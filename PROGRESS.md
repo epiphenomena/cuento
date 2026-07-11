@@ -8,8 +8,10 @@ toolchain so a resumed session doesn't re-discover it. Do not mirror step status
 - node v25.6.1
 - gofumpt (installed)
 - goose (installed)
-- sqlc (installing — verify `sqlc version`)
-- golangci-lint v2 (installing — verify `golangci-lint version`; fragile under new Go, re-check)
+- sqlc v1.31.1 (installed)
+- golangci-lint v2.12.2 (installed, built with go1.25.7 — verified runs)
+
+Subagents MUST prepend `$(go env GOPATH)/bin` to PATH so `make lint` finds sqlc/golangci-lint/gofumpt/goose.
 
 ## Delegation model (per AGENTS + advisor)
 - One PLAN step per subagent; the subagent runs the full loop and COMMITS before returning.
