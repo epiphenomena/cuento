@@ -74,7 +74,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 
 ## Phase 2 — Change & versioning framework
 
-- [ ] **p02.1 db: users (minimal) + changes.**
+- [x] **p02.1 db: users (minimal) + changes.**
   Tests: schema smoke via sqlc; `TestChangesRequiresActor` (FK to users enforced); system user (id 1, `system`) seeded.
   Build: migration — `users(id, username UNIQUE, display_name, created_at, disabled_at)`; `changes(id, actor_id → users, at RFC3339, kind, note)`.
 - [ ] **p02.2 store: write funnel.**

@@ -3,3 +3,23 @@
 //   sqlc v1.31.1
 
 package sqlc
+
+import (
+	"database/sql"
+)
+
+type Change struct {
+	ID      int64
+	ActorID int64
+	At      string
+	Kind    string
+	Note    sql.NullString
+}
+
+type User struct {
+	ID          int64
+	Username    string
+	DisplayName string
+	CreatedAt   string
+	DisabledAt  sql.NullString
+}
