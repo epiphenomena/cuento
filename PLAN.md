@@ -62,7 +62,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 
 ## Phase 1 — Database foundation
 
-- [ ] **p01.1 db: Open with pragmas.**
+- [x] **p01.1 db: Open with pragmas.**
   Tests: `TestOpenSetsPragmas` (query `journal_mode`, `foreign_keys`, `busy_timeout`, `synchronous`), `TestForeignKeysEnforced` (violating insert fails).
   Build: `db.Open(path)` — DSN, pragmas, sane pool settings; the only place pragmas are set.
 - [ ] **p01.2 db: migration runner.**
