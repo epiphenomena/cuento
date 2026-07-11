@@ -86,7 +86,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 - [x] **p03.1 db: currencies.**
   Tests: `TestSeedCurrencies` (USD, MXN, EUR present with correct exponents), `TestExponentBounds` (CHECK 0–4).
   Build: migration `currencies(code PK, exponent, symbol, name, active)` + seed; store reads.
-- [ ] **p03.2 [P] money: Amount.**
+- [x] **p03.2 [P] money: Amount.**
   Tests: table tests for parse/format across all number formats, negative styles (minus/parentheses), and display modes (signed, DR/CR); property test `parse(format(x)) == x` over random minors and formats; `TestAddCurrencyMismatch`; `TestConvertRoundsHalfEven` (explicit tie cases).
   Build: `money.Amount{Minor, Currency}`, `Add/Neg/Split-safe` ops erroring on currency mismatch, `Parse`, `Format(opts)`, `ConvertMinor(minor, rate float64, fromExp, toExp)` with half-even rounding.
 - [ ] **p03.3 [P] money: date & number format enums.**
