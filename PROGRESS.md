@@ -20,6 +20,7 @@ Subagents MUST prepend `$(go env GOPATH)/bin` to PATH so `make lint` finds sqlc/
 
 ## Working-agreement clarifications (from the human)
 - **"Done = green" means locally green** (2026-07-11). No hosted CI; the human pushes as they choose.
-  For every step, "done" = `make lint test check` + the ci.yml steps (vet, golangci-lint, gofumpt -l,
-  go test ./..., govulncheck ./...) all pass locally. Do NOT block on a remote/host run.
+  For every step, "done" = `make lint test check` + vet, golangci-lint, gofumpt -l,
+  go test ./..., govulncheck ./... all pass locally. Do NOT block on a remote/host run.
+  (GitHub Actions workflow removed 2026-07-11 at the human's request — they don't use GitHub CI.)
 - Toolchain auto-upgrades to go1.25.12 via go.mod (`GOTOOLCHAIN=auto`); needed for a clean govulncheck.

@@ -58,7 +58,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
   Tests first: `TestHealthz` (200, JSON `{status:"ok",version}`), `TestStaticEmbedded` (a placeholder asset serves from the embedded FS).
   Build: `cuento serve` with graceful shutdown (context + signal), `/healthz`, embedded `web/static` skeleton.
 - [x] **p00.3 chore: CI.**
-  Workflow (GitHub Actions or equivalent): `go vet`, golangci-lint, `go test ./...`, `govulncheck`. Done when the workflow's steps pass **locally** (no hosted CI; human manages pushes — DoD clarified in DECISIONS p00.3, 2026-07-11).
+  Checks: `go vet`, golangci-lint, `go test ./...`, `govulncheck`. Done when they pass **locally** (no hosted CI; the GitHub Actions workflow was removed 2026-07-11 at the human's request — DoD clarified in DECISIONS p00.3).
 
 ## Phase 1 — Database foundation
 
