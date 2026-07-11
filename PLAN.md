@@ -89,7 +89,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 - [x] **p03.2 [P] money: Amount.**
   Tests: table tests for parse/format across all number formats, negative styles (minus/parentheses), and display modes (signed, DR/CR); property test `parse(format(x)) == x` over random minors and formats; `TestAddCurrencyMismatch`; `TestConvertRoundsHalfEven` (explicit tie cases).
   Build: `money.Amount{Minor, Currency}`, `Add/Neg/Split-safe` ops erroring on currency mismatch, `Parse`, `Format(opts)`, `ConvertMinor(minor, rate float64, fromExp, toExp)` with half-even rounding.
-- [ ] **p03.3 [P] money: date & number format enums.**
+- [x] **p03.3 [P] money: date & number format enums.**
   Tests: format/parse tables for `DateFormat{ISO, US, EU}` (ISO always accepted on input regardless of setting); invalid inputs rejected with useful errors.
   Build: enums + tiny formatter/parser; these are the only date/number formatting entry points for the UI.
 - [ ] **p03.4 [P] i18n: catalog.**
