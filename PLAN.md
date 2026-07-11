@@ -146,7 +146,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 
 ## Phase 8 — Transactions & splits core
 
-- [ ] **p08.1 db: payees, transactions, splits (+versions, triggers, indexes).**
+- [x] **p08.1 db: payees, transactions, splits (+versions, triggers, indexes).**
   Tests (direct SQL): split on a placeholder account rejected; adding a child under an account with splits rejected; `amount = 0` rejected; expense split with NULL `functional_class` rejected and non-expense split with a class rejected; revenue/expense split with NULL `program_id` rejected and A/L/E split carrying a program rejected (triggers join accounts); deleting a referenced account/currency/subsidiary/fund/program rejected; indexes exist.
   Build: migration per Appendix A — `transactions` (with `subsidiary_id NOT NULL`), `splits` (with `fund_id`, `program_id`, `functional_class`); triggers `trg_splits_leaf_active_only`, `trg_accounts_no_children_over_splits`, `trg_splits_function_matches_type`, `trg_splits_program_matches_type`.
 - [ ] **p08.2 store: post / update / delete transactions.**

@@ -141,6 +141,22 @@ type FundsVersion struct {
 	Active      int64
 }
 
+type Payee struct {
+	ID     int64
+	Name   string
+	Active int64
+}
+
+type PayeesVersion struct {
+	ID        int64
+	EntityID  int64
+	ChangeID  int64
+	ValidFrom string
+	Op        string
+	Name      string
+	Active    int64
+}
+
 type Program struct {
 	ID        int64
 	ParentID  sql.NullInt64
@@ -172,6 +188,34 @@ type Session struct {
 	Expiry float64
 }
 
+type Split struct {
+	ID              int64
+	TransactionID   int64
+	AccountID       int64
+	Amount          int64
+	FundID          sql.NullInt64
+	ProgramID       sql.NullInt64
+	FunctionalClass sql.NullString
+	Memo            string
+	Position        int64
+}
+
+type SplitsVersion struct {
+	ID              int64
+	EntityID        int64
+	ChangeID        int64
+	ValidFrom       string
+	Op              string
+	TransactionID   int64
+	AccountID       int64
+	Amount          int64
+	FundID          sql.NullInt64
+	ProgramID       sql.NullInt64
+	FunctionalClass sql.NullString
+	Memo            string
+	Position        int64
+}
+
 type SubsidiariesVersion struct {
 	ID           int64
 	EntityID     int64
@@ -192,6 +236,30 @@ type Subsidiary struct {
 	BaseCurrency string
 	Active       int64
 	SortOrder    int64
+}
+
+type Transaction struct {
+	ID           int64
+	Date         string
+	SubsidiaryID int64
+	PayeeID      sql.NullInt64
+	Memo         string
+	Currency     string
+	Deleted      int64
+}
+
+type TransactionsVersion struct {
+	ID           int64
+	EntityID     int64
+	ChangeID     int64
+	ValidFrom    string
+	Op           string
+	Date         string
+	SubsidiaryID int64
+	PayeeID      sql.NullInt64
+	Memo         string
+	Currency     string
+	Deleted      int64
 }
 
 type User struct {
