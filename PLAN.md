@@ -107,7 +107,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 
 ## Phase 5 — Accounts
 
-- [ ] **p05.1 db: accounts + names + subsidiary map + versions + triggers.**
+- [x] **p05.1 db: accounts + names + subsidiary map + versions + triggers.**
   Tests (direct SQL): inserting an expense under an asset fails; asset under asset succeeds; revenue under expense succeeds; `functional_class` on a non-expense account rejected; `form990_lines` seeded (spot-check known Part VIII/IX/X codes, Q6 default: full 990); versions tables exist for `accounts`, `account_names`, `account_subsidiaries`.
   Build: migration per Appendix A — `form990_lines(code PK, part, line, label, account_types, sort)` seeded reference (static; updated only by migration, not versioned), `accounts` (with `functional_class` default column, `intercompany` flag, `form990_code → form990_lines`), `account_names(account_id, lang, name)`, `account_subsidiaries(account_id, subsidiary_id)`, all three `*_versions`, triggers `trg_accounts_parent_typeclass`, `trg_accounts_function_expense_only`. (Leaf/no-splits triggers arrive in p08.1 when `splits` exists; `default_program_id` arrives in p07.1 once `programs` exists.)
 - [ ] **p05.2 store: account operations.**

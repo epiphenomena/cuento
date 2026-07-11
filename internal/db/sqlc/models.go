@@ -8,6 +8,68 @@ import (
 	"database/sql"
 )
 
+type Account struct {
+	ID              int64
+	ParentID        sql.NullInt64
+	Type            string
+	DefaultCurrency string
+	FunctionalClass sql.NullString
+	Form990Code     sql.NullString
+	Intercompany    int64
+	Reconcilable    int64
+	Active          int64
+	SortOrder       int64
+	CreatedAt       string
+}
+
+type AccountName struct {
+	AccountID int64
+	Lang      string
+	Name      string
+}
+
+type AccountNamesVersion struct {
+	ID        int64
+	EntityID  int64
+	ChangeID  int64
+	ValidFrom string
+	Op        string
+	Lang      string
+	Name      string
+}
+
+type AccountSubsidiariesVersion struct {
+	ID           int64
+	EntityID     int64
+	ChangeID     int64
+	ValidFrom    string
+	Op           string
+	SubsidiaryID int64
+}
+
+type AccountSubsidiary struct {
+	AccountID    int64
+	SubsidiaryID int64
+}
+
+type AccountsVersion struct {
+	ID              int64
+	EntityID        int64
+	ChangeID        int64
+	ValidFrom       string
+	Op              string
+	ParentID        sql.NullInt64
+	Type            string
+	DefaultCurrency string
+	FunctionalClass sql.NullString
+	Form990Code     sql.NullString
+	Intercompany    int64
+	Reconcilable    int64
+	Active          int64
+	SortOrder       int64
+	CreatedAt       string
+}
+
 type Change struct {
 	ID      int64
 	ActorID int64
@@ -22,6 +84,15 @@ type Currency struct {
 	Symbol   string
 	Name     string
 	Active   int64
+}
+
+type Form990Line struct {
+	Code         string
+	Part         string
+	Line         string
+	Label        string
+	AccountTypes string
+	Sort         int64
 }
 
 type SubsidiariesVersion struct {
