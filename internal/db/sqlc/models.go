@@ -97,6 +97,50 @@ type Form990Line struct {
 	Sort         int64
 }
 
+type Fund struct {
+	ID          int64
+	Name        string
+	Funder      string
+	Purpose     string
+	Restriction string
+	ProgramID   sql.NullInt64
+	StartDate   sql.NullString
+	EndDate     sql.NullString
+	Notes       string
+	Active      int64
+}
+
+type FundSubsidiariesVersion struct {
+	ID           int64
+	EntityID     int64
+	ChangeID     int64
+	ValidFrom    string
+	Op           string
+	SubsidiaryID int64
+}
+
+type FundSubsidiary struct {
+	FundID       int64
+	SubsidiaryID int64
+}
+
+type FundsVersion struct {
+	ID          int64
+	EntityID    int64
+	ChangeID    int64
+	ValidFrom   string
+	Op          string
+	Name        string
+	Funder      string
+	Purpose     string
+	Restriction string
+	ProgramID   sql.NullInt64
+	StartDate   sql.NullString
+	EndDate     sql.NullString
+	Notes       string
+	Active      int64
+}
+
 type Program struct {
 	ID        int64
 	ParentID  sql.NullInt64
