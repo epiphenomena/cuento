@@ -98,7 +98,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 
 ## Phase 4 — Subsidiaries
 
-- [ ] **p04.1 db: subsidiaries + versions.**
+- [x] **p04.1 db: subsidiaries + versions.**
   Tests (direct SQL): exactly-one-root enforced (second NULL-parent insert rejected by trigger); FK to currencies; versions table exists.
   Build: migration — `subsidiaries(id, parent_id → subsidiaries, name UNIQUE, base_currency → currencies, active, sort_order)` + `subsidiaries_versions`; trigger `trg_subsidiaries_single_root`; seed root subsidiary (`Organization`, USD) so a single-entity org works with zero setup.
 - [ ] **p04.2 store: subsidiary operations.**

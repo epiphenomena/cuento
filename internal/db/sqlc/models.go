@@ -24,6 +24,28 @@ type Currency struct {
 	Active   int64
 }
 
+type SubsidiariesVersion struct {
+	ID           int64
+	EntityID     int64
+	ChangeID     int64
+	ValidFrom    string
+	Op           string
+	ParentID     sql.NullInt64
+	Name         string
+	BaseCurrency string
+	Active       int64
+	SortOrder    int64
+}
+
+type Subsidiary struct {
+	ID           int64
+	ParentID     sql.NullInt64
+	Name         string
+	BaseCurrency string
+	Active       int64
+	SortOrder    int64
+}
+
 type User struct {
 	ID          int64
 	Username    string

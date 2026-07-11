@@ -31,6 +31,10 @@ func TestWriteRequiresActor(t *testing.T) {
 	d := testutil.NewDB(t)
 	s := New(d)
 
+	// Migrations may seed changes rows (p04.1 seeds one for the root subsidiary),
+	// so assert on the DELTA, not an absolute count: the funnel must write nothing.
+	before := countChanges(t, d)
+
 	fnCalled := false
 	_, err := s.write(context.Background(), "test", "note",
 		func(_ context.Context, _ *sqlc.Queries, _ int64) error {
@@ -43,8 +47,8 @@ func TestWriteRequiresActor(t *testing.T) {
 	if fnCalled {
 		t.Error("fn ran despite missing actor; the check must precede the tx")
 	}
-	if n := countChanges(t, d); n != 0 {
-		t.Errorf("changes count = %d, want 0 (nothing written)", n)
+	if n := countChanges(t, d); n != before {
+		t.Errorf("changes count = %d, want %d (nothing written)", n, before)
 	}
 }
 
@@ -56,6 +60,10 @@ func TestWriteRecordsChange(t *testing.T) {
 	fixed := time.Date(2026, 7, 11, 12, 34, 56, 789_000_000, time.UTC)
 	s := New(d, WithClock(func() time.Time { return fixed }))
 
+	// Assert on the DELTA over any migration-seeded changes rows (p04.1 seeds one):
+	// exactly one row must be added by this funnel call.
+	before := countChanges(t, d)
+
 	ctx := WithActor(context.Background(), Actor{ID: 1})
 	changeID, err := s.write(ctx, "create.thing", "a note",
 		func(_ context.Context, _ *sqlc.Queries, _ int64) error { return nil })
@@ -65,8 +73,8 @@ func TestWriteRecordsChange(t *testing.T) {
 	if changeID <= 0 {
 		t.Fatalf("write returned changeID %d, want a positive id", changeID)
 	}
-	if n := countChanges(t, d); n != 1 {
-		t.Fatalf("changes count = %d, want exactly 1", n)
+	if n := countChanges(t, d); n != before+1 {
+		t.Fatalf("changes count = %d, want %d (exactly one added)", n, before+1)
 	}
 
 	c, err := sqlc.New(d).GetChange(ctx, changeID)
@@ -98,6 +106,10 @@ func TestWriteAtomicRollback(t *testing.T) {
 	d := testutil.NewDB(t)
 	s := New(d)
 
+	// Delta over migration-seeded changes rows (p04.1 seeds one): the failed tx
+	// must leave the count exactly where it started.
+	before := countChanges(t, d)
+
 	sentinel := errors.New("boom")
 	ctx := WithActor(context.Background(), Actor{ID: 1})
 	_, err := s.write(ctx, "test", "",
@@ -120,7 +132,7 @@ func TestWriteAtomicRollback(t *testing.T) {
 	if !errors.Is(err, sentinel) {
 		t.Fatalf("write err = %v, want the sentinel from fn", err)
 	}
-	if n := countChanges(t, d); n != 0 {
-		t.Errorf("changes count = %d, want 0 (whole tx rolled back)", n)
+	if n := countChanges(t, d); n != before {
+		t.Errorf("changes count = %d, want %d (whole tx rolled back)", n, before)
 	}
 }
