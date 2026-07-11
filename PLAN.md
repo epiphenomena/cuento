@@ -113,7 +113,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 - [x] **p05.2 store: account operations.**
   Tests: `TestCreateAccountVersioned` (AssertVersioned for account + names + sub map), `TestCreateRequiresAtLeastOneSub`, `TestMoveRejectsCycle`, `TestMoveRejectsCrossTypeClass`, `TestMoveRejectsSubMismatch` (new parent's sub set must cover the moving account's), `TestAssignSubPropagatesToAncestors` (adding sub S to a leaf silently adds S up the chain), `TestRemoveSubBlockedByChildOrSplits` (can't remove S while a child has S; split-usage guard lands in p08 and is noted here as a TODO test tag), `TestDeactivate`, `TestTreeOrdering`, `TestAccountNameAsOf` (rename, then query the old name at an earlier T via versions), `TestEffective990Inherited` (code set on a parent resolves for all descendants; a child's own code wins), `TestSet990CodeTypeMismatch` (a revenue line on an expense account rejected against `form990_lines.account_types`).
   Build: `CreateAccount(subs ≥ 1)`, `UpdateAccount` (move/flags/default currency/functional default/intercompany/990 code), `SetAccountName(lang)`, `SetAccountSubsidiaries` (superset invariant per D18, ancestor auto-propagation), `DeactivateAccount`, `Tree(lang, subFilter)` and `Effective990Codes()` (nearest-ancestor resolution, D25) via recursive CTE.
-- [ ] **p05.3 store: name fallback.**
+- [x] **p05.3 store: name fallback.**
   Tests: user lang → en → any, exercised through `Tree`.
   Build: COALESCE join in the tree/name queries.
 

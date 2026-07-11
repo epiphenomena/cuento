@@ -487,6 +487,95 @@ func TestTreeSubsidiaryFilter(t *testing.T) {
 	}
 }
 
+// treeName returns the resolved name for account id in a Tree result, failing if
+// the account is absent.
+func treeName(t *testing.T, rows []TreeRow, id int64) string {
+	t.Helper()
+	for _, r := range rows {
+		if r.ID == id {
+			return r.Name
+		}
+	}
+	t.Fatalf("account %d not in tree", id)
+	return ""
+}
+
+// TestTreeNameFallback: the resolved name in Tree follows the fallback chain
+// requested-lang -> en -> any (deterministic), for both the nil-filter and the
+// subFilter query paths (p05.3).
+//
+//   - requested lang present: that name wins (over en, proving precedence).
+//   - requested lang absent, en present: the en name.
+//   - both requested lang and en absent, only another lang present: that "any"
+//     name, chosen deterministically (ORDER BY lang LIMIT 1).
+//
+// CreateAccount mandates an en name and there is no remove-name API, so the
+// any-branch account has its en row raw-DELETEd after creation (raw SQL in tests
+// is in-convention here; noted in the p05.3 commit body).
+func TestTreeNameFallback(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	subA := newSub(t, s, rootID, "A")
+
+	// requested-lang wins: has both fr and en; requesting fr yields the fr name.
+	wantsFr, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD",
+		Names: map[string]string{"en": "en-name", "fr": "fr-name"}, Subsidiaries: []int64{subA},
+	})
+	if err != nil {
+		t.Fatalf("create wantsFr: %v", err)
+	}
+
+	// en fallback: no fr, has en; requesting fr yields the en name.
+	enFallback, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD",
+		Names: map[string]string{"en": "en-only"}, Subsidiaries: []int64{subA},
+	})
+	if err != nil {
+		t.Fatalf("create enFallback: %v", err)
+	}
+
+	// any fallback: neither fr nor en (after deleting the mandated en row); only
+	// es and de remain, so requesting fr must yield the deterministic first-by-lang
+	// name ("de-name" < "es-name").
+	anyFallback, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD",
+		Names: map[string]string{"en": "en-doomed", "es": "es-name", "de": "de-name"}, Subsidiaries: []int64{subA},
+	})
+	if err != nil {
+		t.Fatalf("create anyFallback: %v", err)
+	}
+	if _, err := d.Exec(`DELETE FROM account_names WHERE account_id = ? AND lang = 'en'`, anyFallback); err != nil {
+		t.Fatalf("delete en name of anyFallback: %v", err)
+	}
+
+	check := func(t *testing.T, rows []TreeRow) {
+		t.Helper()
+		if got := treeName(t, rows, wantsFr); got != "fr-name" {
+			t.Errorf("requested-lang: name = %q, want fr-name", got)
+		}
+		if got := treeName(t, rows, enFallback); got != "en-only" {
+			t.Errorf("en fallback: name = %q, want en-only", got)
+		}
+		if got := treeName(t, rows, anyFallback); got != "de-name" {
+			t.Errorf("any fallback: name = %q, want de-name (deterministic ORDER BY lang)", got)
+		}
+	}
+
+	nilRows, err := s.Tree(context.Background(), "fr", nil)
+	if err != nil {
+		t.Fatalf("Tree(fr, nil): %v", err)
+	}
+	t.Run("nil filter", func(t *testing.T) { check(t, nilRows) })
+
+	subRows, err := s.Tree(context.Background(), "fr", &subA)
+	if err != nil {
+		t.Fatalf("Tree(fr, &subA): %v", err)
+	}
+	t.Run("subsidiary filter", func(t *testing.T) { check(t, subRows) })
+}
+
 // TestAccountNameAsOf: rename a name, then query the OLD name as of an earlier
 // time via the versions table. Proves point-in-time works on the composite
 // (account_id, lang) key.

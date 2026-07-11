@@ -160,11 +160,17 @@ FROM form990_lines
 WHERE code = ?;
 
 -- name: AccountTree :many
--- All accounts in DEPTH-FIRST (pre-order) order, resolving the requested lang's
--- name via a LEFT JOIN (empty when absent; the en->any fallback is p05.3 and is
--- NOT built here). Multiple roots are allowed (accounts have no single-root
--- constraint); each root subtree is emitted in order. Path = zero-padded
--- (sort_order, id) per level, so ORDER BY path is a true pre-order traversal.
+-- All accounts in DEPTH-FIRST (pre-order) order, resolving each account's name via
+-- the fallback chain requested-lang -> en -> any (p05.3). Multiple roots are
+-- allowed (accounts have no single-root constraint); each root subtree is emitted
+-- in order. Path = zero-padded (sort_order, id) per level, so ORDER BY path is a
+-- true pre-order traversal.
+--
+-- Name resolution is a COALESCE over correlated subqueries against account_names:
+-- (1) the requested lang, (2) 'en' (D14), (3) any name, chosen deterministically
+-- by ORDER BY lang LIMIT 1 so results are stable. The trailing '' keeps the column
+-- non-null (an account with no names at all resolves to empty, and sqlc types the
+-- column as a plain string), so the store's TreeRow mapping is unchanged.
 WITH RECURSIVE tree(id, parent_id, type, active, sort_order, path) AS (
   SELECT a.id, a.parent_id, a.type, a.active, a.sort_order,
          printf('%020d.%020d', a.sort_order, a.id)
@@ -177,9 +183,13 @@ WITH RECURSIVE tree(id, parent_id, type, active, sort_order, path) AS (
   JOIN tree t ON a.parent_id = t.id
 )
 SELECT tree.id, tree.parent_id, tree.type, tree.active, tree.sort_order,
-       COALESCE(an.name, '') AS name
+       CAST(COALESCE(
+         (SELECT an1.name FROM account_names an1 WHERE an1.account_id = tree.id AND an1.lang = ?),
+         (SELECT an2.name FROM account_names an2 WHERE an2.account_id = tree.id AND an2.lang = 'en'),
+         (SELECT anx.name FROM account_names anx WHERE anx.account_id = tree.id ORDER BY anx.lang LIMIT 1),
+         ''
+       ) AS TEXT) AS name
 FROM tree
-LEFT JOIN account_names an ON an.account_id = tree.id AND an.lang = ?
 ORDER BY tree.path;
 
 -- name: AccountTreeBySubsidiary :many
@@ -188,6 +198,10 @@ ORDER BY tree.path;
 -- paths stay well-defined); a mapped child under an unmapped parent is dropped,
 -- matching "accounts mapped to subFilter". sqlc-sqlite's nullable-? handling is
 -- awkward, so this is a separate query (mirrors SubTree/Descendants split).
+--
+-- Name resolution is the SAME requested-lang -> en -> any COALESCE chain as
+-- AccountTree (p05.3); see that query's comment for the rationale of each branch
+-- and the trailing '' (keeps the column non-null / a plain string in sqlc).
 WITH RECURSIVE tree(id, parent_id, type, active, sort_order, path) AS (
   SELECT a.id, a.parent_id, a.type, a.active, a.sort_order,
          printf('%020d.%020d', a.sort_order, a.id)
@@ -200,10 +214,14 @@ WITH RECURSIVE tree(id, parent_id, type, active, sort_order, path) AS (
   JOIN tree t ON a.parent_id = t.id
 )
 SELECT tree.id, tree.parent_id, tree.type, tree.active, tree.sort_order,
-       COALESCE(an.name, '') AS name
+       CAST(COALESCE(
+         (SELECT an1.name FROM account_names an1 WHERE an1.account_id = tree.id AND an1.lang = ?),
+         (SELECT an2.name FROM account_names an2 WHERE an2.account_id = tree.id AND an2.lang = 'en'),
+         (SELECT anx.name FROM account_names anx WHERE anx.account_id = tree.id ORDER BY anx.lang LIMIT 1),
+         ''
+       ) AS TEXT) AS name
 FROM tree
 JOIN account_subsidiaries asub ON asub.account_id = tree.id AND asub.subsidiary_id = ?
-LEFT JOIN account_names an ON an.account_id = tree.id AND an.lang = ?
 ORDER BY tree.path;
 
 -- name: AllAccountCodes :many
