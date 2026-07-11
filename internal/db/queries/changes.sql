@@ -7,3 +7,6 @@ RETURNING id;
 SELECT id, actor_id, at, kind, note
 FROM changes
 WHERE id = ?;
+
+-- name: CountChanges :one
+SELECT COUNT(*) FROM changes;

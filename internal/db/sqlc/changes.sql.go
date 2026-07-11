@@ -10,6 +10,17 @@ import (
 	"database/sql"
 )
 
+const countChanges = `-- name: CountChanges :one
+SELECT COUNT(*) FROM changes
+`
+
+func (q *Queries) CountChanges(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countChanges)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getChange = `-- name: GetChange :one
 SELECT id, actor_id, at, kind, note
 FROM changes

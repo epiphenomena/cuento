@@ -77,7 +77,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 - [x] **p02.1 db: users (minimal) + changes.**
   Tests: schema smoke via sqlc; `TestChangesRequiresActor` (FK to users enforced); system user (id 1, `system`) seeded.
   Build: migration — `users(id, username UNIQUE, display_name, created_at, disabled_at)`; `changes(id, actor_id → users, at RFC3339, kind, note)`.
-- [ ] **p02.2 store: write funnel.**
+- [x] **p02.2 store: write funnel.**
   Tests: `TestWriteRequiresActor` (no actor in ctx → error, nothing written), `TestWriteRecordsChange` (exactly one `changes` row per call), `TestWriteAtomicRollback` (fn error → no change row, no side effects).
   Build: `store.Store`, `store.Actor` + `WithActor(ctx)/ActorFrom(ctx)`, internal `write(ctx, kind, note, fn(tx, changeID))` helper; per-table version-append helpers follow the Appendix A pattern; `testutil.AssertVersioned` contract helper.
 
