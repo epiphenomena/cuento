@@ -134,7 +134,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 
 ## Phase 7 — Programs & funds
 
-- [ ] **p07.1 db+store: programs.**
+- [x] **p07.1 db+store: programs.**
   Tests: single root enforced by trigger; versions table exists; `TestCreateProgramVersioned`, `TestMoveRejectsCycle`, `TestRootImmovable`, `TestDeactivateBlocksNewUseOnly` (history intact; asserted fully once splits exist), `TestProgramTree` (depth-first), `TestDescendants`, `TestAccountDefaultProgramREOnly` (default program on an A/L/E account rejected).
   Build: migration — `programs(id, parent_id → programs, name UNIQUE, active, sort_order)` + `programs_versions`, trigger `trg_programs_single_root`, seed root program (i18n-labeled "General" — the unallocated default, D24); `ALTER TABLE accounts ADD COLUMN default_program_id REFERENCES programs(id)` (meaningful only on R/E accounts, store-enforced). Store: `CreateProgram`, `UpdateProgram` (rename/move), `DeactivateProgram`, `ProgramTree()`, `Descendants(id)`.
 - [ ] **p07.2 db: funds + scoping + versions.**

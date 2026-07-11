@@ -80,9 +80,13 @@ type CreateAccountInput struct {
 	Subsidiaries    []int64
 	FunctionalClass *string
 	Form990Code     *string
-	Intercompany    bool
-	Reconcilable    bool
-	SortOrder       int64
+	// DefaultProgramID is optional (nil = none). It is meaningful ONLY on
+	// revenue/expense accounts (D24, ErrDefaultProgramNotRE); it must reference an
+	// existing, active program. It prefills a split's required program_id (p08).
+	DefaultProgramID *int64
+	Intercompany     bool
+	Reconcilable     bool
+	SortOrder        int64
 }
 
 // UpdateAccountInput carries only fields to change (nil = leave as-is). A non-nil
@@ -93,9 +97,12 @@ type UpdateAccountInput struct {
 	DefaultCurrency *string
 	FunctionalClass *string
 	Form990Code     *string
-	Intercompany    *bool
-	Reconcilable    *bool
-	SortOrder       *int64
+	// DefaultProgramID: a non-nil, positive value sets the default program (R/E
+	// only, active; D24). A non-nil zero (0) clears it. nil leaves it unchanged.
+	DefaultProgramID *int64
+	Intercompany     *bool
+	Reconcilable     *bool
+	SortOrder        *int64
 }
 
 // CreateAccount creates an account (+ its names + its subsidiary memberships,
@@ -111,6 +118,11 @@ func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (int64
 	}
 	if in.FunctionalClass != nil && in.Type != "expense" {
 		return 0, ErrFunctionalClassNotExpense
+	}
+	// A default program is R/E-only (D24). Reject early on a non-R/E account
+	// before opening the tx (its existence/active check runs inside fn).
+	if in.DefaultProgramID != nil && in.Type != "revenue" && in.Type != "expense" {
+		return 0, ErrDefaultProgramNotRE
 	}
 
 	var newID int64
@@ -143,17 +155,26 @@ func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (int64
 				}
 			}
 
+			// Validate a default program: R/E-only (already checked above),
+			// existing and active (D24). Runs inside fn so a rejection rolls back.
+			if in.DefaultProgramID != nil {
+				if err := checkDefaultProgram(ctx, q, *in.DefaultProgramID, in.Type); err != nil {
+					return err
+				}
+			}
+
 			id, err := q.InsertAccount(ctx, sqlc.InsertAccountParams{
-				ParentID:        nullInt64Ptr(in.ParentID),
-				Type:            in.Type,
-				DefaultCurrency: in.DefaultCurrency,
-				FunctionalClass: nullStringPtr(in.FunctionalClass),
-				Form990Code:     nullStringPtr(in.Form990Code),
-				Intercompany:    boolToInt(in.Intercompany),
-				Reconcilable:    boolToInt(in.Reconcilable),
-				Active:          1,
-				SortOrder:       in.SortOrder,
-				CreatedAt:       s.now().Format(time.RFC3339Nano),
+				ParentID:         nullInt64Ptr(in.ParentID),
+				Type:             in.Type,
+				DefaultCurrency:  in.DefaultCurrency,
+				FunctionalClass:  nullStringPtr(in.FunctionalClass),
+				Form990Code:      nullStringPtr(in.Form990Code),
+				DefaultProgramID: nullInt64Ptr(in.DefaultProgramID),
+				Intercompany:     boolToInt(in.Intercompany),
+				Reconcilable:     boolToInt(in.Reconcilable),
+				Active:           1,
+				SortOrder:        in.SortOrder,
+				CreatedAt:        s.now().Format(time.RFC3339Nano),
 			})
 			if err != nil {
 				return fmt.Errorf("insert account: %w", err)
@@ -223,6 +244,19 @@ func (s *Store) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInp
 				}
 				next.Form990Code = nullString(*in.Form990Code)
 			}
+			if in.DefaultProgramID != nil {
+				// A non-nil zero clears it; a positive value sets it (R/E-only,
+				// active; D24). Validated against next.Type so a same-call type
+				// change is honored (types don't change here, but be explicit).
+				if *in.DefaultProgramID == 0 {
+					next.DefaultProgramID = sql.NullInt64{}
+				} else {
+					if err := checkDefaultProgram(ctx, q, *in.DefaultProgramID, next.Type); err != nil {
+						return err
+					}
+					next.DefaultProgramID = sql.NullInt64{Int64: *in.DefaultProgramID, Valid: true}
+				}
+			}
 			if in.Intercompany != nil {
 				next.Intercompany = boolToInt(*in.Intercompany)
 			}
@@ -239,18 +273,21 @@ func (s *Store) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInp
 				next.ParentID = sql.NullInt64{Int64: *in.ParentID, Valid: true}
 			}
 
+			// next := cur copied DefaultProgramID, so an unrelated update carries
+			// it through unchanged -- it is never silently NULLed (the ripple).
 			if err := q.UpdateAccount(ctx, sqlc.UpdateAccountParams{
-				ParentID:        next.ParentID,
-				Type:            next.Type,
-				DefaultCurrency: next.DefaultCurrency,
-				FunctionalClass: next.FunctionalClass,
-				Form990Code:     next.Form990Code,
-				Intercompany:    next.Intercompany,
-				Reconcilable:    next.Reconcilable,
-				Active:          next.Active,
-				SortOrder:       next.SortOrder,
-				CreatedAt:       next.CreatedAt,
-				ID:              id,
+				ParentID:         next.ParentID,
+				Type:             next.Type,
+				DefaultCurrency:  next.DefaultCurrency,
+				FunctionalClass:  next.FunctionalClass,
+				Form990Code:      next.Form990Code,
+				DefaultProgramID: next.DefaultProgramID,
+				Intercompany:     next.Intercompany,
+				Reconcilable:     next.Reconcilable,
+				Active:           next.Active,
+				SortOrder:        next.SortOrder,
+				CreatedAt:        next.CreatedAt,
+				ID:               id,
 			}); err != nil {
 				return fmt.Errorf("update account %d: %w", id, err)
 			}
@@ -410,17 +447,18 @@ func (s *Store) DeactivateAccount(ctx context.Context, id int64) error {
 				return fmt.Errorf("load account %d: %w", id, err)
 			}
 			if err := q.UpdateAccount(ctx, sqlc.UpdateAccountParams{
-				ParentID:        cur.ParentID,
-				Type:            cur.Type,
-				DefaultCurrency: cur.DefaultCurrency,
-				FunctionalClass: cur.FunctionalClass,
-				Form990Code:     cur.Form990Code,
-				Intercompany:    cur.Intercompany,
-				Reconcilable:    cur.Reconcilable,
-				Active:          0,
-				SortOrder:       cur.SortOrder,
-				CreatedAt:       cur.CreatedAt,
-				ID:              id,
+				ParentID:         cur.ParentID,
+				Type:             cur.Type,
+				DefaultCurrency:  cur.DefaultCurrency,
+				FunctionalClass:  cur.FunctionalClass,
+				Form990Code:      cur.Form990Code,
+				DefaultProgramID: cur.DefaultProgramID,
+				Intercompany:     cur.Intercompany,
+				Reconcilable:     cur.Reconcilable,
+				Active:           0,
+				SortOrder:        cur.SortOrder,
+				CreatedAt:        cur.CreatedAt,
+				ID:               id,
 			}); err != nil {
 				return fmt.Errorf("deactivate account %d: %w", id, err)
 			}

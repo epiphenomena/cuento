@@ -9,17 +9,18 @@ import (
 )
 
 type Account struct {
-	ID              int64
-	ParentID        sql.NullInt64
-	Type            string
-	DefaultCurrency string
-	FunctionalClass sql.NullString
-	Form990Code     sql.NullString
-	Intercompany    int64
-	Reconcilable    int64
-	Active          int64
-	SortOrder       int64
-	CreatedAt       string
+	ID               int64
+	ParentID         sql.NullInt64
+	Type             string
+	DefaultCurrency  string
+	FunctionalClass  sql.NullString
+	Form990Code      sql.NullString
+	Intercompany     int64
+	Reconcilable     int64
+	Active           int64
+	SortOrder        int64
+	CreatedAt        string
+	DefaultProgramID sql.NullInt64
 }
 
 type AccountName struct {
@@ -53,21 +54,22 @@ type AccountSubsidiary struct {
 }
 
 type AccountsVersion struct {
-	ID              int64
-	EntityID        int64
-	ChangeID        int64
-	ValidFrom       string
-	Op              string
-	ParentID        sql.NullInt64
-	Type            string
-	DefaultCurrency string
-	FunctionalClass sql.NullString
-	Form990Code     sql.NullString
-	Intercompany    int64
-	Reconcilable    int64
-	Active          int64
-	SortOrder       int64
-	CreatedAt       string
+	ID               int64
+	EntityID         int64
+	ChangeID         int64
+	ValidFrom        string
+	Op               string
+	ParentID         sql.NullInt64
+	Type             string
+	DefaultCurrency  string
+	FunctionalClass  sql.NullString
+	Form990Code      sql.NullString
+	Intercompany     int64
+	Reconcilable     int64
+	Active           int64
+	SortOrder        int64
+	CreatedAt        string
+	DefaultProgramID sql.NullInt64
 }
 
 type Change struct {
@@ -93,6 +95,26 @@ type Form990Line struct {
 	Label        string
 	AccountTypes string
 	Sort         int64
+}
+
+type Program struct {
+	ID        int64
+	ParentID  sql.NullInt64
+	Name      string
+	Active    int64
+	SortOrder int64
+}
+
+type ProgramsVersion struct {
+	ID        int64
+	EntityID  int64
+	ChangeID  int64
+	ValidFrom string
+	Op        string
+	ParentID  sql.NullInt64
+	Name      string
+	Active    int64
+	SortOrder int64
 }
 
 type ReportGroup struct {

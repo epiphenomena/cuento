@@ -348,11 +348,14 @@ func (q *Queries) DeleteAccountSubsidiary(ctx context.Context, arg DeleteAccount
 
 const getAccount = `-- name: GetAccount :one
 SELECT id, parent_id, type, default_currency, functional_class, form990_code,
-       intercompany, reconcilable, active, sort_order, created_at
+       intercompany, reconcilable, active, sort_order, created_at, default_program_id
 FROM accounts
 WHERE id = ?
 `
 
+// Column order matches the accounts table's PHYSICAL order (default_program_id was
+// ADDed last by 00008), so sqlc maps the result to the sqlc.Account model rather
+// than a bespoke GetAccountRow -- accounts.go depends on GetAccount returning Account.
 func (q *Queries) GetAccount(ctx context.Context, id int64) (Account, error) {
 	row := q.db.QueryRowContext(ctx, getAccount, id)
 	var i Account
@@ -368,6 +371,7 @@ func (q *Queries) GetAccount(ctx context.Context, id int64) (Account, error) {
 		&i.Active,
 		&i.SortOrder,
 		&i.CreatedAt,
+		&i.DefaultProgramID,
 	)
 	return i, err
 }
@@ -436,22 +440,23 @@ const insertAccount = `-- name: InsertAccount :one
 
 INSERT INTO accounts
   (parent_id, type, default_currency, functional_class, form990_code,
-   intercompany, reconcilable, active, sort_order, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+   default_program_id, intercompany, reconcilable, active, sort_order, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
 type InsertAccountParams struct {
-	ParentID        sql.NullInt64
-	Type            string
-	DefaultCurrency string
-	FunctionalClass sql.NullString
-	Form990Code     sql.NullString
-	Intercompany    int64
-	Reconcilable    int64
-	Active          int64
-	SortOrder       int64
-	CreatedAt       string
+	ParentID         sql.NullInt64
+	Type             string
+	DefaultCurrency  string
+	FunctionalClass  sql.NullString
+	Form990Code      sql.NullString
+	DefaultProgramID sql.NullInt64
+	Intercompany     int64
+	Reconcilable     int64
+	Active           int64
+	SortOrder        int64
+	CreatedAt        string
 }
 
 // p05.2: account operations. All SQL for the store's account methods lives here
@@ -470,7 +475,8 @@ type InsertAccountParams struct {
 // the generated SQL for the WHOLE file (see docs/DECISIONS.md p04.2).
 // Live insert of an account. Row-local invariants (parent typeclass,
 // functional-class-expense-only) are validated in the store BEFORE this runs and
-// backstopped by triggers. Returns the new id for the store to snapshot + return.
+// backstopped by triggers. default_program_id is validated in the store as R/E-only
+// (D24). Returns the new id for the store to snapshot + return.
 func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, insertAccount,
 		arg.ParentID,
@@ -478,6 +484,7 @@ func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) (i
 		arg.DefaultCurrency,
 		arg.FunctionalClass,
 		arg.Form990Code,
+		arg.DefaultProgramID,
 		arg.Intercompany,
 		arg.Reconcilable,
 		arg.Active,
@@ -569,11 +576,11 @@ func (q *Queries) InsertAccountSubsidiaryVersion(ctx context.Context, arg Insert
 const insertAccountVersion = `-- name: InsertAccountVersion :exec
 INSERT INTO accounts_versions
   (entity_id, change_id, valid_from, op, parent_id, type, default_currency,
-   functional_class, form990_code, intercompany, reconcilable, active,
-   sort_order, created_at)
+   functional_class, form990_code, default_program_id, intercompany, reconcilable,
+   active, sort_order, created_at)
 SELECT a.id, c.id, c.at, ?, a.parent_id, a.type, a.default_currency,
-       a.functional_class, a.form990_code, a.intercompany, a.reconcilable,
-       a.active, a.sort_order, a.created_at
+       a.functional_class, a.form990_code, a.default_program_id, a.intercompany,
+       a.reconcilable, a.active, a.sort_order, a.created_at
 FROM accounts a, changes c
 WHERE c.id = ? AND a.id = ?
 `
@@ -586,8 +593,11 @@ type InsertAccountVersionParams struct {
 
 // Snapshot-from-live version append for accounts (STANDARD single-column entity,
 // entity_id = accounts.id). Must run AFTER the live write. Snapshot column set
-// matches 00005_accounts.sql exactly. Params (plain positional, each used once):
-// op, change_id, entity_id -> generated fields Op, ID (change_id), ID_2 (entity_id).
+// matches 00005_accounts.sql + the 00008 default_program_id ripple exactly:
+// adding default_program_id to accounts requires it here too, or Z3 (current ==
+// latest snapshot) diverges for accounts touched after p07.1. Params (plain
+// positional, each used once): op, change_id, entity_id -> generated fields Op,
+// ID (change_id), ID_2 (entity_id).
 func (q *Queries) InsertAccountVersion(ctx context.Context, arg InsertAccountVersionParams) error {
 	_, err := q.db.ExecContext(ctx, insertAccountVersion, arg.Op, arg.ID, arg.ID_2)
 	return err
@@ -596,29 +606,32 @@ func (q *Queries) InsertAccountVersion(ctx context.Context, arg InsertAccountVer
 const updateAccount = `-- name: UpdateAccount :exec
 UPDATE accounts
 SET parent_id = ?, type = ?, default_currency = ?, functional_class = ?,
-    form990_code = ?, intercompany = ?, reconcilable = ?, active = ?,
-    sort_order = ?, created_at = ?
+    form990_code = ?, default_program_id = ?, intercompany = ?, reconcilable = ?,
+    active = ?, sort_order = ?, created_at = ?
 WHERE id = ?
 `
 
 type UpdateAccountParams struct {
-	ParentID        sql.NullInt64
-	Type            string
-	DefaultCurrency string
-	FunctionalClass sql.NullString
-	Form990Code     sql.NullString
-	Intercompany    int64
-	Reconcilable    int64
-	Active          int64
-	SortOrder       int64
-	CreatedAt       string
-	ID              int64
+	ParentID         sql.NullInt64
+	Type             string
+	DefaultCurrency  string
+	FunctionalClass  sql.NullString
+	Form990Code      sql.NullString
+	DefaultProgramID sql.NullInt64
+	Intercompany     int64
+	Reconcilable     int64
+	Active           int64
+	SortOrder        int64
+	CreatedAt        string
+	ID               int64
 }
 
 // Live update: move (parent) / flags / default currency / functional default /
-// form990 code / active / sort. The store reads the current row (GetAccount),
-// overrides the caller's fields, and writes the full desired state here, keeping
-// snapshot-from-live trivial. created_at is preserved (read-modify-write).
+// form990 code / default program / active / sort. The store reads the current row
+// (GetAccount), overrides the caller's fields, and writes the full desired state
+// here, keeping snapshot-from-live trivial. created_at is preserved
+// (read-modify-write), and so is default_program_id unless changed -- the store
+// carries cur.DefaultProgramID through, so an unrelated update never NULLs it.
 func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) error {
 	_, err := q.db.ExecContext(ctx, updateAccount,
 		arg.ParentID,
@@ -626,6 +639,7 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) er
 		arg.DefaultCurrency,
 		arg.FunctionalClass,
 		arg.Form990Code,
+		arg.DefaultProgramID,
 		arg.Intercompany,
 		arg.Reconcilable,
 		arg.Active,
