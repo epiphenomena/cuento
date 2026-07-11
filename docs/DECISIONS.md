@@ -44,4 +44,4 @@ Resolved (2026-07): Q1 (funds scope to subsidiaries, not inherited — D20), Q2 
 
 ## Implementation notes (appended per step)
 
-_None yet — p00.1 seeds the tables above; later steps add one line each._
+- **p00.2** — `make lint` runs golangci-lint's bundled gofumpt formatter *and* the standalone `gofumpt` binary; the two disagreed on import grouping (standalone splits the module-local `cuento/...` import into its own block, the bundled one merged it). Set `formatters.settings.gofumpt.module-path: cuento` in `.golangci.yml` so both produce the split form. Tooling reconciliation only; no design impact.

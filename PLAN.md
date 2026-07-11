@@ -54,7 +54,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 
 - [x] **p00.1 chore: repository scaffold.**
   No tests (bootstrap). `go mod init cuento` (module path placeholder — rename if it gets a home on GitHub). Directory layout per AGENTS. Makefile with all targets (stubs where the phase hasn't arrived). `.golangci.yml` (govet, staticcheck, errcheck, gofumpt or gofmt). `.gitignore`: `fixtures/source/`, `fixtures/sample.db`, `*.db*`, `/bin`, `.env`. Seed `docs/DECISIONS.md` from the table above. Commit AGENTS.md, PLAN.md, DECISIONS.md.
-- [ ] **p00.2 web: hello server.**
+- [x] **p00.2 web: hello server.**
   Tests first: `TestHealthz` (200, JSON `{status:"ok",version}`), `TestStaticEmbedded` (a placeholder asset serves from the embedded FS).
   Build: `cuento serve` with graceful shutdown (context + signal), `/healthz`, embedded `web/static` skeleton.
 - [ ] **p00.3 chore: CI.**

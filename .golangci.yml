@@ -12,6 +12,11 @@ linters:
 formatters:
   enable:
     - gofumpt
+  settings:
+    gofumpt:
+      # Match standalone gofumpt (D15 tool): treat the module path as local so
+      # the two formatters agree on import grouping.
+      module-path: cuento
 
 issues:
   max-issues-per-linter: 0
