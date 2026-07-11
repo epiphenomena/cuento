@@ -4,7 +4,7 @@ Read AGENTS.md first; it defines the working method, hard rules, and commit form
 Execution loop per step: write the listed tests → confirm they fail for the right reason → implement to green → refactor → `make lint test check` → tick the checkbox → commit `pNN.M area: summary`.
 
 Legend: `[ ]` todo · `[x]` done · `[P]` parallel-safe (may dispatch to a subagent alongside its siblings).
-Human inputs required: place the cleaned full-ledger CSV export in `fixtures/source/` before p09.2; answer open questions Q1–Q4 (below) whenever possible — affected steps are tagged.
+Human inputs required: place the cleaned full-ledger CSV export in `fixtures/source/` before p09.2; iterate the production mapping with the agent at p09.4 (this is the go-live gate, D26); answer open questions Q5–Q6 (below) whenever possible — affected steps are tagged.
 
 ---
 
@@ -22,7 +22,7 @@ Human inputs required: place the cleaned full-ledger CSV export in `fixtures/sou
 | D8 | Hosting: GCE **e2-micro always-free VM** + persistent disk + **Litestream → GCS** (free 5 GB). TLS via in-process autocert. Cloud Run rejected: ephemeral FS + scale-to-zero vs a single-writer SQLite file. | One binary, one VM, one systemd unit. |
 | D9 | Auth primitives: scs sessions (SQLite store), argon2id, stdlib `http.CrossOriginProtection` (fallback nosurf), `html/template` escaping + strict CSP, `x/time/rate` on login. | Nothing hand-rolled; everything provable via route-registry tests. |
 | D10 | Permissions: per-user `txn_perm ∈ {none,read,write}` + per-report-group read grants; `is_admin` implies everything. Report groups are declared in code and synced to the db at startup. Permissions are org-global in v1 (per-subsidiary grants → backlog, Q2). | Matches stated needs; no RBAC machinery. |
-| D11 | Tree rules: A/L/E children must match parent type exactly; revenue and expense may interleave freely under R/E parents. Placeholders (accounts with children) hold no splits. | Balance sheet stays clean; program trees mix R/E. |
+| D11 | Tree rules: A/L/E children must match parent type exactly; revenue and expense may interleave freely under R/E parents. Placeholders (accounts with children) hold no splits. | Balance sheet stays clean; mixed groupings stay possible — though the chart holds *natural* categories, since programs are a dimension (D24). |
 | D12 | FX conversion happens only in reports: balance-sheet figures at the closing (as-of) rate; P&L activity at each transaction-date rate; rate lookup = latest on-or-before date, direct pair then reciprocal. Rates stored as REAL; conversion rounds half-even at final aggregates. | Standard treatment; storage stays integer-exact. |
 | D13 | Splits in a **finalized** reconciliation are locked (amount/account/txn/date/fund); editing requires an audited unreconcile first. Reconciliation is per `(account, currency)` and spans all funds — a bank statement covers one balance. | Statements stay provable; a key reason funds are a dimension, not currencies (D20). |
 | D14 | **Bilingual UI (en, es) in v1**, extensible: `internal/i18n` embedded key→string catalogs + `t` template func; missing key falls back to en; a parity test enforces identical key sets across catalogs; adding a language = adding one catalog file (+ account names in that language, optional). No CLDR or i18n dependency. Supersedes the earlier English-chrome-only decision. | The bookkeepers work in Spanish; catalogs are a page of code, not a framework. |
@@ -31,19 +31,22 @@ Human inputs required: place the cleaned full-ledger CSV export in `fixtures/sou
 | D17 | IDs are `INTEGER PRIMARY KEY AUTOINCREMENT` on financial tables (no rowid reuse after delete — audit-friendly). | Cheap referential permanence. |
 | D18 | **Subsidiaries**: `subsidiaries` is a tree with exactly one root; each subsidiary has a `base_currency`. Accounts map to **one or more** subsidiaries via `account_subsidiaries`, with the invariant **parent set ⊇ union of children's sets** (superset, not equality — org-wide placeholders may hold sub-specific children; assigning a sub to an account auto-propagates to its ancestors). Every transaction belongs to **exactly one** subsidiary and all its split accounts must include that subsidiary. Report scope = a chosen subsidiary **consolidated with all descendants**; the root is full consolidation. Default report currency = the scoped subsidiary's base currency. | NetSuite-shaped without OneWorld machinery; superset keeps shared placeholders from forcing sub-specific accounts org-wide. |
 | D19 | **Intercompany**: cross-subsidiary funding = paired transactions through due-to/due-from accounts flagged `intercompany`. Consolidated reports whose scope covers both sides collapse flagged accounts after asserting they net to zero per currency; a nonzero net renders as a warning row (never silently dropped). Elimination journal entries are out of scope. | Single-sub transactions make this unavoidable; the flag makes consolidation honest and cheap. |
-| D20 | **Restricted funds are a split dimension with fund-level conservation.** `funds` table documents grants/restricted gifts (funder, purpose, restriction type, dates, subsidiary). Every split carries `fund_id` (NULL = unrestricted); every transaction must sum to zero **within each fund**, not just overall — so restricted money is conserved through *any* account: cash, buildings, loan payoffs. Modelling funds as sub-currencies (`USD.grant`) was evaluated and rejected: identical semantics (per-fund zero-sum ⇔ per-currency zero-sum), but it breaks single-statement reconciliation (D13), multiplies the currency/rate/report surface, and a grant partially converted cross-currency would mint pseudo-currencies on both sides. The UI presents the dimension as "Fund: Unrestricted General / ⟨grant⟩" per split, with a transaction-level apply-to-all. GAAP "released from restrictions" presentation is **derived** in reporting (restricted-fund expenses + non-expense applications), not journaled. | All the tracking power of the sub-currency idea, none of the collateral damage. |
+| D20 | **Restricted funds are a split dimension with fund-level conservation.** `funds` table documents grants/restricted gifts (funder, purpose, restriction type, dates); a fund is scoped to **one or more subsidiaries** via `fund_subsidiaries` (not inherited by descendants — a transaction's subsidiary must be in the fund's set, Q1 resolved) and optionally to a **program subtree** (R/E splits tagged the fund must carry a program inside it). Every split carries `fund_id` (NULL = unrestricted); every transaction must sum to zero **within each fund**, not just overall — so restricted money is conserved through *any* account: cash, buildings, loan payoffs. Modelling funds as sub-currencies (`USD.grant`) was evaluated and rejected: identical semantics (per-fund zero-sum ⇔ per-currency zero-sum), but it breaks single-statement reconciliation (D13), multiplies the currency/rate/report surface, and a grant partially converted cross-currency would mint pseudo-currencies on both sides. The UI presents the dimension as "Fund: Unrestricted General / ⟨grant⟩" per split, with a transaction-level apply-to-all. GAAP "released from restrictions" presentation is **derived** in reporting (restricted-fund expenses + non-expense applications), not journaled. | All the tracking power of the sub-currency idea, none of the collateral damage. |
 | D21 | **Functional expenses (990 Part IX)** are a fixed enum `program | management | fundraising` ("development" = fundraising column). Expense accounts carry a **default** class; every expense split **requires** a class (prefilled from the account default, overridable per split — covers rent/salary allocations); non-expense splits must be NULL. Trigger-enforced. Duplicating the account hierarchy per class rejected: Part IX is natural × functional — a matrix, and matrices are dimensions. | One report renders Part IX; the tree stays single and clean. |
 | D22 | Import source is the **cleaned full-ledger CSV** (former O1, resolved). `cmd/ledgerimport` is driven by a reviewable mapping file: per source account → {type, parent, subsidiaries, default functional class}; per row → subsidiary and fund (defaults: root subsidiary, unrestricted) with optional source-column overrides. | The export is already a ledger; converting it beats re-keying history. |
 | D23 | Negative restricted-fund balances (spending a grant past its receipts) are surfaced as **warnings** by `cuento check` and on fund pages — never blocked at write time. | Backdated entries make hard blocks hostile; visibility beats prevention here. |
+| D24 | **Programs are a dimension**: `programs` tree with a single seeded root ("General" — the unallocated default); every **revenue and expense** split carries `program_id` (required; prefilled from the account's optional default program, else root); A/L/E splits carry none. Programs are org-global (Q5). Consequence: the chart of accounts holds *natural* categories (salaries, supplies, occupancy, program fees) and mission structure lives in the program tree — same reasoning as D21, matrices are dimensions. Program and functional class are **orthogonal**: a fundraising event benefiting one program is class `fundraising` + that program; Part IX columns come from class, Part III rows from programs. | 990 needs program-level revenue *and* expenses; decision-makers need per-program statements; duplicating programs in the account tree was the same mistake as functional duplication. |
+| D25 | **990 line mapping**: seeded `form990_lines` reference table (part, line, label, allowed account types) covering Parts VIII (revenue), IX (expenses), and X (balance sheet); `accounts.form990_code` nullable with **effective code = own or nearest ancestor's** (inheritable, so mapping happens at a handful of parents). Not hard-required: 990 reports render an explicit **Unmapped** bucket instead of dropping rows, and a warning check flags active R/E leaves with activity but no effective code. Goal: the full 990 package (Parts III, VIII, IX, X) is producible directly. | One field, set ~10 times, and year-end becomes running four reports. |
+| D26 | **Two-step go-live**: the production database is produced by `cmd/ledgerimport` from the cleaned CSVs + a reviewed mapping file, built and rehearsed during p09.4 (locally; mapping lives gitignored beside the source data). Deploy = (1) build db + `cuento check --strict`, (2) ship db + binary. The historical mapping assigns subsidiaries, funds, programs, functional classes, and 990 codes (inherited from the created tree) up front. | Import is the deployment path, not an afterthought; rehearsing it early means cutover is mechanical. |
 
 ## Open questions (defaults chosen so work is never blocked)
 
+Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subsidiaries, optionally to a program subtree (D20). **Q2** permissions stay global (D10). **Q3** reports split only with/without donor restrictions; per-grant funder reporting = the fund statement (p15.8). **Q4** hosting, FX, and "development" = fundraising column confirmed.
+
 | ID | Question | Default until answered | Affects |
 |----|----------|------------------------|---------|
-| Q1 | May a fund scoped to subsidiary S be used on transactions of S's descendants? | No — fund usable only in its own subsidiary. | p07, p08 validation |
-| Q2 | Are per-subsidiary permissions needed, or is global read/write enough? | Global (D10); per-sub grants → backlog. | Phase 6, backlog |
-| Q3 | Do reports need to distinguish purpose- vs time-restricted, or only with/without donor restrictions (990 Part X style)? | With/without only; restriction type recorded on the fund as metadata. | Phase 15 |
-| Q4 | Confirm hosting (D8), FX model (D3), and "development" = 990 fundraising column (D21). | As decided. | Phases 14, 15, 18 |
+| Q5 | Should programs be scopeable per subsidiary, or org-global? | Global — every program usable in every sub; per-sub scoping → backlog if miscoding actually occurs. | p07, p08 |
+| Q6 | Seed the full Form 990 line set, or the 990-EZ subset? | Full 990 (supersets EZ; EZ preparers ignore extra granularity). | p05.1, p15.11 |
 
 ---
 
@@ -105,11 +108,11 @@ Human inputs required: place the cleaned full-ledger CSV export in `fixtures/sou
 ## Phase 5 — Accounts
 
 - [ ] **p05.1 db: accounts + names + subsidiary map + versions + triggers.**
-  Tests (direct SQL): inserting an expense under an asset fails; asset under asset succeeds; revenue under expense succeeds; `functional_class` on a non-expense account rejected; versions tables exist for `accounts`, `account_names`, `account_subsidiaries`.
-  Build: migration per Appendix A — `accounts` (now with `functional_class` default column, `intercompany` flag), `account_names(account_id, lang, name)`, `account_subsidiaries(account_id, subsidiary_id)`, all three `*_versions`, triggers `trg_accounts_parent_typeclass`, `trg_accounts_function_expense_only`. (Leaf/no-splits triggers arrive in p08.1 when `splits` exists.)
+  Tests (direct SQL): inserting an expense under an asset fails; asset under asset succeeds; revenue under expense succeeds; `functional_class` on a non-expense account rejected; `form990_lines` seeded (spot-check known Part VIII/IX/X codes, Q6 default: full 990); versions tables exist for `accounts`, `account_names`, `account_subsidiaries`.
+  Build: migration per Appendix A — `form990_lines(code PK, part, line, label, account_types, sort)` seeded reference (static; updated only by migration, not versioned), `accounts` (with `functional_class` default column, `intercompany` flag, `form990_code → form990_lines`), `account_names(account_id, lang, name)`, `account_subsidiaries(account_id, subsidiary_id)`, all three `*_versions`, triggers `trg_accounts_parent_typeclass`, `trg_accounts_function_expense_only`. (Leaf/no-splits triggers arrive in p08.1 when `splits` exists; `default_program_id` arrives in p07.1 once `programs` exists.)
 - [ ] **p05.2 store: account operations.**
-  Tests: `TestCreateAccountVersioned` (AssertVersioned for account + names + sub map), `TestCreateRequiresAtLeastOneSub`, `TestMoveRejectsCycle`, `TestMoveRejectsCrossTypeClass`, `TestMoveRejectsSubMismatch` (new parent's sub set must cover the moving account's), `TestAssignSubPropagatesToAncestors` (adding sub S to a leaf silently adds S up the chain), `TestRemoveSubBlockedByChildOrSplits` (can't remove S while a child has S; split-usage guard lands in p08 and is noted here as a TODO test tag), `TestDeactivate`, `TestTreeOrdering`, `TestAccountNameAsOf` (rename, then query the old name at an earlier T via versions).
-  Build: `CreateAccount(subs ≥ 1)`, `UpdateAccount` (move/flags/default currency/functional default/intercompany), `SetAccountName(lang)`, `SetAccountSubsidiaries` (superset invariant per D18, ancestor auto-propagation), `DeactivateAccount`, `Tree(lang, subFilter)` via recursive CTE.
+  Tests: `TestCreateAccountVersioned` (AssertVersioned for account + names + sub map), `TestCreateRequiresAtLeastOneSub`, `TestMoveRejectsCycle`, `TestMoveRejectsCrossTypeClass`, `TestMoveRejectsSubMismatch` (new parent's sub set must cover the moving account's), `TestAssignSubPropagatesToAncestors` (adding sub S to a leaf silently adds S up the chain), `TestRemoveSubBlockedByChildOrSplits` (can't remove S while a child has S; split-usage guard lands in p08 and is noted here as a TODO test tag), `TestDeactivate`, `TestTreeOrdering`, `TestAccountNameAsOf` (rename, then query the old name at an earlier T via versions), `TestEffective990Inherited` (code set on a parent resolves for all descendants; a child's own code wins), `TestSet990CodeTypeMismatch` (a revenue line on an expense account rejected against `form990_lines.account_types`).
+  Build: `CreateAccount(subs ≥ 1)`, `UpdateAccount` (move/flags/default currency/functional default/intercompany/990 code), `SetAccountName(lang)`, `SetAccountSubsidiaries` (superset invariant per D18, ancestor auto-propagation), `DeactivateAccount`, `Tree(lang, subFilter)` and `Effective990Codes()` (nearest-ancestor resolution, D25) via recursive CTE.
 - [ ] **p05.3 store: name fallback.**
   Tests: user lang → en → any, exercised through `Tree`.
   Build: COALESCE join in the tree/name queries.
@@ -129,30 +132,33 @@ Human inputs required: place the cleaned full-ledger CSV export in `fixtures/sou
   Tests: `TestUserAddAndLogin`, `TestDisabledUserCannotLogin`.
   Build: `cuento user add|passwd|disable` (add supports `--admin`); `serve` logs a bootstrap hint when no human users exist.
 
-## Phase 7 — Funds (grants & restricted gifts)
+## Phase 7 — Programs & funds
 
-- [ ] **p07.1 db: funds + versions.**
-  Tests (direct SQL): FK to subsidiaries; restriction CHECK; versions table exists; date GLOB checks.
-  Build: migration — `funds(id, subsidiary_id → subsidiaries, name, funder, purpose, restriction CHECK ('purpose','time','perpetual'), start_date, end_date, notes, active)` + `funds_versions`. NULL `fund_id` on splits *is* unrestricted (D20) — no seeded "general fund" row; the UI label comes from the i18n catalog.
-- [ ] **p07.2 store: fund operations.**
-  Tests: `TestCreateFundVersioned`, `TestCloseFundBlocksNewUse` (inactive fund rejected on new splits — asserted properly in p08, tagged here), `TestFundsBySubsidiary` (Q1 default: own subsidiary only), `TestReopenAudited`.
-  Build: `CreateFund`, `UpdateFund`, `CloseFund`/`ReopenFund`, `ActiveFunds(subsidiary)` (the transaction editor's option source).
+- [ ] **p07.1 db+store: programs.**
+  Tests: single root enforced by trigger; versions table exists; `TestCreateProgramVersioned`, `TestMoveRejectsCycle`, `TestRootImmovable`, `TestDeactivateBlocksNewUseOnly` (history intact; asserted fully once splits exist), `TestProgramTree` (depth-first), `TestDescendants`, `TestAccountDefaultProgramREOnly` (default program on an A/L/E account rejected).
+  Build: migration — `programs(id, parent_id → programs, name UNIQUE, active, sort_order)` + `programs_versions`, trigger `trg_programs_single_root`, seed root program (i18n-labeled "General" — the unallocated default, D24); `ALTER TABLE accounts ADD COLUMN default_program_id REFERENCES programs(id)` (meaningful only on R/E accounts, store-enforced). Store: `CreateProgram`, `UpdateProgram` (rename/move), `DeactivateProgram`, `ProgramTree()`, `Descendants(id)`.
+- [ ] **p07.2 db: funds + scoping + versions.**
+  Tests (direct SQL): restriction CHECK; program FK; date GLOB checks; versions tables exist for `funds` and `fund_subsidiaries`.
+  Build: migration — `funds(id, name, funder, purpose, restriction CHECK ('purpose','time','perpetual'), program_id REFERENCES programs(id), start_date, end_date, notes, active)` + `fund_subsidiaries(fund_id, subsidiary_id)` (≥1 enforced in store) + both `*_versions`. NULL `fund_id` on splits *is* unrestricted (D20) — no seeded "general fund" row; the UI label comes from the i18n catalog.
+- [ ] **p07.3 store: fund operations.**
+  Tests: `TestCreateFundVersioned` (fund + sub map under one change), `TestCreateRequiresAtLeastOneSub`, `TestCloseFundBlocksNewUse` (asserted properly in p08, tagged here), `TestActiveFundsForSubsidiary` (only funds whose set contains the sub, D20/Q1), `TestProgramScopeStored`, `TestNarrowSubsBlockedBySplits` (tagged; enforced once splits exist in p08), `TestReopenAudited`.
+  Build: `CreateFund(subs ≥ 1)`, `UpdateFund` (incl. subsidiary-set and program-scope changes), `CloseFund`/`ReopenFund`, `ActiveFunds(subsidiary)` (the transaction editor's option source).
 
 ## Phase 8 — Transactions & splits core
 
 - [ ] **p08.1 db: payees, transactions, splits (+versions, triggers, indexes).**
-  Tests (direct SQL): split on a placeholder account rejected; adding a child under an account with splits rejected; `amount = 0` rejected; expense split with NULL `functional_class` rejected and non-expense split with a class rejected (trigger joins accounts); deleting a referenced account/currency/subsidiary/fund rejected; indexes exist.
-  Build: migration per Appendix A — `transactions` (with `subsidiary_id NOT NULL`), `splits` (with `fund_id`, `functional_class`); triggers `trg_splits_leaf_active_only`, `trg_accounts_no_children_over_splits`, `trg_splits_function_matches_type`.
+  Tests (direct SQL): split on a placeholder account rejected; adding a child under an account with splits rejected; `amount = 0` rejected; expense split with NULL `functional_class` rejected and non-expense split with a class rejected; revenue/expense split with NULL `program_id` rejected and A/L/E split carrying a program rejected (triggers join accounts); deleting a referenced account/currency/subsidiary/fund/program rejected; indexes exist.
+  Build: migration per Appendix A — `transactions` (with `subsidiary_id NOT NULL`), `splits` (with `fund_id`, `program_id`, `functional_class`); triggers `trg_splits_leaf_active_only`, `trg_accounts_no_children_over_splits`, `trg_splits_function_matches_type`, `trg_splits_program_matches_type`.
 - [ ] **p08.2 store: post / update / delete transactions.**
-  Tests: `TestPostBalanced` (AssertVersioned: txn + every split under one change), `TestPostUnbalancedRejected` (typed `ErrUnbalanced`), `TestPostFundUnbalancedRejected` (**the D20 invariant**: overall zero-sum but fund groups don't individually net to zero → typed `ErrFundUnbalanced`), `TestPostMixedFundsBalanced` (60/40 grant/unrestricted expense with correspondingly split cash side posts fine), `TestPostSingleSplitRejected`, `TestPostPlaceholderRejected`, `TestPostInactiveAccountRejected`, `TestPostAccountNotInSubsidiary` (split account lacking the txn's sub → typed error), `TestPostFundWrongSubsidiary` (Q1), `TestPostInactiveFundRejected`, `TestPostExpenseRequiresFunction` / `TestPostNonExpenseFunctionRejected`, `TestUpdateDiffsSplits` (changed/added/removed splits each get correct version ops; untouched splits get none), `TestDeleteIsSoft`, `TestTransactionAsOf` (post → edit → edit; as-of between edits reconstructs the middle state including splits), `TestConcurrentPostsSerialize`.
-  Build: `PostTransaction(input)` validating ≥2 splits, zero-sum in txn currency overall **and per fund group (NULL = one group)**, leaf+active accounts each mapped to the txn's active subsidiary, active currency, funds active and in-subsidiary, functional class present exactly on expense splits (defaulted from the account when omitted); `UpdateTransaction` (replace-set diff by split id, same validations); `DeleteTransaction` (soft flag + delete version op). Also: complete p05.2's deferred guard — removing a subsidiary from an account is blocked if the account has splits in that subsidiary.
+  Tests: `TestPostBalanced` (AssertVersioned: txn + every split under one change), `TestPostUnbalancedRejected` (typed `ErrUnbalanced`), `TestPostFundUnbalancedRejected` (**the D20 invariant**: overall zero-sum but fund groups don't individually net to zero → typed `ErrFundUnbalanced`), `TestPostMixedFundsBalanced` (60/40 grant/unrestricted expense with correspondingly split cash side posts fine), `TestPostSingleSplitRejected`, `TestPostPlaceholderRejected`, `TestPostInactiveAccountRejected`, `TestPostAccountNotInSubsidiary` (split account lacking the txn's sub → typed error), `TestPostFundSubsidiaryScope` (fund scoped to two subs posts in both, rejected in a third), `TestPostInactiveFundRejected`, `TestPostExpenseRequiresFunction` / `TestPostNonExpenseFunctionRejected`, `TestPostProgramDefaulted` (omitted program on an R/E split → account default, else root), `TestPostProgramOnBalanceSheetRejected`, `TestPostInactiveProgramRejected`, `TestPostFundProgramScope` (R/E split tagged a fund whose program scope excludes the split's program → typed error), `TestUpdateDiffsSplits` (changed/added/removed splits each get correct version ops; untouched splits get none), `TestDeleteIsSoft`, `TestTransactionAsOf` (post → edit → edit; as-of between edits reconstructs the middle state including splits), `TestConcurrentPostsSerialize`.
+  Build: `PostTransaction(input)` validating ≥2 splits, zero-sum in txn currency overall **and per fund group (NULL = one group)**, leaf+active accounts each mapped to the txn's active subsidiary, active currency, funds active with the txn's subsidiary in their scope, program present exactly on R/E splits (defaulted account default → root; active; inside the fund's program subtree when both are set), functional class present exactly on expense splits (defaulted from the account when omitted); `UpdateTransaction` (replace-set diff by split id, same validations); `DeleteTransaction` (soft flag + delete version op). Also: complete the deferred guards — removing a subsidiary from an account (p05.2) or a fund (p07.3) is blocked if splits exist in that subsidiary.
 - [ ] **p08.3 ledger: integrity suite (`cuento check`).**
   Tests: fixture passes clean; one negative test per rule (corrupt a copy of the db with raw SQL, assert the rule flags it); warning-severity rules reported but exit-zero unless `--strict`.
-  Rules (severity **error** unless noted): Z1 every non-deleted txn sums to 0 · Z2 splits reference leaf accounts · Z3 each current row equals its latest version snapshot · Z4 `PRAGMA foreign_key_check` clean · Z5 every version row has a valid change · Z6 no orphan splits · Z7 account tree acyclic · Z8 reconciled splits match their reconciliation's account and currency · Z9 finalized reconciliations still sum to their statement chain · **Z10** every txn sums to 0 within each fund group · **Z11** every split's account is mapped to its txn's subsidiary · **Z12** every account's subsidiary set ⊇ union of its children's · **Z13** every non-NULL split fund belongs to the txn's subsidiary · **Z14** functional_class present iff expense account · **Z15** subsidiary tree acyclic, exactly one root · **Z16 (warning)** intercompany-flagged accounts net to zero per currency at full consolidation · **Z17 (warning)** no restricted fund has a negative cumulative balance in any currency (D23).
+  Rules (severity **error** unless noted): Z1 every non-deleted txn sums to 0 · Z2 splits reference leaf accounts · Z3 each current row equals its latest version snapshot · Z4 `PRAGMA foreign_key_check` clean · Z5 every version row has a valid change · Z6 no orphan splits · Z7 account tree acyclic · Z8 reconciled splits match their reconciliation's account and currency · Z9 finalized reconciliations still sum to their statement chain · **Z10** every txn sums to 0 within each fund group · **Z11** every split's account is mapped to its txn's subsidiary · **Z12** every account's subsidiary set ⊇ union of its children's · **Z13** every non-NULL split fund's subsidiary set contains the txn's subsidiary · **Z14** functional_class present iff expense account · **Z15** program_id present iff revenue/expense account, and inside the fund's program subtree when both are set · **Z16** subsidiary and program trees acyclic, exactly one root each · **Z17 (warning)** intercompany-flagged accounts net to zero per currency at full consolidation · **Z18 (warning)** no restricted fund has a negative cumulative balance in any currency (D23) · **Z19 (warning)** every active R/E leaf with activity has an effective 990 code (D25).
   Build: `ledger.Check(db) []Violation` (with severity) as named SQL checks; `cuento check` prints violations, exits non-zero on errors; wired into `make check` and CI.
 - [ ] **p08.4 store: balance queries.**
-  Tests: hand-computed expectations on a small in-test dataset for `SubtreeBalancesAsOf(date, scope)` (per account, per currency; scope = subsidiary + descendants), `PeriodActivity(from, to, scope)`, `FundBalancesAsOf(date, scope)` (per fund incl. NULL/unrestricted, per currency), `FunctionalActivity(from, to, scope)` (expense account × class), `RegisterPage(account, cursor, filters)` including window-function running balance per currency, fund/sub filters, and keyset paging edges.
-  Build: recursive CTE + window functions; these queries are the backbone of registers, fund pages, and reports.
+  Tests: hand-computed expectations on a small in-test dataset for `SubtreeBalancesAsOf(date, scope)` (per account, per currency; scope = subsidiary + descendants), `PeriodActivity(from, to, scope)`, `FundBalancesAsOf(date, scope)` (per fund incl. NULL/unrestricted, per currency), `FunctionalActivity(from, to, scope)` (expense account × class), `ProgramActivity(from, to, scope)` (R/E account × program, rollup-ready over both trees), `RegisterPage(account, cursor, filters)` including window-function running balance per currency, fund/sub/program filters, and keyset paging edges.
+  Build: recursive CTE + window functions; these queries are the backbone of registers, fund pages, program pages, and reports.
 - [ ] **p08.5 store: merge accounts.**
   Tests: `TestMergeRepointsSplitsAndRecons`, `TestMergeBlockedCrossTypeClass`, `TestMergeBlockedIntoPlaceholder`, `TestMergeBlockedSubsetSubs` (destination's sub set must cover the source's), `TestMergeFunctionDefaultKept`, `TestMergeHistoryIntact` (as-of before the merge still shows splits on the source account), all under a single change.
   Build: `MergeAccount(src, dst)` — both leaves, same type-class, dst subs ⊇ src subs; repoint splits and reconciliations; deactivate source; fully versioned.
@@ -160,13 +166,16 @@ Human inputs required: place the cleaned full-ledger CSV export in `fixtures/sou
 ## Phase 9 — Fixtures & historical ledger import
 
 - [ ] **p09.1 testutil: canonical synthetic fixture.**
-  Tests: `TestFixtureIntegrity` (`ledger.Check` clean, warnings included), `TestFixtureKnownAggregates` (exported constants: trial-balance zero per sub, specific account balances, fund balances, functional-matrix cells at specific dates).
+  Tests: `TestFixtureIntegrity` (`ledger.Check` clean, warnings included), `TestFixtureKnownAggregates` (exported constants: trial-balance zero per sub, specific account balances, fund balances, functional-matrix cells, per-program activity, 990 line rollups at specific dates).
   Build: `testutil.Fixture(t)` constructing Appendix D exactly — deterministic dates, amounts, edit history, one finalized reconciliation, FX pair, intercompany pair, restricted grant lifecycle. This is what CI and goldens use; the real export never is.
 - [ ] **p09.2 docs: inspect the real export.** *(needs the CSV in `fixtures/source/`)*
   Deliverable: `docs/ledger-export.md` describing file format, columns, encodings, quirks — **structure only, zero data values copied**. No code.
 - [ ] **p09.3 import: ledger converter.**
-  Tests: parsers exercised against synthetic lines embedded in tests (shape per `docs/ledger-export.md`, fake values); `TestMappingAppliesSubFundFunction` (defaults + per-account/per-column overrides per D22); `TestImportedBooksBalance` (every produced txn balances overall and per fund; `ledger.Check` clean on output).
-  Build: `cmd/ledgerimport accounts` emits a reviewable account-mapping YAML (type, parent, subsidiaries, functional default, en/es names); `cmd/ledgerimport build -o fixtures/sample.db` creates subsidiaries (from mapping), accounts, opening balances (via `Equity:Opening Balances`, per subsidiary), payees, transactions with sub/fund/function assigned per D22; `--anonymize` hashes payees/memos. `make fixture` wires it (local only).
+  Tests: parsers exercised against synthetic lines embedded in tests (shape per `docs/ledger-export.md`, fake values); `TestMappingAppliesSubFundProgramFunction` (defaults + per-account/per-column overrides per D22/D26 — program defaults account default → root); `TestImportedBooksBalance` (every produced txn balances overall and per fund; `ledger.Check` clean on output, warnings surfaced).
+  Build: `cmd/ledgerimport accounts` emits a reviewable account-mapping YAML (type, parent, subsidiaries, functional default, default program, 990 code, en/es names); `cmd/ledgerimport build -o fixtures/sample.db` creates subsidiaries, programs, and funds (from mapping), accounts, opening balances (via `Equity:Opening Balances`, per subsidiary), payees, transactions with sub/fund/program/function assigned per D22; `--anonymize` hashes payees/memos. `make fixture` wires it (local only).
+- [ ] **p09.4 import: production mapping & go-live rehearsal.** *(needs human — iterative)*
+  Tests: none automated against real data (AGENTS rule 11); the acceptance gate is mechanical — `ledgerimport build` from `fixtures/source/` + the reviewed mapping → `cuento check --strict` clean, and spot-checked balances match the current reporting spreadsheet.
+  Build: iterate `fixtures/source/mapping.yaml` (gitignored beside the data) with the human until the gate passes — subsidiaries, the natural account tree with 990 codes at parents, the program tree, funds with scopes, and functional defaults are all decided *here*, once; `docs/golive.md` documents the D26 two-step deploy: (1) `ledgerimport build -o cuento.db && cuento check --strict`, (2) ship db + binary per docs/deploy.md. Re-runnable any time before cutover to pick up newer CSVs.
 
 ## Phase 10 — Web shell & asset pipeline
 
@@ -184,7 +193,7 @@ Human inputs required: place the cleaned full-ledger CSV export in `fixtures/sou
 
 - [ ] **p11.1 web: chart of accounts.**
   Tests: handler CRUD happy paths + permission denials; `TestParentOptionsExcludeDescendantsAndWrongClass`; `TestSubsidiaryFilter` (tree filtered to accounts mapped to the selected sub); `TestSubAssignmentPropagation` surfaces the p05.2 behavior in the form; balances column matches p08.4 queries.
-  Build: tree table with per-currency balances, subsidiary filter, active filter; inline htmx create/edit (names en/es, type constrained by parent, default currency, reconcilable flag, subsidiary checklist, functional-class default for expense accounts, intercompany flag); move via filtered parent select.
+  Build: tree table with per-currency balances, subsidiary filter, active filter; inline htmx create/edit (names en/es, type constrained by parent, default currency, reconcilable flag, subsidiary checklist, functional-class default and default program for R/E accounts, 990 line select filtered to the account's type with the inherited effective code shown as placeholder when unset, intercompany flag); move via filtered parent select. Extra test: `TestForm990OptionsFilteredByType`.
 - [ ] **p11.2 [P] web: merge UI.**
   Tests: handler-level, confirm-step required, consequences summarized (split count, recons repointed), sub-coverage rule surfaced as a validation message.
 - [ ] **p11.3 [P] web: subsidiaries admin.**
@@ -193,23 +202,26 @@ Human inputs required: place the cleaned full-ledger CSV export in `fixtures/sou
 - [ ] **p11.4 [P] web+db: org settings & languages.**
   Tests: adding a language exposes a name column in account forms; org settings persist.
   Build: `org_settings(key, value)` migration (org name, enabled languages); minimal admin form. (Report base currency is no longer an org setting — it follows the scoped subsidiary, D18.)
+- [ ] **p11.5 [P] web: programs management.**
+  Tests: CRUD + perms (view TxnRead, manage TxnWrite — program structure is bookkeeping, like funds); root protected; move options exclude descendants; deactivate messaging (blocks new use, history intact); activity totals match p08.4.
+  Build: `/programs` — tree list with period R/E activity totals per program, inline create/edit/move/deactivate.
 
 ## Phase 12 — Transaction entry & register (the heart of the app)
 
 - [ ] **p12.1 web: account register.**
-  Tests: keyset paging (boundaries, stable ordering by date+id), filters (date range, text, fund, subsidiary), running balance per currency, fund chip renders on restricted splits, subsidiary badge renders when the account maps to >1 sub, recon mark rendered only for `reconcilable` accounts, perms.
+  Tests: keyset paging (boundaries, stable ordering by date+id), filters (date range, text, fund, subsidiary, program), running balance per currency, fund chip renders on restricted splits, subsidiary badge renders when the account maps to >1 sub, recon mark rendered only for `reconcilable` accounts, perms.
   Build: `/accounts/{id}/register` — date, sub badge, payee, memo, counter-account (or "Split"), fund chip, amount, running balance; htmx paging that appends/replaces without scroll loss.
 - [ ] **p12.2 web+js: transaction editor.**
-  Tests: handler create/edit round-trips in both display modes (signed single column; DR/CR twin columns mapping to sign, entering one clears the other); subsidiary select filters both account comboboxes and the fund options; fund apply-to-all sets empty rows only; functional-class select appears only on expense rows, prefilled from the account default; `node --test` units for amount-input parsing and the keyboard-grid state machine; server re-render keeps stable input ids.
-  Build: editor grid per Appendix C — subsidiary select at the header (default = user's `default_subsidiary_id`, else sole sub), account/payee comboboxes (ARIA 1.2 listbox pattern in `combobox.js`) filtered by subsidiary, per-split fund select (default Unrestricted) + header apply-to-all, per-expense-split functional class, select-on-focus module, text date field with `t`/`+`/`-` shortcuts, live imbalance chips **overall and per fund** (client-side display; server revalidates), sticky totals bar.
+  Tests: handler create/edit round-trips in both display modes (signed single column; DR/CR twin columns mapping to sign, entering one clears the other); subsidiary select filters both account comboboxes and the fund options (funds via `fund_subsidiaries`); fund apply-to-all sets empty rows only; program select appears only on R/E rows, prefilled account default → root; a fund-program scope violation renders a per-row error; functional-class select appears only on expense rows, prefilled from the account default; `node --test` units for amount-input parsing and the keyboard-grid state machine; server re-render keeps stable input ids.
+  Build: editor grid per Appendix C — subsidiary select at the header (default = user's `default_subsidiary_id`, else sole sub), account/payee comboboxes (ARIA 1.2 listbox pattern in `combobox.js`) filtered by subsidiary, per-split fund select (default Unrestricted) + header apply-to-all, per-R/E-split program select (account default → root), per-expense-split functional class, select-on-focus module, text date field with `t`/`+`/`-` shortcuts, live imbalance chips **overall and per fund** (client-side display; server revalidates), sticky totals bar.
 - [ ] **p12.3 web: payee autocomplete + autofill.**
-  Tests: `TestPayeeSuggestRanking` (prefix match, most-recent first), `TestPayeeTemplatePrefills` (last non-deleted txn's splits — accounts, memos, amounts, funds, functional classes — become editable rows), `TestAutofillNeverOverwrites` (fires only when all split rows are empty), `TestAutofillRespectsSubsidiary` (template splits with accounts outside the selected sub are dropped with a notice).
+  Tests: `TestPayeeSuggestRanking` (prefix match, most-recent first), `TestPayeeTemplatePrefills` (last non-deleted txn's splits — accounts, memos, amounts, funds, programs, functional classes — become editable rows), `TestAutofillNeverOverwrites` (fires only when all split rows are empty), `TestAutofillRespectsSubsidiary` (template splits with accounts outside the selected sub are dropped with a notice).
   Build: `GET /payees/suggest?q=`, `GET /payees/{id}/template?sub=` returning an editor partial.
 - [ ] **p12.4 web: edit / void / duplicate + history panel.**
   Tests: history timeline renders actor, timestamp, per-field diffs and split-set diffs (including fund and functional-class changes) for create/update/delete; TxnRead may view history; void requires confirm and TxnWrite.
   Build: edit loads the same editor; delete = void with confirm; `/transactions/{id}/history` from versions.
 - [ ] **p12.5 web: funds workspace.**
-  Tests: fund list shows per-currency balance and warning badge on negative (Z17); fund detail = a filtered ledger of the fund's splits across all accounts with opening/closing balance; create/edit/close forms; perms (view TxnRead, manage TxnWrite).
+  Tests: fund list shows per-currency balance, funder/scope columns, and warning badge on negative (Z18); fund detail = a filtered ledger of the fund's splits across all accounts with opening/closing balance; create/edit/close forms incl. subsidiary checklist and program scope; perms (view TxnRead, manage TxnWrite).
   Build: `/funds` (active + closed toggle, balances from p08.4), `/funds/{id}` statement view, `/funds/new` + edit — grants are bookkeeping data, so TxnWrite manages them; subsidiaries/users stay Admin.
 - [ ] **p12.6 ux: entry-flow hardening.**
   Tests: automate what's automatable (stable ids across all swap responses; no full-page redirects on in-flow actions).
@@ -239,16 +251,18 @@ Human inputs required: place the cleaned full-ledger CSV export in `fixtures/sou
   Tests: registry sync creates groups; unknown report id → 404; new reports appear in the permission matrix automatically; CSV output escapes correctly; params form includes the subsidiary scope selector on every report.
   Build: `reports.Report{ID, TitleKey, Group, ParamsSpec, Run(ctx, *Toolkit, Params) (Table, error)}`; `Table` with typed cells (money/date/text), indent levels, subtotal flags, warning rows (for D19); HTML + CSV renderers; auto-mounted routes under `/reports/{id}` gated by `ReportGroup`; shared params form (**subsidiary scope** — default user's, consolidating descendants per D18; as-of / period; granularity; target currency defaulting to the scope's base).
 - [ ] **p15.2 reports: toolkit.**
-  Tests: hand-computed expectations on `testutil.Fixture` — `BalancesAsOf` with `Scope{Sub}` at root vs a leaf sub, `ConvertOpts{To, Mode: Closing}`, `Activity` with `Mode: TxnDate`, `Rollup` (placeholder subtotal rows in tree order), `NetIncome(from, to)`, `FundBalances` (per fund per currency; unrestricted line), `FunctionalMatrix` cells, `IntercompanyNet` (zero on the balanced fixture; nonzero on a corrupted copy → warning row), conversion rounding edge cases.
+  Tests: hand-computed expectations on `testutil.Fixture` — `BalancesAsOf` with `Scope{Sub}` at root vs a leaf sub, `ConvertOpts{To, Mode: Closing}`, `Activity` with `Mode: TxnDate`, `Rollup` (placeholder subtotal rows in tree order), `NetIncome(from, to)`, `FundBalances` (per fund per currency; unrestricted line), `FunctionalMatrix` cells, `ProgramActivity` (rollup over the program tree), `Group990` (effective-code rollup per D25 with an explicit Unmapped bucket; a fixture leaf overriding its parent's code lands on its own line), `IntercompanyNet` (zero on the balanced fixture; nonzero on a corrupted copy → warning row), conversion rounding edge cases.
   Build: Appendix E signatures over the p08.4 queries; conversion per D12; consolidation = the scope's descendant closure; intercompany collapse per D19.
 - [ ] **p15.3 [P] report: trial balance** (as-of; per scope; native currencies + converted column) + goldens.
 - [ ] **p15.4 [P] report: balance sheet** (as-of; A/L/E sections; equity section shows **Net assets without donor restrictions** and **Net assets with donor restrictions** (Q3) computed from fund tagging, plus "Net surplus to date"; intercompany collapse with warning row when nonzero; per-currency detail toggle; converted totals at closing rate) + goldens including the multicurrency, multi-sub case.
 - [ ] **p15.5 [P] report: income statement** (period; mixed R/E tree preserved; comparative monthly/quarterly columns; conversion at txn-date rates) + goldens.
 - [ ] **p15.6 [P] report: account ledger** (printable register for a range with opening/closing balances; fund column) + goldens.
-- [ ] **p15.7 [P] report: functional expenses — 990 Part IX** (period; rows = expense accounts in tree order with subtotals, columns = Program / Management & general / Fundraising / Total) + goldens.
+- [ ] **p15.7 [P] report: functional expenses — 990 Part IX** (period; expense accounts grouped and subtotaled under their effective Part IX lines, Unmapped bucket last; columns = Program / Management & general / Fundraising / Total) + goldens.
 - [ ] **p15.8 [P] report: fund balances & activity** (as-of balances per fund with funder/restriction metadata; drill parameters for one fund's period statement: opening, received, applied — split into expenses vs non-expense applications like asset purchases and loan principal — closing) + goldens.
 - [ ] **p15.9 [P] report: activities by restriction** (statement of activities with Without / With donor-restrictions columns; the "net assets released from restrictions" line **derived** as total applications of restricted funds in the period per D20 — no journaled transfers) + goldens.
-- [ ] **p15.10 reports: index + recipe.**
+- [ ] **p15.10 [P] report: program statement** (period; revenue and expense by natural account per program, program-tree rollup, net per program; parameterized to one program subtree or all top-level programs as comparative columns; this is the decision-maker view and feeds 990 Part III) + goldens.
+- [ ] **p15.11 [P] report: 990 package** (fiscal year; one page per part — Part VIII revenue by effective line · Part IX totals cross-checked against p15.7 · Part X balance-sheet lines at year-end incl. the net-assets with/without-restrictions split · Part III program service summary (expenses + revenue per top-level program from p15.10's toolkit calls); every section renders an explicit Unmapped bucket rather than dropping rows) + goldens.
+- [ ] **p15.12 reports: index + recipe.**
   Tests: index lists only permitted groups/reports per persona.
   Build: `/reports` index; `reports/README.md` — the "adding a report" checklist (folder, query, template, i18n keys, register, golden) so future reports are code-only additions.
 
@@ -289,20 +303,20 @@ Human inputs required: place the cleaned full-ledger CSV export in `fixtures/sou
   Build: if `CUENTO_DOMAIN` set → autocert on :443 with :80 redirect (cert cache in data dir), else plain HTTP; `deploy/` — `cuento.service`, `litestream.service`, `ratesync.timer`, `litestream.yml` (replica → GCS); `docs/deploy.md` — e2-micro walkthrough (always-free region, 30 GB pd-standard, firewall 80/443, Litestream restore drill, backup retention).
 - [ ] **p18.3 web: admin ops page.**
   Tests: admin-only (matrix); snapshot download is a valid SQLite file (`PRAGMA quick_check` on the result); actions audited.
-  Build: run `ledger.Check` with rendered violations (errors and warnings, incl. Z16/Z17); backup snapshot via `VACUUM INTO`; build info.
+  Build: run `ledger.Check` with rendered violations (errors and warnings, incl. Z17–Z19); backup snapshot via `VACUUM INTO`; build info.
 - [ ] **p18.4 hardening sweep.**
   Tests: security-header assertions across all routes; CSP console clean in a `-dev` click-through; catalog parity green with the final key set.
   Build: govulncheck green, dependency prune to D15, session lifetime settings reviewed, `make check` run against local `sample.db`, `docs/security.md` (threat model: authenticated misuse + commodity web attacks; explicitly not storing bank credentials), DECISIONS.md tidy.
 
 ## Phase 19 — Backlog (explicit non-goals for v1)
 
-Budgets (incl. per-fund grant budgets) · per-subsidiary permissions (Q2) · intercompany elimination entries beyond the D19 collapse · receipt attachments · global audit browser and "books as edited at time T" reports (data already supports both, per D4/D5) · recurring/scheduled transactions · board-designated (quasi-restricted) funds · additional UI languages beyond en/es (catalogs make it a file-drop) · API tokens · dashboard/home page · multi-org.
+Budgets (incl. per-fund and per-program budgets) · per-subsidiary permissions · per-subsidiary program scoping (Q5) · intercompany elimination entries beyond the D19 collapse · receipt attachments · global audit browser and "books as edited at time T" reports (data already supports both, per D4/D5) · recurring/scheduled transactions · board-designated (quasi-restricted) funds · additional UI languages beyond en/es (catalogs make it a file-drop) · API tokens · dashboard/home page · multi-org.
 
 ---
 
 ## Appendix A — Target schema reference (authoritative source: migrations)
 
-Versions pattern — one table per versioned business table (`subsidiaries`, `accounts`, `account_names`, `account_subsidiaries`, `funds`, `payees`, `transactions`, `splits`, `reconciliations`, `users`†, `user_report_grants`):
+Versions pattern — one table per versioned business table (`subsidiaries`, `programs`, `accounts`, `account_names`, `account_subsidiaries`, `funds`, `fund_subsidiaries`, `payees`, `transactions`, `splits`, `reconciliations`, `users`†, `user_report_grants`):
 
 ```sql
 CREATE TABLE <t>_versions (
@@ -343,6 +357,22 @@ CREATE TABLE subsidiaries (
 );
 -- trg_subsidiaries_single_root: at most one row with parent_id IS NULL
 
+CREATE TABLE programs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  parent_id INTEGER REFERENCES programs(id),       -- NULL only for the single seeded root ("General")
+  name TEXT NOT NULL UNIQUE,
+  active INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+-- trg_programs_single_root (D24)
+
+CREATE TABLE form990_lines (                        -- static seeded reference (D25); not versioned
+  code TEXT PRIMARY KEY,                            -- e.g. 'VIII.1e', 'IX.16', 'X.25'
+  part TEXT NOT NULL, line TEXT NOT NULL, label TEXT NOT NULL,
+  account_types TEXT NOT NULL,                      -- CSV of allowed account types
+  sort INTEGER NOT NULL
+);
+
 CREATE TABLE accounts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   parent_id INTEGER REFERENCES accounts(id),
@@ -350,6 +380,8 @@ CREATE TABLE accounts (
   default_currency TEXT NOT NULL REFERENCES currencies(code),
   functional_class TEXT CHECK (functional_class IN ('program','management','fundraising')),
     -- default class; non-NULL only on expense accounts (trg_accounts_function_expense_only)
+  default_program_id INTEGER REFERENCES programs(id),  -- added p07.1; meaningful only on R/E accounts
+  form990_code TEXT REFERENCES form990_lines(code),    -- effective code = own or nearest ancestor's (D25)
   intercompany INTEGER NOT NULL DEFAULT 0,         -- D19
   reconcilable INTEGER NOT NULL DEFAULT 0,
   active INTEGER NOT NULL DEFAULT 1,
@@ -374,15 +406,23 @@ CREATE TABLE account_subsidiaries (
 
 CREATE TABLE funds (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  subsidiary_id INTEGER NOT NULL REFERENCES subsidiaries(id),
   name TEXT NOT NULL,
   funder TEXT NOT NULL DEFAULT '',
   purpose TEXT NOT NULL DEFAULT '',
   restriction TEXT NOT NULL CHECK (restriction IN ('purpose','time','perpetual')),
+  program_id INTEGER REFERENCES programs(id),      -- optional scope: R/E splits tagged this fund
+                                                   -- must carry a program in this subtree (D20)
   start_date TEXT, end_date TEXT,
   notes TEXT NOT NULL DEFAULT '',
   active INTEGER NOT NULL DEFAULT 1
 );
+
+CREATE TABLE fund_subsidiaries (
+  fund_id INTEGER NOT NULL REFERENCES funds(id),
+  subsidiary_id INTEGER NOT NULL REFERENCES subsidiaries(id),
+  PRIMARY KEY (fund_id, subsidiary_id)
+);
+-- ≥1 row per fund (store-enforced); a txn's subsidiary must be in its fund's set (Z13).
 -- NULL fund_id on a split == unrestricted; no seeded "general fund" row (D20).
 
 CREATE TABLE payees (
@@ -407,6 +447,7 @@ CREATE TABLE splits (
   account_id INTEGER NOT NULL REFERENCES accounts(id),
   amount INTEGER NOT NULL CHECK (amount <> 0),   -- minor units, net-debit sign
   fund_id INTEGER REFERENCES funds(id),          -- NULL = unrestricted (D20)
+  program_id INTEGER REFERENCES programs(id),    -- required iff R/E account (trg_splits_program_matches_type + Z15)
   functional_class TEXT CHECK (functional_class IN ('program','management','fundraising')),
     -- required iff the account is expense-type (trg_splits_function_matches_type + Z14)
   memo TEXT NOT NULL DEFAULT '',
@@ -416,12 +457,14 @@ CREATE TABLE splits (
 CREATE INDEX splits_account ON splits(account_id);
 CREATE INDEX splits_txn     ON splits(transaction_id);
 CREATE INDEX splits_fund    ON splits(fund_id);
+CREATE INDEX splits_program ON splits(program_id);
 CREATE INDEX txn_date       ON transactions(date);
 CREATE INDEX txn_sub        ON transactions(subsidiary_id);
--- trg_splits_leaf_active_only; trg_splits_function_matches_type; trg_split_locked_when_finalized (p16)
+-- trg_splits_leaf_active_only; trg_splits_function_matches_type; trg_splits_program_matches_type;
+-- trg_split_locked_when_finalized (p16)
 -- Zero-sum per transaction AND per (transaction, fund) are NOT schema constraints (SQLite triggers
 -- fire per-row, no deferred checks): enforced in store (the only writer) and proven by `cuento check`
--- (Z1, Z10). Split-account ∈ txn-subsidiary and fund-subsidiary match likewise (Z11, Z13).
+-- (Z1, Z10). Split-account ∈ txn-subsidiary, fund subsidiary/program scopes likewise (Z11, Z13, Z15).
 
 CREATE TABLE reconciliations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -449,8 +492,8 @@ Plus: users (see p06.1), `org_settings(key, value)`, scs `sessions`, and the pha
 |---|---|
 | GET/POST `/login`, GET `/healthz`, GET `/static/…` | Public |
 | POST `/logout`, GET/POST `/settings`, POST `/theme` | AnyUser |
-| GET `/accounts`, `/accounts/{id}/register`, `/transactions/{id}/history`, `/payees/suggest`, `/funds`, `/funds/{id}`, `/reconciliations` | TxnRead |
-| POST `/accounts…`, `/transactions…`, `/funds…`, `/reconciliations…`, `/import…` | TxnWrite |
+| GET `/accounts`, `/accounts/{id}/register`, `/transactions/{id}/history`, `/payees/suggest`, `/funds`, `/funds/{id}`, `/programs`, `/reconciliations` | TxnRead |
+| POST `/accounts…`, `/transactions…`, `/funds…`, `/programs…`, `/reconciliations…`, `/import…` | TxnWrite |
 | GET `/reports`, `/reports/{id}` | ReportGroup(id's group) |
 | `/admin/**` (users, subsidiaries, currencies, rates, org settings, ops) | Admin |
 
@@ -460,7 +503,8 @@ Plus: users (see p06.1), `org_settings(key, value)`, scs `sessions`, and the pha
 - **Keys:** Tab/Shift+Tab between fields · Enter = next logical field, and on a row's last field creates/moves to the next row · Ctrl/Cmd+Enter saves the transaction · Esc cancels the edit (confirm if dirty) · Alt+↑/↓ moves rows.
 - **Combobox** (payee, account): ↓ opens/advances, type-to-filter, Enter selects, Esc closes the list without cancelling the row. ARIA 1.2 combobox/listbox pattern, visible focus, ≥24 px hit targets even at compact density.
 - **Subsidiary:** one select in the txn header (defaults to the user's default subsidiary, or the only one); changing it re-filters account comboboxes and fund options; rows referencing now-invalid accounts get a per-row error, never silent clearing.
-- **Fund:** compact per-split select, default "Unrestricted General" (i18n label for NULL); header-level "apply fund to all rows" fills empty selections only. The per-fund imbalance chip appears whenever ≥2 funds are in play.
+- **Fund:** compact per-split select, default "Unrestricted General" (i18n label for NULL), options limited to funds scoped to the selected subsidiary; header-level "apply fund to all rows" fills empty selections only. The per-fund imbalance chip appears whenever ≥2 funds are in play; a fund-program scope violation is a per-row error.
+- **Program:** compact select on revenue/expense rows only, prefilled account default → root ("General"); one keystroke to change; carried by payee autofill.
 - **Functional class:** appears only on expense rows, prefilled from the account default, one keystroke to override (P/M/F access keys).
 - **Date field:** text input honoring the user's date format (ISO always accepted); `t` = today, `+`/`-` = ±1 day. Never `input[type=date]`.
 - **Amounts:** signed mode = one column; DR/CR mode = twin columns mapping to sign, filling one clears the other. Client-side live imbalance chips — overall and per fund (display only — server revalidates), sticky totals bar.
@@ -471,11 +515,13 @@ Plus: users (see p06.1), `org_settings(key, value)`, scs `sessions`, and the pha
 
 Org: root subsidiary **"Río Verde Internacional"** (USD) with children **"RV Estados Unidos"** (USD) and **"RV México"** (MXN). Currencies USD + MXN.
 
-~24 accounts: Assets{Checking US (USD, reconcilable, sub US), Checking MX (MXN, reconcilable, sub MX), Savings (USD, root), Cash MXN (sub MX), Building (USD, sub US), Due from RV México (USD, **intercompany**, sub US), FX Clearing (root, all subs)}, Liabilities{Credit Card (USD, reconcilable, sub US), Due to RV Internacional (USD, **intercompany**, sub MX)}, Equity{Opening Balances (all subs)}, Programs (placeholder, all subs){Education (subs US+MX){Grant Revenue, Tuition Revenue, Program Supplies (exp, default `program`), Facilitators (exp, default `program`)}, Food Pantry (sub US){Donations (rev), Food Purchases (exp, `program`)}}, Admin (all subs){Insurance (exp, `management`), Bank Fees (exp, `management`)}, Fundraising{Event Costs (exp, `fundraising`)}, Unrestricted Donations (rev, all subs).
+Programs (D24): root **General** with children **Educación** and **Food Pantry**.
 
-Funds: **"Beca Agua 2025"** (purpose-restricted grant, RV México, MXN receipts), **"Building Fund"** (purpose-restricted, RV Estados Unidos).
+~22 accounts, **natural categories** (mission structure lives in the program dimension): Assets{Checking US (USD, reconcilable, sub US), Checking MX (MXN, reconcilable, sub MX), Savings (USD, root), Cash MXN (sub MX), Building (USD, sub US, 990 X line), Due from RV México (USD, **intercompany**, sub US), FX Clearing (root, all subs)}, Liabilities{Credit Card (USD, reconcilable, sub US), Due to RV Internacional (USD, **intercompany**, sub MX)}, Equity{Opening Balances (all subs)}, Revenue (placeholder, 990 codes at children){Contributions (VIII.1f), Government Grants (VIII.1e), Program Service Fees (VIII.2, default program Educación), Event Income}, Expenses (placeholder){Salaries (IX salaries line, default `program`), Program Supplies (default `program`, default program Educación), Food Purchases (default `program`, default program Food Pantry), Occupancy (IX.16, `management`), Insurance (`management`), Bank Fees (`management`), Event Costs (`fundraising`)}. 990 codes are set mostly on parents to exercise inheritance, with **one leaf override** (e.g. Bank Fees overriding the Expenses parent's line) for the `Effective990Codes` test; one active R/E leaf is deliberately left unmapped to exercise Z19 + the Unmapped bucket.
 
-~34 transactions spanning 2025-01 → 2026-06 including: opening-balance txn per subsidiary; repeat payee (autofill tests); MXN cash expenses; restricted grant receipt (MXN, fund Beca Agua) and two restricted spends (one with a mixed 60/40 fund split proving per-fund balancing); a Building Fund receipt applied to a **Building asset purchase** (restricted non-expense application, feeding the p15.8/p15.9 "applied" derivation); one intercompany funding pair (US → MX via due-to/due-from, netting to zero at consolidation); one cross-currency transfer via FX Clearing (−5,000.00 MXN cash→clearing; clearing→ +260.00 USD checking); one transaction edited twice (as-of tests, including a fund change in the edit history); one deleted; one finalized Checking US reconciliation (2026-05-31) spanning restricted and unrestricted splits, leaving two uncleared. Monthly USD/MXN rates 2025-01 → 2026-06 (synthetic drift 17.00 → 18.10). The fixture exports expected aggregates as constants — per-sub trial balances, fund balances, functional-matrix cells, intercompany net (zero) — and goldens and integrity tests assert against them.
+Funds: **"Beca Agua 2025"** (purpose-restricted grant, scoped to subs {RV México, RV Estados Unidos} to exercise multi-sub scoping, program scope **Educación**), **"Building Fund"** (purpose-restricted, scoped to {RV Estados Unidos}, no program scope).
+
+~36 transactions spanning 2025-01 → 2026-06 including: opening-balance txn per subsidiary; repeat payee (autofill tests incl. program prefill); MXN cash expenses (program General); restricted grant receipt (MXN, fund Beca Agua, program Educación) and two restricted spends — one with a mixed 60/40 fund split proving per-fund balancing, one posted in RV Estados Unidos proving the multi-sub fund scope; a Building Fund receipt applied to a **Building asset purchase** (restricted non-expense application — no program on the asset splits — feeding the p15.8/p15.9 "applied" derivation); one intercompany funding pair (US → MX via due-to/due-from, netting to zero at consolidation); one cross-currency transfer via FX Clearing (−5,000.00 MXN cash→clearing; clearing→ +260.00 USD checking); one transaction edited twice (as-of tests, including fund and program changes in the edit history); one deleted; one finalized Checking US reconciliation (2026-05-31) spanning restricted and unrestricted splits, leaving two uncleared. Monthly USD/MXN rates 2025-01 → 2026-06 (synthetic drift 17.00 → 18.10). The fixture exports expected aggregates as constants — per-sub trial balances, fund balances, functional-matrix cells, per-program activity, 990 line rollups (incl. the Unmapped bucket), intercompany net (zero) — and goldens and integrity tests assert against them.
 
 ## Appendix E — Report toolkit signatures (sketch)
 
@@ -489,6 +535,8 @@ func (t *Toolkit) Activity(s Scope, from, to ledger.Date, o ConvertOpts) (map[Ac
 func (t *Toolkit) FundBalancesAsOf(s Scope, d ledger.Date, o ConvertOpts) (map[FundID][]CurAmt, error) // zero FundID = unrestricted
 func (t *Toolkit) FundActivity(s Scope, f FundID, from, to ledger.Date) (FundStatement, error)          // received / applied(exp, non-exp) / closing
 func (t *Toolkit) FunctionalMatrix(s Scope, from, to ledger.Date, o ConvertOpts) (map[AccountID]map[Class]CurAmt, error)
+func (t *Toolkit) ProgramActivity(s Scope, from, to ledger.Date, o ConvertOpts) (map[ProgramID]map[AccountID]CurAmt, error)
+func (t *Toolkit) Group990(part string, leaf map[AccountID]CurAmt) []LineRow // effective-code rollup (D25); Unmapped bucket last
 func (t *Toolkit) IntercompanyNet(s Scope, d ledger.Date) ([]CurAmt, error) // D19 collapse check; nonzero → warning row
 func (t *Toolkit) ByPeriod(from, to ledger.Date, g Granularity, f func(pFrom, pTo ledger.Date) error) error
 func (t *Toolkit) Rollup(leaf map[AccountID]CurAmt) []TreeRow // placeholder subtotals, tree order
@@ -510,6 +558,7 @@ flowchart LR
     history["/transactions/:id/history — audit timeline"]
     funds["/funds — fund list + balances + warnings"]
     fundstmt["/funds/:id — fund statement · edit · close"]
+    programs["/programs — program tree + activity totals · manage"]
     recons["/reconciliations — list + start"]
     reconws["/reconciliations/:id — workspace"]
     impidx["/import — batches + upload"]
@@ -540,9 +589,10 @@ flowchart LR
 | Account register + editor | `/accounts/{id}/register` | TxnRead / TxnWrite | p12.1–.4 |
 | Transaction history | `/transactions/{id}/history` | TxnRead | p12.4 |
 | Funds list / statement / manage | `/funds`, `/funds/{id}` | TxnRead / TxnWrite | p12.5 |
+| Programs tree / manage | `/programs` | TxnRead / TxnWrite | p11.5 |
 | Reconciliations list / workspace | `/reconciliations…` | TxnRead / TxnWrite | p16.3 |
 | Bank import | `/import…` | TxnWrite | p17.2–.3 |
-| Reports index + 9 reports | `/reports…` | ReportGroup | p15 |
+| Reports index + 11 reports | `/reports…` | ReportGroup | p15 |
 | My settings | `/settings` | AnyUser | p13.1 |
 | Admin: users, subsidiaries, currencies/rates, org, ops | `/admin/**` | Admin | p11.3–.4, p13.2, p14.2, p18.3 |
 | Styleguide (dev only) | `/styleguide` | dev | p10.2 |
@@ -553,13 +603,13 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  A[Create subsidiaries<br/>root + children, base currencies] --> B[Enable currencies<br/>+ languages]
-  B --> C[Build account tree<br/>assign subs · functional defaults<br/>· intercompany flags]
+  A[Create subsidiaries<br/>root + children, base currencies] --> B[Enable currencies<br/>+ languages · define program tree]
+  B --> C[Build natural account tree<br/>assign subs · functional defaults ·<br/>default programs · 990 codes at parents ·<br/>intercompany flags]
   C --> D[Create users<br/>perms + report grants]
   D --> E{History?}
-  E -- yes --> F[ledgerimport: mapping YAML<br/>→ review → build db]
+  E -- yes --> F[ledgerimport p09.4: mapping YAML<br/>subs · programs · funds · 990 codes<br/>→ review → build db]
   E -- no --> G[Opening-balance txns<br/>per subsidiary via Equity:Opening]
-  F --> H[cuento check clean]
+  F --> H["cuento check --strict clean<br/>→ two-step go-live (D26):<br/>build db · ship db + binary"]
   G --> H
 ```
 
@@ -567,9 +617,9 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  A[Award letter arrives] --> B[Create fund<br/>funder · purpose · restriction · dates · sub]
-  B --> C[Receipt txn:<br/>DR Checking / CR Grant Revenue<br/>both tagged fund]
-  C --> D[Spend txns: expense splits tagged<br/>fund + functional class;<br/>per-fund zero-sum forces the<br/>cash split to carry the fund]
+  A[Award letter arrives] --> B[Create fund<br/>funder · purpose · restriction · dates ·<br/>subsidiary set · optional program scope]
+  B --> C[Receipt txn:<br/>DR Checking / CR Grant Revenue<br/>both tagged fund, revenue tagged program]
+  C --> D[Spend txns: expense splits tagged<br/>fund + program + functional class;<br/>per-fund zero-sum forces the<br/>cash split to carry the fund;<br/>program scope validated]
   C --> E[Non-expense applications:<br/>asset purchase / loan principal<br/>splits tagged fund]
   D --> F[/funds/:id — balance,<br/>received vs applied,<br/>negative-balance warning/]
   E --> F
@@ -582,7 +632,7 @@ flowchart LR
 flowchart LR
   A[Open account register] --> B[New txn: pick subsidiary<br/>accounts/funds filter to it]
   B --> C[Payee combobox<br/>autofill last txn if rows empty]
-  C --> D[Split rows: account · amount ·<br/>fund default Unrestricted ·<br/>class prefilled on expense rows]
+  C --> D[Split rows: account · amount ·<br/>fund default Unrestricted ·<br/>program prefilled on R/E rows ·<br/>class prefilled on expense rows]
   D --> E{Imbalance chips zero?<br/>overall + per fund}
   E -- no --> D
   E -- yes --> F[Ctrl+Enter saves<br/>→ versioned change]
@@ -595,7 +645,7 @@ flowchart LR
   A[Parent txn, sub US:<br/>DR Due from RV México<br/>CR Checking US] --> C
   B[Child txn, sub MX:<br/>DR Checking MX<br/>CR Due to RV Internacional] --> C
   C[Consolidated reports at root:<br/>intercompany accounts collapse,<br/>asserted net-zero per currency] --> D{Net ≠ 0?}
-  D -- yes --> E[Warning row on report<br/>+ Z16 flags it]
+  D -- yes --> E[Warning row on report<br/>+ Z17 flags it]
   D -- no --> F[Clean consolidation]
 ```
 
@@ -614,10 +664,12 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  A[cuento check clean<br/>incl. fund + intercompany warnings] --> B[Functional expenses report<br/>= Part IX matrix]
-  A --> C[Fund balances + activities<br/>by restriction = Part X<br/>net assets w/ & w/o restrictions]
-  A --> D[Balance sheet & income statement<br/>at root = full consolidation]
+  A["cuento check clean incl. fund ·<br/>intercompany · unmapped-990 warnings"] --> B["990 package report:<br/>Part VIII revenue by line ·<br/>Part IX by line × function ·<br/>Part X incl. net assets w/ & w/o<br/>restrictions"]
+  A --> C[Program statement<br/>= Part III program services]
+  A --> D["Fund statements → per-grant<br/>reports to funders (Q3)"]
+  A --> F[Balance sheet & income statement<br/>at root = full consolidation]
   B --> E[CSV exports → preparer]
   C --> E
   D --> E
+  F --> E
 ```
