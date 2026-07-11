@@ -104,6 +104,15 @@ func serve(args []string) error {
 	defer func() { _ = sqldb.Close() }()
 
 	st := store.New(sqldb)
+
+	// Sync the code-declared report groups into the report_groups reference table
+	// (D10). Idempotent and outside the write funnel (reference data, like
+	// currencies); safe on every boot. The route registry's ReportGroup perms
+	// reference these names, so this runs before we start serving.
+	if err := web.SyncReportGroups(ctx, st); err != nil {
+		return fmt.Errorf("sync report groups: %w", err)
+	}
+
 	handler := web.Handler(web.Config{Version: version, Dev: *dev}, sqldb, st)
 
 	srv := &http.Server{

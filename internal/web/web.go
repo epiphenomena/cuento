@@ -46,6 +46,7 @@ type Config struct {
 type App struct {
 	handler  http.Handler
 	sessions *scs.SessionManager
+	srv      *server // retained for in-package tests that enumerate the registry
 }
 
 // Handler returns the composed HTTP handler. See NewApp for the wiring.
@@ -73,21 +74,14 @@ func NewApp(cfg Config, db *sql.DB, st *store.Store) *App {
 		decoyHash: decoyHash,
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", healthz(cfg.Version))
-	mux.Handle("GET /static/", http.FileServer(http.FS(staticFS)))
-	mux.HandleFunc("GET /login", srv.loginPage)
-	mux.HandleFunc("POST /login", srv.loginSubmit)
-	mux.HandleFunc("POST /logout", srv.logout)
+	// Mount is the ONLY place routes attach to a mux (rule 8): it builds the mux
+	// from the route registry alone, wrapping every route in the permission
+	// enforcement middleware and the load-bearing security chain (secureHeaders ->
+	// crossOrigin -> session -> auth -> lang). Nothing is mounted outside it --
+	// health, static, login, logout and the landing page are all registry entries.
+	handler := srv.Mount()
 
-	// The chain order is load-bearing (rule 13): secure headers first so every
-	// response (including errors thrown deeper) carries them; cross-origin next
-	// so a spoofed cross-site mutating request is rejected before any session or
-	// business work; then session load/save; then identity resolution; then
-	// language. See chain() for the composition.
-	handler := srv.chain(mux)
-
-	return &App{handler: handler, sessions: sessions}
+	return &App{handler: handler, sessions: sessions, srv: srv}
 }
 
 // server bundles the dependencies the handlers and middleware share. It is the

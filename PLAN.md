@@ -125,7 +125,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 - [x] **p06.2 web: sessions, login, security middleware.**
   Tests: `TestLoginSuccessSetsSession`, `TestLoginWrongPassword` (uniform error, no user enumeration), `TestLoginRateLimited`, `TestCookieFlags` (HttpOnly, SameSite=Lax, Secure outside `-dev`), `TestCrossOriginBlocked` (spoofed `Sec-Fetch-Site: cross-site` → 403), `TestSecurityHeaders` (CSP, X-Content-Type-Options, Referrer-Policy), `TestLoginPageLocalized` (`?lang=es` or es cookie renders Spanish strings via the catalog).
   Build: scs + sqlite3store (its `sessions` table created by our migration so goose stays canonical); middleware chain: secure headers → CSRF → session → auth → lang resolution (user setting → cookie → en); login/logout handlers with minimal templates (styling comes in phase 10); `x/time/rate` limiter keyed by IP+username.
-- [ ] **p06.3 web: route registry + provable enforcement.**
+- [x] **p06.3 web: route registry + provable enforcement.**
   Tests: `TestRouteRegistryComplete` (mounting happens only through the registry; every pattern accounted for), `TestPermissionMatrix` (auto-generated: every route × persona {anon, NoAccess, ReadOnly, Bookkeeper, ReportsOnly, Admin} → expected status).
   Build: `routes.go` — `[]Route{Method, Pattern, Perm, Handler}` with `Perm ∈ {Public, AnyUser, TxnRead, TxnWrite, ReportGroup(name), Admin}`; single mount function; middleware enforcement; startup sync of code-declared report groups into `report_groups`.
 - [ ] **p06.4 cli: user management + bootstrap.**

@@ -9,6 +9,12 @@
 
 app.name = "cuento"
 
+# Authenticated landing placeholder (p06.3). The real dashboard/nav is phase 10;
+# GET /{$} renders this so the AnyUser permission path is exercised by a real,
+# i18n'd route rather than a stub.
+home.title = "cuento"
+home.welcome = "Signed in."
+
 common.save = "Save"
 common.cancel = "Cancel"
 
@@ -25,5 +31,6 @@ auth.login_title = "Sign in"
 auth.username = "Username"
 auth.password = "Password"
 auth.sign_in = "Sign in"
+auth.sign_out = "Sign out"
 auth.invalid = "Incorrect username or password."
 auth.rate_limited = "Too many attempts. Please wait and try again."

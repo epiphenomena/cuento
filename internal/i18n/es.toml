@@ -3,6 +3,12 @@
 
 app.name = "cuento"
 
+# Marcador de la pagina de inicio autenticada (p06.3). El panel/nav real es la
+# fase 10; GET /{$} muestra esto para ejercer la ruta AnyUser con una ruta real
+# e internacionalizada en vez de un stub.
+home.title = "cuento"
+home.welcome = "Sesion iniciada."
+
 common.save = "Guardar"
 common.cancel = "Cancelar"
 
@@ -19,5 +25,6 @@ auth.login_title = "Iniciar sesion"
 auth.username = "Usuario"
 auth.password = "Contraseña"
 auth.sign_in = "Iniciar sesion"
+auth.sign_out = "Cerrar sesion"
 auth.invalid = "Usuario o contraseña incorrectos."
 auth.rate_limited = "Demasiados intentos. Espere e intente de nuevo."
