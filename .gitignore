@@ -39,3 +39,5 @@ fixtures/sample.db
 *.db-wal
 *.bak
 /bin/
+/cuento
+/ledgerimport
