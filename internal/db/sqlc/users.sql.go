@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"database/sql"
 )
 
 const countUsers = `-- name: CountUsers :one
@@ -21,14 +22,26 @@ func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
 }
 
 const getUser = `-- name: GetUser :one
+
 SELECT id, username, display_name, created_at, disabled_at
 FROM users
 WHERE id = ?
 `
 
-func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
+type GetUserRow struct {
+	ID          int64
+	Username    string
+	DisplayName string
+	CreatedAt   string
+	DisabledAt  sql.NullString
+}
+
+// p06.1 adds InsertUser + InsertUserVersion. Keep this file PURE ASCII: sqlc
+// v1.31.1 miscounts byte offsets on multi-byte UTF-8 and corrupts the WHOLE
+// file's generated SQL (see docs/DECISIONS.md p04.2).
+func (q *Queries) GetUser(ctx context.Context, id int64) (GetUserRow, error) {
 	row := q.db.QueryRowContext(ctx, getUser, id)
-	var i User
+	var i GetUserRow
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
@@ -37,4 +50,72 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 		&i.DisabledAt,
 	)
 	return i, err
+}
+
+const insertUser = `-- name: InsertUser :one
+INSERT INTO users (username, display_name, created_at, password_hash, is_admin, txn_perm)
+VALUES (?, ?, ?, ?, ?, ?)
+RETURNING id
+`
+
+type InsertUserParams struct {
+	Username     string
+	DisplayName  string
+	CreatedAt    string
+	PasswordHash sql.NullString
+	IsAdmin      int64
+	TxnPerm      string
+}
+
+// Live insert of a user. password_hash is nullable (a passwordless user, like
+// the system user, passes NULL). Settings columns are omitted so their schema
+// DEFAULTs apply; the version append reads them back from the live row. Returns
+// the new id for the store to snapshot + return.
+func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, insertUser,
+		arg.Username,
+		arg.DisplayName,
+		arg.CreatedAt,
+		arg.PasswordHash,
+		arg.IsAdmin,
+		arg.TxnPerm,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertUserVersion = `-- name: InsertUserVersion :exec
+INSERT INTO users_versions
+  (entity_id, change_id, valid_from, op,
+   username, display_name, created_at, disabled_at, is_admin, txn_perm,
+   locale, date_format, number_format, display_mode, neg_style, theme,
+   default_subsidiary_id)
+SELECT u.id, c.id, c.at, ?,
+       u.username, u.display_name, u.created_at, u.disabled_at, u.is_admin, u.txn_perm,
+       u.locale, u.date_format, u.number_format, u.display_mode, u.neg_style, u.theme,
+       u.default_subsidiary_id
+FROM users u, changes c
+WHERE c.id = ? AND u.id = ?
+`
+
+type InsertUserVersionParams struct {
+	Op   string
+	ID   int64
+	ID_2 int64
+}
+
+// Snapshot-from-live version append for users (rule 5, D4). Runs AFTER the live
+// insert; copies every business column EXCEPT password_hash, which is
+// DELIBERATELY omitted so the audit trail never carries the secret (rule 5).
+// valid_from is the change's own `at`, so valid_from == changes.at BY
+// CONSTRUCTION. Snapshot column set matches 00006_credentials_perms.sql exactly.
+//
+// Params are PLAIN POSITIONAL (?), each used once (op, change_id, entity_id), so
+// no numbered/named form is needed -- matching InsertSubsidiaryVersion's shape.
+// Generated struct fields: Op, ID (change_id = c.id), ID_2 (entity_id = u.id).
+// The store wraps that behind one insertUserVersion helper.
+func (q *Queries) InsertUserVersion(ctx context.Context, arg InsertUserVersionParams) error {
+	_, err := q.db.ExecContext(ctx, insertUserVersion, arg.Op, arg.ID, arg.ID_2)
+	return err
 }

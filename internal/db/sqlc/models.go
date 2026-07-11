@@ -95,6 +95,11 @@ type Form990Line struct {
 	Sort         int64
 }
 
+type ReportGroup struct {
+	Name string
+	Sort int64
+}
+
 type SubsidiariesVersion struct {
 	ID           int64
 	EntityID     int64
@@ -118,9 +123,54 @@ type Subsidiary struct {
 }
 
 type User struct {
-	ID          int64
-	Username    string
-	DisplayName string
-	CreatedAt   string
-	DisabledAt  sql.NullString
+	ID                  int64
+	Username            string
+	DisplayName         string
+	CreatedAt           string
+	DisabledAt          sql.NullString
+	PasswordHash        sql.NullString
+	IsAdmin             int64
+	TxnPerm             string
+	Locale              string
+	DateFormat          string
+	NumberFormat        string
+	DisplayMode         string
+	NegStyle            string
+	Theme               string
+	DefaultSubsidiaryID sql.NullInt64
+}
+
+type UserReportGrant struct {
+	UserID    int64
+	GroupName string
+}
+
+type UserReportGrantsVersion struct {
+	ID        int64
+	EntityID  int64
+	ChangeID  int64
+	ValidFrom string
+	Op        string
+	GroupName string
+}
+
+type UsersVersion struct {
+	ID                  int64
+	EntityID            int64
+	ChangeID            int64
+	ValidFrom           string
+	Op                  string
+	Username            string
+	DisplayName         string
+	CreatedAt           string
+	DisabledAt          sql.NullString
+	IsAdmin             int64
+	TxnPerm             string
+	Locale              string
+	DateFormat          string
+	NumberFormat        string
+	DisplayMode         string
+	NegStyle            string
+	Theme               string
+	DefaultSubsidiaryID sql.NullInt64
 }

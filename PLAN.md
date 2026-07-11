@@ -119,7 +119,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 
 ## Phase 6 — AuthN/Z
 
-- [ ] **p06.1 db+auth: credentials, perms, settings columns.**
+- [x] **p06.1 db+auth: credentials, perms, settings columns.**
   Tests: `TestHashVerify` (argon2id wrapper), `TestUsersVersionOmitsPasswordHash` (**critical** — snapshot never contains the hash), grant FK tests.
   Build: migration — users gain `password_hash`, `is_admin`, `txn_perm CHECK(none/read/write)`, settings columns (`locale`, `date_format`, `number_format`, `display_mode`, `neg_style`, `theme`, `default_subsidiary_id`); `report_groups`, `user_report_grants` (+ versions for users and grants).
 - [ ] **p06.2 web: sessions, login, security middleware.**
