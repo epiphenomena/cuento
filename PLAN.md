@@ -68,7 +68,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 - [x] **p01.2 db: migration runner.**
   Tests: `TestMigrateFreshReachesLatest`, `TestMigrateIdempotent`, `TestMigrateBacksUpFile` (a `<db>.pre-<version>.bak` copy exists before changes apply; skipped for brand-new files).
   Build: goose with embedded FS; `cuento migrate` subcommand; auto-migrate on `serve` start.
-- [ ] **p01.3 db: sqlc + test harness.**
+- [x] **p01.3 db: sqlc + test harness.**
   Tests: `TestNewDBIsolated` (two harness dbs don't interfere), `TestSqlcSmoke` (one trivial generated query round-trips).
   Build: `sqlc.yaml` (engine sqlite, schema = migrations dir, queries dir), `make gen`, `testutil.NewDB(t)` returning migrated temp-file db.
 

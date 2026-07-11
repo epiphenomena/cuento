@@ -1,0 +1,16 @@
+version: "2"
+sql:
+  - engine: "sqlite"
+    # goose migrations are the authoritative schema; sqlc reads the same dir and
+    # strips the -- +goose directives. The 00001_init.sql baseline (SELECT 1;)
+    # declares no tables, which is fine — the smoke query is schema-less too.
+    schema: "internal/db/migrations"
+    queries: "internal/db/queries"
+    gen:
+      go:
+        # Generated code lives in its own package, out of the hand-written db
+        # package (which owns Open/Migrate) to avoid symbol collisions.
+        package: "sqlc"
+        out: "internal/db/sqlc"
+        emit_json_tags: false
+        emit_interface: false
