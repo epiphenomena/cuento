@@ -57,12 +57,90 @@ func AssertVersioned(t *testing.T, db *sql.DB, table string, entityID int64, wan
 		t.Fatalf("AssertVersioned: latest %s_versions row for entity_id=%d has NULL change_id", table, entityID)
 	}
 
-	var exists int
-	err = db.QueryRow(`SELECT 1 FROM changes WHERE id = ?`, changeID.Int64).Scan(&exists)
+	assertChangeExists(t, db, "AssertVersioned", changeID)
+}
+
+// AssertVersionedName asserts the versioning contract for one composite-key
+// account name (account_id, lang). account_names_versions keys entity_id on
+// account_id and carries `lang` as both a snapshot column and part of the
+// entity identity (p05.1), so the as-of/latest lookup must filter on the pair.
+// The latest snapshot for (accountID, lang) must have op == wantOp and a
+// change_id naming an existing changes row.
+func AssertVersionedName(t *testing.T, db *sql.DB, accountID int64, lang, wantOp string) {
+	t.Helper()
+
+	var (
+		gotOp    string
+		changeID sql.NullInt64
+	)
+	err := db.QueryRow(
+		`SELECT op, change_id
+		   FROM account_names_versions
+		  WHERE entity_id = ? AND lang = ?
+		  ORDER BY valid_from DESC, id DESC
+		  LIMIT 1`, accountID, lang,
+	).Scan(&gotOp, &changeID)
 	if err == sql.ErrNoRows {
-		t.Fatalf("AssertVersioned: %s_versions.change_id=%d references no changes row", table, changeID.Int64)
+		t.Fatalf("AssertVersionedName: no account_names_versions row for (account_id=%d, lang=%q) (name mutation was not versioned)", accountID, lang)
 	}
 	if err != nil {
-		t.Fatalf("AssertVersioned: verify change_id: %v", err)
+		t.Fatalf("AssertVersionedName: query account_names_versions: %v", err)
+	}
+	if gotOp != wantOp {
+		t.Errorf("AssertVersionedName: latest op for (account_id=%d, lang=%q) = %q, want %q", accountID, lang, gotOp, wantOp)
+	}
+	if !changeID.Valid {
+		t.Fatalf("AssertVersionedName: latest row for (account_id=%d, lang=%q) has NULL change_id", accountID, lang)
+	}
+	assertChangeExists(t, db, "AssertVersionedName", changeID)
+}
+
+// AssertVersionedSub asserts the versioning contract for one composite-key
+// account-subsidiary membership (account_id, subsidiary_id).
+// account_subsidiaries_versions keys entity_id on account_id and carries
+// subsidiary_id as both a snapshot column and part of the entity identity
+// (p05.1). Membership is a set: an add is op='create', a removal op='delete';
+// the latest snapshot for (accountID, subID) must have op == wantOp and a
+// change_id naming an existing changes row.
+func AssertVersionedSub(t *testing.T, db *sql.DB, accountID, subID int64, wantOp string) {
+	t.Helper()
+
+	var (
+		gotOp    string
+		changeID sql.NullInt64
+	)
+	err := db.QueryRow(
+		`SELECT op, change_id
+		   FROM account_subsidiaries_versions
+		  WHERE entity_id = ? AND subsidiary_id = ?
+		  ORDER BY valid_from DESC, id DESC
+		  LIMIT 1`, accountID, subID,
+	).Scan(&gotOp, &changeID)
+	if err == sql.ErrNoRows {
+		t.Fatalf("AssertVersionedSub: no account_subsidiaries_versions row for (account_id=%d, subsidiary_id=%d) (membership mutation was not versioned)", accountID, subID)
+	}
+	if err != nil {
+		t.Fatalf("AssertVersionedSub: query account_subsidiaries_versions: %v", err)
+	}
+	if gotOp != wantOp {
+		t.Errorf("AssertVersionedSub: latest op for (account_id=%d, subsidiary_id=%d) = %q, want %q", accountID, subID, gotOp, wantOp)
+	}
+	if !changeID.Valid {
+		t.Fatalf("AssertVersionedSub: latest row for (account_id=%d, subsidiary_id=%d) has NULL change_id", accountID, subID)
+	}
+	assertChangeExists(t, db, "AssertVersionedSub", changeID)
+}
+
+// assertChangeExists verifies a version row's change_id references a real
+// changes row — the shared tail of every AssertVersioned* helper.
+func assertChangeExists(t *testing.T, db *sql.DB, who string, changeID sql.NullInt64) {
+	t.Helper()
+	var exists int
+	err := db.QueryRow(`SELECT 1 FROM changes WHERE id = ?`, changeID.Int64).Scan(&exists)
+	if err == sql.ErrNoRows {
+		t.Fatalf("%s: change_id=%d references no changes row", who, changeID.Int64)
+	}
+	if err != nil {
+		t.Fatalf("%s: verify change_id: %v", who, err)
 	}
 }
