@@ -392,12 +392,8 @@ func (s *Store) SetAccountSubsidiaries(ctx context.Context, id int64, subs []int
 				return err
 			}
 
-			// Removals first: block if a child still maps the sub.
-			//
-			// TODO(p08): also block removing S while SPLITS reference this account
-			// in subsidiary S. The splits table does not exist until p08.1, so the
-			// split-usage half of ErrSubInUseByChild's guard is intentionally NOT
-			// implemented here (see the step's TODO test tag).
+			// Removals first: block if a child still maps the sub, OR (p08) if a
+			// split on this account belongs to a non-deleted txn in that sub.
 			for sid := range have {
 				if want[sid] {
 					continue
@@ -410,6 +406,15 @@ func (s *Store) SetAccountSubsidiaries(ctx context.Context, id int64, subs []int
 					return fmt.Errorf("count child use of sub %d: %w", sid, err)
 				}
 				if n > 0 {
+					return ErrSubInUseByChild
+				}
+				// p08 (completed): a split on this account in a non-deleted txn of
+				// subsidiary sid also blocks removal (ErrSubInUseByChild extended).
+				used, err := accountSplitInSubsidiary(ctx, q, id, sid)
+				if err != nil {
+					return err
+				}
+				if used {
 					return ErrSubInUseByChild
 				}
 				if err := removeSub(ctx, q, changeID, id, sid); err != nil {

@@ -307,8 +307,8 @@ func TestAssignSubPropagatesToAncestors(t *testing.T) {
 
 // TestRemoveSubBlockedByChildOrSplits: removing a subsidiary from an account is
 // blocked while a CHILD account still maps it (ErrSubInUseByChild). The split-
-// usage half of this guard lands in p08 (splits table does not exist yet) and is
-// deliberately deferred; see the TODO(p08) tag in SetAccountSubsidiaries.
+// usage half of this guard was completed in p08.2 and is exercised below via
+// testRemoveSubBlockedBySplit (a split in that subsidiary also blocks removal).
 func TestRemoveSubBlockedByChildOrSplits(t *testing.T) {
 	d := testutil.NewDB(t)
 	s := New(d)
@@ -344,9 +344,33 @@ func TestRemoveSubBlockedByChildOrSplits(t *testing.T) {
 		t.Errorf("parent lost sub A despite blocked removal")
 	}
 
-	// TODO(p08): once splits exist, removing S must ALSO be blocked while splits
-	// reference the account in subsidiary S. That half of ErrSubInUseByChild's
-	// guard is intentionally not implemented in p05.2 (no splits table yet).
+	// p08.2 (completed): removing S is ALSO blocked while a split references the
+	// account in a non-deleted txn of subsidiary S. Exercise the split half.
+	testRemoveSubBlockedBySplit(t)
+}
+
+// testRemoveSubBlockedBySplit is the split-usage half of the guard, completed in
+// p08.2: a leaf account with a split in subsidiary S cannot drop S.
+func testRemoveSubBlockedBySplit(t *testing.T) {
+	t.Helper()
+	e := newTxnEnv(t)
+	// Post a txn in US using `salaries` and `checking` (both mapped to US only).
+	if _, err := e.s.PostTransaction(mutCtx(), e.balancedInput(100)); err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+	// Add a second sub to checking, then try to remove US: blocked by the split.
+	subMX := newSub(t, e.s, rootID, "MX")
+	if err := e.s.SetAccountSubsidiaries(mutCtx(), e.checking, []int64{e.subUS, subMX}); err != nil {
+		t.Fatalf("widen checking subs: %v", err)
+	}
+	before := countChanges(t, e.d)
+	err := e.s.SetAccountSubsidiaries(mutCtx(), e.checking, []int64{subMX})
+	if !errors.Is(err, ErrSubInUseByChild) {
+		t.Fatalf("remove US used by a split: err = %v, want ErrSubInUseByChild", err)
+	}
+	if n := countChanges(t, e.d); n != before {
+		t.Errorf("changes = %d, want %d (rejected leaves no trace)", n, before)
+	}
 }
 
 // TestRemoveSubSucceedsWhenUnused: removing a subsidiary with no child using it

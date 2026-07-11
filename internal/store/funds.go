@@ -42,6 +42,9 @@ var (
 	// ErrFundProgramMissing: an optional program scope was given but the program
 	// does not exist (D20 -- the program must exist if set).
 	ErrFundProgramMissing = errors.New("store: fund program scope not found")
+	// ErrFundSubInUseBySplit: a subsidiary cannot be removed from a fund while a
+	// split tagged that fund lives in a non-deleted txn of that subsidiary (p08).
+	ErrFundSubInUseBySplit = errors.New("store: fund subsidiary still used by a split")
 )
 
 // CreateFundInput is the desired state of a NEW fund. Restriction is one of
@@ -209,15 +212,19 @@ func (s *Store) UpdateFund(ctx context.Context, id int64, in UpdateFundInput) er
 					return err
 				}
 
-				// Removals: drop each sub in have but not want.
-				//
-				// TODO(p08): also block removing S while SPLITS reference this fund
-				// in subsidiary S (PLAN p08.2). The splits table does not exist
-				// until p08.1, so the split-usage guard is intentionally NOT
-				// implemented here -- see TestNarrowSubsBlockedBySplits (skipped).
+				// Removals: drop each sub in have but not want. p08 (completed):
+				// block a removal while a split tagged this fund lives in a
+				// non-deleted txn of subsidiary S (ErrFundSubInUseBySplit).
 				for sid := range have {
 					if want[sid] {
 						continue
+					}
+					used, err := fundSplitInSubsidiary(ctx, q, id, sid)
+					if err != nil {
+						return err
+					}
+					if used {
+						return ErrFundSubInUseBySplit
 					}
 					if err := removeFundSub(ctx, q, changeID, id, sid); err != nil {
 						return err

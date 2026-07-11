@@ -1,0 +1,229 @@
+-- p08.2: transaction/split/payee operations (D2, D18, D20, D21, D24). All SQL for
+-- the store's transaction methods lives here (rule 6). This copies the
+-- version-append convention established in subsidiaries.sql (p04.2) and the
+-- snapshot-from-live pattern: the entity op does the live write inside the
+-- funnel's fn, then appends a snapshot-from-live version row, so each version row
+-- is byte-identical to its live row (Z3 can never diverge) and valid_from ==
+-- changes.at BY CONSTRUCTION.
+--
+-- transactions/splits use SOFT-DELETE only for the header (rule 14): DeleteTransaction
+-- flips transactions.deleted and appends a transactions_versions op='delete'; the
+-- splits are left in place (the as-of query excludes the txn by its own delete row).
+-- An UpdateTransaction split REMOVAL is a hard live DELETE of that split row plus a
+-- splits_versions op='delete' (captured BEFORE the live delete, snapshot-from-live).
+--
+-- Query names are DISTINCT across the whole sqlc package.
+--
+-- NOTE: keep every comment and identifier in this file PURE ASCII. sqlc v1.31.1
+-- miscounts byte offsets when a query file contains multi-byte UTF-8, corrupting
+-- the generated SQL for the WHOLE file (see docs/DECISIONS.md p04.2).
+
+-- ---------------------------------------------------------------------------
+-- payees (minimal; autocomplete is p12.3)
+-- ---------------------------------------------------------------------------
+
+-- name: InsertPayee :one
+-- Live insert of a payee. name is UNIQUE COLLATE NOCASE (schema). Returns the id.
+INSERT INTO payees (name, active)
+VALUES (?, 1)
+RETURNING id;
+
+-- name: GetPayee :one
+SELECT id, name, active FROM payees WHERE id = ?;
+
+-- name: InsertPayeeVersion :exec
+-- Snapshot-from-live version append for payees (STANDARD single-id entity,
+-- entity_id = payees.id). Runs AFTER the live insert. Snapshot column set matches
+-- 00010_transactions_splits.sql exactly (name, active). Params (positional, each
+-- used once): op, change_id, entity_id -> generated Op, ID (change_id), ID_2.
+INSERT INTO payees_versions
+  (entity_id, change_id, valid_from, op, name, active)
+SELECT p.id, c.id, c.at, ?, p.name, p.active
+FROM payees p, changes c
+WHERE c.id = ? AND p.id = ?;
+
+-- ---------------------------------------------------------------------------
+-- transactions
+-- ---------------------------------------------------------------------------
+
+-- name: InsertTransaction :one
+-- Live insert of the transaction header (D18: exactly one subsidiary; D3: single
+-- currency). deleted defaults to 0. Returns the new id.
+INSERT INTO transactions (date, subsidiary_id, payee_id, memo, currency, deleted)
+VALUES (?, ?, ?, ?, ?, 0)
+RETURNING id;
+
+-- name: GetTransaction :one
+SELECT id, date, subsidiary_id, payee_id, memo, currency, deleted
+FROM transactions
+WHERE id = ?;
+
+-- name: UpdateTransaction :exec
+-- Live update of the header fields (date/payee/memo; subsidiary and currency may
+-- also change on an edit). deleted is carried through by the store (never flipped
+-- here -- soft-delete is its own query).
+UPDATE transactions
+SET date = ?, subsidiary_id = ?, payee_id = ?, memo = ?, currency = ?, deleted = ?
+WHERE id = ?;
+
+-- name: SoftDeleteTransaction :exec
+-- Soft-delete (rule 14): flip the deleted flag. The row is never removed. The
+-- store appends a transactions_versions op='delete' after this.
+UPDATE transactions SET deleted = 1 WHERE id = ?;
+
+-- name: InsertTransactionVersion :exec
+-- Snapshot-from-live version append for transactions (STANDARD single-id entity).
+-- Runs AFTER the live write. Snapshot column set matches 00010 exactly. Params
+-- (positional): op, change_id, entity_id -> generated Op, ID (change_id), ID_2.
+INSERT INTO transactions_versions
+  (entity_id, change_id, valid_from, op, date, subsidiary_id, payee_id, memo, currency, deleted)
+SELECT t.id, c.id, c.at, ?, t.date, t.subsidiary_id, t.payee_id, t.memo, t.currency, t.deleted
+FROM transactions t, changes c
+WHERE c.id = ? AND t.id = ?;
+
+-- ---------------------------------------------------------------------------
+-- splits
+-- ---------------------------------------------------------------------------
+
+-- name: InsertSplit :one
+-- Live insert of one split line. amount is int64 minor units, net-debit sign
+-- (D1/D2), CHECK amount <> 0. fund_id NULL == unrestricted (D20). program_id
+-- required iff R/E account (trigger backstop); functional_class required iff
+-- expense account (trigger backstop); the store DEFAULTS both before insert so the
+-- triggers never fire on the happy path. Returns the new id.
+INSERT INTO splits
+  (transaction_id, account_id, amount, fund_id, program_id, functional_class, memo, position)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id;
+
+-- name: UpdateSplit :exec
+-- Live update of one split's business columns (replace-set diff: only splits that
+-- actually changed reach this). id last.
+UPDATE splits
+SET account_id = ?, amount = ?, fund_id = ?, program_id = ?,
+    functional_class = ?, memo = ?, position = ?
+WHERE id = ?;
+
+-- name: DeleteSplit :exec
+-- Hard-delete one split row (the replace-set diff removes splits dropped from the
+-- input). For op='delete' the version row is captured BEFORE this runs (the live
+-- row must still exist to snapshot from) -- the removal-op ordering.
+DELETE FROM splits WHERE id = ?;
+
+-- name: SplitsByTransaction :many
+-- The current live split set for one transaction, in display order.
+SELECT id, transaction_id, account_id, amount, fund_id, program_id,
+       functional_class, memo, position
+FROM splits
+WHERE transaction_id = ?
+ORDER BY position, id;
+
+-- name: InsertSplitVersion :exec
+-- Snapshot-from-live version append for splits (STANDARD single-id entity,
+-- entity_id = splits.id). For op='create'/'update' this runs AFTER the live write;
+-- for op='delete' it runs BEFORE the live DELETE (the row must still exist to
+-- snapshot). Snapshot column set matches 00010 exactly. Params (positional): op,
+-- change_id, entity_id -> generated Op, ID (change_id), ID_2.
+INSERT INTO splits_versions
+  (entity_id, change_id, valid_from, op, transaction_id, account_id, amount,
+   fund_id, program_id, functional_class, memo, position)
+SELECT s.id, c.id, c.at, ?, s.transaction_id, s.account_id, s.amount,
+       s.fund_id, s.program_id, s.functional_class, s.memo, s.position
+FROM splits s, changes c
+WHERE c.id = ? AND s.id = ?;
+
+-- ---------------------------------------------------------------------------
+-- validation reads (inside the funnel's fn, on the tx-bound queries)
+-- ---------------------------------------------------------------------------
+
+-- name: AccountIsLeaf :one
+-- 1 when the account has NO children (a leaf; D11). A placeholder (>=1 child)
+-- holds no splits. Used to raise ErrPlaceholderAccount before the trigger fires.
+SELECT NOT EXISTS (SELECT 1 FROM accounts c WHERE c.parent_id = ?) AS is_leaf;
+
+-- name: HasAccountSubsidiaryMap :one
+-- 1 when account A is mapped to subsidiary S (D18). Used to raise
+-- ErrAccountNotInSubsidiary: every split account must include the txn's subsidiary.
+SELECT EXISTS (
+  SELECT 1 FROM account_subsidiaries WHERE account_id = ? AND subsidiary_id = ?
+) AS mapped;
+
+-- name: HasFundSubsidiaryMap :one
+-- 1 when fund F is scoped to subsidiary S (D20/Z13). Used to raise
+-- ErrFundSubsidiaryScope: a txn's subsidiary must be in its split fund's set.
+SELECT EXISTS (
+  SELECT 1 FROM fund_subsidiaries WHERE fund_id = ? AND subsidiary_id = ?
+) AS scoped;
+
+-- name: RootProgram :one
+-- The single root program (parent_id IS NULL; the seeded "General", D24). The
+-- program-defaulting fallback for an R/E split with no account default. Looked up
+-- rather than hardcoded id 1.
+SELECT id, parent_id, name, active, sort_order
+FROM programs
+WHERE parent_id IS NULL;
+
+-- name: ProgramSubtreeIDs :many
+-- The program ids in the subtree rooted at R (self included). Used for the
+-- fund-program scope check (D20): an R/E split tagged a fund whose program scope R
+-- is set must carry a program inside R's subtree, else ErrFundProgramScope. Like
+-- ProgramDescendants, the store builds a set and checks membership in Go (sqlc's
+-- sqlite analyzer rejects a recursive-CTE alias in an outer EXISTS/WHERE).
+WITH RECURSIVE subtree(id, parent_id, name, active, sort_order) AS (
+  SELECT p0.id, p0.parent_id, p0.name, p0.active, p0.sort_order
+  FROM programs p0 WHERE p0.id = ?
+  UNION ALL
+  SELECT p.id, p.parent_id, p.name, p.active, p.sort_order
+  FROM programs p JOIN subtree ON p.parent_id = subtree.id
+)
+SELECT subtree.id FROM subtree;
+
+-- ---------------------------------------------------------------------------
+-- as-of reconstruction (D4/D5) -- resolved in Go (like Effective990Codes) to keep
+-- each param single-use and avoid the sqlc numbered-param quirk on `at` reuse.
+-- ---------------------------------------------------------------------------
+
+-- name: TransactionVersionAsOf :one
+-- The transaction header as of a time: the latest transactions_versions row with
+-- valid_from <= at (op='delete' means the txn is absent -- the store excludes it).
+-- Tiebreak (valid_from DESC, id DESC) matches AssertVersioned's append order.
+SELECT op, date, subsidiary_id, payee_id, memo, currency, deleted
+FROM transactions_versions
+WHERE entity_id = ? AND valid_from <= ?
+ORDER BY valid_from DESC, id DESC
+LIMIT 1;
+
+-- name: SplitVersionsAsOf :many
+-- Every split version row for a transaction with valid_from <= at, ordered so the
+-- store can take the FIRST row per entity_id (the latest snapshot for that split)
+-- and drop op='delete'. transaction_id filters to this txn's splits. Tiebreak
+-- matches AssertVersioned.
+SELECT entity_id, op, transaction_id, account_id, amount, fund_id, program_id,
+       functional_class, memo, position
+FROM splits_versions
+WHERE transaction_id = ? AND valid_from <= ?
+ORDER BY entity_id, valid_from DESC, id DESC;
+
+-- ---------------------------------------------------------------------------
+-- deferred p08 guards (complete the p05.2 / p07.3 TODOs)
+-- ---------------------------------------------------------------------------
+
+-- name: SplitUsesAccountInSubsidiary :one
+-- 1 when a split on account A belongs to a NON-DELETED transaction whose
+-- subsidiary is S. Completes the p05.2 guard: removing subsidiary S from account A
+-- is blocked while such a split exists (ErrSubInUseByChild extended to splits).
+SELECT EXISTS (
+  SELECT 1 FROM splits s
+  JOIN transactions t ON t.id = s.transaction_id
+  WHERE s.account_id = ? AND t.subsidiary_id = ? AND t.deleted = 0
+) AS in_use;
+
+-- name: SplitUsesFundInSubsidiary :one
+-- 1 when a split with fund_id F belongs to a NON-DELETED transaction whose
+-- subsidiary is S. Completes the p07.3 guard: removing subsidiary S from fund F is
+-- blocked while such a split exists (ErrFundSubInUseBySplit).
+SELECT EXISTS (
+  SELECT 1 FROM splits s
+  JOIN transactions t ON t.id = s.transaction_id
+  WHERE s.fund_id = ? AND t.subsidiary_id = ? AND t.deleted = 0
+) AS in_use;

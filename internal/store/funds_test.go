@@ -340,8 +340,9 @@ func TestUpdateFundSubsetChange(t *testing.T) {
 // yet). TAGGED here: assert only that CloseFund is versioned and sets active=0
 // NOW; the post-time block is proven in p08.2.
 func TestCloseFundBlocksNewUse(t *testing.T) {
-	// TODO(p08): once splits/transactions exist, assert PostTransaction rejects
-	// a split tagged with a closed fund. Here, only the close itself is provable.
+	// p08.2 (completed): the post-time block is proven by TestPostInactiveFundRejected
+	// (PostTransaction rejects a split tagged with a closed fund). Here, assert only
+	// the close itself is versioned and sets active=0.
 	d := testutil.NewDB(t)
 	s := New(d)
 
@@ -362,13 +363,32 @@ func TestCloseFundBlocksNewUse(t *testing.T) {
 }
 
 // TestNarrowSubsBlockedBySplits: narrowing a fund's subsidiary set (removing a
-// sub) must be blocked when SPLITS exist in that subsidiary. Splits do not
-// exist until p08, so the split-usage guard is a tagged TODO in UpdateFund and
-// this test is skipped until then.
+// sub S) is blocked (ErrFundSubInUseBySplit) while a split tagged the fund lives
+// in a non-deleted transaction of subsidiary S (the p08.2-completed guard).
 func TestNarrowSubsBlockedBySplits(t *testing.T) {
-	// TODO(p08): implement once the splits table exists (p08.1). UpdateFund
-	// carries a matching `// TODO(p08)` guard before each membership removal;
-	// this test is intentionally skipped -- not silently omitted -- until the
-	// split-usage check can be written and asserted.
-	t.Skip("p08: split-usage guard on fund-subsidiary removal (splits table absent until p08.1)")
+	e := newTxnEnv(t)
+	// A fund scoped to {US, MX}; post a txn in US tagging the fund.
+	subMX := newSub(t, e.s, rootID, "MX")
+	fund := mkFund(t, e.s, "Grant", []int64{e.subUS, subMX}, nil)
+	in := e.balancedInput(100)
+	in.Splits[0].FundID = &fund
+	in.Splits[1].FundID = &fund
+	if _, err := e.s.PostTransaction(mutCtx(), in); err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+
+	// Removing US (which has the split) must be blocked.
+	before := countChanges(t, e.d)
+	err := e.s.UpdateFund(mutCtx(), fund, UpdateFundInput{Subsidiaries: []int64{subMX}})
+	if !errors.Is(err, ErrFundSubInUseBySplit) {
+		t.Fatalf("narrow away US: err = %v, want ErrFundSubInUseBySplit", err)
+	}
+	if n := countChanges(t, e.d); n != before {
+		t.Errorf("changes = %d, want %d (rejected leaves no trace)", n, before)
+	}
+
+	// Removing MX (no split there) succeeds.
+	if err := e.s.UpdateFund(mutCtx(), fund, UpdateFundInput{Subsidiaries: []int64{e.subUS}}); err != nil {
+		t.Fatalf("narrow away MX (unused): %v", err)
+	}
 }
