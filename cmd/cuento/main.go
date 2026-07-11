@@ -1,6 +1,6 @@
 // Command cuento is the single binary for the whole application. The first CLI
-// argument selects a subcommand. Phase 0 implements serve; migrate, check,
-// user, and ratesync arrive in later phases (p01.2, p08.3, p06.4, p14.2).
+// argument selects a subcommand. Phase 0 implements serve; migrate arrives in
+// p01.2; check, user, and ratesync arrive in later phases (p08.3, p06.4, p14.2).
 package main
 
 import (
@@ -15,8 +15,13 @@ import (
 	"syscall"
 	"time"
 
+	"cuento/internal/db"
 	"cuento/internal/web"
 )
+
+// defaultDBPath is where the SQLite file lives when no -db flag is given. serve
+// and migrate share it so they operate on the same database by default.
+const defaultDBPath = "cuento.db"
 
 // version is the build version, overridden at release via
 // -ldflags "-X main.version=...". It is not wired to ldflags yet (p18.1).
@@ -34,6 +39,10 @@ func main() {
 		if err := serve(args); err != nil {
 			log.Fatalf("serve: %v", err)
 		}
+	case "migrate":
+		if err := migrate(args); err != nil {
+			log.Fatalf("migrate: %v", err)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "cuento: unknown subcommand %q\n\n", cmd)
 		usage()
@@ -42,19 +51,45 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: cuento <command> [flags]\n\ncommands:\n  serve   run the HTTP server\n")
+	fmt.Fprintf(os.Stderr, "usage: cuento <command> [flags]\n\ncommands:\n  serve     run the HTTP server (auto-migrates on start)\n  migrate   apply pending database migrations\n")
 }
 
-// serve runs the HTTP server until SIGINT/SIGTERM, then shuts down gracefully.
-func serve(args []string) error {
-	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	addr := fs.String("addr", ":8080", "listen address")
+// migrate applies any pending embedded migrations to the configured database
+// (backing the file up first when it already carries schema, AGENTS rule 4).
+func migrate(args []string) error {
+	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
+	dbPath := fs.String("db", defaultDBPath, "path to the SQLite database file")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	if err := db.Migrate(ctx, *dbPath); err != nil {
+		return err
+	}
+	log.Printf("migrations applied to %s", *dbPath)
+	return nil
+}
+
+// serve runs the HTTP server until SIGINT/SIGTERM, then shuts down gracefully.
+func serve(args []string) error {
+	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
+	addr := fs.String("addr", ":8080", "listen address")
+	dbPath := fs.String("db", defaultDBPath, "path to the SQLite database file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// Auto-migrate before listening so the running binary always matches its
+	// schema (backup-before-apply is handled inside db.Migrate).
+	if err := db.Migrate(ctx, *dbPath); err != nil {
+		return err
+	}
 
 	srv := &http.Server{
 		Addr:              *addr,
