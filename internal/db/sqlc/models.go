@@ -16,6 +16,14 @@ type Change struct {
 	Note    sql.NullString
 }
 
+type Currency struct {
+	Code     string
+	Exponent int64
+	Symbol   string
+	Name     string
+	Active   int64
+}
+
 type User struct {
 	ID          int64
 	Username    string

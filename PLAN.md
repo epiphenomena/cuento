@@ -83,7 +83,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 
 ## Phase 3 — Money, formats & i18n
 
-- [ ] **p03.1 db: currencies.**
+- [x] **p03.1 db: currencies.**
   Tests: `TestSeedCurrencies` (USD, MXN, EUR present with correct exponents), `TestExponentBounds` (CHECK 0–4).
   Build: migration `currencies(code PK, exponent, symbol, name, active)` + seed; store reads.
 - [ ] **p03.2 [P] money: Amount.**
