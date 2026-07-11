@@ -50,6 +50,17 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 
 ---
 
+## Functional / end-to-end tests (Playwright) — cross-cutting (added 2026-07-11 at human request)
+
+Browser-based functional tests that drive the **real** `cuento serve -dev`. Test-only (Node/npm under `e2e/`), never a Go dependency, opt-in via `make e2e` (needs a browser; kept out of the hermetic `make test`). See DECISIONS "Functional testing". The suite grows with the UI: the harness is built once, then each UI phase adds specs for its real flows.
+
+- [ ] **pE.1 build: Playwright functional-test harness.**
+  Tests first: a `login.spec` that (bad creds → error shown; good creds → authenticated landing) drives the actual login page.
+  Build: `e2e/` with `package.json` (playwright pinned), `playwright.config`, a dev-server fixture (build binary → temp db → migrate → seed admin via `cuento user add --admin` → launch `serve -dev` on an ephemeral port → teardown), the login spec, and a `make e2e` target. `.gitignore` node_modules + Playwright artifacts. Prove it runs green locally (chromium is available).
+- [ ] **pE.2+ per-UI-phase specs.** As phases 11–17 land, each adds functional specs for its delivered flows (chart of accounts CRUD, transaction entry incl. per-fund imbalance + keyboard entry, funds workspace, reconciliation toggle, reports params→table, bank-import review→post, settings/locale). Tracked as part of each UI step's work; `docs/qa-entry.md` (p12.6) references the keyboard-entry spec.
+
+---
+
 ## Phase 0 — Scaffold
 
 - [x] **p00.1 chore: repository scaffold.**

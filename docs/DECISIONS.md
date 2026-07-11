@@ -42,6 +42,14 @@ Seeded at p00.1 from the settled-decisions table in PLAN.md. Later steps append 
 
 Resolved (2026-07): Q1 (funds scope to subsidiaries, not inherited — D20), Q2 (permissions global — D10), Q3 (reports split with/without donor restrictions; per-grant = fund statement), Q4 (hosting, FX, "development" = fundraising column).
 
+## Functional testing (Playwright) — added 2026-07-11 at the human's request
+
+The human explicitly asked for browser-based functional tests, **superseding AGENTS rule 12's original "no browser automation dependency" clause** (acknowledgment: 2026-07-11). Decisions:
+- A **Playwright** end-to-end suite lives under `e2e/` (Node/npm, test-only). It is **not** a Go dependency (D15 untouched) and is **never** imported by the shipped binary or the frontend runtime — the boring-frontend rules (no framework/bundler/CDN, strict CSP) still govern the app itself.
+- The suite drives the **real** `cuento serve -dev`: a fixture builds the binary, creates a temp SQLite db, seeds a known admin (via `cuento user add --admin`) plus any data a spec needs, launches serve on an ephemeral port, and tears it all down.
+- Run via `make e2e` — **opt-in, separate from `make test`** (it needs a browser; `make test` stays hermetic per AGENTS). Chromium is provided by Playwright's own download.
+- The suite **grows with the UI**: the harness (pE.1) is built now against the login flow (the only real page so far); every later UI phase (11–17) adds specs for its real user flows as part of that step's work. Functional coverage of a delivered UI flow is expected before its phase is considered done.
+
 ## Implementation notes (appended per step)
 
 - **p00.2** — `make lint` runs golangci-lint's bundled gofumpt formatter *and* the standalone `gofumpt` binary; the two disagreed on import grouping (standalone splits the module-local `cuento/...` import into its own block, the bundled one merged it). Set `formatters.settings.gofumpt.module-path: cuento` in `.golangci.yml` so both produce the split form. Tooling reconciliation only; no design impact.
