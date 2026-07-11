@@ -18,6 +18,8 @@ Subagents MUST prepend `$(go env GOPATH)/bin` to PATH so `make lint` finds sqlc/
 - Coordinator verifies each with `git show <hash>` (don't trust the report; check tests came first).
 - Non-`[P]` steps are strictly sequential. First parallel fan-out: p03.2/.3/.4 (worktree + rebase).
 
-## Known flags
-- p00.3 CI: no git remote, user doesn't want pushes → cannot verify "green on host" locally.
-  Write the workflow but leave unverified; confirm with user before treating as done.
+## Working-agreement clarifications (from the human)
+- **"Done = green" means locally green** (2026-07-11). No hosted CI; the human pushes as they choose.
+  For every step, "done" = `make lint test check` + the ci.yml steps (vet, golangci-lint, gofumpt -l,
+  go test ./..., govulncheck ./...) all pass locally. Do NOT block on a remote/host run.
+- Toolchain auto-upgrades to go1.25.12 via go.mod (`GOTOOLCHAIN=auto`); needed for a clean govulncheck.
