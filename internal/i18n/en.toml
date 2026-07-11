@@ -1,0 +1,19 @@
+# English catalog (base language). See i18n.go for the supported flat subset:
+# `key = "value"` lines, `#` comments, blank lines, double-quoted values with
+# \n / \" / \\ escapes. This is NOT full TOML — the .toml extension is only for
+# editor syntax familiarity.
+#
+# RULE 9 (AGENTS): every user-visible string lives here and in es.toml with an
+# IDENTICAL key set (TestCatalogParity enforces it). Real UI keys arrive with
+# their features; this is a minimal starter set.
+
+app.name = "cuento"
+
+common.save = "Save"
+common.cancel = "Cancel"
+
+# Label for a NULL fund_id (unrestricted general fund), per D20.
+fund.unrestricted = "Unrestricted General"
+
+# Positional-interpolation sample (%s), exercised by TestInterpolation.
+greeting = "Hello, %s"

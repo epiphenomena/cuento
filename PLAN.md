@@ -92,7 +92,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 - [x] **p03.3 [P] money: date & number format enums.**
   Tests: format/parse tables for `DateFormat{ISO, US, EU}` (ISO always accepted on input regardless of setting); invalid inputs rejected with useful errors.
   Build: enums + tiny formatter/parser; these are the only date/number formatting entry points for the UI.
-- [ ] **p03.4 [P] i18n: catalog.**
+- [x] **p03.4 [P] i18n: catalog.**
   Tests: `TestCatalogParity` (en and es expose the exact same key set — the test that keeps translations honest forever), `TestFallbackToEnglish` (unknown lang / missing key), `TestInterpolation` (positional args).
   Build: `internal/i18n` — embedded `en.toml`/`es.toml` (flat key→string; hand-rolled minimal parser or key=value format to stay inside D15), `T(lang, key, args...)`, `Langs()`; template func registration happens in phase 10. Every later step adding a UI string adds it to **both** catalogs (AGENTS rule 9).
 

@@ -1,0 +1,13 @@
+# Spanish catalog. Same flat subset and the SAME key set as en.toml
+# (TestCatalogParity enforces identical keys in both directions).
+
+app.name = "cuento"
+
+common.save = "Guardar"
+common.cancel = "Cancelar"
+
+# Etiqueta para un fondo sin restricciones (fund_id NULL), segun D20.
+fund.unrestricted = "Fondo General No Restringido"
+
+# Muestra de interpolacion posicional (%s), usada por TestInterpolation.
+greeting = "Hola, %s"
