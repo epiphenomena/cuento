@@ -30,3 +30,12 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# cuento — real data and build artifacts (AGENTS rule 11: real data never enters the repo)
+fixtures/source/
+fixtures/sample.db
+*.db
+*.db-shm
+*.db-wal
+*.bak
+/bin/

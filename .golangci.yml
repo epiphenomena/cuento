@@ -1,0 +1,18 @@
+# golangci-lint v2 config — see AGENTS.md Style. Keep the linter set small and strict.
+version: "2"
+
+linters:
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+
+formatters:
+  enable:
+    - gofumpt
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
