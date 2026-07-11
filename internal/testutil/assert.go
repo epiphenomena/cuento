@@ -131,6 +131,42 @@ func AssertVersionedSub(t *testing.T, db *sql.DB, accountID, subID int64, wantOp
 	assertChangeExists(t, db, "AssertVersionedSub", changeID)
 }
 
+// AssertVersionedFundSub asserts the versioning contract for one composite-key
+// fund-subsidiary membership (fund_id, subsidiary_id). fund_subsidiaries_versions
+// keys entity_id on fund_id and carries subsidiary_id as both a snapshot column
+// and part of the entity identity (p07.2), so the latest lookup must filter on
+// the pair. Membership is a set: an add is op='create', a removal op='delete';
+// the latest snapshot for (fundID, subID) must have op == wantOp and a change_id
+// naming an existing changes row. It mirrors AssertVersionedSub (accounts).
+func AssertVersionedFundSub(t *testing.T, db *sql.DB, fundID, subID int64, wantOp string) {
+	t.Helper()
+
+	var (
+		gotOp    string
+		changeID sql.NullInt64
+	)
+	err := db.QueryRow(
+		`SELECT op, change_id
+		   FROM fund_subsidiaries_versions
+		  WHERE entity_id = ? AND subsidiary_id = ?
+		  ORDER BY valid_from DESC, id DESC
+		  LIMIT 1`, fundID, subID,
+	).Scan(&gotOp, &changeID)
+	if err == sql.ErrNoRows {
+		t.Fatalf("AssertVersionedFundSub: no fund_subsidiaries_versions row for (fund_id=%d, subsidiary_id=%d) (membership mutation was not versioned)", fundID, subID)
+	}
+	if err != nil {
+		t.Fatalf("AssertVersionedFundSub: query fund_subsidiaries_versions: %v", err)
+	}
+	if gotOp != wantOp {
+		t.Errorf("AssertVersionedFundSub: latest op for (fund_id=%d, subsidiary_id=%d) = %q, want %q", fundID, subID, gotOp, wantOp)
+	}
+	if !changeID.Valid {
+		t.Fatalf("AssertVersionedFundSub: latest row for (fund_id=%d, subsidiary_id=%d) has NULL change_id", fundID, subID)
+	}
+	assertChangeExists(t, db, "AssertVersionedFundSub", changeID)
+}
+
 // assertChangeExists verifies a version row's change_id references a real
 // changes row — the shared tail of every AssertVersioned* helper.
 func assertChangeExists(t *testing.T, db *sql.DB, who string, changeID sql.NullInt64) {

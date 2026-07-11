@@ -140,7 +140,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 - [x] **p07.2 db: funds + scoping + versions.**
   Tests (direct SQL): restriction CHECK; program FK; date GLOB checks; versions tables exist for `funds` and `fund_subsidiaries`.
   Build: migration — `funds(id, name, funder, purpose, restriction CHECK ('purpose','time','perpetual'), program_id REFERENCES programs(id), start_date, end_date, notes, active)` + `fund_subsidiaries(fund_id, subsidiary_id)` (≥1 enforced in store) + both `*_versions`. NULL `fund_id` on splits *is* unrestricted (D20) — no seeded "general fund" row; the UI label comes from the i18n catalog.
-- [ ] **p07.3 store: fund operations.**
+- [x] **p07.3 store: fund operations.**
   Tests: `TestCreateFundVersioned` (fund + sub map under one change), `TestCreateRequiresAtLeastOneSub`, `TestCloseFundBlocksNewUse` (asserted properly in p08, tagged here), `TestActiveFundsForSubsidiary` (only funds whose set contains the sub, D20/Q1), `TestProgramScopeStored`, `TestNarrowSubsBlockedBySplits` (tagged; enforced once splits exist in p08), `TestReopenAudited`.
   Build: `CreateFund(subs ≥ 1)`, `UpdateFund` (incl. subsidiary-set and program-scope changes), `CloseFund`/`ReopenFund`, `ActiveFunds(subsidiary)` (the transaction editor's option source).
 
