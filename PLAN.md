@@ -128,7 +128,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 - [x] **p06.3 web: route registry + provable enforcement.**
   Tests: `TestRouteRegistryComplete` (mounting happens only through the registry; every pattern accounted for), `TestPermissionMatrix` (auto-generated: every route × persona {anon, NoAccess, ReadOnly, Bookkeeper, ReportsOnly, Admin} → expected status).
   Build: `routes.go` — `[]Route{Method, Pattern, Perm, Handler}` with `Perm ∈ {Public, AnyUser, TxnRead, TxnWrite, ReportGroup(name), Admin}`; single mount function; middleware enforcement; startup sync of code-declared report groups into `report_groups`.
-- [ ] **p06.4 cli: user management + bootstrap.**
+- [x] **p06.4 cli: user management + bootstrap.**
   Tests: `TestUserAddAndLogin`, `TestDisabledUserCannotLogin`.
   Build: `cuento user add|passwd|disable` (add supports `--admin`); `serve` logs a bootstrap hint when no human users exist.
 

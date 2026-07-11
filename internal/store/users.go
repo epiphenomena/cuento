@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -65,6 +67,81 @@ func (s *Store) CreateUser(ctx context.Context, in CreateUserInput) (int64, erro
 		return 0, fmt.Errorf("create user: %w", err)
 	}
 	return newID, nil
+}
+
+// ErrUserNotFound is returned by the username-keyed operations (SetUserPassword
+// and DisableUser resolve ids from usernames; the CLI resolves the id first)
+// when no user matches. Callers turn it into a clean CLI message.
+var ErrUserNotFound = errors.New("store: user not found")
+
+// SetUserPassword replaces a user's password_hash on the live row and appends an
+// op='update' users_versions row under ONE change (p06.4 `user passwd`). The
+// version append is the SAME snapshot-from-live query CreateUser uses, so it
+// omits password_hash by construction (rule 5): the new secret enters only the
+// live table, never the audit trail.
+func (s *Store) SetUserPassword(ctx context.Context, userID int64, passwordHash string) error {
+	_, err := s.write(ctx, "user.passwd", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			if err := q.SetUserPassword(ctx, sqlc.SetUserPasswordParams{
+				PasswordHash: sql.NullString{String: passwordHash, Valid: true},
+				ID:           userID,
+			}); err != nil {
+				return fmt.Errorf("set password: %w", err)
+			}
+			return insertUserVersion(ctx, q, changeID, "update", userID)
+		})
+	if err != nil {
+		return fmt.Errorf("set user password (id %d): %w", userID, err)
+	}
+	return nil
+}
+
+// DisableUser marks a user disabled (disabled_at = now) on the live row and
+// appends an op='update' users_versions row under ONE change (p06.4 `user
+// disable`). A disabled user cannot log in (the login handler enforces this).
+// Unlike password_hash, disabled_at IS part of the snapshot, so the audit trail
+// records who was disabled and when.
+func (s *Store) DisableUser(ctx context.Context, userID int64) error {
+	_, err := s.write(ctx, "user.disable", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			if err := q.SetUserDisabled(ctx, sqlc.SetUserDisabledParams{
+				DisabledAt: sql.NullString{String: s.now().Format(time.RFC3339Nano), Valid: true},
+				ID:         userID,
+			}); err != nil {
+				return fmt.Errorf("set disabled: %w", err)
+			}
+			return insertUserVersion(ctx, q, changeID, "update", userID)
+		})
+	if err != nil {
+		return fmt.Errorf("disable user (id %d): %w", userID, err)
+	}
+	return nil
+}
+
+// UserIDByUsername resolves a username to its id for the CLI's passwd/disable
+// (which take a username but the versioned store methods take an id). A missing
+// username returns ErrUserNotFound. This is a read (rule 2 permits reads outside
+// the write funnel via sqlc).
+func (s *Store) UserIDByUsername(ctx context.Context, username string) (int64, error) {
+	id, err := s.q.UserIDByUsername(ctx, username)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, ErrUserNotFound
+	}
+	if err != nil {
+		return 0, fmt.Errorf("lookup user %q: %w", username, err)
+	}
+	return id, nil
+}
+
+// CountHumanUsers returns the number of real operators, excluding the seeded
+// system user (id 1). serve uses it to decide whether to log the bootstrap hint
+// (no human users -> tell the operator to run `cuento user add`). A read.
+func (s *Store) CountHumanUsers(ctx context.Context) (int64, error) {
+	n, err := s.q.CountHumanUsers(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("count human users: %w", err)
+	}
+	return n, nil
 }
 
 // Credentials is what the login handler needs to authenticate a username: the

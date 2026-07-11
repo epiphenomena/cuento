@@ -10,6 +10,30 @@ WHERE id = ?;
 -- name: CountUsers :one
 SELECT COUNT(*) FROM users;
 
+-- name: CountHumanUsers :one
+-- Bootstrap hint (p06.4): count real operators, excluding the seeded system
+-- user (id 1). Zero means the operator still needs to create the first account,
+-- so serve logs the `cuento user add ... --admin` hint on start.
+SELECT COUNT(*) FROM users WHERE id <> 1;
+
+-- name: UserIDByUsername :one
+-- CLI lookup (p06.4): passwd/disable take a username; resolve it to the id the
+-- versioned store methods need. A missing username is sql.ErrNoRows the CLI maps
+-- to a clean "no such user" error.
+SELECT id FROM users WHERE username = ?;
+
+-- name: SetUserPassword :exec
+-- Live update of a user's password_hash (p06.4 `user passwd`). The version append
+-- (InsertUserVersion) that follows DELIBERATELY omits password_hash (rule 5), so
+-- the new secret enters only the live table, never the audit trail.
+UPDATE users SET password_hash = ? WHERE id = ?;
+
+-- name: SetUserDisabled :exec
+-- Live update of a user's disabled_at (p06.4 `user disable`). A disabled user
+-- cannot log in (login enforces this). Versioned as op='update'; disabled_at IS
+-- part of the users_versions snapshot, so the audit trail records the disabling.
+UPDATE users SET disabled_at = ? WHERE id = ?;
+
 -- name: UserByUsername :one
 -- Login lookup (p06.2). Returns the credential + the columns the auth/lang
 -- middleware needs: password_hash (nullable; the system user has none),

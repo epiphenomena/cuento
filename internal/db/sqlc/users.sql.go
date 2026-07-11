@@ -10,6 +10,20 @@ import (
 	"database/sql"
 )
 
+const countHumanUsers = `-- name: CountHumanUsers :one
+SELECT COUNT(*) FROM users WHERE id <> 1
+`
+
+// Bootstrap hint (p06.4): count real operators, excluding the seeded system
+// user (id 1). Zero means the operator still needs to create the first account,
+// so serve logs the `cuento user add ... --admin` hint on start.
+func (q *Queries) CountHumanUsers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countHumanUsers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUsers = `-- name: CountUsers :one
 SELECT COUNT(*) FROM users
 `
@@ -120,6 +134,40 @@ func (q *Queries) InsertUserVersion(ctx context.Context, arg InsertUserVersionPa
 	return err
 }
 
+const setUserDisabled = `-- name: SetUserDisabled :exec
+UPDATE users SET disabled_at = ? WHERE id = ?
+`
+
+type SetUserDisabledParams struct {
+	DisabledAt sql.NullString
+	ID         int64
+}
+
+// Live update of a user's disabled_at (p06.4 `user disable`). A disabled user
+// cannot log in (login enforces this). Versioned as op='update'; disabled_at IS
+// part of the users_versions snapshot, so the audit trail records the disabling.
+func (q *Queries) SetUserDisabled(ctx context.Context, arg SetUserDisabledParams) error {
+	_, err := q.db.ExecContext(ctx, setUserDisabled, arg.DisabledAt, arg.ID)
+	return err
+}
+
+const setUserPassword = `-- name: SetUserPassword :exec
+UPDATE users SET password_hash = ? WHERE id = ?
+`
+
+type SetUserPasswordParams struct {
+	PasswordHash sql.NullString
+	ID           int64
+}
+
+// Live update of a user's password_hash (p06.4 `user passwd`). The version append
+// (InsertUserVersion) that follows DELIBERATELY omits password_hash (rule 5), so
+// the new secret enters only the live table, never the audit trail.
+func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams) error {
+	_, err := q.db.ExecContext(ctx, setUserPassword, arg.PasswordHash, arg.ID)
+	return err
+}
+
 const userByID = `-- name: UserByID :one
 SELECT id, username, disabled_at, txn_perm, is_admin, locale
 FROM users
@@ -182,4 +230,18 @@ func (q *Queries) UserByUsername(ctx context.Context, username string) (UserByUs
 		&i.Locale,
 	)
 	return i, err
+}
+
+const userIDByUsername = `-- name: UserIDByUsername :one
+SELECT id FROM users WHERE username = ?
+`
+
+// CLI lookup (p06.4): passwd/disable take a username; resolve it to the id the
+// versioned store methods need. A missing username is sql.ErrNoRows the CLI maps
+// to a clean "no such user" error.
+func (q *Queries) UserIDByUsername(ctx context.Context, username string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, userIDByUsername, username)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }

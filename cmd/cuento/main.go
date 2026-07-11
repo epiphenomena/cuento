@@ -1,6 +1,6 @@
 // Command cuento is the single binary for the whole application. The first CLI
 // argument selects a subcommand. Phase 0 implements serve; migrate arrives in
-// p01.2; check, user, and ratesync arrive in later phases (p08.3, p06.4, p14.2).
+// p01.2; user arrives in p06.4; check and ratesync arrive later (p08.3, p14.2).
 package main
 
 import (
@@ -44,6 +44,10 @@ func main() {
 		if err := migrate(args); err != nil {
 			log.Fatalf("migrate: %v", err)
 		}
+	case "user":
+		if err := userCmd(args); err != nil {
+			log.Fatalf("user: %v", err)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "cuento: unknown subcommand %q\n\n", cmd)
 		usage()
@@ -52,7 +56,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: cuento <command> [flags]\n\ncommands:\n  serve     run the HTTP server (auto-migrates on start; -dev relaxes cookie Secure)\n  migrate   apply pending database migrations\n")
+	fmt.Fprintf(os.Stderr, "usage: cuento <command> [flags]\n\ncommands:\n  serve     run the HTTP server (auto-migrates on start; -dev relaxes cookie Secure)\n  migrate   apply pending database migrations\n  user      manage users (add|passwd|disable)\n")
 }
 
 // migrate applies any pending embedded migrations to the configured database
@@ -111,6 +115,16 @@ func serve(args []string) error {
 	// reference these names, so this runs before we start serving.
 	if err := web.SyncReportGroups(ctx, st); err != nil {
 		return fmt.Errorf("sync report groups: %w", err)
+	}
+
+	// Bootstrap hint: with no human users (only the seeded system user id 1), the
+	// operator cannot log in yet. Log a friendly pointer to create the first
+	// admin. Operator-facing console output, not a UI string (no i18n catalog
+	// entry); a lookup failure is non-fatal (never block startup on a hint).
+	if n, err := st.CountHumanUsers(ctx); err != nil {
+		log.Printf("bootstrap check failed (non-fatal): %v", err)
+	} else if n == 0 {
+		log.Print("no users yet: create the first admin with `cuento user add <username> --admin`")
 	}
 
 	handler := web.Handler(web.Config{Version: version, Dev: *dev}, sqldb, st)
