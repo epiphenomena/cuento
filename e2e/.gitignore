@@ -1,0 +1,8 @@
+# Playwright / Node test-only artifacts (pE.1). node_modules and browser caches
+# are NEVER committed; package.json + package-lock.json + config + specs + fixture
+# are. Run the suite with `make e2e` from the repo root.
+node_modules/
+test-results/
+playwright-report/
+playwright/.cache/
+.cache/

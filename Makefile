@@ -11,7 +11,7 @@ SQLC        ?= sqlc
 GOLANGCILINT?= golangci-lint
 GOFUMPT     ?= gofumpt
 
-.PHONY: all gen lint test check fixture golden run release build clean tools
+.PHONY: all gen lint test check e2e fixture golden run release build clean tools
 
 all: lint test check
 
@@ -37,6 +37,16 @@ test:
 ## check — build, then run `cuento check` against a fixture db (wired in p08.3).
 check: build
 	@echo "check: cuento check wiring lands in p08.3"
+
+## e2e — opt-in Playwright functional tests (pE.1). Builds bin/cuento, installs
+## the pinned test-only Node deps (@playwright/test, bundled chromium already
+## cached), and runs the suite in e2e/ against the REAL `cuento serve -dev`. NOT
+## part of `make test` (which stays hermetic — no browser, no network per AGENTS):
+## e2e needs a browser and is run explicitly. Playwright is a dev/test dependency
+## only, never a Go dep and never shipped (AGENTS rule 12, DECISIONS "Functional
+## testing"). `npm ci` requires e2e/package-lock.json (committed).
+e2e: build
+	cd e2e && npm ci && npx playwright test
 
 ## fixture — local only: run ledgerimport to produce fixtures/sample.db (phase 9).
 fixture:

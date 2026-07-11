@@ -1,0 +1,12 @@
+{
+  "name": "cuento-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Playwright functional (end-to-end) tests for cuento. Test-only; never a Go or frontend runtime dependency (AGENTS rule 12, DECISIONS 'Functional testing').",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.53.2"
+  }
+}
