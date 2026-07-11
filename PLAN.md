@@ -101,7 +101,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 - [x] **p04.1 db: subsidiaries + versions.**
   Tests (direct SQL): exactly-one-root enforced (second NULL-parent insert rejected by trigger); FK to currencies; versions table exists.
   Build: migration — `subsidiaries(id, parent_id → subsidiaries, name UNIQUE, base_currency → currencies, active, sort_order)` + `subsidiaries_versions`; trigger `trg_subsidiaries_single_root`; seed root subsidiary (`Organization`, USD) so a single-entity org works with zero setup.
-- [ ] **p04.2 store: subsidiary operations.**
+- [x] **p04.2 store: subsidiary operations.**
   Tests: `TestCreateSubsidiaryVersioned`, `TestMoveRejectsCycle`, `TestRootImmovable` (root keeps NULL parent), `TestDeactivateBlockedWithActiveChildren`, `TestSubTree` (depth-first order), `TestDescendants` (self + transitive closure — the primitive report scoping uses).
   Build: `CreateSubsidiary`, `UpdateSubsidiary` (rename/move/base-currency — base-currency change allowed; it only affects report defaults), `DeactivateSubsidiary` (blocked while it has active children; deactivated subs reject new transactions but keep history), `SubTree()`, `Descendants(id)` via recursive CTE.
 

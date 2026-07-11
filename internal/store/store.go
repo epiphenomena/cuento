@@ -5,14 +5,29 @@
 // work in a single transaction, so an actor is recorded for every mutation and
 // nothing is half-written.
 //
-// Versioning convention (AGENTS rule 5, D4). There is deliberately NO generic
-// version-append helper here: a table-name-parameterized helper would need
-// interpolated SQL, which rule 6 forbids in the query layer. Instead, every
-// versioned business table gets its own sqlc InsertXVersion query, called inside
-// the funnel's fn on the SAME tx-bound *sqlc.Queries and sharing the funnel's
-// changeID (so the version row's change_id matches and valid_from = changes.at).
-// The first concrete instance lands at p04.1 (subsidiaries); this step only
-// establishes the funnel and the convention.
+// Versioning convention (AGENTS rule 5, D4) -- THE pattern p05/p07/p08 copy,
+// established concretely in subsidiaries.go (p04.2). There is deliberately NO
+// generic version-append helper here: a table-name-parameterized helper would
+// need interpolated SQL, which rule 6 forbids in the query layer. Instead, every
+// versioned business table gets its own sqlc InsertXVersion query, and every
+// entity op follows the same discipline:
+//
+//   - the op runs entirely inside the funnel's fn, so the funnel's change row is
+//     rolled back if fn returns a validation error (rejected ops leave NO audit
+//     trace -- validation lives inside fn, never before write());
+//   - inside fn the LIVE write happens FIRST, THEN the version append via a
+//     snapshot-from-live query (InsertXVersion does INSERT ... SELECT from the
+//     just-written live row on the SAME tx-bound *sqlc.Queries, sharing the
+//     funnel's changeID). This makes the version row byte-identical to the live
+//     row (Z3 can never diverge) and valid_from == changes.at BY CONSTRUCTION --
+//     both structural, never asserted;
+//   - deactivation is op='update' (the entity still exists); op='delete' is
+//     reserved for transaction soft-delete (rule 14).
+//
+// Composite-key versioned tables (account_names, account_subsidiaries,
+// fund_subsidiaries) reuse the snapshot-from-live query's shape verbatim, changing
+// only its entity_id/WHERE expression -- nothing here hard-bakes "entity_id is a
+// single autoincrement id".
 package store
 
 import (
