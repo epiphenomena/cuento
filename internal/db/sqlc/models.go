@@ -100,6 +100,12 @@ type ReportGroup struct {
 	Sort int64
 }
 
+type Session struct {
+	Token  string
+	Data   []byte
+	Expiry float64
+}
+
 type SubsidiariesVersion struct {
 	ID           int64
 	EntityID     int64

@@ -67,6 +67,67 @@ func (s *Store) CreateUser(ctx context.Context, in CreateUserInput) (int64, erro
 	return newID, nil
 }
 
+// Credentials is what the login handler needs to authenticate a username: the
+// user id, the stored argon2id hash (nil when the user is passwordless, e.g. the
+// system user), whether the account is disabled, and the UI locale to bind after
+// a successful login. It is a read projection, not a live entity.
+type Credentials struct {
+	ID           int64
+	PasswordHash *string
+	Disabled     bool
+	Locale       string
+}
+
+// CurrentUser is the identity the auth middleware resolves from a session: who
+// the request is acting as, plus the permission + locale fields handlers and
+// templates read. It is deliberately small — contexts carry the actor, and this
+// read carries only what request handling needs (AGENTS Style).
+type CurrentUser struct {
+	ID       int64
+	Username string
+	Disabled bool
+	TxnPerm  string
+	IsAdmin  bool
+	Locale   string
+}
+
+// CredentialsByUsername returns the login credentials for username. A username
+// that does not exist returns (zero, sql.ErrNoRows) — the login handler maps
+// that to the SAME uniform error as a wrong password so unknown-user and
+// wrong-password are indistinguishable (no user enumeration, rule 13). This is a
+// read (rule 2 permits reads outside the write funnel via sqlc queries).
+func (s *Store) CredentialsByUsername(ctx context.Context, username string) (Credentials, error) {
+	row, err := s.q.UserByUsername(ctx, username)
+	if err != nil {
+		return Credentials{}, err
+	}
+	return Credentials{
+		ID:           row.ID,
+		PasswordHash: nullStringToPtr(row.PasswordHash),
+		Disabled:     row.DisabledAt.Valid,
+		Locale:       row.Locale,
+	}, nil
+}
+
+// UserByID resolves a session's stored user id back into the current identity.
+// Used by the auth middleware on every authenticated request; a missing id
+// returns sql.ErrNoRows (a stale/forged session), which the middleware treats as
+// anonymous.
+func (s *Store) UserByID(ctx context.Context, id int64) (CurrentUser, error) {
+	row, err := s.q.UserByID(ctx, id)
+	if err != nil {
+		return CurrentUser{}, err
+	}
+	return CurrentUser{
+		ID:       row.ID,
+		Username: row.Username,
+		Disabled: row.DisabledAt.Valid,
+		TxnPerm:  row.TxnPerm,
+		IsAdmin:  row.IsAdmin != 0,
+		Locale:   row.Locale,
+	}, nil
+}
+
 // insertUserVersion appends the users snapshot-from-live version row. It hides
 // the generated positional-param names (ID=change_id, ID_2=entity_id) behind one
 // call site. It MUST run after the live insert so the snapshot captures the new

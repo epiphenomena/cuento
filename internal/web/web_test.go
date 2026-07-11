@@ -5,11 +5,26 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"cuento/internal/store"
+	"cuento/internal/testutil"
 )
+
+// newTestHandler builds the real mounted handler over a migrated temp db, the
+// way p06.2 onward exercise the web layer (AGENTS testing conventions: hit the
+// real router via httptest, no store mocks). cfg lets a test flip -dev.
+func newTestHandler(t *testing.T, cfg Config) http.Handler {
+	t.Helper()
+	db := testutil.NewDB(t)
+	if cfg.Version == "" {
+		cfg.Version = "test"
+	}
+	return Handler(cfg, db, store.New(db))
+}
 
 func TestHealthz(t *testing.T) {
 	const version = "test-1.2.3"
-	h := Handler(version)
+	h := newTestHandler(t, Config{Version: version})
 
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
@@ -38,7 +53,7 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestStaticEmbedded(t *testing.T) {
-	h := Handler("dev")
+	h := newTestHandler(t, Config{})
 
 	req := httptest.NewRequest(http.MethodGet, "/static/app.css", nil)
 	rec := httptest.NewRecorder()

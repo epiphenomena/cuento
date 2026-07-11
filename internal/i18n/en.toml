@@ -17,3 +17,13 @@ fund.unrestricted = "Unrestricted General"
 
 # Positional-interpolation sample (%s), exercised by TestInterpolation.
 greeting = "Hello, %s"
+
+# Login page (p06.2). The auth.invalid / auth.rate_limited errors are
+# deliberately generic: a uniform message that does not reveal whether a
+# username exists (no user enumeration, rule 13).
+auth.login_title = "Sign in"
+auth.username = "Username"
+auth.password = "Password"
+auth.sign_in = "Sign in"
+auth.invalid = "Incorrect username or password."
+auth.rate_limited = "Too many attempts. Please wait and try again."

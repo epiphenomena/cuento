@@ -660,6 +660,17 @@ func nullStringPtr(p *string) sql.NullString {
 	return nullString(*p)
 }
 
+// nullStringToPtr maps a sql.NullString back to *string (invalid -> nil). It is
+// the inverse of nullStringPtr, used by read projections that surface a nullable
+// column (e.g. a user's optional password_hash) as an optional Go value.
+func nullStringToPtr(ns sql.NullString) *string {
+	if !ns.Valid {
+		return nil
+	}
+	v := ns.String
+	return &v
+}
+
 // boolToInt maps a Go bool to the 0/1 SQLite integer flag columns use.
 func boolToInt(b bool) int64 {
 	if b {

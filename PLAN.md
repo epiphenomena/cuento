@@ -122,7 +122,7 @@ Resolved (2026-07): **Q1** funds are not inherited but scope to one or more subs
 - [x] **p06.1 db+auth: credentials, perms, settings columns.**
   Tests: `TestHashVerify` (argon2id wrapper), `TestUsersVersionOmitsPasswordHash` (**critical** — snapshot never contains the hash), grant FK tests.
   Build: migration — users gain `password_hash`, `is_admin`, `txn_perm CHECK(none/read/write)`, settings columns (`locale`, `date_format`, `number_format`, `display_mode`, `neg_style`, `theme`, `default_subsidiary_id`); `report_groups`, `user_report_grants` (+ versions for users and grants).
-- [ ] **p06.2 web: sessions, login, security middleware.**
+- [x] **p06.2 web: sessions, login, security middleware.**
   Tests: `TestLoginSuccessSetsSession`, `TestLoginWrongPassword` (uniform error, no user enumeration), `TestLoginRateLimited`, `TestCookieFlags` (HttpOnly, SameSite=Lax, Secure outside `-dev`), `TestCrossOriginBlocked` (spoofed `Sec-Fetch-Site: cross-site` → 403), `TestSecurityHeaders` (CSP, X-Content-Type-Options, Referrer-Policy), `TestLoginPageLocalized` (`?lang=es` or es cookie renders Spanish strings via the catalog).
   Build: scs + sqlite3store (its `sessions` table created by our migration so goose stays canonical); middleware chain: secure headers → CSRF → session → auth → lang resolution (user setting → cookie → en); login/logout handlers with minimal templates (styling comes in phase 10); `x/time/rate` limiter keyed by IP+username.
 - [ ] **p06.3 web: route registry + provable enforcement.**

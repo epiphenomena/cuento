@@ -10,6 +10,26 @@ WHERE id = ?;
 -- name: CountUsers :one
 SELECT COUNT(*) FROM users;
 
+-- name: UserByUsername :one
+-- Login lookup (p06.2). Returns the credential + the columns the auth/lang
+-- middleware needs: password_hash (nullable; the system user has none),
+-- disabled_at (a disabled user cannot log in), and locale (drives the
+-- post-login UI language). A NULL row (no such username) is a sql.ErrNoRows the
+-- caller maps to the SAME uniform error as a wrong password (no user
+-- enumeration, rule 13).
+SELECT id, password_hash, disabled_at, locale
+FROM users
+WHERE username = ?;
+
+-- name: UserByID :one
+-- Session-resolution lookup (p06.2): the middleware turns a stored user id back
+-- into the current identity + its UI language on every authenticated request.
+-- Kept separate from GetUser (whose projection is pinned by
+-- sqlc/users_changes_test.go, p06.1) so this step touches no existing query.
+SELECT id, username, disabled_at, txn_perm, is_admin, locale
+FROM users
+WHERE id = ?;
+
 -- name: InsertUser :one
 -- Live insert of a user. password_hash is nullable (a passwordless user, like
 -- the system user, passes NULL). Settings columns are omitted so their schema

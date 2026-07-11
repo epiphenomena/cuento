@@ -11,3 +11,13 @@ fund.unrestricted = "Fondo General No Restringido"
 
 # Muestra de interpolacion posicional (%s), usada por TestInterpolation.
 greeting = "Hola, %s"
+
+# Pagina de inicio de sesion (p06.2). Los errores auth.invalid /
+# auth.rate_limited son deliberadamente genericos: un mensaje uniforme que no
+# revela si un usuario existe (sin enumeracion de usuarios, regla 13).
+auth.login_title = "Iniciar sesion"
+auth.username = "Usuario"
+auth.password = "Contraseña"
+auth.sign_in = "Iniciar sesion"
+auth.invalid = "Usuario o contraseña incorrectos."
+auth.rate_limited = "Demasiados intentos. Espere e intente de nuevo."

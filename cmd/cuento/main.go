@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"cuento/internal/db"
+	"cuento/internal/store"
 	"cuento/internal/web"
 )
 
@@ -51,7 +52,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: cuento <command> [flags]\n\ncommands:\n  serve     run the HTTP server (auto-migrates on start)\n  migrate   apply pending database migrations\n")
+	fmt.Fprintf(os.Stderr, "usage: cuento <command> [flags]\n\ncommands:\n  serve     run the HTTP server (auto-migrates on start; -dev relaxes cookie Secure)\n  migrate   apply pending database migrations\n")
 }
 
 // migrate applies any pending embedded migrations to the configured database
@@ -78,6 +79,9 @@ func serve(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	addr := fs.String("addr", ":8080", "listen address")
 	dbPath := fs.String("db", defaultDBPath, "path to the SQLite database file")
+	// -dev relaxes the session cookie's Secure attribute so the dev server works
+	// over plain HTTP (rule 13, D9). The Makefile `run` target passes it.
+	dev := fs.Bool("dev", false, "development mode: session cookie not marked Secure (plain HTTP)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -91,9 +95,20 @@ func serve(args []string) error {
 		return err
 	}
 
+	// Open the pooled handle the web layer needs: the store (single writer/read
+	// funnel) and the scs session store both operate over it.
+	sqldb, err := db.Open(*dbPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = sqldb.Close() }()
+
+	st := store.New(sqldb)
+	handler := web.Handler(web.Config{Version: version, Dev: *dev}, sqldb, st)
+
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           web.Handler(version),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
