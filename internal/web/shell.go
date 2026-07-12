@@ -61,10 +61,13 @@ func navSections() []navEntry {
 }
 
 // navItem is a nav entry resolved for one request: its already-localized label and
-// href, ready for the template (which never sees a Perm or a raw key).
+// href, ready for the template (which never sees a Perm or a raw key). Current
+// marks the section matching the request path so the shell can render
+// aria-current="page" (the gold active-nav accent, ux brand identity).
 type navItem struct {
-	Label string
-	Href  string
+	Label   string
+	Href    string
+	Current bool
 }
 
 // visibleNav resolves navSections for the current request: it keeps an entry only
@@ -73,7 +76,7 @@ type navItem struct {
 // policy, so nav visibility and route enforcement can never disagree). The
 // ReportGroup case is treated as "any report grant (or admin)" for nav purposes:
 // the index route lands in p15 and will gate the concrete reports.
-func (s *server) visibleNav(ctx context.Context, u *store.CurrentUser) []navItem {
+func (s *server) visibleNav(ctx context.Context, u *store.CurrentUser, currentPath string) []navItem {
 	registered := s.registeredGetPaths()
 	lang := langOf(ctx)
 
@@ -85,9 +88,24 @@ func (s *server) visibleNav(ctx context.Context, u *store.CurrentUser) []navItem
 		if !s.navPermits(ctx, u, e.Perm) {
 			continue
 		}
-		out = append(out, navItem{Label: i18n.T(lang, e.LabelKey), Href: e.Href})
+		out = append(out, navItem{
+			Label:   i18n.T(lang, e.LabelKey),
+			Href:    e.Href,
+			Current: isCurrentNav(e.Href, currentPath),
+		})
 	}
 	return out
+}
+
+// isCurrentNav reports whether nav entry href is the active section for the
+// request path: an exact match, or (for a non-root section like "/accounts") the
+// path being under it ("/accounts/new"). The root "/" matches only itself so it
+// isn't flagged current on every page.
+func isCurrentNav(href, path string) bool {
+	if href == "/" {
+		return path == "/"
+	}
+	return path == href || strings.HasPrefix(path, href+"/")
 }
 
 // navPermits reports whether user u may see a nav entry guarded by perm. It reuses
@@ -184,7 +202,7 @@ func (s *server) newShellPage(r *http.Request, page any) shellPage {
 		Shell: baseData{
 			Lang:    langOf(ctx),
 			Theme:   resolveTheme(r, u),
-			Nav:     s.visibleNav(ctx, u),
+			Nav:     s.visibleNav(ctx, u, r.URL.Path),
 			Version: s.cfg.Version,
 		},
 		Page: page,

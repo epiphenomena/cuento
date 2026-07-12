@@ -121,6 +121,30 @@ func TestJSUnitTestNotServed(t *testing.T) {
 	}
 }
 
+// TestBrandAssetsServed: the ux brand SVGs (favicon + standalone logo icon) are
+// real assets — hashed into the manifest and served under img-src 'self' (never a
+// CDN, rule 12). Mirrors TestVendoredHtmxServed.
+func TestBrandAssetsServed(t *testing.T) {
+	app := newTestApp(t, Config{})
+	h := newTestHandler(t, Config{})
+
+	for _, name := range []string{"favicon.svg", "logo-icon.svg"} {
+		want := "/static/" + insertHash(name, embeddedHash(t, name))
+		if got := app.srv.assetURL(name); got != want {
+			t.Fatalf("assetURL(%s) = %q, want %q", name, got, want)
+		}
+		req := httptest.NewRequest(http.MethodGet, want, nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || rec.Body.Len() == 0 {
+			t.Fatalf("GET %s = %d (len %d), want 200 with body", want, rec.Code, rec.Body.Len())
+		}
+		if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "svg") {
+			t.Errorf("%s Content-Type = %q, want an svg type", name, ct)
+		}
+	}
+}
+
 // TestHTMLNoStore: an HTML response (the login page) is served no-store. HTML
 // must never be cached; content-hashing is only for static assets. (Guards a
 // pre-existing render.go invariant.)

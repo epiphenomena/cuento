@@ -9,6 +9,32 @@
 {{template "shell-open" (shellTitle . (t "styleguide.title"))}}
   <h1>{{t "styleguide.title"}}</h1>
 
+  <section aria-labelledby="sg-brand">
+    <h2 id="sg-brand">{{t "styleguide.brand"}}</h2>
+    {{/* The mark + wordmark rendered in BOTH themes on one page: each pane pins
+         its own color-scheme so light-dark() resolves per pane (app.css). */}}
+    <div class="theme-previews">
+      <div class="theme-preview is-light">
+        <h3>{{t "theme.light"}}</h3>
+        <span class="brand-lockup">{{template "brand-icon" .}}<span class="app-brand-name">{{t "app.name"}}</span></span>
+      </div>
+      <div class="theme-preview is-dark">
+        <h3>{{t "theme.dark"}}</h3>
+        <span class="brand-lockup">{{template "brand-icon" .}}<span class="app-brand-name">{{t "app.name"}}</span></span>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="sg-palette">
+    <h2 id="sg-palette">{{t "styleguide.palette"}}</h2>
+    <ul class="swatches">
+      <li class="swatch"><span class="swatch-chip is-blue"></span><span class="swatch-name">Primary Blue</span><span class="swatch-hex">#0072CE</span></li>
+      <li class="swatch"><span class="swatch-chip is-gold"></span><span class="swatch-name">Accent Gold</span><span class="swatch-hex">#FFB81C</span></li>
+      <li class="swatch"><span class="swatch-chip is-white"></span><span class="swatch-name">White</span><span class="swatch-hex">#FFFFFF</span></li>
+      <li class="swatch"><span class="swatch-chip is-navy"></span><span class="swatch-name">Deep Navy</span><span class="swatch-hex">#0A1A2F</span></li>
+    </ul>
+  </section>
+
   <section aria-labelledby="sg-buttons">
     <h2 id="sg-buttons">{{t "styleguide.buttons"}}</h2>
     <p class="cluster">

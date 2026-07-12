@@ -192,6 +192,52 @@ func TestSettingsStubRendersShell(t *testing.T) {
 	}
 }
 
+// TestShellRendersBrandLogo: the authenticated shell header carries the "Open
+// Ledger & Star" mark as an inline, themeable SVG (element classes styled from
+// app.css — no inline style, rule 12) inside the brand link, and that link has an
+// accessible name (aria-label = app.name). The favicon is wired in the head.
+func TestShellRendersBrandLogo(t *testing.T) {
+	h, _, st, _, sm := newMatrixApp(t)
+	user := makeUser(t, st, store.CreateUserInput{Username: "brander", TxnPerm: "read"})
+
+	body := getHomeAs(t, h, sm, user).Body.String()
+
+	if !strings.Contains(body, `aria-label="cuento"`) {
+		t.Errorf("brand link missing accessible name (aria-label):\n%s", body)
+	}
+	if !strings.Contains(body, `class="brand-icon"`) {
+		t.Errorf("shell missing the inline brand mark (svg.brand-icon):\n%s", body)
+	}
+	for _, cls := range []string{`class="logo-book"`, `class="logo-star"`} {
+		if !strings.Contains(body, cls) {
+			t.Errorf("brand mark missing themeable shape %s:\n%s", cls, body)
+		}
+	}
+	if !strings.Contains(body, `rel="icon"`) || !strings.Contains(body, "favicon.") {
+		t.Errorf("shell head missing the favicon link:\n%s", body)
+	}
+}
+
+// TestNavCurrentAccent: the nav entry matching the request path is marked
+// aria-current="page" (the gold active-nav accent), and only that one is.
+func TestNavCurrentAccent(t *testing.T) {
+	h, _, st, _, sm := newMatrixApp(t)
+	user := makeUser(t, st, store.CreateUserInput{Username: "navcur", TxnPerm: "read"})
+
+	// On /settings the Settings entry is current; Home is not.
+	req := httptest.NewRequest(http.MethodGet, "/settings", nil)
+	req.AddCookie(mintCookie(t, sm, user.ID))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, `href="/settings" aria-current="page"`) {
+		t.Errorf("/settings nav entry not marked current:\n%s", body)
+	}
+	if strings.Contains(body, `href="/" aria-current="page"`) {
+		t.Errorf("root nav entry wrongly marked current on /settings:\n%s", body)
+	}
+}
+
 // TestThemePersistsCookieAndSetting: POST /theme sets the theme cookie AND, for a
 // logged-in user, persists the user's theme setting via the store. A subsequent
 // GET renders the persisted theme from the user setting even with no cookie.

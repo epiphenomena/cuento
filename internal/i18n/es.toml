@@ -3,6 +3,11 @@
 
 app.name = "cuento"
 
+# Lema de la marca, solo en la pagina de inicio de sesion (identidad "Open Ledger
+# & Star"). Se mantiene en espanol en ambos catalogos por diseno (es el texto
+# propio de la marca, como el logotipo).
+brand.tagline = "contabilidad abierta para el bien común"
+
 # Marcador de la pagina de inicio autenticada (p06.3). El panel/nav real es la
 # fase 10; GET /{$} muestra esto para ejercer la ruta AnyUser con una ruta real
 # e internacionalizada en vez de un stub.
@@ -44,6 +49,8 @@ footer.version = "Version %s"
 
 # Guia de estilos solo en dev (p10.2): revision visual de los componentes.
 styleguide.title = "Guia de estilos"
+styleguide.brand = "Marca"
+styleguide.palette = "Paleta"
 styleguide.buttons = "Botones"
 styleguide.forms = "Formularios"
 styleguide.alerts = "Alertas"

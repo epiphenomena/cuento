@@ -12,10 +12,21 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{t "auth.login_title"}} — {{t "app.name"}}</title>
+  <link rel="icon" href="{{asset "favicon.svg"}}" type="image/svg+xml">
   <link rel="stylesheet" href="{{asset "app.css"}}">
 </head>
 <body class="login-body">
   <main class="login-card">
+    {{/* Centered brand lockup above the form: the themeable inline mark (see the
+         brand-icon partial in base.tmpl — one parse set), the wordmark, and the
+         Spanish tagline (login only). All strings via {{t}} (rule 9). */}}
+    <div class="login-brand">
+      <a class="brand-lockup" href="/" aria-label="{{t "app.name"}}">
+        {{template "brand-icon" .}}
+        <span class="app-brand-name">{{t "app.name"}}</span>
+      </a>
+      <p class="brand-tagline">{{t "brand.tagline"}}</p>
+    </div>
     <h1>{{t "auth.login_title"}}</h1>
     {{if .Error}}<p class="alert" role="alert">{{t .Error}}</p>{{end}}
     <form method="post" action="/login">

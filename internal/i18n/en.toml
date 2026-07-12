@@ -9,6 +9,11 @@
 
 app.name = "cuento"
 
+# Brand tagline shown on the login page only ("Open Ledger & Star" identity).
+# Kept in Spanish in both catalogs by design (it is the brand's own wording, like
+# the wordmark) so the mark reads consistently regardless of the UI language.
+brand.tagline = "contabilidad abierta para el bien común"
+
 # Authenticated landing placeholder (p06.3). The real dashboard/nav is phase 10;
 # GET /{$} renders this so the AnyUser permission path is exercised by a real,
 # i18n'd route rather than a stub.
@@ -51,6 +56,8 @@ footer.version = "Version %s"
 
 # Dev-only styleguide (p10.2): a visual review page for the component primitives.
 styleguide.title = "Styleguide"
+styleguide.brand = "Brand"
+styleguide.palette = "Palette"
 styleguide.buttons = "Buttons"
 styleguide.forms = "Forms"
 styleguide.alerts = "Alerts"

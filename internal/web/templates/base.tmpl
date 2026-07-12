@@ -23,9 +23,32 @@
   toggle is a plain <form> POST, JS-free.
 */ -}}
 
+{{/* brand-icon: the "Open Ledger & Star" mark, inline so it is themeable from
+     app.css (an external <img> SVG can't see page CSS, and a <style> inside the
+     SVG would violate style-src 'self'). The shapes carry classes only; their
+     colors (blue book, gold star) come from app.css tokens, which are
+     light-dark() pairs — so the mark adapts to light/dark with no JS and no
+     inline style (rule 12). aria-hidden: the accessible name lives on the link. */ -}}
+{{define "brand-icon" -}}
+<svg class="brand-icon" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+  <g class="logo-book" fill="none" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 22 C 25 17, 16 17, 10 19 L 10 50 C 16 48, 25 48, 32 52"/>
+    <path d="M32 22 C 39 17, 48 17, 54 19 L 54 50 C 48 48, 39 48, 32 52"/>
+    <line x1="32" y1="22" x2="32" y2="52"/>
+    <line x1="16" y1="27" x2="27" y2="27"/>
+    <line x1="16" y1="34" x2="27" y2="34"/>
+    <line x1="16" y1="41" x2="27" y2="41"/>
+  </g>
+  <path class="logo-star" d="M32 3 l2.1 4.3 4.7 .7 -3.4 3.3 .8 4.7 -4.2 -2.2 -4.2 2.2 .8 -4.7 -3.4 -3.3 4.7 -.7z"/>
+</svg>
+{{- end}}
+
 {{define "shell-nav" -}}
 <header class="app-header">
-  <a class="app-brand" href="/">{{t "app.name"}}</a>
+  <a class="app-brand" href="/" aria-label="{{t "app.name"}}">
+    {{template "brand-icon" .}}
+    <span class="app-brand-name">{{t "app.name"}}</span>
+  </a>
   {{/* p10.3: hx-boost on the TOP-LEVEL nav ONLY (progressive enhancement) — the
        <a href> links still work as full-page navigations without JS; with htmx
        loaded, boosting turns them into targeted body swaps for a snappier feel.
@@ -33,7 +56,7 @@
        boosted (task: nav only). */}}
   <nav class="app-nav" aria-label="{{t "nav.label"}}" hx-boost="true">
     <ul>
-      {{range .Shell.Nav}}<li><a href="{{.Href}}">{{.Label}}</a></li>
+      {{range .Shell.Nav}}<li><a href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}}</a></li>
       {{end}}
     </ul>
   </nav>
@@ -66,6 +89,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}} — {{t "app.name"}}</title>
+  <link rel="icon" href="{{asset "favicon.svg"}}" type="image/svg+xml">
   <link rel="stylesheet" href="{{asset "app.css"}}">
   {{/* p10.3 htmx config, set BEFORE htmx loads (CSP-safe: a meta, never inline
        script — rule 12). Two things the form-error convention needs:

@@ -22,20 +22,33 @@
      native form controls / scrollbars to match. Overridden per data-theme below. */
   color-scheme: light dark;
 
+  /* Brand palette ("Open Ledger & Star"): Primary Blue #0072CE, Accent Gold
+     #FFB81C, White, deep-navy dark surface (~#0A1A2F). Two fixed anchors —
+     --brand-blue and --brand-gold hold the light-mode brand hues for the logo
+     and accents; on dark surfaces they lighten for legibility (gold-on-navy) and
+     AA contrast (a mid #0072CE is too dark for link text on #0A1A2F, so the dark
+     side uses a lightened blue). Gold is used ONLY for non-text accents (the
+     star, the active-nav bar) — #FFB81C on white is ~1.5:1, unusable as text. */
+  --brand-blue:        light-dark(#0072ce, #4da3ff);
+  --brand-gold:        light-dark(#ffb81c, #ffca4d);
+
   /* Palette — each is light-dark(<light value>, <dark value>). */
-  --color-bg:          light-dark(#f7f8fa, #16181d);
-  --color-surface:     light-dark(#ffffff, #1e2127);
-  --color-surface-alt: light-dark(#eef0f4, #24272f);
-  --color-text:        light-dark(#1a1d23, #e7e9ee);
-  --color-text-muted:  light-dark(#5b6472, #9aa3b2);
-  --color-border:      light-dark(#d5d9e0, #333843);
-  --color-primary:     light-dark(#2457c5, #6f9bff);
-  --color-primary-text: light-dark(#ffffff, #0d1017);
-  --color-danger:      light-dark(#b3261e, #ff6b61);
+  --color-bg:          light-dark(#f4f7fb, #0a1a2f);
+  --color-surface:     light-dark(#ffffff, #0f2440);
+  --color-surface-alt: light-dark(#e9f0f9, #163257);
+  --color-text:        light-dark(#0d1b2a, #eaf1fb);
+  --color-text-muted:  light-dark(#4a5a6e, #9db4d1);
+  --color-border:      light-dark(#cfdcec, #24456f);
+  --color-primary:     light-dark(#0072ce, #4da3ff);
+  --color-primary-hover: light-dark(#005ba6, #74baff);
+  --color-primary-active: light-dark(#00477f, #9acbff);
+  --color-primary-text: light-dark(#ffffff, #071726);
+  --color-accent:      light-dark(#ffb81c, #ffca4d);
+  --color-danger:      light-dark(#b3261e, #ff8079);
   --color-danger-bg:   light-dark(#fde8e6, #3a1c1a);
   --color-success:     light-dark(#1f7a3d, #6fdd8b);
-  --color-success-bg:  light-dark(#e6f5ec, #12301d);
-  --color-focus:       light-dark(#2457c5, #9cc0ff);
+  --color-success-bg:  light-dark(#e6f5ec, #0f2f1c);
+  --color-focus:       light-dark(#0072ce, #7ab8ff);
 
   /* Spacing scale (rem). */
   --space-1: 0.25rem;
@@ -116,7 +129,22 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border-bottom: var(--border);
   box-shadow: var(--shadow);
 }
-.app-brand { font-weight: 700; text-decoration: none; color: var(--color-text); }
+.app-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 700;
+  text-decoration: none;
+  color: var(--color-text);
+}
+.app-brand-name { letter-spacing: 0.01em; }
+
+/* Brand mark (inline SVG). Colors come from tokens so the mark themes itself:
+   the book strokes take the brand blue, the star the accent gold. Element
+   classes only — no <style> in the SVG, no inline style attribute (rule 12). */
+.brand-icon { display: block; width: 1.75rem; height: 1.75rem; flex: none; }
+.logo-book { stroke: var(--brand-blue); }
+.logo-star { fill: var(--brand-gold); }
 
 .app-nav { flex: 1 1 auto; }
 .app-nav ul {
@@ -130,8 +158,15 @@ button, input, select, textarea { font: inherit; color: inherit; }
   text-decoration: none;
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius);
+  /* Reserve the gold active-marker gutter so hovering doesn't shift the label. */
+  border-bottom: 2px solid transparent;
 }
 .app-nav a:hover { background: var(--color-surface-alt); }
+/* Gold as a sparing accent: the current section gets a gold underline. */
+.app-nav a[aria-current="page"] {
+  border-bottom-color: var(--color-accent);
+  font-weight: 600;
+}
 
 .app-main {
   max-width: 60rem;
@@ -173,6 +208,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
   background: var(--color-primary);
   color: var(--color-primary-text);
   border-color: var(--color-primary);
+}
+.btn-primary:hover {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+.btn-primary:active {
+  background: var(--color-primary-active);
+  border-color: var(--color-primary-active);
 }
 .btn-ghost { background: transparent; }
 
@@ -240,6 +283,24 @@ input[aria-invalid="true"] {
 }
 .login-card .btn-primary { width: 100%; }
 
+/* Login brand lockup: centered mark + wordmark + Spanish tagline above the form. */
+.login-brand { text-align: center; margin-bottom: var(--space-6); }
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  text-decoration: none;
+  color: var(--color-text);
+  font-weight: 700;
+  font-size: 1.75rem;
+}
+.brand-lockup .brand-icon { width: 2.75rem; height: 2.75rem; }
+.brand-tagline {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
 /* p11.1 chart of accounts. Tree-table indentation is expressed as depth classes
    (no inline style attribute -- strict CSP style-src 'self', rule 12). A handful
    of levels covers a realistic chart; deeper accounts simply stop indenting. */
@@ -249,6 +310,12 @@ input[aria-invalid="true"] {
   padding: var(--space-2) var(--space-3);
   border-bottom: var(--border);
   vertical-align: top;
+}
+/* Blue-accented header row anchors the table in the brand (bottom rule + tint). */
+.tree-table thead th {
+  color: var(--color-primary);
+  border-bottom: 2px solid var(--color-primary);
+  background: var(--color-surface-alt);
 }
 .tree-table .acct-balances { font-variant-numeric: tabular-nums; }
 .tree-table .acct-inactive { opacity: 0.6; }
@@ -276,3 +343,38 @@ input[aria-invalid="true"] {
 .account-form .hint { font-size: 0.85em; color: var(--color-muted, inherit); margin: 0 0 var(--space-2); }
 .filters { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
 .filters .check { display: inline-flex; gap: var(--space-2); align-items: center; }
+
+/* ------------------------------------------------------------------ *
+ * Brand styleguide (ux: brand identity)
+ * ------------------------------------------------------------------ */
+
+/* Palette swatches: a labelled color chip grid. Each chip's fill is a modifier
+   class (never an inline style attribute — strict CSP, rule 12). */
+.swatches { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: var(--space-4) 0; padding: 0; list-style: none; }
+.swatch { display: flex; flex-direction: column; gap: var(--space-1); width: 8rem; }
+.swatch-chip { height: 3.5rem; border: var(--border); border-radius: var(--radius); }
+.swatch-chip.is-blue    { background: #0072ce; }
+.swatch-chip.is-gold    { background: #ffb81c; }
+.swatch-chip.is-white   { background: #ffffff; }
+.swatch-chip.is-navy    { background: #0a1a2f; }
+.swatch-chip.is-primary { background: var(--color-primary); }
+.swatch-chip.is-accent  { background: var(--color-accent); }
+.swatch-name { font-weight: 600; }
+.swatch-hex  { color: var(--color-text-muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+
+/* Side-by-side logo/palette in BOTH themes on one page: each pane pins its own
+   color-scheme so light-dark() resolves per pane (no JS, no second page load). */
+.theme-previews { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: var(--space-4) 0; }
+.theme-preview {
+  flex: 1 1 16rem;
+  padding: var(--space-6);
+  border: var(--border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.theme-preview.is-light { color-scheme: light; }
+.theme-preview.is-dark  { color-scheme: dark; }
+.theme-preview h3 { margin: 0 0 var(--space-3); }
+.theme-preview .brand-lockup { font-size: 1.5rem; }
+.theme-preview .brand-lockup .brand-icon { width: 2.25rem; height: 2.25rem; }
