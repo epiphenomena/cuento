@@ -11,7 +11,7 @@ SQLC        ?= sqlc
 GOLANGCILINT?= golangci-lint
 GOFUMPT     ?= gofumpt
 
-.PHONY: all gen lint test check e2e fixture golden run release build clean tools
+.PHONY: all gen lint test check golive-check e2e fixture golden run release build clean tools
 
 all: lint test check
 
@@ -37,19 +37,23 @@ test:
 ## check — build, then run the ledger integrity suite (`cuento check`) against a
 ## FRESH temp migrated db, which MUST be clean (an empty migrated db has only the
 ## seeded roots and no splits). Hermetic: the temp db is created and removed here,
-## and nothing depends on fixtures/sample.db (p09.3, gitignored). If a local
-## fixtures/sample.db happens to exist we additionally check it (--strict), but the
-## default must never require it. migrate + check share the same cwd and -db value
-## so db.Open resolves them to one physical file (the p06.4 path-escape quirk).
+## and it NEVER touches fixtures/sample.db (p09.3, gitignored) — routine `make
+## check` must not depend on, or fail because of, a local best-guess sample.db
+## (which by design carries expected Z19 warnings pending the p09.4 human review).
+## The strict go-live gate is a separate manual target, `make golive-check`.
+## migrate + check share cwd and -db so db.Open resolves them to one file.
 check: build
 	@tmpdb=$$(mktemp -u -t cuento-check-XXXXXX.db); \
 	trap 'rm -f "$$tmpdb" "$$tmpdb"-* "$$tmpdb".*' EXIT; \
 	echo "check: fresh migrated db -> cuento check (must be clean)"; \
-	$(BINARY) migrate -db "$$tmpdb" >/dev/null && $(BINARY) check -db "$$tmpdb"; \
-	if [ -f fixtures/sample.db ]; then \
-		echo "check: fixtures/sample.db present -> cuento check --strict"; \
-		$(BINARY) check -db fixtures/sample.db --strict; \
-	fi
+	$(BINARY) migrate -db "$$tmpdb" >/dev/null && $(BINARY) check -db "$$tmpdb"
+
+## golive-check — the D26 strict go-live gate (manual, local): run `cuento check
+## --strict` on a built db (default fixtures/sample.db). Fails on ANY warning
+## (e.g. unmapped-990 Z19) — this is intentional, it is the human-review gate
+## before cutover, NOT part of routine `make check`. See docs/golive.md.
+golive-check: build
+	$(BINARY) check -db $(or $(DB),fixtures/sample.db) --strict
 
 ## e2e — opt-in Playwright functional tests (pE.1). Builds bin/cuento, installs
 ## the pinned test-only Node deps (@playwright/test, bundled chromium already
