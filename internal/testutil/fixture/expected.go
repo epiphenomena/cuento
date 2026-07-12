@@ -62,6 +62,56 @@ type Expected struct {
 	// its create and final states. Populated by New (from the versions table)
 	// since the deterministic clock is internal.
 	EditedMidAsOf string
+
+	// Rates is the FX seam (p14), populated ONLY after (*Fixture).ExtendRates(t) is
+	// called; the zero value (empty) means the seam has not been applied and every
+	// aggregate above is native-currency (the default state New leaves the fixture
+	// in). It captures the deterministic monthly USD->MXN schedule and the
+	// hand-computed CONVERTED aggregates p15 will assert against.
+	Rates RatesExpected
+}
+
+// RatesExpected holds the p14 exchange-rate seam's expectations: the schedule
+// ExtendRates loads and the converted values derived from it under an explicit
+// rule. Converted values are UNROUNDED floats on purpose -- p15 owns the rounding
+// mode + rules (D12), so pinning rounded int64 here would pre-commit p15 to
+// reproduce this step's arithmetic. p15 reads these floats and applies its own
+// rounding. The conversion RULE (documented in DECISIONS p14.1):
+//
+//   - report base currency USD; convert an MXN balance to USD with the CLOSING
+//     rate at the balance-sheet date AsOf (2026-06-30);
+//   - USD->MXN on-or-before 2026-06-30 resolves to the last scheduled point
+//     (2026-06-01, rate 18.10); an MXN amount converts to USD by 1/18.10
+//     (RateOn(MXN,USD,AsOf) is the reciprocal of the direct USD->MXN rate).
+type RatesExpected struct {
+	// Source is the source string every seam rate row carries.
+	Source string
+	// FirstDate/LastDate/Months bound the monthly schedule ExtendRates loads
+	// (First 2025-01-01 @ 17.00, Last 2026-06-01 @ 18.10, 18 monthly points).
+	FirstDate string
+	LastDate  string
+	Months    int
+	// FirstRate/LastRate are the schedule endpoints (USD->MXN). Intermediate
+	// points are the exact linear interpolation FirstRate + i*(LastRate-FirstRate)/(Months-1).
+	FirstRate float64
+	LastRate  float64
+	// ClosingUSDPerMXN is the USD->MXN rate effective on-or-before AsOf (== LastRate,
+	// the 2026-06-01 point). An MXN->USD conversion at AsOf uses 1/ClosingUSDPerMXN.
+	ClosingUSDPerMXN float64
+	// ConvertedFundBalances is the fixture's FundBalances converted to the USD
+	// report base at the AsOf closing rate, UNROUNDED. USD funds pass through 1:1;
+	// MXN funds convert by 1/ClosingUSDPerMXN. p15 rounds these.
+	ConvertedFundBalances []ConvertedFundBalance
+}
+
+// ConvertedFundBalance is one fund's balance converted to the report base (USD),
+// as an unrounded float in major units (dollars), plus the native minor-unit input
+// and its native currency so p15 can re-derive and round independently.
+type ConvertedFundBalance struct {
+	Fund         int64
+	NativeCcy    string
+	NativeMinor  int64   // the native FundBalance amount (minor units)
+	ConvertedUSD float64 // NativeMinor/100 converted to USD at AsOf, unrounded
 }
 
 // AccountBalance is one expected (account, currency) balance.
@@ -210,5 +260,9 @@ func expectedFor(ids IDs) Expected {
 
 		IntercompanyNetCurrencies: []string{"USD"},
 		UnmappedRevenueLeaf:       ids.EventIncome,
+
+		// Rates is left ZERO here (the seam is opt-in): New does NOT load rates, so
+		// the default fixture stays native-currency. (*Fixture).ExtendRates fills
+		// this in place when a p15 test opts into conversion.
 	}
 }

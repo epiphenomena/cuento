@@ -26,6 +26,7 @@ package fixture
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -186,10 +187,86 @@ func newDB(t *testing.T) *sql.DB {
 	return sqldb
 }
 
-// ExtendRates is the p14 seam. Today it is a no-op: exchange_rates does not
-// exist and every expected aggregate is native-currency. p14 fills it (monthly
-// USD/MXN rates 17.00 -> 18.10) and adds converted expectations THERE.
-func (f *Fixture) ExtendRates(_ *testing.T) {}
+// ratesSource is the source string every seam rate row carries. Synthetic, so it
+// is distinguishable from a real provider's rows and honest that these are
+// fixture data (rule 11).
+const ratesSource = "fixture"
+
+// rateSchedule constants: 18 monthly USD->MXN points, first 2025-01-01 @ 17.00,
+// last 2026-06-01 @ 18.10 -- spanning the fixture's transaction range (2025-01 ..
+// 2026-06). Deterministic, no clock/network. The i-th point (i=0..17) is the exact
+// linear interpolation firstRate + i*(lastRate-firstRate)/(rateMonths-1).
+const (
+	rateMonths = 18
+	firstRate  = 17.00
+	lastRate   = 18.10
+)
+
+// ExtendRates is the p14 seam: it loads the deterministic monthly USD->MXN rate
+// schedule via the store's audited PutRates (ONE change for the whole batch) and
+// fills f.Expected.Rates with the schedule metadata + the CONVERTED fund balances
+// p15 asserts against. It is OPT-IN: New does not call it, so the default fixture
+// stays native-currency and every existing native-currency expectation is
+// untouched. Idempotent-ish for a single call per fixture; not meant to be called
+// twice (PutRates would re-anchor the same rows to a new change).
+//
+// Only USD->MXN rows are stored (18 points). MXN->USD conversions use the
+// reciprocal (RateOn's fallback), exercising that path in p15 for free.
+func (f *Fixture) ExtendRates(t *testing.T) {
+	t.Helper()
+	ctx := store.WithActor(context.Background(), systemActor)
+
+	rates := make([]store.Rate, 0, rateMonths)
+	y, m := 2025, 1
+	for i := 0; i < rateMonths; i++ {
+		date := fmt.Sprintf("%04d-%02d-01", y, m)
+		val := firstRate + float64(i)*(lastRate-firstRate)/float64(rateMonths-1)
+		rates = append(rates, store.Rate{
+			RateDate: date,
+			Base:     "USD",
+			Quote:    "MXN",
+			Value:    val,
+			Source:   ratesSource,
+		})
+		if m == 12 {
+			y, m = y+1, 1
+		} else {
+			m++
+		}
+	}
+	if err := f.Store.PutRates(ctx, rates); err != nil {
+		t.Fatalf("fixture: ExtendRates PutRates: %v", err)
+	}
+
+	// The closing USD->MXN rate on-or-before AsOf (2026-06-30) is the last scheduled
+	// point (2026-06-01 == lastRate); an MXN balance converts to USD by 1/lastRate.
+	closing := lastRate
+	converted := make([]ConvertedFundBalance, 0, len(f.Expected.FundBalances))
+	for _, fb := range f.Expected.FundBalances {
+		major := float64(fb.Amount) / 100.0 // both USD and MXN have exponent 2
+		usd := major
+		if fb.Currency == "MXN" {
+			usd = major / closing // reciprocal of the direct USD->MXN rate
+		}
+		converted = append(converted, ConvertedFundBalance{
+			Fund:         fb.Fund,
+			NativeCcy:    fb.Currency,
+			NativeMinor:  fb.Amount,
+			ConvertedUSD: usd,
+		})
+	}
+
+	f.Expected.Rates = RatesExpected{
+		Source:                ratesSource,
+		FirstDate:             "2025-01-01",
+		LastDate:              "2026-06-01",
+		Months:                rateMonths,
+		FirstRate:             firstRate,
+		LastRate:              lastRate,
+		ClosingUSDPerMXN:      closing,
+		ConvertedFundBalances: converted,
+	}
+}
 
 // ExtendReconciliation is the p16 seam. Today a no-op: reconciliations /
 // splits.reconciliation_id do not exist. p16 fills it (finalize the 2026-05-31

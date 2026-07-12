@@ -251,7 +251,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 
 ## Phase 14 — Exchange rates
 
-- [ ] **p14.1 db+store: rates.**
+- [x] **p14.1 db+store: rates.**
   Tests: `TestRateOnOrBefore`, `TestRateReciprocalFallback`, `TestRateMissing` (typed error), `TestRateStaleness` (lookup returns the rate's actual date so reports can footnote gaps).
   Build: migration `exchange_rates(rate_date, base, quote, rate REAL, source, change_id, PK(rate_date, base, quote))`; `PutRates` (batch, one change), `RateOn(base, quote, date)`.
 - [ ] **p14.2 tools: ratesync + CSV import.**

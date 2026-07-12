@@ -88,6 +88,15 @@ type Currency struct {
 	Active   int64
 }
 
+type ExchangeRate struct {
+	RateDate string
+	Base     string
+	Quote    string
+	Rate     float64
+	Source   string
+	ChangeID int64
+}
+
 type Form990Line struct {
 	Code         string
 	Part         string
