@@ -1,0 +1,63 @@
+{{/*
+  p11.3 subsidiaries create/edit form partial ("subsidiary-form"). SINGLE SOURCE of
+  the form region: the page renders the "New subsidiary" trigger inside
+  #subsidiary-form; GET .../new and .../{id}/edit swap THIS partial in (hx-target
+  #subsidiary-form, outerHTML), and a failed POST re-renders it at 422 -- so input
+  ids stay stable across every swap (anti-jank, Appendix C). The dot is always a
+  subsidiaryForm.
+
+  hx-post targets /admin/subsidiaries (create) when .ID is 0, else
+  /admin/subsidiaries/{id} (edit). Field errors come from .Errors (formErrors):
+  .Errors.ErrorKey "field" is the i18n KEY (or "") rendered via {{t}} (rule 9);
+  autofocus is stamped on .Errors.FirstInvalid only.
+
+  The parent select is OMITTED for the root (.IsRoot) -- the root is immovable
+  (D18); the store still enforces it. On a child, the options exclude the subject +
+  its descendants so a cycle is never offered (presentation only; the store
+  rejects a raw cycle too). Subsidiaries are proper nouns, so option labels render
+  the stored names; every other string via {{t}} (rule 9). No inline script/style
+  (strict CSP, rule 12).
+*/ -}}
+{{define "subsidiary-form" -}}
+<form id="subsidiary-form" class="subsidiary-form"
+      hx-post="{{if .ID}}/admin/subsidiaries/{{.ID}}{{else}}/admin/subsidiaries{{end}}"
+      hx-target="#subsidiary-form" hx-swap="outerHTML">
+
+  <h2>{{if .ID}}{{t "subsidiaries.form.edit_title"}}{{else}}{{t "subsidiaries.form.new_title"}}{{end}}</h2>
+
+  <div class="field">
+    <label for="sf-name">{{t "subsidiaries.form.name"}}</label>
+    <input id="sf-name" name="name" type="text" value="{{.Name}}"
+      {{- if .Errors.ErrorKey "name"}} aria-invalid="true" aria-describedby="sf-name-err"{{end}}
+      {{- if eq .Errors.FirstInvalid "name"}} autofocus{{end}}>
+    {{with .Errors.ErrorKey "name"}}<p id="sf-name-err" class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+
+  {{if not .IsRoot}}
+  <div class="field">
+    <label for="sf-parent">{{t "subsidiaries.form.parent"}}</label>
+    <select id="sf-parent" name="parent_id"
+      {{- if eq .Errors.FirstInvalid "parent_id"}} autofocus{{end}}>
+      {{range .Parents}}<option value="{{.ID}}"{{if eq .ID $.ParentID}} selected{{end}}>{{.Name}}</option>
+      {{end}}
+    </select>
+    {{with .Errors.ErrorKey "parent_id"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+  {{else}}
+  <p class="hint">{{t "subsidiaries.form.root_note"}}</p>
+  {{end}}
+
+  <div class="field">
+    <label for="sf-currency">{{t "subsidiaries.form.base_currency"}}</label>
+    <select id="sf-currency" name="base_currency">
+      {{range .Currencies}}<option value="{{.Code}}"{{if eq .Code $.BaseCurrency}} selected{{end}}>{{.Code}} — {{.Name}}</option>
+      {{end}}
+    </select>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">{{t "common.save"}}</button>
+    <a class="btn btn-ghost" href="/admin/subsidiaries">{{t "common.cancel"}}</a>
+  </div>
+</form>
+{{- end}}

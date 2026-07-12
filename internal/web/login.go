@@ -101,7 +101,14 @@ func (s *server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	username := r.PostFormValue("username")
 	password := r.PostFormValue("password")
 
-	if !s.limiter.allow(clientIP(r), username) {
+	// Rate-limit login attempts in production (rule 13, D9: choke online password
+	// guessing). In -dev the limiter is bypassed: -dev is a local, non-adversarial
+	// mode (it also relaxes the session cookie's Secure flag for the same reason),
+	// and the Playwright functional suite drives many rapid same-user logins against
+	// one -dev server, which the burst would otherwise throttle. The limiter path is
+	// still fully exercised by TestLoginRateLimited (which runs Dev=false). See
+	// DECISIONS p11.3.
+	if !s.cfg.Dev && !s.limiter.allow(clientIP(r), username) {
 		// Over the limit: do no auth work at all. Answer 429 with the login page
 		// carrying a rate-limit message.
 		s.render(w, r, http.StatusTooManyRequests, "login.tmpl", s.loginModel(r, "auth.rate_limited"))

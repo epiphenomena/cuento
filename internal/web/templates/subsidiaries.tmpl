@@ -1,0 +1,65 @@
+{{/*
+  p11.3 subsidiaries admin page (/admin/subsidiaries, Admin). Like the other shell
+  pages it is a self-contained top-level template that emits shell-open, its <main>
+  content, then shell-close. .Page is a subsidiariesPageModel.
+
+  The tree table shows each subsidiary (indented by depth), its base currency, and
+  its active state, with Admin actions (Edit / Deactivate). The inline create/edit
+  form is fetched into #subsidiary-form via htmx (GET .../new or .../{id}/edit) and
+  swapped in place -- reusing the p10.3 form-error convention on a bad submit. A
+  blocked deactivate (active children) re-renders THIS page at 422 with .ErrorKey
+  shown as a page-level alert (no execution). Subsidiaries are proper nouns (stored
+  data), so names render verbatim; every OTHER string via {{t}} (rule 9); no inline
+  script (rule 12).
+*/ -}}
+{{define "subsidiaries.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "subsidiaries.title"))}}
+  {{- with .Page}}
+  <h1>{{t "subsidiaries.title"}}</h1>
+  <p class="hint">{{t "subsidiaries.intro"}}</p>
+
+  {{if .ErrorKey}}
+  <p class="field-error" role="alert">{{t .ErrorKey}}</p>
+  {{end}}
+
+  <div id="subsidiary-form" class="subsidiary-form-region">
+    {{/* The inline form fetches here. GET .../new htmx-swaps its form in. */}}
+    <button type="button" class="btn btn-primary"
+            hx-get="/admin/subsidiaries/new" hx-target="#subsidiary-form" hx-swap="outerHTML">
+      {{t "subsidiaries.new"}}
+    </button>
+  </div>
+
+  <table class="tree-table">
+    <thead>
+      <tr>
+        <th>{{t "subsidiaries.col.name"}}</th>
+        <th>{{t "subsidiaries.col.base_currency"}}</th>
+        <th>{{t "subsidiaries.col.actions"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="sub-row{{if not .Active}} sub-inactive{{end}}" data-depth="{{.Depth}}">
+        <td class="sub-name acct-depth-{{.Depth}}">{{.Name}}{{if not .Active}} <span class="badge">{{t "subsidiaries.inactive"}}</span>{{end}}</td>
+        <td>{{.BaseCurrency}}</td>
+        <td class="sub-actions">
+          <button type="button" class="btn btn-ghost"
+                  hx-get="/admin/subsidiaries/{{.ID}}/edit" hx-target="#subsidiary-form" hx-swap="outerHTML">
+            {{t "common.edit"}}
+          </button>
+          {{if .Active}}
+          <form method="post" action="/admin/subsidiaries/{{.ID}}/deactivate" class="inline">
+            <button type="submit" class="btn btn-ghost">{{t "subsidiaries.deactivate"}}</button>
+          </form>
+          {{end}}
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="3">{{t "subsidiaries.empty"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

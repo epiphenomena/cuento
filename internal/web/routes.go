@@ -159,6 +159,19 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/accounts", TxnWrite, http.HandlerFunc(s.accountCreate)},
 		{http.MethodPost, "/accounts/{id}", TxnWrite, http.HandlerFunc(s.accountUpdate)},
 		{http.MethodPost, "/accounts/{id}/deactivate", TxnWrite, http.HandlerFunc(s.accountDeactivate)},
+		// p11.3 subsidiaries admin (Appendix B/F: /admin/** = Admin). The tree list
+		// (GET), the inline create/edit form fetches (GET .../new, .../{id}/edit), and
+		// the create/update/deactivate mutations are ALL Admin -- subsidiaries are org
+		// structure, not bookkeeping. The literal ".../new" and ".../merge"-style
+		// segments are more specific than ".../{id}", so the Go 1.22+ mux routes them
+		// precisely. The permission-matrix test picks these up automatically (rule 8);
+		// the /admin landing (admin.tmpl) links this page.
+		{http.MethodGet, "/admin/subsidiaries", Admin, http.HandlerFunc(s.subsidiariesPage)},
+		{http.MethodGet, "/admin/subsidiaries/new", Admin, http.HandlerFunc(s.subsidiaryNewForm)},
+		{http.MethodGet, "/admin/subsidiaries/{id}/edit", Admin, http.HandlerFunc(s.subsidiaryEditForm)},
+		{http.MethodPost, "/admin/subsidiaries", Admin, http.HandlerFunc(s.subsidiaryCreate)},
+		{http.MethodPost, "/admin/subsidiaries/{id}", Admin, http.HandlerFunc(s.subsidiaryUpdate)},
+		{http.MethodPost, "/admin/subsidiaries/{id}/deactivate", Admin, http.HandlerFunc(s.subsidiaryDeactivate)},
 	}
 	// The -dev-only styleguide (Appendix F): a component gallery for visual review.
 	// Registered ONLY in -dev so it 404s in production (it is not in the registry
