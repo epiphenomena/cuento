@@ -267,6 +267,9 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
   Tests: hand-computed expectations on `testutil.Fixture` — `BalancesAsOf` with `Scope{Sub}` at root vs a leaf sub, `ConvertOpts{To, Mode: Closing}`, `Activity` with `Mode: TxnDate`, `Rollup` (placeholder subtotal rows in tree order), `NetIncome(from, to)`, `FundBalances` (per fund per currency; unrestricted line), `FunctionalMatrix` cells, `ProgramActivity` (rollup over the program tree), `Group990` (effective-code rollup per D25 with an explicit Unmapped bucket; a fixture leaf overriding its parent's code lands on its own line), `IntercompanyNet` (zero on the balanced fixture; nonzero on a corrupted copy → warning row), conversion rounding edge cases.
   Build: Appendix E signatures over the p08.4 queries; conversion per D12; consolidation = the scope's descendant closure; intercompany collapse per D19.
 - [x] **p15.3 [P] report: trial balance** (as-of; per scope; native currencies + converted column) + goldens.
+- [ ] **p15.3d reports: drill-down (framework capability).** (Inserted 2026-07-12 per user; framework-FIRST so p15.4–p15.11 emit drill links as they are built, and the budget reports (Phase 19) inherit it.)
+  Tests: a report cell/row carrying a `Drill` filter renders as a link on the HTML report (omitted/annotated in CSV); the drill view lists exactly the transactions/splits whose signed sum equals the drilled figure (assert reconciliation against the toolkit number on the fixture); a converted/consolidated cell drills to its NATIVE underlying splits; perm = same `ReportGroup` as the report (a viewer who sees the number can drill it); drill rows link to the txn editor/history (p12.4).
+  Build: extend the reports framework `Cell`/`Row` with an optional `Drill{Scope, Accounts, Fund, Program, Class, From/To|AsOf, Currency}`; a shared drill handler (`/reports/drill?…` or reuse the register filtered by those params) that lists the contributing transactions via the toolkit/store (reuse register rendering); retrofit p15.3 trial-balance cells to be drillable. p15.4–p15.11 then attach `Drill` to their balance/activity cells.
 - [ ] **p15.4 [P] report: balance sheet** (as-of; A/L/E sections; equity section shows **Net assets without donor restrictions** and **Net assets with donor restrictions** (Q3) computed from fund tagging, plus "Net surplus to date"; intercompany collapse with warning row when nonzero; per-currency detail toggle; converted totals at closing rate) + goldens including the multicurrency, multi-sub case.
 - [ ] **p15.5 [P] report: income statement** (period; mixed R/E tree preserved; comparative monthly/quarterly columns; conversion at txn-date rates) + goldens.
 - [ ] **p15.6 [P] report: account ledger** (printable register for a range with opening/closing balances; fund column) + goldens.
@@ -321,9 +324,38 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
   Tests: security-header assertions across all routes; CSP console clean in a `-dev` click-through; catalog parity green with the final key set.
   Build: govulncheck green, dependency prune to D15, session lifetime settings reviewed, `make check` run against local `sample.db`, `docs/security.md` (threat model: authenticated misuse + commodity web attacks; explicitly not storing bank credentials), DECISIONS.md tidy.
 
-## Phase 19 — Backlog (explicit non-goals for v1)
+## Phase 19 — Budgeting (added 2026-07-12 per user; was a Phase-19 backlog non-goal, now promoted to v1)
 
-Budgets (incl. per-fund and per-program budgets) · per-subsidiary permissions · per-subsidiary program scoping (Q5) · intercompany elimination entries beyond the D19 collapse · receipt attachments · global audit browser and "books as edited at time T" reports (data already supports both, per D4/D5) · recurring/scheduled transactions · board-designated (quasi-restricted) funds · additional UI languages beyond en/es (catalogs make it a file-drop) · API tokens · dashboard/home page · multi-org.
+Budget lines keyed by **(subsidiary, account [revenue/expense], fund, program)** + amount + timing (one-time date OR a recurring schedule). FULL FUND TRACKING: forecasts, cashflow projection, and actuals-vs-budget all break out by fund (restricted vs unrestricted net assets projected separately). Reports inherit p15.3d drill-down. Budgets follow the append-only versioning / write-funnel discipline (audited, editable with history).
+
+- [ ] **p19.1 db+store: budget model.**
+  Tests: versioned CRUD (AssertVersioned) for budget + lines; a line carries sub/account/fund/program/amount/currency + schedule; validation (account is R/E, fund/program/sub exist, schedule well-formed); one-time vs recurring.
+  Build: migration `budgets(id, name, fiscal_year?, notes, …)` + `budget_lines(id, budget_id, subsidiary_id, account_id, fund_id NULL=unrestricted, program_id, amount INTEGER minor, currency, schedule_kind CHECK(onetime/recurring), schedule_date, recur_freq CHECK(weekly/monthly/quarterly/annual), recur_start, recur_end)` + versions twins; store CRUD through the funnel.
+- [ ] **p19.2 store+toolkit: expansion, pro-rata, projections.**
+  Tests: recurring line expands to the right occurrences across a range; PRO-RATA to weekly/monthly/annual buckets is calendar-day proportional (a monthly line shown weekly contributes days-overlap/days-in-month × amount); `ActualsVsBudget` over a period per (sub,account,fund,program); `CashflowProjection` starts from CURRENT actual net-asset fund balances and rolls budgeted in/outflows forward to period end, per fund; hand-computed on the fixture.
+  Build: toolkit budget methods over p19.1 + the p15.2 actuals toolkit; deterministic bucketing (week/month/quarter/year); no clock (period is a param).
+- [ ] **p19.3 web: budget management.**
+  Tests: create/edit/delete budget lines (sub/account/fund/program/amount/schedule); perms (manage = TxnWrite or Admin — decide; view feeds reports).
+  Build: budget list + line editor; recurrence picker; fund/program selectors scoped to the sub.
+- [ ] **p19.4 [P] reports: forecast + actuals-vs-budget + cashflow projection** (weekly/monthly/annual buckets, pro-rata; per-fund; actuals vs budgeted variance; cashflow projection of net-asset fund balances start→end; drill-down on the actuals columns) + goldens.
+
+## Phase 20 — Expense reports (added 2026-07-12 per user)
+
+A submission→review workflow decoupled from book-editing: a low-privilege user submits an expense report; an editing user converts it to a balanced ledger transaction or rejects it. Data follows the versioning / write-funnel discipline; the posted transaction links back to its source report for audit.
+
+- [ ] **p20.1 db+store: expense-report model + submit permission.**
+  Tests: a NEW standalone capability to submit expense reports, independent of `txn_perm` (none/read/write) and report grants — a pure submitter has no ledger access; matrix picks up the new perm; versioned lifecycle (draft→submitted→rejected→resubmitted→converted) with AssertVersioned; `posted_transaction_id` set only on convert.
+  Build: migration `expense_reports(id, submitter_id, subsidiary_id, status CHECK(draft/submitted/rejected/converted), review_notes, posted_transaction_id NULL, …)` + `expense_report_lines(id, report_id, account_id, amount INTEGER minor, fund_id, program_id, memo)` + versions; a user capability (e.g. `can_submit_expenses` column or a new `Perm`); store: `SubmitExpenseReport`, `RejectExpenseReport(reason)`, `ConvertExpenseReport(→ links the posted txn)`, `ResubmitExpenseReport`.
+- [ ] **p20.2 web: submitter workspace.**
+  Tests: a submit-only user (single sub) enters revenue/expense splits (need not balance), submits, sees status, and resubmits after a rejection with the reviewer's reason shown; cannot see the ledger/reports; perm enforced.
+  Build: expense-report editor (one subsidiary; revenue/expense split rows with fund/program/memo — reuses phase-12 grid pieces but no balancing requirement); my-reports list with status.
+- [ ] **p20.3 web: reviewer queue → convert / reject.**
+  Tests: an editing (TxnWrite) user sees the queue, opens a report in the phase-12 editor prefilled with the submitted splits, balances + posts it (a real versioned transaction, linked via `posted_transaction_id`), OR rejects with a reason routing it back to the submitter; the converted report is immutable and shows the resulting txn.
+  Build: review queue; "review & post" = the phase-12 editor prefilled with the report's splits and its subsidiary locked; reject-with-reason; batch/status indicators.
+
+## Phase 21 — Backlog (explicit non-goals for v1)
+
+Per-subsidiary permissions · per-subsidiary program scoping (Q5) · intercompany elimination entries beyond the D19 collapse · receipt attachments · global audit browser and "books as edited at time T" reports (data already supports both, per D4/D5) · recurring/scheduled *ledger* transactions (distinct from budget recurrence, p19) · board-designated (quasi-restricted) funds · additional UI languages beyond en/es (catalogs make it a file-drop) · API tokens · dashboard/home page · multi-org.
 
 ---
 
