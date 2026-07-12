@@ -172,6 +172,26 @@ const test = base.extend({
   baseURL: async ({ server }, use) => {
     await use(server.baseURL);
   },
+
+  // Every page auto-installs the htmx SETTLE MARKER. htmx wires a swapped-in node's
+  // hx-* triggers (hx-get/hx-post) on the settle tick, which lands AFTER the node
+  // paints -- so a synthetic action (selectOption/click) fired the instant a swapped
+  // form appears can beat the wiring and be dropped (the request never fires). Under
+  // parallel CPU load the paint→settle gap widens, turning this into an intermittent
+  // flake. This listener stamps `e2e-settled` on each `htmx:afterSettle` target so a
+  // spec can `await expect(locator('...#...e2e-settled')).toBeVisible()` before driving
+  // a freshly-swapped hx-trigger. It is ordinary page JS (allowed under the strict
+  // `script-src 'self'` CSP; only Playwright's eval-based waitForFunction is blocked,
+  // which is why we mark the DOM instead). addInitScript re-runs on every navigation.
+  page: async ({ page }, use) => {
+    await page.addInitScript(() => {
+      document.addEventListener('htmx:afterSettle', (e) => {
+        const t = /** @type {any} */ (e.target);
+        if (t && t.classList) t.classList.add('e2e-settled');
+      });
+    });
+    await use(page);
+  },
 });
 
 module.exports = { test, expect, ADMIN_USERNAME, ADMIN_PASSWORD };

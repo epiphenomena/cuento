@@ -23,22 +23,32 @@ async function login(page, server) {
   await page.waitForURL('**/');
 }
 
-// createLeaf makes one active leaf account of the given type via the inline form.
-async function createLeaf(page, name, type) {
+// createLeaf makes one active leaf account via the inline form. It creates an ASSET
+// leaf (the form's DEFAULT type) on purpose: picking a non-default type fires an
+// htmx form re-fetch (hx-get on #af-type) that re-renders the form, and the newly
+// swapped Save button's hx-post is only wired on the settle tick -- clicking it in
+// that window drops the submit and the account is never created (a real flake seen
+// under parallel load; the form just sits open). Merge is type-agnostic (it needs
+// two same-type leaves), so asset leaves are equivalent coverage without the race.
+async function createLeaf(page, name) {
   await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('#af-name-en')).toBeVisible();
-  await page.locator('#af-type').selectOption(type);
+  // Wait for the New-account form swap to SETTLE so htmx has wired the Save button's
+  // hx-post before we click it (see the settle-marker note in fixtures.js).
+  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
   await page.locator('#af-name-en').fill(name);
   const rootSub = page.locator('input[name="sub_1"]');
   if (!(await rootSub.isChecked())) {
     await rootSub.check();
   }
+  // Save posts via hx-post; success returns an htmx HX-Redirect that navigates back
+  // to GET /accounts. We're ALREADY on /accounts, so waitForURL('**/accounts') is a
+  // no-op that does NOT wait for the reload -- wait for the reload RESPONSE instead,
+  // which only lands after the write commits, so the new row is in the fresh SSR DOM.
+  const reloaded = page.waitForResponse(
+    (r) => r.url().endsWith('/accounts') && r.request().method() === 'GET',
+  );
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/accounts');
-  // The save responds with an htmx HX-Redirect; wait for the redirect-driven load
-  // to fully settle before the next action, or a following goto/click can abort
-  // the in-flight navigation (net::ERR_ABORTED).
-  await page.waitForLoadState('load');
+  await reloaded;
   await expect(page.getByText(name, { exact: true })).toBeVisible();
 }
 
@@ -47,9 +57,9 @@ test.describe('merge accounts', () => {
     await login(page, server);
     await page.goto('/accounts');
 
-    // Two same-type expense leaves to merge.
-    await createLeaf(page, 'Supplies E2E', 'expense');
-    await createLeaf(page, 'Office E2E', 'expense');
+    // Two same-type (asset) leaves to merge.
+    await createLeaf(page, 'Supplies E2E');
+    await createLeaf(page, 'Office E2E');
 
     // Open the merge form.
     await page.getByRole('button', { name: /merge accounts/i }).click();

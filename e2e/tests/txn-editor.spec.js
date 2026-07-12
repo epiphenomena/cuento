@@ -10,26 +10,14 @@
 
 const { test, expect } = require('../fixtures');
 
-// htmx wires hx-get/hx-post triggers on a swapped-in node during the SETTLE tick,
-// which lands AFTER the node is already visible. So a synthetic Playwright action
-// (e.g. selectOption) fired right after `toBeVisible()` can beat the wiring and its
-// change→GET never fires (a real user is hundreds of ms slower and never hits this).
-// Mark each settled swap target so a test can wait for wiring to finish before
-// touching a freshly-swapped hx-* trigger. The listener is ordinary page JS —
-// allowed under the app's strict `script-src 'self'` CSP; only Playwright's
-// eval-based `waitForFunction` is blocked by it, which is why we mark the DOM
-// instead. addInitScript re-installs on every navigation.
-async function installSettleMarker(page) {
-  await page.addInitScript(() => {
-    document.addEventListener('htmx:afterSettle', (e) => {
-      const t = /** @type {any} */ (e.target);
-      if (t && t.classList) t.classList.add('e2e-settled');
-    });
-  });
-}
+// The htmx settle marker (`e2e-settled` on each htmx:afterSettle target) is installed
+// centrally by the `page` fixture — see fixtures.js for why (hx-* triggers on a
+// swapped-in node are wired on the settle tick, after it paints, so a synthetic
+// action right after `toBeVisible()` can beat the wiring; the strict CSP rules out
+// waitForFunction, so we mark the DOM). Waiting for `.e2e-settled` before driving a
+// freshly-swapped hx-trigger makes it race-free.
 
 async function login(page, server) {
-  await installSettleMarker(page);
   await page.goto('/login');
   await page.locator('#username').fill(server.username);
   await page.locator('#password').fill(server.password);
@@ -37,19 +25,24 @@ async function login(page, server) {
   await page.waitForURL('**/');
 }
 
-// createAsset makes a leaf asset account mapped to the root subsidiary and returns
-// nothing (the account is found later by name). Mirrors register.spec's flow.
+// createAsset makes a leaf asset account (the form's default type, so no type-change
+// re-fetch) mapped to the root subsidiary. Waits for the form to settle before Save
+// (so its hx-post is wired) and for the reload response (so the new row is in the SSR
+// DOM) — see createLeaf in merge.spec.js for the full rationale.
 async function createAsset(page, name) {
   await page.goto('/accounts');
   await page.getByRole('button', { name: /new account/i }).click();
+  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
   await page.locator('#af-name-en').fill(name);
-  await page.locator('#af-type').selectOption('asset');
   const rootSub = page.locator('input[name="sub_1"]');
   if (!(await rootSub.isChecked())) {
     await rootSub.check();
   }
+  const reloaded = page.waitForResponse(
+    (r) => r.url().endsWith('/accounts') && r.request().method() === 'GET',
+  );
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/accounts');
+  await reloaded;
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 
@@ -116,8 +109,15 @@ test.describe('transaction editor', () => {
     const rootSub = page.locator('input[name="sub_1"]');
     if (!(await rootSub.isChecked())) await rootSub.check();
     await page.locator('#af-func').selectOption('management');
+    // #af-func visible means the expense re-fetch swapped in (old form gone), so the
+    // marker now tracks THIS form; wait for it to settle so the re-rendered Save's
+    // hx-post is wired, then wait for the reload response (not the no-op waitForURL).
+    await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+    const reloaded = page.waitForResponse(
+      (r) => r.url().endsWith('/accounts') && r.request().method() === 'GET',
+    );
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL('**/accounts');
+    await reloaded;
     await expect(page.locator('tr.acct-row', { hasText: 'Editor Rent' })).toBeVisible();
 
     await page.goto('/transactions/new');
