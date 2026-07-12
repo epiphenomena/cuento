@@ -257,6 +257,8 @@ func (b *builder) resolveSplit(r Record) (pending, error) {
 	if !ok {
 		return pending{}, fmt.Errorf("source account %q not mapped", r.Acct)
 	}
+	acctType := b.acctType[acctID]
+	isRE := acctType == "revenue" || acctType == "expense"
 
 	s := store.SplitInput{AccountID: acctID, Amount: amt}
 
@@ -266,18 +268,22 @@ func (b *builder) resolveSplit(r Record) (pending, error) {
 			s.FundID = &fid
 		}
 	}
-	// Program from kat (D24). The store enforces program present iff R/E and defaults
-	// from the account when omitted, so only set it when we have a mapped kat.
-	if r.Kat != "" {
+	// Program from kat (D24), ONLY on revenue/expense splits: the store rejects a
+	// program on an A/L/E split (ErrProgramOnBalanceSheet), and the source populates
+	// kat on non-R/E lines too. The store defaults program from the account when
+	// omitted, so we set it only when we have a mapped kat on an R/E account.
+	if isRE && r.Kat != "" {
 		if pname, ok := b.cfg.Programs[r.Kat]; ok {
 			if pid, ok := b.res.ProgramIDs[pname]; ok {
 				s.ProgramID = &pid
 			}
 		}
 	}
-	// Functional class from kls (D21). Only meaningful on expense splits; the store
-	// defaults from the account otherwise and rejects a class on non-expense.
-	if r.Kls != "" {
+	// Functional class from kls (D21), ONLY on expense splits: the store rejects a
+	// functional class on a non-expense split (ErrNonExpenseFunction), and the
+	// source populates kls on non-expense lines (revenue/asset) too. The store
+	// defaults from the account otherwise, so we set it only on expense accounts.
+	if acctType == "expense" && r.Kls != "" {
 		if fc, ok := b.cfg.FunctionalClasses[r.Kls]; ok {
 			s.FunctionalClass = &fc
 		}

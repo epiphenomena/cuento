@@ -101,6 +101,13 @@ type builder struct {
 
 	exponent map[string]int // currency code -> minor-unit exponent (D1)
 	payeeID  map[string]int64
+
+	// acctType maps a created account id -> its cuento type. resolveSplit consults
+	// it so a source dimension (functional class from kls, program from kat) is only
+	// applied on the account types the store accepts it on (D21/D24) -- the source
+	// populates kls on non-expense lines too, and the store rejects a functional
+	// class on a non-expense split (ErrNonExpenseFunction).
+	acctType map[int64]string
 }
 
 // subsidiaries renames the seeded root and creates one child per configured
@@ -202,6 +209,9 @@ func (b *builder) accounts(ctx context.Context, rows []AccountMap) error {
 	if err != nil {
 		return err
 	}
+	if b.acctType == nil {
+		b.acctType = map[int64]string{}
+	}
 
 	for _, r := range ordered {
 		var parent *int64
@@ -251,6 +261,7 @@ func (b *builder) accounts(ctx context.Context, rows []AccountMap) error {
 			return fmt.Errorf("create account %q: %w", r.SourceAcct, err)
 		}
 		b.res.AccountIDs[r.SourceAcct] = id
+		b.acctType[id] = r.CuentoType
 	}
 	return nil
 }

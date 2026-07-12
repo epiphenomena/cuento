@@ -50,6 +50,7 @@ func testAccountMap() string {
 		{SourceAcct: "Cash MX", CuentoType: "asset", CuentoParent: "Assets", Subsidiaries: []string{"Test MX"}, NameEN: "Cash MX", NameES: "Efectivo"},
 		{SourceAcct: "Revenue", CuentoType: "revenue", CuentoParent: "", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Revenue", NameES: "Ingresos"},
 		{SourceAcct: "Grant Revenue", CuentoType: "revenue", CuentoParent: "Revenue", Subsidiaries: []string{"Test US", "Test MX"}, DefaultProgram: "Education", NameEN: "Grant Revenue", NameES: "Ingreso Beca"},
+		{SourceAcct: "Donations", CuentoType: "revenue", CuentoParent: "Revenue", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Donations", NameES: "Donaciones"},
 		{SourceAcct: "Expenses", CuentoType: "expense", CuentoParent: "", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Expenses", NameES: "Gastos"},
 		{SourceAcct: "Supplies", CuentoType: "expense", CuentoParent: "Expenses", Subsidiaries: []string{"Test US", "Test MX"}, FunctionalClass: "program", NameEN: "Supplies", NameES: "Suministros"},
 		{SourceAcct: "Equity", CuentoType: "equity", CuentoParent: "", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Equity", NameES: "Patrimonio"},
@@ -100,6 +101,14 @@ func testSource() string {
 		// carry the fund so every currency leg balances WITHIN the GRANT1 group.
 		row("MX", "A", "xfer", "Cash MX", "", "2025-06-01", "", "5", "fx grant", "GRANT1", "MXN", "0.05", "0", "0", "5000.00", "5000.00", "Assets"),
 		row("US", "A", "xfer", "Checking", "", "2025-06-01", "", "5", "fx grant", "GRANT1", "USD", "0.05", "250.00", "250.00", "0", "0", "Assets"),
+		// tid 6: a revenue line that carries a kls (functional-class code) and an
+		// asset line that carries a kat (program code) -- BOTH on non-target account
+		// types. The real export populates kls/kat on non-expense/non-R/E lines; the
+		// importer must NOT forward kls to a non-expense split (the store rejects a
+		// functional class off an expense account) nor kat to an A/L/E split (the
+		// store rejects a program on a balance-sheet split). US, USD, unrestricted.
+		row("US", "I", "receipt", "Donations", "EDU", "2025-07-01", "PRG", "6", "donation", "", "USD", "1.0", "0", "0", "70.00", "70.00", "Revenue"),
+		row("US", "A", "receipt", "Checking", "EDU", "2025-07-01", "PRG", "6", "donation", "", "USD", "1.0", "70.00", "70.00", "0", "0", "Assets"),
 		// A consolidation-marker row (country CONSOL) that must be SKIPPED entirely.
 		row("CONSOL", "A", "elim", "Checking", "", "2025-05-01", "", "9", "elim", "", "", "1.0", "0", "0", "0", "0", "Assets"),
 	}
@@ -236,6 +245,47 @@ func TestImportedBooksBalance(t *testing.T) {
 	// did not expect were swallowed -- surface them).
 	for _, w := range res.Warnings {
 		t.Logf("build warning surfaced: %s", w)
+	}
+}
+
+// TestSourceDimensionsGatedByAccountType is the p09.4 regression for the real-data
+// quirk that the source populates kls (functional class) on non-expense lines and
+// kat (program) on non-R/E lines. The importer must forward each source dimension
+// ONLY to the account type the store accepts it on, else the store rejects the
+// whole transaction (ErrNonExpenseFunction / ErrProgramOnBalanceSheet) and the
+// group is dropped. tid 6 posts a revenue+asset pair that both carry kls and kat.
+func TestSourceDimensionsGatedByAccountType(t *testing.T) {
+	sqldb, _, res := buildInto(t, false)
+
+	// The group must have posted as one transaction (not rejected/dropped).
+	if n := res.txnCountForTid("6"); n != 1 {
+		t.Fatalf("tid 6 produced %d transactions, want 1 (dimensions must not force a store rejection)", n)
+	}
+
+	// The revenue split carried a kls ("PRG") but revenue is not expense -> its
+	// functional_class must be NULL (the store would reject a non-NULL one).
+	revID := res.AccountIDs["Donations"]
+	var fcNonNull int
+	if err := sqldb.QueryRow(
+		`SELECT count(*) FROM splits WHERE account_id = ? AND functional_class IS NOT NULL`, revID,
+	).Scan(&fcNonNull); err != nil {
+		t.Fatalf("count revenue functional_class: %v", err)
+	}
+	if fcNonNull != 0 {
+		t.Errorf("revenue split carries a functional class (%d non-NULL); kls must not forward off an expense account", fcNonNull)
+	}
+
+	// The asset split carried a kat ("EDU") but asset is not R/E -> its program_id
+	// must be NULL (the store would reject a program on a balance-sheet split).
+	astID := res.AccountIDs["Checking"]
+	var progNonNull int
+	if err := sqldb.QueryRow(
+		`SELECT count(*) FROM splits WHERE account_id = ? AND program_id IS NOT NULL`, astID,
+	).Scan(&progNonNull); err != nil {
+		t.Fatalf("count asset program_id: %v", err)
+	}
+	if progNonNull != 0 {
+		t.Errorf("asset split carries a program (%d non-NULL); kat must not forward onto a balance-sheet split", progNonNull)
 	}
 }
 

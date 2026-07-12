@@ -8,10 +8,11 @@ import (
 	"cuento/internal/testutil"
 )
 
-// TestSeedCurrencies proves the p03.1 migration seeds USD, MXN and EUR with the
-// correct exponents (all 2, D1), read back through the store's thin sqlc
-// wrappers — not raw SQL (rule 2/6). Currencies is static reference data, so no
-// actor is needed for the read.
+// TestSeedCurrencies proves the seed migrations provide USD, MXN and EUR
+// (p03.1) plus HNL (p09.4, the go-live import's local currency) with the correct
+// exponents (all 2, D1), read back through the store's thin sqlc wrappers — not
+// raw SQL (rule 2/6). Currencies is static reference data, so no actor is needed
+// for the read.
 func TestSeedCurrencies(t *testing.T) {
 	d := testutil.NewDB(t)
 	s := New(d)
@@ -28,7 +29,7 @@ func TestSeedCurrencies(t *testing.T) {
 		byCode[c.Code] = c
 	}
 
-	want := map[string]int64{"USD": 2, "MXN": 2, "EUR": 2}
+	want := map[string]int64{"USD": 2, "MXN": 2, "EUR": 2, "HNL": 2}
 	for code, exp := range want {
 		c, ok := byCode[code]
 		if !ok {
