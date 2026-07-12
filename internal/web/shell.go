@@ -238,13 +238,6 @@ func (s *server) home(w http.ResponseWriter, r *http.Request) {
 	s.renderShell(w, r, http.StatusOK, nil)
 }
 
-// settingsStub is the p10.2 GET /settings placeholder (AnyUser): a real, permitted,
-// localized shell page so the Settings nav entry has a live target to link and
-// test. The full settings page (language/formats/theme/default sub) is p13.1.
-func (s *server) settingsStub(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, "settings.tmpl", s.newShellPage(r, nil))
-}
-
 // adminStub is the p10.2 GET /admin landing (Admin): a minimal, Admin-only shell
 // page so the admin nav section has a real, permitted, no-dead-link target and the
 // perm gate is provable now. The real admin pages (users, subsidiaries, currencies,

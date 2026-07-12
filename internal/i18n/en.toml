@@ -117,11 +117,57 @@ other = "This field is required."
 [error.email]
 other = "Enter a valid email address."
 
-# My settings stub (p10.2); the full settings page is p13.1.
+# My settings (p13.1): the personal-preferences page (language, money/date display,
+# theme, default subsidiary). coming_soon is the retired p10.2 stub string, kept for
+# catalog parity but no longer rendered.
 [settings.title]
 other = "Settings"
 [settings.coming_soon]
 other = "Settings arrive in a later step."
+[settings.intro]
+other = "These preferences apply only to your account and change how dates and amounts are shown to you."
+[settings.saved]
+other = "Your settings were saved."
+[settings.language]
+other = "Language"
+[settings.date_format]
+other = "Date format"
+[settings.number_format]
+other = "Number format"
+[settings.display_mode]
+other = "Amount display"
+[settings.neg_style]
+other = "Negative amounts"
+[settings.theme]
+other = "Theme"
+[settings.default_subsidiary]
+other = "Default subsidiary"
+[settings.default_subsidiary_none]
+other = "None"
+[settings.default_subsidiary_hint]
+other = "Preselected as the subsidiary when you start a new transaction."
+[settings.date.iso]
+other = "ISO (2025-03-15)"
+[settings.date.us]
+other = "US (03/15/2025)"
+[settings.date.eu]
+other = "European (15/03/2025)"
+[settings.number.us]
+other = "1,234.50"
+[settings.number.eu]
+other = "1.234,50"
+[settings.number.plain]
+other = "1234.50"
+[settings.display.signed]
+other = "Signed (-1,234.50)"
+[settings.display.dr_cr]
+other = "Debit / Credit (1,234.50 DR)"
+[settings.neg.minus]
+other = "Minus sign (-1,234.50)"
+[settings.neg.parens]
+other = "Parentheses ((1,234.50))"
+[settings.error.invalid]
+other = "That value is not allowed. Please choose one of the offered options."
 
 # Admin landing stub (p10.2); the real admin pages arrive in later phases.
 [admin.coming_soon]

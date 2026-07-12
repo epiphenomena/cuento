@@ -1,12 +1,102 @@
 {{/*
-  p10.2 Settings stub (GET /settings, AnyUser). A real, permitted, localized shell
-  page so the Settings nav entry has a live target to link and test. The full
-  settings page (language / formats / theme / default subsidiary) is p13.1.
-  Reuses the base.tmpl shell partials; every string via {{t}}.
+  p13.1 My settings (GET /settings, AnyUser). ONE personal-preferences page: UI
+  language, money/date display (date format, number format, display mode signed vs
+  DR/CR, negative style), theme, and the (optional) default subsidiary for new
+  transactions. A user edits THEIR OWN settings only.
+
+  A plain full-page form POST to /settings (NOT an htmx partial swap -- this page is
+  the whole settings document; on save it 303-redirects back to GET /settings so the
+  new locale/theme render on the fresh load). Every input is a fixed <select>, so a
+  normal user cannot submit an invalid value; a crafted invalid POST re-renders this
+  whole page at 422 with the field error + autofocus on the first invalid control.
+  .Page is a settingsForm. Every string via {{t}} (rule 9); no inline script/style
+  (rule 12).
 */ -}}
 {{define "settings.tmpl" -}}
 {{template "shell-open" (shellTitle . (t "settings.title"))}}
+  {{- with .Page}}
   <h1>{{t "settings.title"}}</h1>
-  <p>{{t "settings.coming_soon"}}</p>
+  <p class="hint">{{t "settings.intro"}}</p>
+
+  {{if .Saved}}
+  <p class="notice" role="status">{{t "settings.saved"}}</p>
+  {{end}}
+
+  {{if .Errors.FirstInvalid}}
+  <p class="error" role="alert">{{t "settings.error.invalid"}}</p>
+  {{end}}
+
+  <form method="post" action="/settings" class="settings-form">
+    <div class="field">
+      <label for="setting-locale">{{t "settings.language"}}</label>
+      <select id="setting-locale" name="locale"{{if eq .Errors.FirstInvalid "locale"}} autofocus{{end}}>
+        {{- range .Langs}}
+        <option value="{{.Code}}"{{if .Current}} selected{{end}}>{{.Label}}</option>
+        {{- end}}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="setting-date">{{t "settings.date_format"}}</label>
+      <select id="setting-date" name="date_format">
+        {{- range .DateFormats}}
+        <option value="{{.Value}}"{{if eq .Value $.Page.DateFormat}} selected{{end}}>{{t .LabelKey}}</option>
+        {{- end}}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="setting-number">{{t "settings.number_format"}}</label>
+      <select id="setting-number" name="number_format">
+        {{- range .NumberFmts}}
+        <option value="{{.Value}}"{{if eq .Value $.Page.NumberFormat}} selected{{end}}>{{t .LabelKey}}</option>
+        {{- end}}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="setting-display">{{t "settings.display_mode"}}</label>
+      <select id="setting-display" name="display_mode">
+        {{- range .DisplayModes}}
+        <option value="{{.Value}}"{{if eq .Value $.Page.DisplayMode}} selected{{end}}>{{t .LabelKey}}</option>
+        {{- end}}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="setting-neg">{{t "settings.neg_style"}}</label>
+      <select id="setting-neg" name="neg_style">
+        {{- range .NegStyles}}
+        <option value="{{.Value}}"{{if eq .Value $.Page.NegStyle}} selected{{end}}>{{t .LabelKey}}</option>
+        {{- end}}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="setting-theme">{{t "settings.theme"}}</label>
+      <select id="setting-theme" name="theme">
+        {{- range .Themes}}
+        <option value="{{.Value}}"{{if eq .Value $.Page.Theme}} selected{{end}}>{{t .LabelKey}}</option>
+        {{- end}}
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="setting-sub">{{t "settings.default_subsidiary"}}</label>
+      <select id="setting-sub" name="default_subsidiary">
+        <option value="">{{t "settings.default_subsidiary_none"}}</option>
+        {{- range .Subs}}
+        <option value="{{.ID}}"{{if eq .ID $.Page.DefaultSub}} selected{{end}}>{{.Name}}</option>
+        {{- end}}
+      </select>
+      <p class="hint">{{t "settings.default_subsidiary_hint"}}</p>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{{t "common.save"}}</button>
+      <a class="btn btn-ghost" href="/">{{t "common.cancel"}}</a>
+    </div>
+  </form>
+  {{- end}}
 {{template "shell-close" .}}
 {{- end}}

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 
 	"cuento/internal/testutil"
@@ -150,6 +151,129 @@ func assertHashAbsentFromVersion(t *testing.T, d *sql.DB, entityID int64, secret
 		if c.Valid && c.String == secret {
 			t.Fatalf("column %q of the version row holds the password hash; rule 5 violated", cols[i])
 		}
+	}
+}
+
+// okLocale is a stand-in for the web layer's i18n.Langs membership test: the store
+// stays i18n-free and takes the check as a closure. en/es are the catalog langs.
+func okLocale(s string) bool { return s == "en" || s == "es" }
+
+// TestUpdateUserSettingsVersioned proves the p13.1 settings write: a valid update
+// changes the live users row across all seven preference columns AND appends an
+// op='update' users_versions snapshot naming the actor, under ONE change (rule 5).
+// It also proves the nullable default subsidiary round-trips (set then clear).
+func TestUpdateUserSettingsVersioned(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	ctx := WithActor(context.Background(), Actor{ID: 1})
+
+	id, err := s.CreateUser(ctx, CreateUserInput{Username: "carol", DisplayName: "Carol"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	// Root subsidiary is seeded id 1; use it as a valid default.
+	rootSub := int64(1)
+	in := UserSettingsInput{
+		Locale: "es", DateFormat: "EU", NumberFormat: "EU",
+		DisplayMode: "dr_cr", NegStyle: "parens", Theme: "dark",
+		DefaultSubsidiaryID: &rootSub,
+	}
+	if err := s.UpdateUserSettings(ctx, id, in, okLocale); err != nil {
+		t.Fatalf("UpdateUserSettings: %v", err)
+	}
+
+	// Live row reflects every field.
+	got, err := s.UserByID(ctx, id)
+	if err != nil {
+		t.Fatalf("UserByID: %v", err)
+	}
+	if got.Locale != "es" || got.DateFormat != "EU" || got.NumberFormat != "EU" ||
+		got.DisplayMode != "dr_cr" || got.NegStyle != "parens" || got.Theme != "dark" {
+		t.Fatalf("live settings = %+v, want the applied values", got)
+	}
+	if got.DefaultSubsidiaryID == nil || *got.DefaultSubsidiaryID != rootSub {
+		t.Fatalf("default subsidiary = %v, want %d", got.DefaultSubsidiaryID, rootSub)
+	}
+
+	// An op='update' version snapshot exists, tied to the acting actor (id 1).
+	testutil.AssertVersioned(t, d, "users", id, "update")
+	var vActor int64
+	var vLocale, vDisplayMode string
+	err = d.QueryRow(
+		`SELECT c.actor_id, v.locale, v.display_mode
+		   FROM users_versions v JOIN changes c ON c.id = v.change_id
+		  WHERE v.entity_id = ? AND v.op = 'update'
+		  ORDER BY v.valid_from DESC, v.id DESC LIMIT 1`, id,
+	).Scan(&vActor, &vLocale, &vDisplayMode)
+	if err != nil {
+		t.Fatalf("read update version: %v", err)
+	}
+	if vActor != 1 {
+		t.Errorf("version actor_id = %d, want 1 (the acting user)", vActor)
+	}
+	if vLocale != "es" || vDisplayMode != "dr_cr" {
+		t.Errorf("version snapshot = (%q,%q), want (es,dr_cr)", vLocale, vDisplayMode)
+	}
+
+	// Clearing the default subsidiary (nil) persists a NULL.
+	in.DefaultSubsidiaryID = nil
+	if err := s.UpdateUserSettings(ctx, id, in, okLocale); err != nil {
+		t.Fatalf("UpdateUserSettings clear: %v", err)
+	}
+	got, err = s.UserByID(ctx, id)
+	if err != nil {
+		t.Fatalf("UserByID after clear: %v", err)
+	}
+	if got.DefaultSubsidiaryID != nil {
+		t.Errorf("default subsidiary = %v, want nil after clear", got.DefaultSubsidiaryID)
+	}
+}
+
+// TestUpdateUserSettingsRejectsInvalid proves each field's validator rejects an
+// unknown value (the columns have no DB CHECK, so the store is the guard) and that
+// a non-existent default subsidiary is rejected as a clean ErrInvalidSetting rather
+// than an FK explosion. Every rejection must leave NO version row (fail before the
+// write funnel opens).
+func TestUpdateUserSettingsRejectsInvalid(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	ctx := WithActor(context.Background(), Actor{ID: 1})
+
+	id, err := s.CreateUser(ctx, CreateUserInput{Username: "dave", DisplayName: "Dave"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	base := UserSettingsInput{
+		Locale: "en", DateFormat: "ISO", NumberFormat: "US",
+		DisplayMode: "signed", NegStyle: "minus", Theme: "auto",
+	}
+	bad := int64(999999)
+	cases := map[string]func(UserSettingsInput) UserSettingsInput{
+		"locale":        func(i UserSettingsInput) UserSettingsInput { i.Locale = "de"; return i },
+		"date_format":   func(i UserSettingsInput) UserSettingsInput { i.DateFormat = "XX"; return i },
+		"number_format": func(i UserSettingsInput) UserSettingsInput { i.NumberFormat = "XX"; return i },
+		"display_mode":  func(i UserSettingsInput) UserSettingsInput { i.DisplayMode = "XX"; return i },
+		"neg_style":     func(i UserSettingsInput) UserSettingsInput { i.NegStyle = "XX"; return i },
+		"theme":         func(i UserSettingsInput) UserSettingsInput { i.Theme = "XX"; return i },
+		"default_sub":   func(i UserSettingsInput) UserSettingsInput { i.DefaultSubsidiaryID = &bad; return i },
+	}
+	for name, mut := range cases {
+		if err := s.UpdateUserSettings(ctx, id, mut(base), okLocale); !errors.Is(err, ErrInvalidSetting) {
+			t.Errorf("%s: err = %v, want ErrInvalidSetting", name, err)
+		}
+	}
+
+	// No update version row was ever written (every reject fails before the funnel).
+	var n int
+	if err := d.QueryRow(
+		`SELECT COUNT(*) FROM users_versions WHERE entity_id = ? AND op = 'update'`, id,
+	).Scan(&n); err != nil {
+		t.Fatalf("count update versions: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("update version rows = %d, want 0 (rejects must not write)", n)
 	}
 }
 

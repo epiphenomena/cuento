@@ -111,11 +111,57 @@ other = "Este campo es obligatorio."
 [error.email]
 other = "Introduzca un correo electronico valido."
 
-# Ajustes (stub, p10.2); la pagina completa es p13.1.
+# Ajustes (p13.1): la pagina de preferencias personales (idioma, formato de fecha y
+# numeros, tema, subsidiaria predeterminada). coming_soon es el texto retirado del
+# stub p10.2, conservado por paridad del catalogo pero ya no se muestra.
 [settings.title]
 other = "Ajustes"
 [settings.coming_soon]
 other = "Los ajustes llegan en un paso posterior."
+[settings.intro]
+other = "Estas preferencias solo se aplican a tu cuenta y cambian como se te muestran las fechas y los importes."
+[settings.saved]
+other = "Se guardaron tus ajustes."
+[settings.language]
+other = "Idioma"
+[settings.date_format]
+other = "Formato de fecha"
+[settings.number_format]
+other = "Formato de numeros"
+[settings.display_mode]
+other = "Presentacion de importes"
+[settings.neg_style]
+other = "Importes negativos"
+[settings.theme]
+other = "Tema"
+[settings.default_subsidiary]
+other = "Subsidiaria predeterminada"
+[settings.default_subsidiary_none]
+other = "Ninguna"
+[settings.default_subsidiary_hint]
+other = "Se preselecciona como subsidiaria al iniciar una transaccion nueva."
+[settings.date.iso]
+other = "ISO (2025-03-15)"
+[settings.date.us]
+other = "EE. UU. (03/15/2025)"
+[settings.date.eu]
+other = "Europeo (15/03/2025)"
+[settings.number.us]
+other = "1,234.50"
+[settings.number.eu]
+other = "1.234,50"
+[settings.number.plain]
+other = "1234.50"
+[settings.display.signed]
+other = "Con signo (-1,234.50)"
+[settings.display.dr_cr]
+other = "Debe / Haber (1,234.50 DR)"
+[settings.neg.minus]
+other = "Signo menos (-1,234.50)"
+[settings.neg.parens]
+other = "Parentesis ((1,234.50))"
+[settings.error.invalid]
+other = "Ese valor no esta permitido. Elige una de las opciones ofrecidas."
 
 # Landing de administracion (stub, p10.2); las paginas reales llegan despues.
 [admin.coming_soon]

@@ -242,7 +242,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 
 ## Phase 13 — Settings & admin
 
-- [ ] **p13.1 web: my settings.**
+- [x] **p13.1 web: my settings.**
   Tests: `TestFormatsFollowUserSettings` — two users with different date/number/display settings see the same register rendered differently, end to end; `TestLocaleSwitchSwapsChrome` (es user sees es catalog everywhere).
   Build: settings page (language, formats, display mode, negative style, theme, default subsidiary); audit all render paths go through the p03 formatters and `{{t}}`.
 - [ ] **p13.2 web: admin.**

@@ -36,6 +36,19 @@ UPDATE users SET password_hash = ? WHERE id = ?;
 -- user.
 UPDATE users SET theme = ? WHERE id = ?;
 
+-- name: UpdateUserSettings :exec
+-- Live update of a user's personal settings (p13.1 /settings): the UI locale, the
+-- money/date display columns, the theme, and the (nullable) default subsidiary. The
+-- version append (InsertUserVersion) that follows snapshots ALL of these from the
+-- live row under the SAME change, so the audit trail records who changed which
+-- preferences. password_hash is untouched (and never in the snapshot, rule 5).
+-- Plain positional ? params (each used once); ASCII-only file (sqlc byte-offset
+-- gotcha, DECISIONS p04.2).
+UPDATE users
+SET locale = ?, date_format = ?, number_format = ?, display_mode = ?,
+    neg_style = ?, theme = ?, default_subsidiary_id = ?
+WHERE id = ?;
+
 -- name: SetUserDisabled :exec
 -- Live update of a user's disabled_at (p06.4 `user disable`). A disabled user
 -- cannot log in (login enforces this). Versioned as op='update'; disabled_at IS

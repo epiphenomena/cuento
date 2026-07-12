@@ -244,6 +244,91 @@ func ValidTheme(theme string) bool {
 	}
 }
 
+// The valid value sets for the per-user settings columns (p13.1). The web
+// format.go maps these strings LENIENTLY (unknown -> default) so a stray value
+// never breaks a render path; but the settings WRITE must REJECT unknowns (the
+// migration puts a CHECK only on txn_perm, so these columns have no DB backstop --
+// the store is the guard that keeps the columns to a known vocabulary). Each
+// mirrors the switch arms format.go recognizes.
+func validDateFormat(s string) bool   { return s == "ISO" || s == "US" || s == "EU" }
+func validNumberFormat(s string) bool { return s == "US" || s == "EU" || s == "plain" }
+func validDisplayMode(s string) bool  { return s == "signed" || s == "dr_cr" }
+func validNegStyle(s string) bool     { return s == "minus" || s == "parens" }
+
+// ErrInvalidSetting is returned by UpdateUserSettings when any field carries a
+// value outside its known vocabulary (locale/date/number/display/neg/theme) or the
+// requested default subsidiary does not exist. The web layer maps it to a 422 form
+// error (a bad settings POST is a client error, only reachable by a crafted request
+// since the form offers fixed <select> options).
+var ErrInvalidSetting = errors.New("store: invalid setting value")
+
+// UserSettingsInput is the desired state of a user's personal preferences (p13.1
+// /settings). DefaultSubsidiaryID is nil to CLEAR the preference (a user may have
+// none); a non-nil id must reference a real subsidiary. Locale must be a known
+// catalog language (validated by the caller against i18n.Langs, passed as
+// localeOK) -- the store stays free of an i18n import while still rejecting an
+// unknown locale.
+type UserSettingsInput struct {
+	Locale              string
+	DateFormat          string
+	NumberFormat        string
+	DisplayMode         string
+	NegStyle            string
+	Theme               string
+	DefaultSubsidiaryID *int64
+}
+
+// UpdateUserSettings persists a user's personal preferences on the live row and
+// appends an op='update' users_versions row under ONE change (p13.1 POST
+// /settings), so the audit trail records who changed which settings. Every field
+// is validated against its known vocabulary FIRST (rejecting unknowns with
+// ErrInvalidSetting) since the columns carry no DB CHECK; localeOK is the caller's
+// i18n.Langs membership test (keeping the store i18n-free). A non-nil
+// DefaultSubsidiaryID must reference an existing subsidiary (existence-checked so a
+// bad id is a clean 422, not an FK-triggered 500); nil clears it (NULL). The
+// version append is the same snapshot-from-live query CreateUser uses, so all seven
+// columns are captured.
+func (s *Store) UpdateUserSettings(ctx context.Context, userID int64, in UserSettingsInput, localeOK func(string) bool) error {
+	if !localeOK(in.Locale) ||
+		!validDateFormat(in.DateFormat) ||
+		!validNumberFormat(in.NumberFormat) ||
+		!validDisplayMode(in.DisplayMode) ||
+		!validNegStyle(in.NegStyle) ||
+		!ValidTheme(in.Theme) {
+		return ErrInvalidSetting
+	}
+
+	if in.DefaultSubsidiaryID != nil {
+		if _, err := s.q.GetSubsidiary(ctx, *in.DefaultSubsidiaryID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrInvalidSetting
+			}
+			return fmt.Errorf("verify default subsidiary %d: %w", *in.DefaultSubsidiaryID, err)
+		}
+	}
+
+	_, err := s.write(ctx, "user.settings", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			if err := q.UpdateUserSettings(ctx, sqlc.UpdateUserSettingsParams{
+				Locale:              in.Locale,
+				DateFormat:          in.DateFormat,
+				NumberFormat:        in.NumberFormat,
+				DisplayMode:         in.DisplayMode,
+				NegStyle:            in.NegStyle,
+				Theme:               in.Theme,
+				DefaultSubsidiaryID: nullInt64Ptr(in.DefaultSubsidiaryID),
+				ID:                  userID,
+			}); err != nil {
+				return fmt.Errorf("update settings: %w", err)
+			}
+			return insertUserVersion(ctx, q, changeID, "update", userID)
+		})
+	if err != nil {
+		return fmt.Errorf("update user settings (id %d): %w", userID, err)
+	}
+	return nil
+}
+
 // SetUserTheme persists a user's theme preference on the live row and appends an
 // op='update' users_versions row under ONE change (p10.2 POST /theme). theme is
 // validated against ValidTheme first so a bad value never reaches the db. The

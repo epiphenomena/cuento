@@ -130,11 +130,13 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/login", Public, http.HandlerFunc(s.loginSubmit)},
 		{http.MethodPost, "/logout", AnyUser, http.HandlerFunc(s.logout)},
 		{http.MethodGet, "/{$}", AnyUser, http.HandlerFunc(s.home)},
-		// p10.2 shell: the theme control (persists cookie + user setting) and the
-		// Settings stub (a real, permitted, localized nav target; the full page is
-		// p13.1). Both AnyUser per Appendix B.
+		// p10.2 shell: the theme control (persists cookie + user setting). p13.1 makes
+		// /settings the real personal-preferences page (GET form, POST save); both are
+		// AnyUser per Appendix B -- a user edits THEIR OWN settings (admin edit-others
+		// is p13.2). The header theme control (POST /theme) stays as a quick toggle.
 		{http.MethodPost, "/theme", AnyUser, http.HandlerFunc(s.setTheme)},
-		{http.MethodGet, "/settings", AnyUser, http.HandlerFunc(s.settingsStub)},
+		{http.MethodGet, "/settings", AnyUser, http.HandlerFunc(s.settingsPage)},
+		{http.MethodPost, "/settings", AnyUser, http.HandlerFunc(s.settingsUpdate)},
 		// A minimal Admin landing so the perm-gated nav has a real, Admin-only
 		// target NOW (the shell must prove "Admin sees the admin entry, a non-admin
 		// does not" -- DoD). The real /admin pages (users, subsidiaries, ops) land

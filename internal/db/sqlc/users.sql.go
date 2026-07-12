@@ -187,6 +187,45 @@ func (q *Queries) SetUserTheme(ctx context.Context, arg SetUserThemeParams) erro
 	return err
 }
 
+const updateUserSettings = `-- name: UpdateUserSettings :exec
+UPDATE users
+SET locale = ?, date_format = ?, number_format = ?, display_mode = ?,
+    neg_style = ?, theme = ?, default_subsidiary_id = ?
+WHERE id = ?
+`
+
+type UpdateUserSettingsParams struct {
+	Locale              string
+	DateFormat          string
+	NumberFormat        string
+	DisplayMode         string
+	NegStyle            string
+	Theme               string
+	DefaultSubsidiaryID sql.NullInt64
+	ID                  int64
+}
+
+// Live update of a user's personal settings (p13.1 /settings): the UI locale, the
+// money/date display columns, the theme, and the (nullable) default subsidiary. The
+// version append (InsertUserVersion) that follows snapshots ALL of these from the
+// live row under the SAME change, so the audit trail records who changed which
+// preferences. password_hash is untouched (and never in the snapshot, rule 5).
+// Plain positional ? params (each used once); ASCII-only file (sqlc byte-offset
+// gotcha, DECISIONS p04.2).
+func (q *Queries) UpdateUserSettings(ctx context.Context, arg UpdateUserSettingsParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserSettings,
+		arg.Locale,
+		arg.DateFormat,
+		arg.NumberFormat,
+		arg.DisplayMode,
+		arg.NegStyle,
+		arg.Theme,
+		arg.DefaultSubsidiaryID,
+		arg.ID,
+	)
+	return err
+}
+
 const userByID = `-- name: UserByID :one
 SELECT id, username, disabled_at, txn_perm, is_admin, locale, theme,
        date_format, number_format, display_mode, neg_style,
