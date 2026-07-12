@@ -483,6 +483,20 @@ func (s *Store) GetAccount(ctx context.Context, id int64) (sqlc.Account, error) 
 	return row, nil
 }
 
+// SplitIDsForAccount returns the ids of every split currently on an account, in
+// id order. Read; sqlc. It reuses the SAME SplitIdsByAccount query MergeAccount
+// repoints from, so the merge-UI consequences preview counts EXACTLY the splits
+// the merge will move (including soft-deleted-txn splits -- see the query
+// comment); a count is len() of this, guaranteeing preview == effect by
+// construction rather than a second COUNT query that could drift (p11.2).
+func (s *Store) SplitIDsForAccount(ctx context.Context, accountID int64) ([]int64, error) {
+	ids, err := s.q.SplitIdsByAccount(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("store: split ids for account %d: %w", accountID, err)
+	}
+	return ids, nil
+}
+
 // TreeRow is one account in tree order with its name resolved for the requested
 // lang (empty when that lang has no name -- the en->any fallback is p05.3).
 type TreeRow struct {

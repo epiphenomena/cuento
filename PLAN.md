@@ -205,7 +205,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p11.1 web: chart of accounts.**
   Tests: handler CRUD happy paths + permission denials; `TestParentOptionsExcludeDescendantsAndWrongClass`; `TestSubsidiaryFilter` (tree filtered to accounts mapped to the selected sub); `TestSubAssignmentPropagation` surfaces the p05.2 behavior in the form; balances column matches p08.4 queries.
   Build: tree table with per-currency balances, subsidiary filter, active filter; inline htmx create/edit (names en/es, type constrained by parent, default currency, reconcilable flag, subsidiary checklist, functional-class default and default program for R/E accounts, 990 line select filtered to the account's type with the inherited effective code shown as placeholder when unset, intercompany flag); move via filtered parent select. Extra test: `TestForm990OptionsFilteredByType`.
-- [ ] **p11.2 [P] web: merge UI.**
+- [x] **p11.2 [P] web: merge UI.**
   Tests: handler-level, confirm-step required, consequences summarized (split count, recons repointed), sub-coverage rule surfaced as a validation message.
 - [ ] **p11.3 [P] web: subsidiaries admin.**
   Tests: CRUD + matrix perms (Admin); root protections; deactivation guard messages.

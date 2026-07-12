@@ -34,10 +34,15 @@
   <p class="asof">{{t "accounts.balances_as_of"}} {{.AsOf}}</p>
 
   <div id="account-form" class="account-form-region">
-    {{/* The inline form fetches here. Initially a single "New account" trigger. */}}
+    {{/* The inline form fetches here. Initially the New-account and Merge triggers;
+         each htmx-swaps its form into #account-form (p11.1 create/edit, p11.2 merge). */}}
     <button type="button" class="btn btn-primary"
             hx-get="/accounts/new" hx-target="#account-form" hx-swap="outerHTML">
       {{t "accounts.new"}}
+    </button>
+    <button type="button" class="btn btn-ghost"
+            hx-get="/accounts/merge" hx-target="#account-form" hx-swap="outerHTML">
+      {{t "accounts.merge"}}
     </button>
   </div>
 

@@ -149,6 +149,13 @@ func (s *server) routes() []Route {
 		{http.MethodGet, "/accounts", TxnRead, http.HandlerFunc(s.accountsPage)},
 		{http.MethodGet, "/accounts/new", TxnWrite, http.HandlerFunc(s.accountNewForm)},
 		{http.MethodGet, "/accounts/{id}/edit", TxnWrite, http.HandlerFunc(s.accountEditForm)},
+		// p11.2 merge UI (TxnWrite). GET renders the merge form (source/destination
+		// leaf pickers) into #account-form; POST is the two-step flow (preview without
+		// confirm, execute with confirm=1). The literal "/accounts/merge" is more
+		// specific than "/accounts/{id}", so the Go 1.22+ mux routes it precisely (no
+		// conflict). The permission-matrix test picks both up automatically (rule 8).
+		{http.MethodGet, "/accounts/merge", TxnWrite, http.HandlerFunc(s.mergeFormPartial)},
+		{http.MethodPost, "/accounts/merge", TxnWrite, http.HandlerFunc(s.merge)},
 		{http.MethodPost, "/accounts", TxnWrite, http.HandlerFunc(s.accountCreate)},
 		{http.MethodPost, "/accounts/{id}", TxnWrite, http.HandlerFunc(s.accountUpdate)},
 		{http.MethodPost, "/accounts/{id}/deactivate", TxnWrite, http.HandlerFunc(s.accountDeactivate)},
