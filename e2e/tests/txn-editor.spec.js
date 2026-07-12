@@ -10,7 +10,26 @@
 
 const { test, expect } = require('../fixtures');
 
+// htmx wires hx-get/hx-post triggers on a swapped-in node during the SETTLE tick,
+// which lands AFTER the node is already visible. So a synthetic Playwright action
+// (e.g. selectOption) fired right after `toBeVisible()` can beat the wiring and its
+// change→GET never fires (a real user is hundreds of ms slower and never hits this).
+// Mark each settled swap target so a test can wait for wiring to finish before
+// touching a freshly-swapped hx-* trigger. The listener is ordinary page JS —
+// allowed under the app's strict `script-src 'self'` CSP; only Playwright's
+// eval-based `waitForFunction` is blocked by it, which is why we mark the DOM
+// instead. addInitScript re-installs on every navigation.
+async function installSettleMarker(page) {
+  await page.addInitScript(() => {
+    document.addEventListener('htmx:afterSettle', (e) => {
+      const t = /** @type {any} */ (e.target);
+      if (t && t.classList) t.classList.add('e2e-settled');
+    });
+  });
+}
+
 async function login(page, server) {
+  await installSettleMarker(page);
   await page.goto('/login');
   await page.locator('#username').fill(server.username);
   await page.locator('#password').fill(server.password);
@@ -83,11 +102,19 @@ test.describe('transaction editor', () => {
     await createAsset(page, 'Editor Bank');
     await page.goto('/accounts');
     await page.getByRole('button', { name: /new account/i }).click();
-    await page.locator('#af-name-en').fill('Editor Rent');
+    // The New-account form arrives via an htmx swap; wait for it to SETTLE (not just
+    // appear) so htmx has wired #af-type's change→hx-get before we drive it — else
+    // the type change fires into an unwired select and the re-fetch never happens.
+    await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+    // Choosing the expense type triggers an htmx form-swap (hx-get -> #account-form,
+    // outerHTML) that server-renders the functional-class default field (#af-func is
+    // gated by {{if .IsExpense}}). #af-func becoming visible is the swap's own signal.
+    // The handler round-trips typed values (overlayFormValues), so name/sub survive.
     await page.locator('#af-type').selectOption('expense');
+    await expect(page.locator('#af-func')).toBeVisible();
+    await page.locator('#af-name-en').fill('Editor Rent');
     const rootSub = page.locator('input[name="sub_1"]');
     if (!(await rootSub.isChecked())) await rootSub.check();
-    // The functional-class default select is revealed for expense accounts.
     await page.locator('#af-func').selectOption('management');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL('**/accounts');
