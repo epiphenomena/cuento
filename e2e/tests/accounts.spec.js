@@ -12,6 +12,7 @@
 //   - inline field error:   p.field-error (rendered {{t error.account.*}})
 
 const { test, expect } = require('../fixtures');
+const { saveAndReload } = require('../helpers');
 
 // login signs the admin in and lands on the authenticated shell. Reused by every
 // test here (no storageState wiring in this suite; a fresh login is cheap).
@@ -45,10 +46,8 @@ test.describe('chart of accounts', () => {
       await rootSub.check();
     }
 
-    await page.getByRole('button', { name: /^save$/i }).click();
-
     // Success is a server redirect to /accounts; the new account is in the tree.
-    await page.waitForURL('**/accounts');
+    await saveAndReload(page, { reloadPath: '/accounts' });
     await expect(page.getByText('Petty Cash E2E')).toBeVisible();
   });
 
@@ -87,8 +86,7 @@ test.describe('chart of accounts', () => {
     if (!(await rootSub.isChecked())) {
       await rootSub.check();
     }
-    await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL('**/accounts');
+    await saveAndReload(page, { reloadPath: '/accounts' });
     await expect(page.getByText('Editable E2E')).toBeVisible();
 
     // Open its edit form (the row's Edit button swaps #account-form).
@@ -97,9 +95,7 @@ test.describe('chart of accounts', () => {
     await expect(page.locator('#af-name-en')).toHaveValue('Editable E2E');
 
     await page.locator('#af-name-en').fill('Renamed E2E');
-    await page.getByRole('button', { name: /^save$/i }).click();
-
-    await page.waitForURL('**/accounts');
+    await saveAndReload(page, { reloadPath: '/accounts' });
     await expect(page.getByText('Renamed E2E')).toBeVisible();
     await expect(page.getByText('Editable E2E')).toHaveCount(0);
   });

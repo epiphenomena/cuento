@@ -11,23 +11,13 @@
 // swap), so they need no settle dance; the editor save is a plain submit.
 
 const { test, expect } = require('../fixtures');
+const { saveAndReload } = require('../helpers');
 
-// installSettleMarker / login mirror txn-editor.spec: htmx wires a swapped node's
-// hx-* triggers on the SETTLE tick (after paint), so a synthetic action fired right
-// after visibility can beat the wiring. We stamp e2e-settled on each afterSettle
-// target and wait for it before touching a freshly-swapped hx-trigger. Only the
-// new-account form swap needs this here (the p12.4 actions are plain links).
-async function installSettleMarker(page) {
-  await page.addInitScript(() => {
-    document.addEventListener('htmx:afterSettle', (e) => {
-      const t = /** @type {any} */ (e.target);
-      if (t && t.classList) t.classList.add('e2e-settled');
-    });
-  });
-}
-
+// The htmx settle marker is installed centrally by the `page` fixture (fixtures.js);
+// the per-row p12.4 actions (edit/void/duplicate/history) are plain full-page <a>
+// links, so only the new-account form swap needs the settle dance, handled by the
+// shared saveAndReload helper.
 async function login(page, server) {
-  await installSettleMarker(page);
   await page.goto('/login');
   await page.locator('#username').fill(server.username);
   await page.locator('#password').fill(server.password);
@@ -38,14 +28,13 @@ async function login(page, server) {
 async function createAsset(page, name) {
   await page.goto('/accounts');
   await page.getByRole('button', { name: /new account/i }).click();
+  await expect(page.locator('#af-name-en')).toBeVisible();
   await page.locator('#af-name-en').fill(name);
-  await page.locator('#af-type').selectOption('asset');
   const rootSub = page.locator('input[name="sub_1"]');
   if (!(await rootSub.isChecked())) {
     await rootSub.check();
   }
-  await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/accounts');
+  await saveAndReload(page, { reloadPath: '/accounts' });
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 

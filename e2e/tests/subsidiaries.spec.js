@@ -13,6 +13,7 @@
 //   - guard message:          p.field-error (rendered {{t error.subsidiary.*}})
 
 const { test, expect } = require('../fixtures');
+const { saveAndReload } = require('../helpers');
 
 test('subsidiaries admin: create child, rename, and blocked deactivate', async ({ page, server }) => {
   // Log in once (admin => Admin perm).
@@ -32,9 +33,7 @@ test('subsidiaries admin: create child, rename, and blocked deactivate', async (
   await expect(page.locator('#sf-name')).toBeVisible();
   await page.locator('#sf-name').fill('West Branch E2E');
   await page.locator('#sf-currency').selectOption('USD'); // parent defaults to root
-  await page.getByRole('button', { name: /^save$/i }).click();
-
-  await page.waitForURL('**/admin/subsidiaries');
+  await saveAndReload(page, { reloadPath: '/admin/subsidiaries', formSelector: 'form#subsidiary-form' });
   await expect(page.getByRole('cell', { name: 'West Branch E2E', exact: true })).toBeVisible();
 
   // --- rename it and the new name shows in the tree ---
@@ -42,23 +41,19 @@ test('subsidiaries admin: create child, rename, and blocked deactivate', async (
   await row.getByRole('button', { name: /^edit$/i }).click();
   await expect(page.locator('#sf-name')).toHaveValue('West Branch E2E');
   await page.locator('#sf-name').fill('Renamed E2E');
-  await page.getByRole('button', { name: /^save$/i }).click();
-
-  await page.waitForURL('**/admin/subsidiaries');
+  await saveAndReload(page, { reloadPath: '/admin/subsidiaries', formSelector: 'form#subsidiary-form' });
   await expect(page.getByRole('cell', { name: 'Renamed E2E', exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'West Branch E2E', exact: true })).toHaveCount(0);
 
   // --- a blocked deactivate (active child) shows the localized guard message ---
   await page.getByRole('button', { name: /new subsidiary/i }).click();
   await page.locator('#sf-name').fill('Parent E2E');
-  await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/admin/subsidiaries');
+  await saveAndReload(page, { reloadPath: '/admin/subsidiaries', formSelector: 'form#subsidiary-form' });
 
   await page.getByRole('button', { name: /new subsidiary/i }).click();
   await page.locator('#sf-name').fill('Kid E2E');
   await page.locator('#sf-parent').selectOption({ label: 'Parent E2E' });
-  await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/admin/subsidiaries');
+  await saveAndReload(page, { reloadPath: '/admin/subsidiaries', formSelector: 'form#subsidiary-form' });
 
   // Deactivating the parent is blocked; the localized guard message appears and the
   // parent stays active (no execution) -- the store's no-trace discipline.

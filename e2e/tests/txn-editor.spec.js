@@ -9,6 +9,7 @@
 // Selectors come from transaction_form.tmpl / register.tmpl / accounts.tmpl.
 
 const { test, expect } = require('../fixtures');
+const { saveAndReload } = require('../helpers');
 
 // The htmx settle marker (`e2e-settled` on each htmx:afterSettle target) is installed
 // centrally by the `page` fixture — see fixtures.js for why (hx-* triggers on a
@@ -32,17 +33,13 @@ async function login(page, server) {
 async function createAsset(page, name) {
   await page.goto('/accounts');
   await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+  await expect(page.locator('#af-name-en')).toBeVisible();
   await page.locator('#af-name-en').fill(name);
   const rootSub = page.locator('input[name="sub_1"]');
   if (!(await rootSub.isChecked())) {
     await rootSub.check();
   }
-  const reloaded = page.waitForResponse(
-    (r) => r.url().endsWith('/accounts') && r.request().method() === 'GET',
-  );
-  await page.getByRole('button', { name: /^save$/i }).click();
-  await reloaded;
+  await saveAndReload(page, { reloadPath: '/accounts' });
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 
@@ -109,15 +106,10 @@ test.describe('transaction editor', () => {
     const rootSub = page.locator('input[name="sub_1"]');
     if (!(await rootSub.isChecked())) await rootSub.check();
     await page.locator('#af-func').selectOption('management');
-    // #af-func visible means the expense re-fetch swapped in (old form gone), so the
-    // marker now tracks THIS form; wait for it to settle so the re-rendered Save's
-    // hx-post is wired, then wait for the reload response (not the no-op waitForURL).
-    await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
-    const reloaded = page.waitForResponse(
-      (r) => r.url().endsWith('/accounts') && r.request().method() === 'GET',
-    );
-    await page.getByRole('button', { name: /^save$/i }).click();
-    await reloaded;
+    // #af-func visible means the expense re-fetch swapped in (old form gone), so
+    // saveAndReload's `.e2e-settled` wait now tracks THIS form — it waits for the
+    // re-rendered Save's hx-post to be wired, then for the reload response.
+    await saveAndReload(page, { reloadPath: '/accounts' });
     await expect(page.locator('tr.acct-row', { hasText: 'Editor Rent' })).toBeVisible();
 
     await page.goto('/transactions/new');

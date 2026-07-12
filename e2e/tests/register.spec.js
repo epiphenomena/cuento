@@ -9,6 +9,7 @@
 // Selectors come from register.tmpl / accounts.tmpl.
 
 const { test, expect } = require('../fixtures');
+const { saveAndReload } = require('../helpers');
 
 async function login(page, server) {
   await page.goto('/login');
@@ -36,8 +37,7 @@ test.describe('account register', () => {
     if (!(await recon.isChecked())) {
       await recon.check();
     }
-    await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL('**/accounts');
+    await saveAndReload(page, { reloadPath: '/accounts' });
 
     // Follow the per-row Register link.
     const row = page.locator('tr.acct-row', { hasText: 'Checking E2E' });

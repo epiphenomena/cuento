@@ -14,6 +14,7 @@
 //   - confirm button:   button "Confirm merge"
 
 const { test, expect } = require('../fixtures');
+const { saveAndReload } = require('../helpers');
 
 async function login(page, server) {
   await page.goto('/login');
@@ -32,23 +33,15 @@ async function login(page, server) {
 // two same-type leaves), so asset leaves are equivalent coverage without the race.
 async function createLeaf(page, name) {
   await page.getByRole('button', { name: /new account/i }).click();
-  // Wait for the New-account form swap to SETTLE so htmx has wired the Save button's
-  // hx-post before we click it (see the settle-marker note in fixtures.js).
-  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+  await expect(page.locator('#af-name-en')).toBeVisible();
   await page.locator('#af-name-en').fill(name);
   const rootSub = page.locator('input[name="sub_1"]');
   if (!(await rootSub.isChecked())) {
     await rootSub.check();
   }
-  // Save posts via hx-post; success returns an htmx HX-Redirect that navigates back
-  // to GET /accounts. We're ALREADY on /accounts, so waitForURL('**/accounts') is a
-  // no-op that does NOT wait for the reload -- wait for the reload RESPONSE instead,
-  // which only lands after the write commits, so the new row is in the fresh SSR DOM.
-  const reloaded = page.waitForResponse(
-    (r) => r.url().endsWith('/accounts') && r.request().method() === 'GET',
-  );
-  await page.getByRole('button', { name: /^save$/i }).click();
-  await reloaded;
+  // saveAndReload waits for the form to settle (Save's hx-post wired) and for the
+  // reload response (waitForURL is a no-op when already on /accounts) -- see helpers.js.
+  await saveAndReload(page, { reloadPath: '/accounts' });
   await expect(page.getByText(name, { exact: true })).toBeVisible();
 }
 

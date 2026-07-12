@@ -17,6 +17,7 @@
 // active children is blocked.
 
 const { test, expect } = require('../fixtures');
+const { saveAndReload } = require('../helpers');
 
 test('programs: create child, rename, and blocked deactivate', async ({ page, server }) => {
   // Log in once (admin => TxnWrite, hence manage).
@@ -35,9 +36,7 @@ test('programs: create child, rename, and blocked deactivate', async ({ page, se
   await page.getByRole('button', { name: /new program/i }).click();
   await expect(page.locator('#pf-name')).toBeVisible();
   await page.locator('#pf-name').fill('Outreach E2E'); // parent defaults to root
-  await page.getByRole('button', { name: /^save$/i }).click();
-
-  await page.waitForURL('**/programs');
+  await saveAndReload(page, { reloadPath: '/programs', formSelector: 'form#program-form' });
   await expect(page.getByRole('cell', { name: 'Outreach E2E', exact: true })).toBeVisible();
 
   // --- rename it and the new name shows in the tree ---
@@ -45,23 +44,19 @@ test('programs: create child, rename, and blocked deactivate', async ({ page, se
   await row.getByRole('button', { name: /^edit$/i }).click();
   await expect(page.locator('#pf-name')).toHaveValue('Outreach E2E');
   await page.locator('#pf-name').fill('Renamed Program E2E');
-  await page.getByRole('button', { name: /^save$/i }).click();
-
-  await page.waitForURL('**/programs');
+  await saveAndReload(page, { reloadPath: '/programs', formSelector: 'form#program-form' });
   await expect(page.getByRole('cell', { name: 'Renamed Program E2E', exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'Outreach E2E', exact: true })).toHaveCount(0);
 
   // --- a blocked deactivate (active child) shows the localized guard message ---
   await page.getByRole('button', { name: /new program/i }).click();
   await page.locator('#pf-name').fill('Parent Program E2E');
-  await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/programs');
+  await saveAndReload(page, { reloadPath: '/programs', formSelector: 'form#program-form' });
 
   await page.getByRole('button', { name: /new program/i }).click();
   await page.locator('#pf-name').fill('Kid Program E2E');
   await page.locator('#pf-parent').selectOption({ label: 'Parent Program E2E' });
-  await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/programs');
+  await saveAndReload(page, { reloadPath: '/programs', formSelector: 'form#program-form' });
 
   // Deactivating the parent is blocked; the localized guard message appears and the
   // parent stays active (no execution) -- the store's no-trace discipline (D24).
