@@ -23,6 +23,11 @@ type Toolkit struct {
 	// currency). p15.2's methods read Scope/dates/TargetCurrency from here so a
 	// report need not thread them through every call.
 	Params Params
+
+	// expCache memoizes currency minor-unit exponents for the duration of one report
+	// run (compute.go's conversion path looks them up per cell). Currencies are
+	// static reference data (D1), so a single fetch per code per run is safe.
+	expCache map[string]int
 }
 
 // NewToolkit builds a Toolkit for one report run over st with the resolved params.

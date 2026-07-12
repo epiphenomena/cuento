@@ -53,6 +53,18 @@ type ProgramCell struct {
 	Amount    int64
 }
 
+// IntercompanyAccountIDs returns the ids of every account flagged intercompany
+// (D19), id-ordered. The report toolkit's IntercompanyNet sums these accounts'
+// balances per currency across a consolidated scope to assert they net to zero;
+// a nonzero residual renders as a warning row.
+func (s *Store) IntercompanyAccountIDs(ctx context.Context) ([]int64, error) {
+	ids, err := s.q.IntercompanyAccountIDs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("store: intercompany account ids: %w", err)
+	}
+	return ids, nil
+}
+
 // SubtreeBalancesAsOf returns, per (account, currency), the cumulative signed
 // balance of non-deleted splits whose transaction date <= asof and whose
 // subsidiary is in scopeSub's descendant closure (D18). Balances are cumulative

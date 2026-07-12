@@ -603,6 +603,40 @@ func (q *Queries) InsertAccountVersion(ctx context.Context, arg InsertAccountVer
 	return err
 }
 
+const intercompanyAccountIDs = `-- name: IntercompanyAccountIDs :many
+SELECT id
+FROM accounts
+WHERE intercompany = 1
+ORDER BY id
+`
+
+// Ids of every account flagged intercompany (D19). The report toolkit's
+// IntercompanyNet sums these accounts' balances per currency across a consolidated
+// scope to assert they net to zero (a nonzero residual becomes a warning row).
+// Ordered by id for deterministic iteration.
+func (q *Queries) IntercompanyAccountIDs(ctx context.Context) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, intercompanyAccountIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listForm990Lines = `-- name: ListForm990Lines :many
 SELECT code, part, line, label, account_types, sort
 FROM form990_lines

@@ -254,3 +254,13 @@ ORDER BY tree.path;
 SELECT id, parent_id, form990_code
 FROM accounts
 ORDER BY id;
+
+-- name: IntercompanyAccountIDs :many
+-- Ids of every account flagged intercompany (D19). The report toolkit's
+-- IntercompanyNet sums these accounts' balances per currency across a consolidated
+-- scope to assert they net to zero (a nonzero residual becomes a warning row).
+-- Ordered by id for deterministic iteration.
+SELECT id
+FROM accounts
+WHERE intercompany = 1
+ORDER BY id;
