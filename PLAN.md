@@ -326,18 +326,20 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 
 ## Phase 19 — Budgeting (added 2026-07-12 per user; was a Phase-19 backlog non-goal, now promoted to v1)
 
-Budget lines keyed by **(subsidiary, account [revenue/expense], fund, program)** + amount + timing (one-time date OR a recurring schedule). FULL FUND TRACKING: forecasts, cashflow projection, and actuals-vs-budget all break out by fund (restricted vs unrestricted net assets projected separately). Reports inherit p15.3d drill-down. Budgets follow the append-only versioning / write-funnel discipline (audited, editable with history).
+Budget lines keyed by **(subsidiary, account [revenue/expense], fund, program)** + amount-per-occurrence + a **named schedule** that generates concrete occurrence DATES. FULL FUND TRACKING: forecasts, cashflow projection, and actuals-vs-budget all break out by fund (restricted vs unrestricted net assets projected separately). Reports inherit p15.3d drill-down. Budgets follow the append-only versioning / write-funnel discipline (audited, editable with history).
 
-- [ ] **p19.1 db+store: budget model.**
-  Tests: versioned CRUD (AssertVersioned) for budget + lines; a line carries sub/account/fund/program/amount/currency + schedule; validation (account is R/E, fund/program/sub exist, schedule well-formed); one-time vs recurring.
-  Build: migration `budgets(id, name, fiscal_year?, notes, …)` + `budget_lines(id, budget_id, subsidiary_id, account_id, fund_id NULL=unrestricted, program_id, amount INTEGER minor, currency, schedule_kind CHECK(onetime/recurring), schedule_date, recur_freq CHECK(weekly/monthly/quarterly/annual), recur_start, recur_end)` + versions twins; store CRUD through the funnel.
-- [ ] **p19.2 store+toolkit: expansion, pro-rata, projections.**
-  Tests: recurring line expands to the right occurrences across a range; PRO-RATA to weekly/monthly/annual buckets is calendar-day proportional (a monthly line shown weekly contributes days-overlap/days-in-month × amount); `ActualsVsBudget` over a period per (sub,account,fund,program); `CashflowProjection` starts from CURRENT actual net-asset fund balances and rolls budgeted in/outflows forward to period end, per fund; hand-computed on the fixture.
-  Build: toolkit budget methods over p19.1 + the p15.2 actuals toolkit; deterministic bucketing (week/month/quarter/year); no clock (period is a param).
-- [ ] **p19.3 web: budget management.**
-  Tests: create/edit/delete budget lines (sub/account/fund/program/amount/schedule); perms (manage = TxnWrite or Admin — decide; view feeds reports).
-  Build: budget list + line editor; recurrence picker; fund/program selectors scoped to the sub.
-- [ ] **p19.4 [P] reports: forecast + actuals-vs-budget + cashflow projection** (weekly/monthly/annual buckets, pro-rata; per-fund; actuals vs budgeted variance; cashflow projection of net-asset fund balances start→end; drill-down on the actuals columns) + goldens.
+**Scheduling model (refined 2026-07-12 per user — DISCRETE dated occurrences, NOT pro-rata):** the amount lands in FULL on each occurrence date; reports just bucket occurrences by the report's period (week/month/year) and sum — no pro-rata. Budget horizon is capped at ~1 fiscal year (nobody budgets further out effectively); annual items are a single date. Schedules are **named, reusable, and importable**. Kinds: `onetime`/`annual` (a single date); `monthly` (a chosen day-of-month e.g. 15th, OR an ordinal weekday e.g. "2nd Monday"); `semimonthly` (two chosen days, e.g. 15th + last day, or 15th + 30th); `biweekly` (every 14 days from an anchor — naturally 3-in-a-month, crosses year boundaries); `weekly` (a chosen weekday from an anchor); `custom` (an explicit imported list of dates). **Weekend policy:** only day-of-month kinds can land on Sat/Sun (ordinal-weekday / biweekly / weekly are weekday-anchored by construction), so each schedule carries `weekend_adjust ∈ {actual, prev_business_day, next_business_day}`, default **prev_business_day**. Weekends ONLY in v1 — NO holiday calendar (holidays → Phase 21 backlog).
+
+- [ ] **p19.1 db+store: named schedules + budget model.**
+  Tests: versioned CRUD (AssertVersioned) for schedules, budgets + lines; a schedule generates the RIGHT occurrence dates for each kind over a horizon (day-of-month incl. month-end/short-month clamping; ordinal-weekday; semimonthly; biweekly across a year boundary giving 3-in-a-month; weekly; custom list); weekend adjustment applies only to day-of-month kinds and rolls per policy; a line carries sub/account/fund/program/amount/currency + schedule ref; validation (account is R/E, fund/program/sub exist).
+  Build: migration `budget_schedules(id, name, kind CHECK(onetime/annual/monthly/semimonthly/biweekly/weekly/custom), day_of_month, day_of_month_2, ordinal, weekday, anchor_date, weekend_adjust CHECK(actual/prev_business_day/next_business_day), notes)` + `budget_schedule_dates(schedule_id, occurs_on)` for custom/imported lists; `budgets(id, name, period_start, period_end, notes)` + `budget_lines(id, budget_id, subsidiary_id, account_id, fund_id NULL=unrestricted, program_id, amount INTEGER minor, currency, schedule_id)` + versions twins; a **schedule-expansion** function (pure, deterministic, no clock — horizon is a param) producing the occurrence dates; store CRUD + schedule import through the funnel.
+- [ ] **p19.2 toolkit: occurrences, actuals-vs-budget, projections.**
+  Tests: a line expands (via its schedule) to the right dated occurrences within the budget period; bucketed sums to week/month/quarter/year are just occurrence sums (assert no pro-rata); `ActualsVsBudget` over a period per (sub,account,fund,program) — budgeted = Σ occurrences in bucket, actual = p15.2 `Activity`; `CashflowProjection` starts from CURRENT actual net-asset fund balances and adds budgeted occurrence flows forward to period end, per fund; hand-computed on the fixture.
+  Build: toolkit budget methods over p19.1 + the p15.2 actuals toolkit; deterministic bucketing; no clock (period is a param).
+- [ ] **p19.3 web: schedules + budget management.**
+  Tests: create/edit/delete named schedules (incl. import a custom date list) and budget lines (sub/account/fund/program/amount/schedule); perms (manage = TxnWrite or Admin — decide; view feeds reports).
+  Build: schedule library (kind-specific pickers: day-of-month, ordinal-weekday, semimonthly, biweekly/weekly anchor, custom import; weekend policy) + budget list + line editor; fund/program selectors scoped to the sub.
+- [ ] **p19.4 [P] reports: forecast + actuals-vs-budget + cashflow projection** (weekly/monthly/annual buckets = summed occurrences, no pro-rata; per-fund; actuals vs budgeted variance; cashflow projection of net-asset fund balances start→end; drill-down on the actuals columns) + goldens.
 
 ## Phase 20 — Expense reports (added 2026-07-12 per user)
 
@@ -355,7 +357,7 @@ A submission→review workflow decoupled from book-editing: a low-privilege user
 
 ## Phase 21 — Backlog (explicit non-goals for v1)
 
-Per-subsidiary permissions · per-subsidiary program scoping (Q5) · intercompany elimination entries beyond the D19 collapse · receipt attachments · global audit browser and "books as edited at time T" reports (data already supports both, per D4/D5) · recurring/scheduled *ledger* transactions (distinct from budget recurrence, p19) · board-designated (quasi-restricted) funds · additional UI languages beyond en/es (catalogs make it a file-drop) · API tokens · dashboard/home page · multi-org.
+Per-subsidiary permissions · per-subsidiary program scoping (Q5) · holiday calendar for budget-schedule weekend/holiday adjustment (v1 does weekends only) · intercompany elimination entries beyond the D19 collapse · receipt attachments · global audit browser and "books as edited at time T" reports (data already supports both, per D4/D5) · recurring/scheduled *ledger* transactions (distinct from budget recurrence, p19) · board-designated (quasi-restricted) funds · additional UI languages beyond en/es (catalogs make it a file-drop) · API tokens · dashboard/home page · multi-org.
 
 ---
 
