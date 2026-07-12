@@ -28,6 +28,37 @@ func (q *Queries) GetCurrency(ctx context.Context, code string) (Currency, error
 	return i, err
 }
 
+const insertCurrency = `-- name: InsertCurrency :exec
+INSERT INTO currencies (code, exponent, symbol, name, active)
+VALUES (?, ?, ?, ?, 1)
+ON CONFLICT(code) DO UPDATE SET
+  exponent = excluded.exponent, symbol = excluded.symbol,
+  name = excluded.name, active = 1
+`
+
+type InsertCurrencyParams struct {
+	Code     string
+	Exponent int64
+	Symbol   string
+	Name     string
+}
+
+// Add a currency (p13.2 admin; used by FX in p14). currencies is STATIC reference
+// data (D1), NOT a versioned business table -- so this is a plain reference-data
+// write OUTSIDE the write funnel (no changes row, no *_versions twin), like
+// report_groups/org_settings (rule 2). ON CONFLICT keeps the add idempotent: a
+// re-add of an existing code refreshes its metadata + re-enables it rather than
+// erroring, so a same-worker e2e retry never PK-collides.
+func (q *Queries) InsertCurrency(ctx context.Context, arg InsertCurrencyParams) error {
+	_, err := q.db.ExecContext(ctx, insertCurrency,
+		arg.Code,
+		arg.Exponent,
+		arg.Symbol,
+		arg.Name,
+	)
+	return err
+}
+
 const listCurrencies = `-- name: ListCurrencies :many
 SELECT code, exponent, symbol, name, active
 FROM currencies
@@ -62,4 +93,21 @@ func (q *Queries) ListCurrencies(ctx context.Context) ([]Currency, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const setCurrencyActive = `-- name: SetCurrencyActive :exec
+UPDATE currencies SET active = ? WHERE code = ?
+`
+
+type SetCurrencyActiveParams struct {
+	Active int64
+	Code   string
+}
+
+// Enable/disable a currency (p13.2 admin). A disabled currency is hidden from the
+// subsidiary base-currency picker but its historical rows keep their code. Plain
+// reference-data write, outside the funnel (currencies is not versioned).
+func (q *Queries) SetCurrencyActive(ctx context.Context, arg SetCurrencyActiveParams) error {
+	_, err := q.db.ExecContext(ctx, setCurrencyActive, arg.Active, arg.Code)
+	return err
 }

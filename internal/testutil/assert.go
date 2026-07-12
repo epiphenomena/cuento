@@ -167,6 +167,83 @@ func AssertVersionedFundSub(t *testing.T, db *sql.DB, fundID, subID int64, wantO
 	assertChangeExists(t, db, "AssertVersionedFundSub", changeID)
 }
 
+// AssertVersionedGrant asserts the versioning contract for one composite-key
+// report grant (user_id, group_name). user_report_grants_versions keys entity_id
+// on user_id and carries group_name as both a snapshot column and part of the
+// entity identity (00006). Membership is a set: a grant is op='create', a revoke
+// op='delete'. The latest snapshot for (userID, group) must have op == wantOp and
+// a change_id naming an existing changes row. It mirrors AssertVersionedSub.
+func AssertVersionedGrant(t *testing.T, db *sql.DB, userID int64, group, wantOp string) {
+	t.Helper()
+
+	var (
+		gotOp    string
+		changeID sql.NullInt64
+	)
+	err := db.QueryRow(
+		`SELECT op, change_id
+		   FROM user_report_grants_versions
+		  WHERE entity_id = ? AND group_name = ?
+		  ORDER BY valid_from DESC, id DESC
+		  LIMIT 1`, userID, group,
+	).Scan(&gotOp, &changeID)
+	if err == sql.ErrNoRows {
+		t.Fatalf("AssertVersionedGrant: no user_report_grants_versions row for (user_id=%d, group=%q) (grant mutation was not versioned)", userID, group)
+	}
+	if err != nil {
+		t.Fatalf("AssertVersionedGrant: query user_report_grants_versions: %v", err)
+	}
+	if gotOp != wantOp {
+		t.Errorf("AssertVersionedGrant: latest op for (user_id=%d, group=%q) = %q, want %q", userID, group, gotOp, wantOp)
+	}
+	if !changeID.Valid {
+		t.Fatalf("AssertVersionedGrant: latest row for (user_id=%d, group=%q) has NULL change_id", userID, group)
+	}
+	assertChangeExists(t, db, "AssertVersionedGrant", changeID)
+}
+
+// LatestVersionActor returns the changes.actor_id of the change that produced the
+// latest <table>_versions row for entityID. It lets a test assert that a versioned
+// mutation NAMED a specific acting user (rule 5: changes.actor_id) -- something the
+// AssertVersioned* op/existence helpers deliberately do not check. Test tooling, so
+// it parameterizes the table name (exempt from rule 6, like AssertVersioned).
+func LatestVersionActor(t *testing.T, db *sql.DB, table string, entityID int64) int64 {
+	t.Helper()
+	q := fmt.Sprintf(
+		`SELECT ch.actor_id
+		   FROM %s_versions v
+		   JOIN changes ch ON ch.id = v.change_id
+		  WHERE v.entity_id = ?
+		  ORDER BY v.valid_from DESC, v.id DESC
+		  LIMIT 1`, table,
+	)
+	var actor int64
+	if err := db.QueryRow(q, entityID).Scan(&actor); err != nil {
+		t.Fatalf("LatestVersionActor: query %s_versions actor for entity_id=%d: %v", table, entityID, err)
+	}
+	return actor
+}
+
+// LatestGrantActor returns the changes.actor_id of the change behind the latest
+// user_report_grants_versions row for (userID, group) -- the composite-key analog
+// of LatestVersionActor, since grants key on (entity_id, group_name).
+func LatestGrantActor(t *testing.T, db *sql.DB, userID int64, group string) int64 {
+	t.Helper()
+	var actor int64
+	err := db.QueryRow(
+		`SELECT ch.actor_id
+		   FROM user_report_grants_versions v
+		   JOIN changes ch ON ch.id = v.change_id
+		  WHERE v.entity_id = ? AND v.group_name = ?
+		  ORDER BY v.valid_from DESC, v.id DESC
+		  LIMIT 1`, userID, group,
+	).Scan(&actor)
+	if err != nil {
+		t.Fatalf("LatestGrantActor: query grant actor for (user_id=%d, group=%q): %v", userID, group, err)
+	}
+	return actor
+}
+
 // assertChangeExists verifies a version row's change_id references a real
 // changes row — the shared tail of every AssertVersioned* helper.
 func assertChangeExists(t *testing.T, db *sql.DB, who string, changeID sql.NullInt64) {

@@ -1,0 +1,82 @@
+{{/*
+  p13.2 admin currencies (GET /admin/currencies, Admin). A table of currencies with
+  an inline add form and a per-row enable/disable toggle. Currencies are reference
+  data (not versioned); the add is an idempotent upsert. A bad add re-renders THIS
+  page at 422 with the add-form field errors. .Page is a currenciesPageModel.
+  Currency names/symbols are stored data (rendered verbatim); every other string via
+  {{t}} (rule 9); no inline script (rule 12).
+*/ -}}
+{{define "admin_currencies.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "admin.currencies.title"))}}
+  {{- with .Page}}
+  <h1>{{t "admin.currencies.title"}}</h1>
+  <p class="hint">{{t "admin.currencies.intro"}}</p>
+
+  <form method="post" action="/admin/currencies" class="currency-add-form">
+    <h2>{{t "admin.currencies.add"}}</h2>
+    {{- with .Form}}
+    <div class="field">
+      <label for="cc-code">{{t "admin.currencies.col.code"}}</label>
+      <input id="cc-code" name="code" type="text" maxlength="3" value="{{.Code}}" autocomplete="off"
+        {{- if .Errors.ErrorKey "code"}} aria-invalid="true" aria-describedby="cc-code-err"{{end}}
+        {{- if eq .Errors.FirstInvalid "code"}} autofocus{{end}}>
+      {{with .Errors.ErrorKey "code"}}<p id="cc-code-err" class="field-error" role="alert">{{t .}}</p>{{end}}
+    </div>
+    <div class="field">
+      <label for="cc-name">{{t "admin.currencies.col.name"}}</label>
+      <input id="cc-name" name="name" type="text" value="{{.Name}}" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="cc-symbol">{{t "admin.currencies.col.symbol"}}</label>
+      <input id="cc-symbol" name="symbol" type="text" value="{{.Symbol}}" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="cc-exponent">{{t "admin.currencies.col.exponent"}}</label>
+      <input id="cc-exponent" name="exponent" type="text" inputmode="numeric" value="{{.Exponent}}"
+        {{- if .Errors.ErrorKey "exponent"}} aria-invalid="true" aria-describedby="cc-exp-err"{{end}}
+        {{- if eq .Errors.FirstInvalid "exponent"}} autofocus{{end}}>
+      {{with .Errors.ErrorKey "exponent"}}<p id="cc-exp-err" class="field-error" role="alert">{{t .}}</p>{{end}}
+      <p class="hint">{{t "admin.currencies.exponent_hint"}}</p>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{{t "admin.currencies.add"}}</button>
+    </div>
+    {{- end}}
+  </form>
+
+  <table class="data-table currencies-table">
+    <thead>
+      <tr>
+        <th>{{t "admin.currencies.col.code"}}</th>
+        <th>{{t "admin.currencies.col.name"}}</th>
+        <th>{{t "admin.currencies.col.symbol"}}</th>
+        <th>{{t "admin.currencies.col.exponent"}}</th>
+        <th>{{t "admin.currencies.col.status"}}</th>
+        <th>{{t "admin.currencies.col.actions"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="currency-row{{if not .Active}} currency-inactive{{end}}" data-code="{{.Code}}">
+        <td class="currency-code">{{.Code}}</td>
+        <td>{{.Name}}</td>
+        <td>{{.Symbol}}</td>
+        <td>{{.Exponent}}</td>
+        <td class="currency-status">{{if .Active}}{{t "admin.currencies.active"}}{{else}}{{t "admin.currencies.inactive"}}{{end}}</td>
+        <td class="currency-actions">
+          <form method="post" action="/admin/currencies/{{.Code}}/toggle" class="inline currency-toggle-form">
+            <input type="hidden" name="active" value="{{if .Active}}0{{else}}1{{end}}">
+            <button type="submit" class="btn btn-ghost">
+              {{if .Active}}{{t "admin.currencies.disable"}}{{else}}{{t "admin.currencies.enable"}}{{end}}
+            </button>
+          </form>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="6">{{t "admin.currencies.empty"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

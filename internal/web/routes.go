@@ -142,7 +142,28 @@ func (s *server) routes() []Route {
 		// does not" -- DoD). The real /admin pages (users, subsidiaries, ops) land
 		// in p11.3/p13.2/p18.3; this stub is the section index they hang off. See
 		// DECISIONS p10.2.
-		{http.MethodGet, "/admin", Admin, http.HandlerFunc(s.adminStub)},
+		{http.MethodGet, "/admin", Admin, http.HandlerFunc(s.adminIndex)},
+		// p13.2 admin: users, per-user permissions, and currencies (Appendix B/F:
+		// /admin/** = Admin). The users list + inline create form, disable/reset
+		// actions, the per-user perm detail (txn_perm select + report-group grant
+		// checkboxes -- each a VERSIONED change naming the acting admin), and the
+		// currencies list + add + enable/disable toggle. The literal ".../new" is more
+		// specific than ".../{id}", so the Go 1.22+ mux routes them precisely; likewise
+		// the ".../disable", ".../reset-password", ".../txn-perm", ".../grants" segments
+		// vs the ".../{id}" GET. Org settings (/admin/org) is already built (p11.4); the
+		// admin index links it. The permission-matrix test picks these up automatically
+		// (rule 8).
+		{http.MethodGet, "/admin/users", Admin, http.HandlerFunc(s.usersPage)},
+		{http.MethodGet, "/admin/users/new", Admin, http.HandlerFunc(s.userNewForm)},
+		{http.MethodPost, "/admin/users", Admin, http.HandlerFunc(s.userCreate)},
+		{http.MethodGet, "/admin/users/{id}", Admin, http.HandlerFunc(s.userDetailPage)},
+		{http.MethodPost, "/admin/users/{id}/disable", Admin, http.HandlerFunc(s.userDisable)},
+		{http.MethodPost, "/admin/users/{id}/reset-password", Admin, http.HandlerFunc(s.userResetPassword)},
+		{http.MethodPost, "/admin/users/{id}/txn-perm", Admin, http.HandlerFunc(s.userSetTxnPerm)},
+		{http.MethodPost, "/admin/users/{id}/grants", Admin, http.HandlerFunc(s.userSetGrants)},
+		{http.MethodGet, "/admin/currencies", Admin, http.HandlerFunc(s.currenciesPage)},
+		{http.MethodPost, "/admin/currencies", Admin, http.HandlerFunc(s.currencyAdd)},
+		{http.MethodPost, "/admin/currencies/{code}/toggle", Admin, http.HandlerFunc(s.currencyToggle)},
 		// p11.1 chart of accounts (Appendix B/F). GET is TxnRead (the tree table +
 		// balances + filters + the inline form fetches); the POST mutations are
 		// TxnWrite. The nav.accounts entry (shell.go) lights up now that GET

@@ -24,6 +24,22 @@ func (q *Queries) CountHumanUsers(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countOtherEnabledAdmins = `-- name: CountOtherEnabledAdmins :one
+SELECT COUNT(*) FROM users
+WHERE id <> ? AND is_admin = 1 AND disabled_at IS NULL
+`
+
+// Last-admin guard (p13.2). Counts ENABLED admins OTHER than the given user.
+// DisableUser rejects disabling an admin when this is 0 -- the very last enabled
+// admin cannot lock the whole org out of the admin surface. Distinct from
+// CountHumanUsers (which counts non-system users regardless of admin/enabled).
+func (q *Queries) CountOtherEnabledAdmins(ctx context.Context, id int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countOtherEnabledAdmins, id)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUsers = `-- name: CountUsers :one
 SELECT COUNT(*) FROM users
 `
@@ -61,6 +77,38 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (GetUserRow, error) {
 		&i.Username,
 		&i.DisplayName,
 		&i.CreatedAt,
+		&i.DisabledAt,
+	)
+	return i, err
+}
+
+const getUserRow = `-- name: GetUserRow :one
+SELECT id, username, display_name, is_admin, txn_perm, disabled_at
+FROM users
+WHERE id = ?
+`
+
+type GetUserRowRow struct {
+	ID          int64
+	Username    string
+	DisplayName string
+	IsAdmin     int64
+	TxnPerm     string
+	DisabledAt  sql.NullString
+}
+
+// Full live user row for the admin detail page (p13.2): the columns the per-user
+// perm/grant editor needs. Distinct from UserByID (session projection) so this
+// step touches no existing query.
+func (q *Queries) GetUserRow(ctx context.Context, id int64) (GetUserRowRow, error) {
+	row := q.db.QueryRowContext(ctx, getUserRow, id)
+	var i GetUserRowRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.DisplayName,
+		&i.IsAdmin,
+		&i.TxnPerm,
 		&i.DisabledAt,
 	)
 	return i, err
@@ -134,6 +182,55 @@ func (q *Queries) InsertUserVersion(ctx context.Context, arg InsertUserVersionPa
 	return err
 }
 
+const listUsers = `-- name: ListUsers :many
+SELECT id, username, display_name, is_admin, txn_perm, disabled_at
+FROM users
+WHERE id <> 1
+ORDER BY username
+`
+
+type ListUsersRow struct {
+	ID          int64
+	Username    string
+	DisplayName string
+	IsAdmin     int64
+	TxnPerm     string
+	DisabledAt  sql.NullString
+}
+
+// Admin user list (p13.2 /admin/users). Excludes the seeded system user (id 1):
+// it is passwordless machinery, not an operator, and must never be managed here
+// (disable/reset/perm all reject it). ORDER BY username for a stable listing.
+func (q *Queries) ListUsers(ctx context.Context) ([]ListUsersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUsers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUsersRow
+	for rows.Next() {
+		var i ListUsersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.DisplayName,
+			&i.IsAdmin,
+			&i.TxnPerm,
+			&i.DisabledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setUserDisabled = `-- name: SetUserDisabled :exec
 UPDATE users SET disabled_at = ? WHERE id = ?
 `
@@ -184,6 +281,24 @@ type SetUserThemeParams struct {
 // user.
 func (q *Queries) SetUserTheme(ctx context.Context, arg SetUserThemeParams) error {
 	_, err := q.db.ExecContext(ctx, setUserTheme, arg.Theme, arg.ID)
+	return err
+}
+
+const setUserTxnPerm = `-- name: SetUserTxnPerm :exec
+UPDATE users SET txn_perm = ? WHERE id = ?
+`
+
+type SetUserTxnPermParams struct {
+	TxnPerm string
+	ID      int64
+}
+
+// Live update of a user's transaction permission (p13.2 admin). Versioned as
+// op='update'; txn_perm IS part of the users_versions snapshot, so the change
+// names the acting admin in the audit trail. The store validates the value
+// against {none,read,write} first; the column CHECK is only a backstop.
+func (q *Queries) SetUserTxnPerm(ctx context.Context, arg SetUserTxnPermParams) error {
+	_, err := q.db.ExecContext(ctx, setUserTxnPerm, arg.TxnPerm, arg.ID)
 	return err
 }
 

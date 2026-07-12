@@ -1,0 +1,132 @@
+{{/*
+  p13.2 admin users list (GET /admin/users, Admin). A table of manageable operators
+  (the system user is excluded by the store) showing username, admin flag, txn_perm,
+  enabled/disabled state, and report grants, with per-user actions: a link to the
+  per-user perm detail page, a reset-password inline form, and a disable form. An
+  inline htmx create form (the "user-create-form" partial) hangs off #user-create-form.
+
+  A blocked guard (disable the last admin / system user, or a blank reset password)
+  re-renders THIS page at 422 with .ErrorKey as a page-level alert (no execution),
+  mirroring the subsidiaries deactivate path. .Page is a usersPageModel. Usernames /
+  display names are stored data (rendered verbatim); every other string via {{t}}
+  (rule 9); no inline script (rule 12).
+*/ -}}
+{{define "admin_users.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "admin.users.title"))}}
+  {{- with .Page}}
+  <h1>{{t "admin.users.title"}}</h1>
+  <p class="hint">{{t "admin.users.intro"}}</p>
+
+  {{if .ErrorKey}}
+  <p class="field-error" role="alert">{{t .ErrorKey}}</p>
+  {{end}}
+
+  <div id="user-create-form" class="user-create-region">
+    <button type="button" class="btn btn-primary"
+            hx-get="/admin/users/new" hx-target="#user-create-form" hx-swap="outerHTML">
+      {{t "admin.users.new"}}
+    </button>
+  </div>
+
+  <table class="data-table admin-users-table">
+    <thead>
+      <tr>
+        <th>{{t "admin.users.col.username"}}</th>
+        <th>{{t "admin.users.col.admin"}}</th>
+        <th>{{t "admin.users.col.txn_perm"}}</th>
+        <th>{{t "admin.users.col.grants"}}</th>
+        <th>{{t "admin.users.col.status"}}</th>
+        <th>{{t "admin.users.col.actions"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="user-row{{if .Disabled}} user-disabled{{end}}" data-username="{{.Username}}">
+        <td class="user-name">
+          <a href="/admin/users/{{.ID}}">{{.Username}}</a>
+          {{if .DisplayName}}<span class="user-display">{{.DisplayName}}</span>{{end}}
+        </td>
+        <td>{{if .IsAdmin}}{{t "admin.users.is_admin"}}{{else}}&mdash;{{end}}</td>
+        <td class="user-perm">{{t (printf "admin.users.perm.%s" .TxnPerm)}}</td>
+        <td class="user-grants">
+          {{- range $i, $g := .Grants}}{{if $i}}, {{end}}{{$g}}{{else}}&mdash;{{end -}}
+        </td>
+        <td>{{if .Disabled}}<span class="badge">{{t "admin.users.disabled"}}</span>{{else}}{{t "admin.users.enabled"}}{{end}}</td>
+        <td class="user-actions">
+          <a class="btn btn-ghost" href="/admin/users/{{.ID}}">{{t "admin.users.permissions"}}</a>
+          {{if not .Disabled}}
+          <form method="post" action="/admin/users/{{.ID}}/reset-password" class="inline reset-pw-form">
+            <input name="password" type="password" autocomplete="new-password"
+                   placeholder="{{t "admin.users.new_password"}}" aria-label="{{t "admin.users.new_password"}}">
+            <button type="submit" class="btn btn-ghost">{{t "admin.users.reset_password"}}</button>
+          </form>
+          <form method="post" action="/admin/users/{{.ID}}/disable" class="inline disable-form">
+            <button type="submit" class="btn btn-ghost">{{t "admin.users.disable"}}</button>
+          </form>
+          {{end}}
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="6">{{t "admin.users.empty"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}
+
+{{/*
+  The inline create form partial ("user-create-form"). SINGLE SOURCE of the create
+  region: the list renders the "New user" trigger inside #user-create-form; GET
+  /admin/users/new swaps THIS partial in, and a failed POST re-renders it at 422 --
+  so input ids stay stable across the swap (anti-jank). The dot is a userCreateForm.
+  The password is never echoed back (a re-render keeps the other fields, not the
+  secret). Field errors via .Errors (formErrors); autofocus on .Errors.FirstInvalid.
+*/ -}}
+{{define "user-create-form" -}}
+<form id="user-create-form" class="user-create-form"
+      hx-post="/admin/users" hx-target="#user-create-form" hx-swap="outerHTML">
+  <h2>{{t "admin.users.form.title"}}</h2>
+
+  <div class="field">
+    <label for="uc-username">{{t "admin.users.form.username"}}</label>
+    <input id="uc-username" name="username" type="text" value="{{.Username}}" autocomplete="off"
+      {{- if .Errors.ErrorKey "username"}} aria-invalid="true" aria-describedby="uc-username-err"{{end}}
+      {{- if eq .Errors.FirstInvalid "username"}} autofocus{{end}}>
+    {{with .Errors.ErrorKey "username"}}<p id="uc-username-err" class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+
+  <div class="field">
+    <label for="uc-display">{{t "admin.users.form.display_name"}}</label>
+    <input id="uc-display" name="display_name" type="text" value="{{.DisplayName}}" autocomplete="off">
+  </div>
+
+  <div class="field">
+    <label for="uc-password">{{t "admin.users.form.password"}}</label>
+    <input id="uc-password" name="password" type="password" autocomplete="new-password"
+      {{- if .Errors.ErrorKey "password"}} aria-invalid="true" aria-describedby="uc-password-err"{{end}}
+      {{- if eq .Errors.FirstInvalid "password"}} autofocus{{end}}>
+    {{with .Errors.ErrorKey "password"}}<p id="uc-password-err" class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+
+  <div class="field">
+    <label for="uc-perm">{{t "admin.users.form.txn_perm"}}</label>
+    <select id="uc-perm" name="txn_perm"
+      {{- if eq .Errors.FirstInvalid "txn_perm"}} autofocus{{end}}>
+      {{- range .TxnPerms}}
+      <option value="{{.Value}}"{{if eq .Value $.TxnPerm}} selected{{end}}>{{t .LabelKey}}</option>
+      {{- end}}
+    </select>
+    {{with .Errors.ErrorKey "txn_perm"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+
+  <div class="field field-check">
+    <label><input type="checkbox" name="is_admin" value="1"{{if .IsAdmin}} checked{{end}}> {{t "admin.users.form.is_admin"}}</label>
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">{{t "admin.users.form.create"}}</button>
+    <a class="btn btn-ghost" href="/admin/users">{{t "common.cancel"}}</a>
+  </div>
+</form>
+{{- end}}

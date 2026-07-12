@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"cuento/internal/db/sqlc"
@@ -21,6 +22,11 @@ import (
 // Full user management (passwd/disable/admin toggles, report-group grants) is
 // deferred to p06.4/p13.2; grant version-append writers land there. This step
 // intentionally builds no grant surface.
+
+// systemUserID is the seeded machine actor (id 1, migration 00002). It is never
+// an operator: the admin surface refuses to disable, perm-change, grant, or reset
+// it. Named here so the guard reads intent, not a magic number.
+const systemUserID int64 = 1
 
 // CreateUserInput is the desired state of a NEW user. PasswordHash is optional
 // (nil = a passwordless user, like the system user). TxnPerm defaults to "none"
@@ -57,6 +63,9 @@ func (s *Store) CreateUser(ctx context.Context, in CreateUserInput) (int64, erro
 				TxnPerm:      txnPerm,
 			})
 			if err != nil {
+				if isUniqueViolation(err) {
+					return ErrUsernameTaken
+				}
 				return fmt.Errorf("insert user: %w", err)
 			}
 			newID = id
@@ -64,9 +73,31 @@ func (s *Store) CreateUser(ctx context.Context, in CreateUserInput) (int64, erro
 			return insertUserVersion(ctx, q, changeID, "create", id)
 		})
 	if err != nil {
+		if errors.Is(err, ErrUsernameTaken) {
+			return 0, ErrUsernameTaken
+		}
 		return 0, fmt.Errorf("create user: %w", err)
 	}
 	return newID, nil
+}
+
+// ErrUsernameTaken is returned by CreateUser when the username collides with an
+// existing user (the users.username UNIQUE constraint). The web layer maps it to a
+// username field error (a 422), rather than a 500 -- it is a routine user mistake,
+// not a server fault.
+var ErrUsernameTaken = errors.New("store: username already taken")
+
+// ValidTxnPermPublic reports whether p is one of none/read/write. Exported so the
+// web create form can reject a crafted value before calling CreateUser (whose
+// TxnPerm defaults to "none" on empty and relies on the column CHECK otherwise).
+func ValidTxnPermPublic(p string) bool { return validTxnPerm(p) }
+
+// isUniqueViolation reports whether err is a SQLite UNIQUE-constraint failure. The
+// modernc.org/sqlite driver surfaces it in the error text ("UNIQUE constraint
+// failed: ..."); matching the text keeps the store driver-agnostic without pulling
+// the driver's error type into this package.
+func isUniqueViolation(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
 // ErrUserNotFound is returned by the username-keyed operations (SetUserPassword
@@ -96,13 +127,51 @@ func (s *Store) SetUserPassword(ctx context.Context, userID int64, passwordHash 
 	return nil
 }
 
+// ErrSystemUser is returned when an admin action targets the seeded system user
+// (id 1): it is passwordless machinery, never an operator, so it cannot be
+// disabled, perm-changed, granted, or password-reset. The web layer maps it to a
+// page-level 422 guard.
+var ErrSystemUser = errors.New("store: cannot manage the system user")
+
+// ErrLastAdmin is returned by DisableUser when disabling the target would leave
+// the org with no enabled admin (the target is the last enabled admin). The web
+// layer maps it to a page-level 422 guard so the admin surface is never locked
+// out. This is checked against CountOtherEnabledAdmins, NOT CountHumanUsers
+// (which counts non-system users regardless of admin/enabled state).
+var ErrLastAdmin = errors.New("store: cannot disable the last admin")
+
 // DisableUser marks a user disabled (disabled_at = now) on the live row and
 // appends an op='update' users_versions row under ONE change (p06.4 `user
 // disable`). A disabled user cannot log in (the login handler enforces this).
 // Unlike password_hash, disabled_at IS part of the snapshot, so the audit trail
 // records who was disabled and when.
+//
+// Two guards protect the admin surface (p13.2): the system user (id 1) can never
+// be disabled (ErrSystemUser), and an admin cannot be disabled when they are the
+// last ENABLED admin (ErrLastAdmin) -- else no one could reach /admin/**. Both
+// are checked BEFORE the write so a blocked disable leaves no trace. A non-admin
+// user is never subject to the last-admin guard.
 func (s *Store) DisableUser(ctx context.Context, userID int64) error {
-	_, err := s.write(ctx, "user.disable", "",
+	if userID == systemUserID {
+		return ErrSystemUser
+	}
+	row, err := s.q.GetUserRow(ctx, userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		return fmt.Errorf("disable user (id %d): load: %w", userID, err)
+	}
+	if row.IsAdmin != 0 {
+		others, err := s.q.CountOtherEnabledAdmins(ctx, userID)
+		if err != nil {
+			return fmt.Errorf("disable user (id %d): count admins: %w", userID, err)
+		}
+		if others == 0 {
+			return ErrLastAdmin
+		}
+	}
+	_, err = s.write(ctx, "user.disable", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			if err := q.SetUserDisabled(ctx, sqlc.SetUserDisabledParams{
 				DisabledAt: sql.NullString{String: s.now().Format(time.RFC3339Nano), Valid: true},
@@ -116,6 +185,93 @@ func (s *Store) DisableUser(ctx context.Context, userID int64) error {
 		return fmt.Errorf("disable user (id %d): %w", userID, err)
 	}
 	return nil
+}
+
+// ErrInvalidTxnPerm is returned by SetUserTxnPerm when the requested value is not
+// one of none/read/write. The migration's CHECK is only a backstop; the store is
+// the guard (mirroring ErrInvalidSetting / ErrInvalidTheme). The web layer maps it
+// to a 422 form error (only reachable by a crafted request, the form is a fixed
+// <select>).
+var ErrInvalidTxnPerm = errors.New("store: invalid txn_perm value")
+
+// validTxnPerm mirrors the migration 00006 CHECK (none/read/write) so the store
+// rejects an unknown value before it reaches the db.
+func validTxnPerm(p string) bool { return p == "none" || p == "read" || p == "write" }
+
+// SetUserTxnPerm updates a user's transaction permission on the live row and
+// appends an op='update' users_versions row under ONE change (p13.2 admin), so the
+// audit trail names the acting admin (changes.actor_id) who changed the perm.
+// txn_perm IS part of the users_versions snapshot. The value is validated against
+// {none,read,write} first (ErrInvalidTxnPerm); the system user (id 1) is refused
+// (ErrSystemUser) -- its perm is irrelevant machinery and must not be audited as an
+// operator change.
+func (s *Store) SetUserTxnPerm(ctx context.Context, userID int64, perm string) error {
+	if userID == systemUserID {
+		return ErrSystemUser
+	}
+	if !validTxnPerm(perm) {
+		return ErrInvalidTxnPerm
+	}
+	_, err := s.write(ctx, "user.txn_perm", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			if err := q.SetUserTxnPerm(ctx, sqlc.SetUserTxnPermParams{TxnPerm: perm, ID: userID}); err != nil {
+				return fmt.Errorf("set txn_perm: %w", err)
+			}
+			return insertUserVersion(ctx, q, changeID, "update", userID)
+		})
+	if err != nil {
+		return fmt.Errorf("set user txn_perm (id %d): %w", userID, err)
+	}
+	return nil
+}
+
+// AdminUser is one row of the admin user list (p13.2 /admin/users): the fields the
+// list and per-user editor read. Excludes the system user by construction (the
+// ListUsers query filters id <> 1). A read projection, not a live entity.
+type AdminUser struct {
+	ID          int64
+	Username    string
+	DisplayName string
+	IsAdmin     bool
+	TxnPerm     string
+	Disabled    bool
+}
+
+// ListUsers returns the manageable operators (every user except the seeded system
+// user), ordered by username. A read (rule 2).
+func (s *Store) ListUsers(ctx context.Context) ([]AdminUser, error) {
+	rows, err := s.q.ListUsers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("store: list users: %w", err)
+	}
+	out := make([]AdminUser, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, AdminUser{
+			ID: r.ID, Username: r.Username, DisplayName: r.DisplayName,
+			IsAdmin: r.IsAdmin != 0, TxnPerm: r.TxnPerm, Disabled: r.DisabledAt.Valid,
+		})
+	}
+	return out, nil
+}
+
+// AdminUserByID returns one manageable user for the per-user admin detail page
+// (p13.2). The system user (id 1) is refused (ErrSystemUser) -- it is not an
+// operator; a missing id returns ErrUserNotFound. A read.
+func (s *Store) AdminUserByID(ctx context.Context, userID int64) (AdminUser, error) {
+	if userID == systemUserID {
+		return AdminUser{}, ErrSystemUser
+	}
+	r, err := s.q.GetUserRow(ctx, userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return AdminUser{}, ErrUserNotFound
+		}
+		return AdminUser{}, fmt.Errorf("store: get user %d: %w", userID, err)
+	}
+	return AdminUser{
+		ID: r.ID, Username: r.Username, DisplayName: r.DisplayName,
+		IsAdmin: r.IsAdmin != 0, TxnPerm: r.TxnPerm, Disabled: r.DisabledAt.Valid,
+	}, nil
 }
 
 // UserIDByUsername resolves a username to its id for the CLI's passwd/disable

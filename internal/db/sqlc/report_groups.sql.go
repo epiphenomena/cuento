@@ -9,6 +9,122 @@ import (
 	"context"
 )
 
+const deleteReportGrant = `-- name: DeleteReportGrant :exec
+DELETE FROM user_report_grants
+WHERE user_id = ? AND group_name = ?
+`
+
+type DeleteReportGrantParams struct {
+	UserID    int64
+	GroupName string
+}
+
+// Remove one grant. For op=delete the version row is captured BEFORE this runs
+// (the live row must still exist to snapshot) -- the removal-op ordering the
+// account-subsidiaries store path documents.
+func (q *Queries) DeleteReportGrant(ctx context.Context, arg DeleteReportGrantParams) error {
+	_, err := q.db.ExecContext(ctx, deleteReportGrant, arg.UserID, arg.GroupName)
+	return err
+}
+
+const hasReportGrant = `-- name: HasReportGrant :one
+SELECT COUNT(*) FROM user_report_grants
+WHERE user_id = ? AND group_name = ?
+`
+
+type HasReportGrantParams struct {
+	UserID    int64
+	GroupName string
+}
+
+// 1 if the user already holds the grant. Grant management guards with this first
+// so a re-grant is a no-op with no duplicate PK and no spurious version row --
+// mirroring HasAccountSubsidiary (the composite-membership pattern).
+func (q *Queries) HasReportGrant(ctx context.Context, arg HasReportGrantParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasReportGrant, arg.UserID, arg.GroupName)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const insertReportGrant = `-- name: InsertReportGrant :exec
+INSERT INTO user_report_grants (user_id, group_name)
+VALUES (?, ?)
+`
+
+type InsertReportGrantParams struct {
+	UserID    int64
+	GroupName string
+}
+
+// Add one (user_id, group_name) grant. Callers guard with HasReportGrant first
+// (membership is a set; the PK forbids duplicates). The version append that
+// follows (op='create') snapshots this row under the acting admin's change.
+func (q *Queries) InsertReportGrant(ctx context.Context, arg InsertReportGrantParams) error {
+	_, err := q.db.ExecContext(ctx, insertReportGrant, arg.UserID, arg.GroupName)
+	return err
+}
+
+const insertReportGrantVersion = `-- name: InsertReportGrantVersion :exec
+INSERT INTO user_report_grants_versions
+  (entity_id, change_id, valid_from, op, group_name)
+SELECT g.user_id, c.id, c.at, ?, g.group_name
+FROM user_report_grants g, changes c
+WHERE c.id = ? AND g.user_id = ? AND g.group_name = ?
+`
+
+type InsertReportGrantVersionParams struct {
+	Op        string
+	ID        int64
+	UserID    int64
+	GroupName string
+}
+
+// Snapshot-from-live version append for a COMPOSITE (user_id, group_name) grant
+// (00006 twin: entity_id = user_id, snapshot group_name). For op='create' this
+// runs AFTER the live insert; for op='delete' BEFORE the live delete (the row
+// must still exist to snapshot). Params (positional): op, change_id, user_id,
+// group_name -> generated fields Op, ID, UserID, GroupName. Mirrors
+// InsertAccountSubsidiaryVersion. ASCII only (p04.2 sqlc quirk).
+func (q *Queries) InsertReportGrantVersion(ctx context.Context, arg InsertReportGrantVersionParams) error {
+	_, err := q.db.ExecContext(ctx, insertReportGrantVersion,
+		arg.Op,
+		arg.ID,
+		arg.UserID,
+		arg.GroupName,
+	)
+	return err
+}
+
+const listReportGroups = `-- name: ListReportGroups :many
+SELECT name, sort FROM report_groups ORDER BY sort, name
+`
+
+// All code-declared report groups, in their declared sort order (p13.2): the set
+// of grant checkboxes the admin per-user page offers. A read (reference data).
+func (q *Queries) ListReportGroups(ctx context.Context) ([]ReportGroup, error) {
+	rows, err := q.db.QueryContext(ctx, listReportGroups)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReportGroup
+	for rows.Next() {
+		var i ReportGroup
+		if err := rows.Scan(&i.Name, &i.Sort); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reportGrantsForUser = `-- name: ReportGrantsForUser :many
 SELECT group_name
 FROM user_report_grants

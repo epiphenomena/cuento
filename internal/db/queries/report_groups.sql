@@ -19,3 +19,42 @@ SELECT group_name
 FROM user_report_grants
 WHERE user_id = ?
 ORDER BY group_name;
+
+-- name: ListReportGroups :many
+-- All code-declared report groups, in their declared sort order (p13.2): the set
+-- of grant checkboxes the admin per-user page offers. A read (reference data).
+SELECT name, sort FROM report_groups ORDER BY sort, name;
+
+-- name: HasReportGrant :one
+-- 1 if the user already holds the grant. Grant management guards with this first
+-- so a re-grant is a no-op with no duplicate PK and no spurious version row --
+-- mirroring HasAccountSubsidiary (the composite-membership pattern).
+SELECT COUNT(*) FROM user_report_grants
+WHERE user_id = ? AND group_name = ?;
+
+-- name: InsertReportGrant :exec
+-- Add one (user_id, group_name) grant. Callers guard with HasReportGrant first
+-- (membership is a set; the PK forbids duplicates). The version append that
+-- follows (op='create') snapshots this row under the acting admin's change.
+INSERT INTO user_report_grants (user_id, group_name)
+VALUES (?, ?);
+
+-- name: DeleteReportGrant :exec
+-- Remove one grant. For op=delete the version row is captured BEFORE this runs
+-- (the live row must still exist to snapshot) -- the removal-op ordering the
+-- account-subsidiaries store path documents.
+DELETE FROM user_report_grants
+WHERE user_id = ? AND group_name = ?;
+
+-- name: InsertReportGrantVersion :exec
+-- Snapshot-from-live version append for a COMPOSITE (user_id, group_name) grant
+-- (00006 twin: entity_id = user_id, snapshot group_name). For op='create' this
+-- runs AFTER the live insert; for op='delete' BEFORE the live delete (the row
+-- must still exist to snapshot). Params (positional): op, change_id, user_id,
+-- group_name -> generated fields Op, ID, UserID, GroupName. Mirrors
+-- InsertAccountSubsidiaryVersion. ASCII only (p04.2 sqlc quirk).
+INSERT INTO user_report_grants_versions
+  (entity_id, change_id, valid_from, op, group_name)
+SELECT g.user_id, c.id, c.at, ?, g.group_name
+FROM user_report_grants g, changes c
+WHERE c.id = ? AND g.user_id = ? AND g.group_name = ?;

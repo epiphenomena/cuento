@@ -173,6 +173,130 @@ other = "That value is not allowed. Please choose one of the offered options."
 [admin.coming_soon]
 other = "Admin tools arrive in a later step."
 
+# Admin index (p13.2): the section hub linking every admin area.
+[admin.intro]
+other = "Manage operators, subsidiaries, currencies, and organization settings."
+
+# Admin: users management (p13.2). The system user is not shown or managed.
+[admin.users.title]
+other = "Users"
+[admin.users.intro]
+other = "Operators who can sign in. Disable an account to revoke access; you cannot disable the last admin."
+[admin.users.new]
+other = "New user"
+[admin.users.empty]
+other = "No users yet."
+[admin.users.is_admin]
+other = "Admin"
+[admin.users.enabled]
+other = "Enabled"
+[admin.users.disabled]
+other = "Disabled"
+[admin.users.permissions]
+other = "Permissions"
+[admin.users.disable]
+other = "Disable"
+[admin.users.reset_password]
+other = "Reset password"
+[admin.users.new_password]
+other = "New password"
+[admin.users.saved]
+other = "Saved."
+[admin.users.admin_note]
+other = "This user is an admin and has every permission."
+[admin.users.col.username]
+other = "User"
+[admin.users.col.admin]
+other = "Admin"
+[admin.users.col.txn_perm]
+other = "Transactions"
+[admin.users.col.grants]
+other = "Report groups"
+[admin.users.col.status]
+other = "Status"
+[admin.users.col.actions]
+other = "Actions"
+[admin.users.perm.none]
+other = "No access"
+[admin.users.perm.read]
+other = "Read only"
+[admin.users.perm.write]
+other = "Read and write"
+[admin.users.txn_perm_title]
+other = "Transaction permission"
+[admin.users.save_perm]
+other = "Save permission"
+[admin.users.grants_title]
+other = "Report group access"
+[admin.users.grants_intro]
+other = "Grant read access to report groups. Admins already see every report."
+[admin.users.no_groups]
+other = "No report groups are defined yet."
+[admin.users.save_grants]
+other = "Save report access"
+[admin.users.form.title]
+other = "New user"
+[admin.users.form.username]
+other = "Username"
+[admin.users.form.display_name]
+other = "Display name"
+[admin.users.form.password]
+other = "Password"
+[admin.users.form.txn_perm]
+other = "Transaction permission"
+[admin.users.form.is_admin]
+other = "Administrator"
+[admin.users.form.create]
+other = "Create user"
+[admin.users.error.username_required]
+other = "Enter a username."
+[admin.users.error.username_taken]
+other = "That username is already taken."
+[admin.users.error.password_required]
+other = "Enter a password."
+[admin.users.error.bad_perm]
+other = "Choose a valid transaction permission."
+[admin.users.error.last_admin]
+other = "You cannot disable the last admin."
+[admin.users.error.system_user]
+other = "The system account cannot be managed."
+
+# Admin: currencies management (p13.2). Reference data used by exchange rates later.
+[admin.currencies.title]
+other = "Currencies"
+[admin.currencies.intro]
+other = "Currencies available for subsidiaries and exchange rates. Disable one to hide it from new pickers; its history keeps its code."
+[admin.currencies.add]
+other = "Add currency"
+[admin.currencies.empty]
+other = "No currencies yet."
+[admin.currencies.active]
+other = "Active"
+[admin.currencies.inactive]
+other = "Disabled"
+[admin.currencies.enable]
+other = "Enable"
+[admin.currencies.disable]
+other = "Disable"
+[admin.currencies.exponent_hint]
+other = "Number of decimal places (0 to 4). Most currencies use 2."
+[admin.currencies.col.code]
+other = "Code"
+[admin.currencies.col.name]
+other = "Name"
+[admin.currencies.col.symbol]
+other = "Symbol"
+[admin.currencies.col.exponent]
+other = "Decimals"
+[admin.currencies.col.status]
+other = "Status"
+[admin.currencies.col.actions]
+other = "Actions"
+[admin.currencies.error.invalid]
+other = "Enter a 3-letter code, a symbol, a name, and decimals from 0 to 4."
+[admin.currencies.error.bad_exponent]
+other = "Decimals must be a whole number from 0 to 4."
+
 # Org settings & languages (p11.4). The enabled languages are the languages account
 # NAMES may be entered in (D14); the UI chrome stays en/es.
 [org.title]

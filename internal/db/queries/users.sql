@@ -55,6 +55,38 @@ WHERE id = ?;
 -- part of the users_versions snapshot, so the audit trail records the disabling.
 UPDATE users SET disabled_at = ? WHERE id = ?;
 
+-- name: SetUserTxnPerm :exec
+-- Live update of a user's transaction permission (p13.2 admin). Versioned as
+-- op='update'; txn_perm IS part of the users_versions snapshot, so the change
+-- names the acting admin in the audit trail. The store validates the value
+-- against {none,read,write} first; the column CHECK is only a backstop.
+UPDATE users SET txn_perm = ? WHERE id = ?;
+
+-- name: ListUsers :many
+-- Admin user list (p13.2 /admin/users). Excludes the seeded system user (id 1):
+-- it is passwordless machinery, not an operator, and must never be managed here
+-- (disable/reset/perm all reject it). ORDER BY username for a stable listing.
+SELECT id, username, display_name, is_admin, txn_perm, disabled_at
+FROM users
+WHERE id <> 1
+ORDER BY username;
+
+-- name: CountOtherEnabledAdmins :one
+-- Last-admin guard (p13.2). Counts ENABLED admins OTHER than the given user.
+-- DisableUser rejects disabling an admin when this is 0 -- the very last enabled
+-- admin cannot lock the whole org out of the admin surface. Distinct from
+-- CountHumanUsers (which counts non-system users regardless of admin/enabled).
+SELECT COUNT(*) FROM users
+WHERE id <> ? AND is_admin = 1 AND disabled_at IS NULL;
+
+-- name: GetUserRow :one
+-- Full live user row for the admin detail page (p13.2): the columns the per-user
+-- perm/grant editor needs. Distinct from UserByID (session projection) so this
+-- step touches no existing query.
+SELECT id, username, display_name, is_admin, txn_perm, disabled_at
+FROM users
+WHERE id = ?;
+
 -- name: UserByUsername :one
 -- Login lookup (p06.2). Returns the credential + the columns the auth/lang
 -- middleware needs: password_hash (nullable; the system user has none),

@@ -1,0 +1,65 @@
+{{/*
+  p13.2 admin per-user permissions (GET /admin/users/{id}, Admin). Two small
+  full-page forms, each its own VERSIONED change: the txn_perm select (POST
+  .../txn-perm) and the report-group grant checkboxes (POST .../grants, the full
+  desired set diffed server-side into grants/revokes). Both 303-redirect back here
+  with a saved notice (PRG). .Page is a userDetailModel. Every string via {{t}}
+  (rule 9); no inline script (rule 12); the username/display name are stored data.
+*/ -}}
+{{define "admin_user_detail.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "admin.users.permissions"))}}
+  {{- with .Page}}
+  <p><a href="/admin/users">&larr; {{t "admin.users.title"}}</a></p>
+  <h1>{{.Username}}</h1>
+  {{if .DisplayName}}<p class="hint">{{.DisplayName}}</p>{{end}}
+  {{if .Disabled}}<p class="badge">{{t "admin.users.disabled"}}</p>{{end}}
+  {{if .IsAdmin}}<p class="hint">{{t "admin.users.admin_note"}}</p>{{end}}
+
+  {{if .Saved}}
+  <p class="notice" role="status">{{t "admin.users.saved"}}</p>
+  {{end}}
+
+  {{if .ErrorKey}}
+  <p class="error" role="alert">{{t .ErrorKey}}</p>
+  {{end}}
+
+  <section class="perm-section">
+    <h2>{{t "admin.users.txn_perm_title"}}</h2>
+    <form method="post" action="/admin/users/{{.ID}}/txn-perm" class="txn-perm-form">
+      <div class="field">
+        <label for="ud-perm">{{t "admin.users.form.txn_perm"}}</label>
+        <select id="ud-perm" name="txn_perm"
+          {{- if eq .ErrorField "txn_perm"}} autofocus aria-invalid="true"{{end}}>
+          {{- range .TxnPerms}}
+          <option value="{{.Value}}"{{if eq .Value $.Page.TxnPerm}} selected{{end}}>{{t .LabelKey}}</option>
+          {{- end}}
+        </select>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">{{t "admin.users.save_perm"}}</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="grant-section">
+    <h2>{{t "admin.users.grants_title"}}</h2>
+    <p class="hint">{{t "admin.users.grants_intro"}}</p>
+    <form method="post" action="/admin/users/{{.ID}}/grants" class="grants-form">
+      {{- range .Grants}}
+      <div class="field field-check">
+        <label>
+          <input type="checkbox" name="grant_{{.Name}}" value="1"{{if .Granted}} checked{{end}}>
+          {{.Name}}
+        </label>
+      </div>
+      {{else}}
+      <p class="hint">{{t "admin.users.no_groups"}}</p>
+      {{- end}}
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">{{t "admin.users.save_grants"}}</button>
+      </div>
+    </form>
+  </section>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

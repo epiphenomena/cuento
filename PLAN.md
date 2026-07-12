@@ -245,7 +245,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p13.1 web: my settings.**
   Tests: `TestFormatsFollowUserSettings` — two users with different date/number/display settings see the same register rendered differently, end to end; `TestLocaleSwitchSwapsChrome` (es user sees es catalog everywhere).
   Build: settings page (language, formats, display mode, negative style, theme, default subsidiary); audit all render paths go through the p03 formatters and `{{t}}`.
-- [ ] **p13.2 web: admin.**
+- [x] **p13.2 web: admin.**
   Tests: feature tests + `TestPermChangeVersioned` (grant/perm changes produce version rows naming the acting admin); matrix test picks the new routes up automatically.
   Build: users list/create/disable/reset-password, txn_perm select, report-group grants, currencies management, org settings.
 

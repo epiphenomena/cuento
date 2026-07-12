@@ -238,11 +238,11 @@ func (s *server) home(w http.ResponseWriter, r *http.Request) {
 	s.renderShell(w, r, http.StatusOK, nil)
 }
 
-// adminStub is the p10.2 GET /admin landing (Admin): a minimal, Admin-only shell
-// page so the admin nav section has a real, permitted, no-dead-link target and the
-// perm gate is provable now. The real admin pages (users, subsidiaries, currencies,
-// ops) land in p11.3/p13.2/p14.2/p18.3.
-func (s *server) adminStub(w http.ResponseWriter, r *http.Request) {
+// adminIndex is the GET /admin landing (Admin): the section hub linking every
+// admin area (users, subsidiaries, currencies, org). p13.2 promoted it from the
+// p10.2 stub to a real index once the users/currencies pages landed. Ops (p18.3)
+// will add its link here later.
+func (s *server) adminIndex(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "admin.tmpl", s.newShellPage(r, nil))
 }
 

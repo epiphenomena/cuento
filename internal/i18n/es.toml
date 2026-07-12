@@ -167,6 +167,130 @@ other = "Ese valor no esta permitido. Elige una de las opciones ofrecidas."
 [admin.coming_soon]
 other = "Las herramientas de administracion llegan en un paso posterior."
 
+# Indice de administracion (p13.2): el centro que enlaza cada area.
+[admin.intro]
+other = "Administre operadores, subsidiarias, monedas y ajustes de la organizacion."
+
+# Administracion: usuarios (p13.2). El usuario del sistema no se muestra ni se gestiona.
+[admin.users.title]
+other = "Usuarios"
+[admin.users.intro]
+other = "Operadores que pueden iniciar sesion. Deshabilite una cuenta para revocar el acceso; no puede deshabilitar al ultimo administrador."
+[admin.users.new]
+other = "Nuevo usuario"
+[admin.users.empty]
+other = "Aun no hay usuarios."
+[admin.users.is_admin]
+other = "Administrador"
+[admin.users.enabled]
+other = "Habilitado"
+[admin.users.disabled]
+other = "Deshabilitado"
+[admin.users.permissions]
+other = "Permisos"
+[admin.users.disable]
+other = "Deshabilitar"
+[admin.users.reset_password]
+other = "Restablecer contrasena"
+[admin.users.new_password]
+other = "Nueva contrasena"
+[admin.users.saved]
+other = "Guardado."
+[admin.users.admin_note]
+other = "Este usuario es administrador y tiene todos los permisos."
+[admin.users.col.username]
+other = "Usuario"
+[admin.users.col.admin]
+other = "Administrador"
+[admin.users.col.txn_perm]
+other = "Transacciones"
+[admin.users.col.grants]
+other = "Grupos de informes"
+[admin.users.col.status]
+other = "Estado"
+[admin.users.col.actions]
+other = "Acciones"
+[admin.users.perm.none]
+other = "Sin acceso"
+[admin.users.perm.read]
+other = "Solo lectura"
+[admin.users.perm.write]
+other = "Lectura y escritura"
+[admin.users.txn_perm_title]
+other = "Permiso de transacciones"
+[admin.users.save_perm]
+other = "Guardar permiso"
+[admin.users.grants_title]
+other = "Acceso a grupos de informes"
+[admin.users.grants_intro]
+other = "Otorgue acceso de lectura a grupos de informes. Los administradores ya ven todos los informes."
+[admin.users.no_groups]
+other = "Aun no hay grupos de informes definidos."
+[admin.users.save_grants]
+other = "Guardar acceso a informes"
+[admin.users.form.title]
+other = "Nuevo usuario"
+[admin.users.form.username]
+other = "Nombre de usuario"
+[admin.users.form.display_name]
+other = "Nombre visible"
+[admin.users.form.password]
+other = "Contrasena"
+[admin.users.form.txn_perm]
+other = "Permiso de transacciones"
+[admin.users.form.is_admin]
+other = "Administrador"
+[admin.users.form.create]
+other = "Crear usuario"
+[admin.users.error.username_required]
+other = "Ingrese un nombre de usuario."
+[admin.users.error.username_taken]
+other = "Ese nombre de usuario ya esta en uso."
+[admin.users.error.password_required]
+other = "Ingrese una contrasena."
+[admin.users.error.bad_perm]
+other = "Elija un permiso de transacciones valido."
+[admin.users.error.last_admin]
+other = "No puede deshabilitar al ultimo administrador."
+[admin.users.error.system_user]
+other = "La cuenta del sistema no se puede gestionar."
+
+# Administracion: monedas (p13.2). Datos de referencia usados luego por los tipos de cambio.
+[admin.currencies.title]
+other = "Monedas"
+[admin.currencies.intro]
+other = "Monedas disponibles para subsidiarias y tipos de cambio. Deshabilite una para ocultarla de los nuevos selectores; su historial conserva el codigo."
+[admin.currencies.add]
+other = "Agregar moneda"
+[admin.currencies.empty]
+other = "Aun no hay monedas."
+[admin.currencies.active]
+other = "Activa"
+[admin.currencies.inactive]
+other = "Deshabilitada"
+[admin.currencies.enable]
+other = "Habilitar"
+[admin.currencies.disable]
+other = "Deshabilitar"
+[admin.currencies.exponent_hint]
+other = "Numero de decimales (0 a 4). La mayoria de las monedas usa 2."
+[admin.currencies.col.code]
+other = "Codigo"
+[admin.currencies.col.name]
+other = "Nombre"
+[admin.currencies.col.symbol]
+other = "Simbolo"
+[admin.currencies.col.exponent]
+other = "Decimales"
+[admin.currencies.col.status]
+other = "Estado"
+[admin.currencies.col.actions]
+other = "Acciones"
+[admin.currencies.error.invalid]
+other = "Ingrese un codigo de 3 letras, un simbolo, un nombre y decimales de 0 a 4."
+[admin.currencies.error.bad_exponent]
+other = "Los decimales deben ser un numero entero de 0 a 4."
+
 # Ajustes de la organizacion e idiomas (p11.4). Los idiomas habilitados son los
 # idiomas en que se pueden nombrar las cuentas (D14); la interfaz sigue en/es.
 [org.title]
