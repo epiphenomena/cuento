@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
+	"cuento/internal/i18n"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
 )
@@ -387,6 +389,204 @@ func TestTxnStableInputIDsAcrossRerender(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), wantID) {
 		t.Fatalf("re-render lost stable id %s; body:\n%s", wantID, rec.Body.String())
+	}
+}
+
+// asHTMXUser is asUser plus the HX-Request header the real htmx client sends on an
+// in-flow action (the subsidiary re-filter's hx-get, the editor's hx-post). It exists
+// so the p12.6 tests can assert the in-flow swap behavior (partial, not full page).
+func asHTMXUser(t *testing.T, e *txnWebEnv, method, path string, form url.Values) *httptest.ResponseRecorder {
+	t.Helper()
+	var body *strings.Reader
+	if form != nil {
+		body = strings.NewReader(form.Encode())
+	} else {
+		body = strings.NewReader("")
+	}
+	req := httptest.NewRequest(method, path, body)
+	if form != nil {
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	req.Header.Set("HX-Request", "true")
+	req.AddCookie(mintCookie(t, e.sm, e.book))
+	rec := httptest.NewRecorder()
+	e.h.ServeHTTP(rec, req)
+	return rec
+}
+
+// isFullPage reports whether an htmx response body is a FULL page (doctype / <html> /
+// <nav> shell) rather than a form-region partial. An in-flow editor action must never
+// return a full page (it would nest a whole document inside #txn-form or force a
+// visible reload mid-entry -- the anti-jank rule, Appendix C).
+func isFullPage(body string) bool {
+	return strings.Contains(body, "<!DOCTYPE") ||
+		strings.Contains(body, "<!doctype") ||
+		strings.Contains(body, "<html") ||
+		strings.Contains(body, "<nav")
+}
+
+// TestTxnStableInputIDsAcrossAllSwaps (p12.6, Tests bullet a): input ids stay stable
+// across EVERY in-flow swap response, not only the 422 POST re-render that
+// TestTxnStableInputIDsAcrossRerender already covers. Here we also assert the
+// subsidiary-change re-filter (the header select's hx-get) and the htmx 422 re-render
+// keep the exact row-0 ids, so focus/tab targets never jump between swaps.
+func TestTxnStableInputIDsAcrossAllSwaps(t *testing.T) {
+	e := newTxnWebEnv(t)
+	setDefaultSub(t, e, e.book, e.sub1)
+
+	// The stable ids the fresh new form emits on row 0 (the keys the client and focus
+	// logic depend on).
+	wantIDs := []string{
+		`id="txn-account-0"`, `id="txn-amount-0"`, `id="txn-fund-0"`,
+		`id="txn-program-0"`, `id="txn-class-0"`, `id="txn-memo-0"`,
+		`id="txn-splitid-0"`,
+	}
+	base := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/new", nil)
+	if base.Code != http.StatusOK {
+		t.Fatalf("GET new: %d", base.Code)
+	}
+	for _, id := range wantIDs {
+		if !strings.Contains(base.Body.String(), id) {
+			t.Fatalf("fresh new form missing stable id %s", id)
+		}
+	}
+
+	// Swap 1: the subsidiary re-filter (hx-get to /transactions/new?subsidiary=...),
+	// which swaps #txn-form. Every row-0 id must survive.
+	q := url.Values{}
+	q.Set("subsidiary", itoa(e.sub2))
+	q.Set("rows", "2")
+	q.Set("account_0", itoa(e.checking))
+	q.Set("amount_0", "10.00")
+	refilter := asHTMXUser(t, e, http.MethodGet, "/transactions/new?"+q.Encode(), nil)
+	if refilter.Code != http.StatusOK {
+		t.Fatalf("re-filter GET: %d", refilter.Code)
+	}
+	for _, id := range wantIDs {
+		if !strings.Contains(refilter.Body.String(), id) {
+			t.Fatalf("re-filter swap lost stable id %s; body:\n%s", id, refilter.Body.String())
+		}
+	}
+
+	// Swap 2: an htmx 422 re-render (unbalanced POST). Same row-0 ids must survive.
+	f := e.balancedForm("100.00", "-90.00")
+	rerender := asHTMXUser(t, e, http.MethodPost, "/transactions", f)
+	if rerender.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422, got %d", rerender.Code)
+	}
+	for _, id := range wantIDs {
+		if !strings.Contains(rerender.Body.String(), id) {
+			t.Fatalf("422 htmx re-render lost stable id %s; body:\n%s", id, rerender.Body.String())
+		}
+	}
+}
+
+// TestTxnInFlowActionsNeverFullReload (p12.6, Tests bullet b): in-flow editor actions
+// swap partials or navigate INTENTIONALLY (HX-Redirect on save) -- they never bounce
+// through a full-page reload mid-entry. We assert:
+//   - the subsidiary re-filter swap returns the form-region PARTIAL (no shell/doctype);
+//   - the 422 re-render returns the form-region PARTIAL (no shell/doctype);
+//   - a successful save returns HX-Redirect (an intentional full-page navigation to the
+//     register), NOT a re-rendered editor page -- the ONE deliberate navigation.
+//
+// Stable ids across those same swaps are covered by TestTxnStableInputIDsAcrossAllSwaps
+// and TestTxnStableInputIDsAcrossRerender.
+func TestTxnInFlowActionsNeverFullReload(t *testing.T) {
+	e := newTxnWebEnv(t)
+	setDefaultSub(t, e, e.book, e.sub1)
+
+	// Re-filter: partial, still the #txn-form region, no shell.
+	q := url.Values{}
+	q.Set("subsidiary", itoa(e.sub2))
+	q.Set("rows", "2")
+	refilter := asHTMXUser(t, e, http.MethodGet, "/transactions/new?"+q.Encode(), nil)
+	if refilter.Code != http.StatusOK {
+		t.Fatalf("re-filter GET: %d", refilter.Code)
+	}
+	if isFullPage(refilter.Body.String()) {
+		t.Fatalf("re-filter returned a FULL page mid-entry (should be a partial):\n%s", refilter.Body.String())
+	}
+	if !strings.Contains(refilter.Body.String(), `id="txn-form"`) {
+		t.Fatalf("re-filter partial missing the #txn-form region")
+	}
+
+	// 422 re-render: partial, no shell.
+	bad := e.balancedForm("100.00", "-90.00")
+	rerender := asHTMXUser(t, e, http.MethodPost, "/transactions", bad)
+	if rerender.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422, got %d", rerender.Code)
+	}
+	if isFullPage(rerender.Body.String()) {
+		t.Fatalf("422 re-render returned a FULL page mid-entry (should be a partial):\n%s", rerender.Body.String())
+	}
+
+	// Successful save: HX-Redirect (intentional navigation), NOT a re-rendered editor.
+	ok := e.balancedForm("100.00", "-100.00")
+	saved := asHTMXUser(t, e, http.MethodPost, "/transactions", ok)
+	if saved.Code != http.StatusOK {
+		t.Fatalf("save: status=%d body=%s", saved.Code, saved.Body.String())
+	}
+	dest := saved.Header().Get("HX-Redirect")
+	if dest == "" {
+		t.Fatalf("successful save did not set HX-Redirect (in-flow save must navigate intentionally, not swap a page)")
+	}
+	if !strings.HasSuffix(dest, "/register") {
+		t.Fatalf("HX-Redirect = %q, want the first split's /register", dest)
+	}
+	// A save must NOT re-render the editor form region into the body (that would be a
+	// mid-entry swap of the whole editor rather than the intended navigation).
+	if strings.Contains(saved.Body.String(), `id="txn-form"`) {
+		t.Fatalf("successful save swapped the editor form back in instead of navigating:\n%s", saved.Body.String())
+	}
+}
+
+// TestTxnEditorEsNoRawKeys (p12.6 es locale pass): the editor rendered for an es-locale
+// user shows the Spanish catalog strings and leaks NO raw i18n keys. This converts the
+// qa-entry.md es checkpoint from an inferred claim (catalog parity) into an OBSERVED
+// one: it actually GETs the editor in es and scans the body. The user's stored locale
+// is authoritative over ?lang= (D14), so we set it directly (settings writers are
+// p13.1; raw SQL in tests is in-convention, e.g. setDefaultSub). The chrome/nav is
+// exempt (proper nouns render verbatim), so we assert on the editor's own strings: the
+// known es column headers/title/button are present, and no raw `txn.`/`error.txn.` KEY
+// substring appears.
+func TestTxnEditorEsNoRawKeys(t *testing.T) {
+	e := newTxnWebEnv(t)
+	setDefaultSub(t, e, e.book, e.sub1)
+	setLocale(t, e.db, e.book, "es")
+
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/new", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET new (es): %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The Spanish catalog strings render (a known column header + the page title).
+	for _, want := range []string{
+		i18n.T("es", "txn.col.account"), // "Cuenta"
+		i18n.T("es", "txn.col.amount"),  // "Importe"
+		i18n.T("es", "txn.new_title"),   // "Nueva transaccion"
+		i18n.T("es", "txn.fund.apply_all_btn"),
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("es editor missing translated string %q", want)
+		}
+	}
+	// And they are the es strings, not the en ones (guards against a fallback-to-en).
+	if strings.Contains(body, i18n.T("en", "txn.new_title")) {
+		t.Fatalf("es editor leaked the en title %q (catalog fell back to en)", i18n.T("en", "txn.new_title"))
+	}
+
+	// No raw i18n KEY substring leaks into the rendered body (a missing/typo'd {{t}}
+	// would show the literal key). Proper nouns are stored data, not keys, so this is
+	// safe to assert broadly on the editor's own vocabulary.
+	for _, key := range []string{
+		"txn.col.", "txn.fund.", "txn.class.", "txn.amount.", "txn.new_title",
+		"txn.subsidiary", "txn.date", "txn.payee", "txn.memo", "txn.add_row",
+		"error.txn.",
+	} {
+		if strings.Contains(body, key) {
+			t.Fatalf("es editor leaked a raw i18n key substring %q (a {{t}} call is missing/broken):\n%s", key, body)
+		}
 	}
 }
 

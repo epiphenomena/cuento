@@ -234,7 +234,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p12.5 web: funds workspace.**
   Tests: fund list shows per-currency balance, funder/scope columns, and warning badge on negative (Z18); fund detail = a filtered ledger of the fund's splits across all accounts with opening/closing balance; create/edit/close forms incl. subsidiary checklist and program scope; perms (view TxnRead, manage TxnWrite).
   Build: `/funds` (active + closed toggle, balances from p08.4), `/funds/{id}` statement view, `/funds/new` + edit — grants are bookkeeping data, so TxnWrite manages them; subsidiaries/users stay Admin.
-- [ ] **p12.6 ux: entry-flow hardening.**
+- [x] **p12.6 ux: entry-flow hardening.**
   Tests: automate what's automatable (stable ids across all swap responses; no full-page redirects on in-flow actions).
   Build: manual QA script `docs/qa-entry.md` (focus retention, zero layout shift, scroll preservation, keyboard-only entry of a 4-split mixed-fund transaction end to end, es locale pass); fix all findings.
   Follow-up (from p12.2 e2e): htmx wires a swapped-in node's hx-* triggers on the settle tick (after it paints), so an interaction within ~1 frame of a form swap can miss (the account-form type select on `hx-get` re-fetch). Negligible for pointer/keyboard users but confirm during the keyboard-only pass; if ever real, target an inner region so the trigger isn't self-swapped.
