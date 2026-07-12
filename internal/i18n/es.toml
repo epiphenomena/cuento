@@ -291,6 +291,41 @@ other = "Ingrese un codigo de 3 letras, un simbolo, un nombre y decimales de 0 a
 [admin.currencies.error.bad_exponent]
 other = "Los decimales deben ser un numero entero de 0 a 4."
 
+# Admin: carga CSV de tipos de cambio manuales / de respaldo (p14.2). La contraparte
+# humana de `cuento ratesync` (que obtiene los tipos de Yahoo automaticamente). Cada
+# fila se valida antes de guardar nada; un encabezado o fila invalida rechaza todo.
+[admin.rates.title]
+other = "Importar tipos de cambio"
+[admin.rates.intro]
+other = "Sube un CSV de tipos de cambio para los dias que la sincronizacion automatica no cubrio, o para corregir un tipo. Se revisa todo el archivo antes de guardar nada."
+[admin.rates.file]
+other = "Archivo CSV de tipos"
+[admin.rates.file_hint]
+other = "Un CSV con una fila de encabezado y un tipo por linea."
+[admin.rates.upload]
+other = "Importar tipos"
+[admin.rates.columns]
+other = "Columnas, en orden: rate_date (AAAA-MM-DD), base, quote, rate, source."
+[admin.rates.imported]
+one = "Se importo %d tipo."
+other = "Se importaron %d tipos."
+[admin.rates.error.no_file]
+other = "Elige un archivo CSV para subir."
+[admin.rates.error.bad_header]
+other = "La fila de encabezado debe ser exactamente: rate_date,base,quote,rate,source."
+[admin.rates.error.empty]
+other = "El archivo no tiene filas de tipos."
+[admin.rates.error.bad_row]
+other = "La linea %s esta mal formada (numero de columnas incorrecto)."
+[admin.rates.error.bad_date]
+other = "La linea %s tiene una fecha invalida; usa AAAA-MM-DD."
+[admin.rates.error.unknown_currency]
+other = "La linea %s nombra una moneda que no existe."
+[admin.rates.error.bad_rate]
+other = "La linea %s tiene un tipo invalido; debe ser un numero positivo."
+[admin.rates.error.bad_source]
+other = "La linea %s no tiene la columna source."
+
 # Ajustes de la organizacion e idiomas (p11.4). Los idiomas habilitados son los
 # idiomas en que se pueden nombrar las cuentas (D14); la interfaz sigue en/es.
 [org.title]

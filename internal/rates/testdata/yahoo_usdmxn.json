@@ -1,0 +1,17 @@
+{
+  "chart": {
+    "result": [
+      {
+        "meta": {
+          "currency": "MXN",
+          "symbol": "USDMXN=X",
+          "regularMarketTime": 1704067200,
+          "regularMarketPrice": 17.125,
+          "fromCurrency": "USD",
+          "toCurrency": "MXN"
+        }
+      }
+    ],
+    "error": null
+  }
+}

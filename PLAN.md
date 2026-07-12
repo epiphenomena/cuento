@@ -254,7 +254,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p14.1 db+store: rates.**
   Tests: `TestRateOnOrBefore`, `TestRateReciprocalFallback`, `TestRateMissing` (typed error), `TestRateStaleness` (lookup returns the rate's actual date so reports can footnote gaps).
   Build: migration `exchange_rates(rate_date, base, quote, rate REAL, source, change_id, PK(rate_date, base, quote))`; `PutRates` (batch, one change), `RateOn(base, quote, date)`.
-- [ ] **p14.2 tools: ratesync + CSV import.**
+- [x] **p14.2 tools: ratesync + CSV import.**
   Tests: fetch parser against recorded response bodies in `testdata/`; `TestRatesCSVImport`.
   Build: `cuento ratesync` pulling configured pairs from Yahoo Finance behind a `RateSource` interface (it's unofficial and will break someday — isolate it); admin CSV upload for manual/backfill rates; systemd timer documented in phase 18.
 

@@ -297,6 +297,41 @@ other = "Enter a 3-letter code, a symbol, a name, and decimals from 0 to 4."
 [admin.currencies.error.bad_exponent]
 other = "Decimals must be a whole number from 0 to 4."
 
+# Admin: manual/backfill exchange-rate CSV upload (p14.2). The human counterpart to
+# `cuento ratesync` (which auto-fetches from Yahoo). Every row is validated before any
+# write; a bad header/row is rejected wholesale (no partial import).
+[admin.rates.title]
+other = "Import exchange rates"
+[admin.rates.intro]
+other = "Upload a CSV of exchange rates for days the automatic sync missed, or to correct a rate. The whole file is checked before anything is saved."
+[admin.rates.file]
+other = "Rates CSV file"
+[admin.rates.file_hint]
+other = "A CSV with a header row and one rate per line."
+[admin.rates.upload]
+other = "Import rates"
+[admin.rates.columns]
+other = "Columns, in order: rate_date (YYYY-MM-DD), base, quote, rate, source."
+[admin.rates.imported]
+one = "Imported %d rate."
+other = "Imported %d rates."
+[admin.rates.error.no_file]
+other = "Choose a CSV file to upload."
+[admin.rates.error.bad_header]
+other = "The header row must be exactly: rate_date,base,quote,rate,source."
+[admin.rates.error.empty]
+other = "The file has no rate rows."
+[admin.rates.error.bad_row]
+other = "Line %s is malformed (wrong number of columns)."
+[admin.rates.error.bad_date]
+other = "Line %s has an invalid date; use YYYY-MM-DD."
+[admin.rates.error.unknown_currency]
+other = "Line %s names a currency that does not exist."
+[admin.rates.error.bad_rate]
+other = "Line %s has an invalid rate; it must be a positive number."
+[admin.rates.error.bad_source]
+other = "Line %s is missing the source column."
+
 # Org settings & languages (p11.4). The enabled languages are the languages account
 # NAMES may be entered in (D14); the UI chrome stays en/es.
 [org.title]

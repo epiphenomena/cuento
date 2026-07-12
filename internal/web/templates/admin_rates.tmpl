@@ -1,0 +1,39 @@
+{{/*
+  p14.2 admin exchange-rate CSV upload (GET/POST /admin/rates, Admin). The manual /
+  backfill counterpart to `cuento ratesync`. An admin uploads a CSV
+  (rate_date,base,quote,rate,source) and every row is validated BEFORE any write; a
+  bad header/row re-renders THIS page at 422 with the error (naming the line); a valid
+  file re-renders with an imported-count summary. .Page is a ratesPageModel. Every
+  string via {{t}} (rule 9); no inline script (rule 12). The file input can't be echoed
+  back, so errors render as a page-level message rather than an inline field swap.
+*/ -}}
+{{define "admin_rates.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "admin.rates.title"))}}
+  {{- with .Page}}
+  <h1>{{t "admin.rates.title"}}</h1>
+  <p class="hint">{{t "admin.rates.intro"}}</p>
+
+  {{- if .Done}}
+  <p class="notice rates-imported" role="status">{{tn "admin.rates.imported" .Imported}}</p>
+  {{- end}}
+  {{- if .ErrorKey}}
+  <p class="field-error rates-error" role="alert">{{if .ErrorArg}}{{t .ErrorKey .ErrorArg}}{{else}}{{t .ErrorKey}}{{end}}</p>
+  {{- end}}
+
+  <form method="post" action="/admin/rates" enctype="multipart/form-data" class="rates-upload-form">
+    <div class="field">
+      <label for="rates-file">{{t "admin.rates.file"}}</label>
+      <input id="rates-file" name="file" type="file" accept=".csv,text/csv" required>
+      <p class="hint">{{t "admin.rates.file_hint"}}</p>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{{t "admin.rates.upload"}}</button>
+    </div>
+  </form>
+
+  <p class="hint">{{t "admin.rates.columns"}}</p>
+  <pre class="rates-example">rate_date,base,quote,rate,source
+2025-01-01,USD,MXN,17.05,manual</pre>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

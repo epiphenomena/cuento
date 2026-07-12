@@ -1,6 +1,6 @@
 // Command cuento is the single binary for the whole application. The first CLI
 // argument selects a subcommand. Phase 0 implements serve; migrate arrives in
-// p01.2; user arrives in p06.4; check and ratesync arrive later (p08.3, p14.2).
+// p01.2; user arrives in p06.4; check arrives in p08.3; ratesync arrives in p14.2.
 package main
 
 import (
@@ -60,6 +60,10 @@ func main() {
 		if err := userCmd(args); err != nil {
 			log.Fatalf("user: %v", err)
 		}
+	case "ratesync":
+		if err := ratesyncCmd(args); err != nil {
+			log.Fatalf("ratesync: %v", err)
+		}
 	case "check":
 		if err := checkCmd(args); err != nil {
 			// A deliberate non-zero exit (ledger violations) carries its own
@@ -78,7 +82,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: cuento <command> [flags]\n\ncommands:\n  serve     run the HTTP server (auto-migrates on start; -dev relaxes cookie Secure)\n  migrate   apply pending database migrations\n  user      manage users (add|passwd|disable)\n  check     run the ledger integrity suite ([-db PATH] [--strict])\n")
+	fmt.Fprintf(os.Stderr, "usage: cuento <command> [flags]\n\ncommands:\n  serve     run the HTTP server (auto-migrates on start; -dev relaxes cookie Secure)\n  migrate   apply pending database migrations\n  user      manage users (add|passwd|disable)\n  check     run the ledger integrity suite ([-db PATH] [--strict])\n  ratesync  fetch configured currency pairs from Yahoo Finance into exchange rates ([-db PATH])\n")
 }
 
 // migrate applies any pending embedded migrations to the configured database

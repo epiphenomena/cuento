@@ -164,6 +164,13 @@ func (s *server) routes() []Route {
 		{http.MethodGet, "/admin/currencies", Admin, http.HandlerFunc(s.currenciesPage)},
 		{http.MethodPost, "/admin/currencies", Admin, http.HandlerFunc(s.currencyAdd)},
 		{http.MethodPost, "/admin/currencies/{code}/toggle", Admin, http.HandlerFunc(s.currencyToggle)},
+		// p14.2 admin: manual/backfill exchange-rate CSV upload (Appendix B/F:
+		// /admin/** = Admin). GET is the upload form; POST parses the multipart
+		// file, validates every row, and PutRates the batch as one change (the
+		// automated counterpart is `cuento ratesync`). The permission-matrix test
+		// picks these up automatically (rule 8); the /admin landing links the page.
+		{http.MethodGet, "/admin/rates", Admin, http.HandlerFunc(s.ratesPage)},
+		{http.MethodPost, "/admin/rates", Admin, http.HandlerFunc(s.ratesImport)},
 		// p11.1 chart of accounts (Appendix B/F). GET is TxnRead (the tree table +
 		// balances + filters + the inline form fetches); the POST mutations are
 		// TxnWrite. The nav.accounts entry (shell.go) lights up now that GET
