@@ -29,6 +29,7 @@ const IS = '/reports/income_statement';
 const AL = '/reports/account_ledger';
 const FE = '/reports/functional_expenses';
 const FA = '/reports/fund_activity';
+const ABR = '/reports/activities_by_restriction';
 
 async function login(page, server) {
   await page.goto('/login');
@@ -492,6 +493,23 @@ async function createRevenueAccount(page, name) {
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 
+// createExpenseAccount makes a leaf EXPENSE account (default functional class program)
+// mapped to the root subsidiary. An expense split requires a functional class (rule 7),
+// which prefills from this default on the txn form.
+async function createExpenseAccount(page, name) {
+  await page.goto('/accounts');
+  await page.getByRole('button', { name: /new account/i }).click();
+  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+  await page.locator('#af-type').selectOption('expense');
+  await expect(page.locator('#af-func')).toBeVisible();
+  await page.locator('#af-name-en').fill(name);
+  const rootSub = page.locator('input[name="sub_1"]');
+  if (!(await rootSub.isChecked())) await rootSub.check();
+  await page.locator('#af-func').selectOption('program');
+  await saveAndReload(page, { reloadPath: '/accounts' });
+  await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
+}
+
 // createFund makes a restricted fund scoped to the root subsidiary via the /funds form.
 async function createFund(page, name, funder) {
   await page.goto('/funds');
@@ -596,4 +614,77 @@ test('reports: open the fund report (list), pick a fund, see its period statemen
   expect(resp.headers()['content-type']).toContain('text/csv');
   const body = await resp.text();
   expect(body.split('\n')[0]).toContain(',');
+});
+
+test('reports: open the activities-by-restriction statement, see the two restriction columns + released line + change in net assets, CSV returns', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  // --- seed: a restricted fund + a receipt INTO it (With-donor-restriction support) and
+  // an unrestricted expense (a Without-restriction expense). The receipt makes the fund
+  // hold spendable resources; the point of THIS spec is the STRUCTURE (the two columns +
+  // released + change), so a receipt + an unrestricted expense renders every row.
+  await createFund(page, 'Restr Fund E2E', 'Restr Donor E2E');
+  await createAsset(page, 'Restr Cash E2E');
+  await createRevenueAccount(page, 'Restr Gift E2E');
+  await createExpenseAccount(page, 'Restr Cost E2E');
+
+  // Receipt INTO the fund: DR Restr Cash 100.00 (fund), CR Restr Gift 100.00 (fund).
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await page.locator('#txn-account-0').selectOption({ label: 'Restr Cash E2E' });
+  await page.locator('#txn-amount-0').fill('100.00');
+  await page.locator('#txn-fund-0').selectOption({ label: 'Restr Fund E2E' });
+  await page.locator('#txn-account-1').selectOption({ label: 'Restr Gift E2E' });
+  await page.locator('#txn-amount-1').fill('-100.00');
+  await page.locator('#txn-fund-1').selectOption({ label: 'Restr Fund E2E' });
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL('**/register**');
+
+  // An UNRESTRICTED expense (no fund): DR Restr Cost 30.00, CR Restr Cash 30.00. Its
+  // functional class + program prefill from the form defaults (expense splits need both).
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await page.locator('#txn-account-0').selectOption({ label: 'Restr Cost E2E' });
+  await page.locator('#txn-amount-0').fill('30.00');
+  await page.locator('#txn-account-1').selectOption({ label: 'Restr Cash E2E' });
+  await page.locator('#txn-amount-1').fill('-30.00');
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL('**/register**');
+
+  // --- open the statement over a wide period, root scope ---
+  await page.goto(`${ABR}?scope=1`);
+  await expect(page.locator('form.report-params')).toBeVisible();
+  await expect(page.locator('select.report-scope-select[name="scope"]')).toBeVisible();
+  await page.locator('form.report-params [name="from"]').fill('2025-01-01');
+  await page.locator('form.report-params [name="to"]').fill('2030-12-31');
+  await page.locator('form.report-params button[type="submit"]').click();
+  await page.waitForURL('**/reports/activities_by_restriction?**');
+
+  const abrStmt = page.locator('table.report-table');
+  await expect(abrStmt).toBeVisible();
+  // The two restriction COLUMNS (localized en headers) + the Total column.
+  await expect(abrStmt).toContainText('Without donor restrictions');
+  await expect(abrStmt).toContainText('With donor restrictions');
+  // The signature line ROWS: revenue, the DERIVED released line, expenses, and change.
+  await expect(abrStmt).toContainText('Revenue and support');
+  await expect(abrStmt).toContainText('Net assets released from restrictions');
+  await expect(abrStmt).toContainText('Expenses');
+  await expect(abrStmt).toContainText('Change in net assets');
+  // The Change-in-net-assets line is a grand-total row (kind marker).
+  await expect(page.locator('table.report-table tr.report-total')).not.toHaveCount(0);
+  // A drillable figure is present (reconciliation is unit-tested; here we confirm cells
+  // render as drill links — e.g. the released fund-set drill).
+  await expect(page.locator('a.report-drill-link').first()).toBeVisible();
+
+  // --- the CSV export returns text/csv ---
+  await expect(page.locator('a.report-csv-link')).toBeVisible();
+  const abrCsvHref = await page.locator('a.report-csv-link').getAttribute('href');
+  const abrResp = await page.request.get(abrCsvHref);
+  expect(abrResp.status()).toBe(200);
+  expect(abrResp.headers()['content-type']).toContain('text/csv');
+  const abrBody = await abrResp.text();
+  expect(abrBody.split('\n')[0]).toContain(',');
 });

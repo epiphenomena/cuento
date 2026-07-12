@@ -1,0 +1,12 @@
+   Line                                   Currency  Without donor restrictions  With donor restrictions           Total
+-  -------------------------------------  --------  --------------------------  -----------------------  --------------
+   Revenue and support                    MXN                         MXN 0.00           MXN 100,000.00  MXN 100,000.00
+   Net assets released from restrictions  MXN                     MXN 3,000.00            MXN -3,000.00        MXN 0.00
+>  Total support and revenue              MXN                     MXN 3,000.00            MXN 97,000.00  MXN 100,000.00
+   Expenses                               MXN                     MXN 8,600.00                 MXN 0.00    MXN 8,600.00
+=  Change in net assets                   MXN                    MXN -5,600.00            MXN 97,000.00   MXN 91,400.00
+   Revenue and support                    USD                     USD 6,950.00            USD 52,000.00   USD 58,950.00
+   Net assets released from restrictions  USD                    USD 41,500.00           USD -41,500.00        USD 0.00
+>  Total support and revenue              USD                    USD 48,450.00            USD 10,500.00   USD 58,950.00
+   Expenses                               USD                    USD 23,275.00                 USD 0.00   USD 23,275.00
+=  Change in net assets                   USD                    USD 25,175.00            USD 10,500.00   USD 35,675.00

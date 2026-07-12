@@ -1132,3 +1132,30 @@ other = "Closing (spendable)"
 other = "Total fund assets"
 [reports.fund_activity.all_funds]
 other = "— all funds —"
+
+# p15.9 activities by restriction — the FASB statement of activities with the two
+# donor-restriction columns (Without / With) + a Total column, per currency. The "net
+# assets released from restrictions" line is DERIVED (D20, no journaled transfer): it
+# nets to zero in Total (it moves restricted resources to unrestricted as they are spent).
+[reports.activities_by_restriction.title]
+other = "Statement of activities (by restriction)"
+[reports.activities_by_restriction.col.line]
+other = "Line"
+[reports.activities_by_restriction.col.currency]
+other = "Currency"
+[reports.activities_by_restriction.col.without]
+other = "Without donor restrictions"
+[reports.activities_by_restriction.col.with]
+other = "With donor restrictions"
+[reports.activities_by_restriction.col.total]
+other = "Total"
+[reports.activities_by_restriction.revenue]
+other = "Revenue and support"
+[reports.activities_by_restriction.released]
+other = "Net assets released from restrictions"
+[reports.activities_by_restriction.total_support]
+other = "Total support and revenue"
+[reports.activities_by_restriction.expenses]
+other = "Expenses"
+[reports.activities_by_restriction.change]
+other = "Change in net assets"

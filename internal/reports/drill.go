@@ -83,6 +83,17 @@ type Drill struct {
 	ProgramID *int64
 	Class     *string
 
+	// FundIDs is an optional fund SET (p15.9): the drilled figure sums splits across
+	// SEVERAL funds at once (the activities-by-restriction "net assets released" line
+	// aggregates applications across every RESTRICTED fund, so its USD cell spans Beca
+	// Agua + Building Fund — a single FundID cannot express it). When non-empty the
+	// drill unions the per-fund split sets (account SET × fund SET), reconciling to the
+	// multi-fund figure; the store's per-cell query still filters ONE fund at a time
+	// (no SQL change), the caller loops the set. FundID and FundIDs are mutually
+	// exclusive: a cell sets at most one (FundIDs when it aggregates funds, FundID for a
+	// single fund).
+	FundIDs []int64
+
 	// Mode selects the date treatment (as-of cumulative vs period activity).
 	Mode DrillMode
 
@@ -112,6 +123,13 @@ func (d Drill) Encode() string {
 	}
 	if d.FundID != nil {
 		q.Set("fund", strconv.FormatInt(*d.FundID, 10))
+	}
+	if len(d.FundIDs) > 0 {
+		ids := make([]string, len(d.FundIDs))
+		for i, id := range d.FundIDs {
+			ids[i] = strconv.FormatInt(id, 10)
+		}
+		q.Set("funds", strings.Join(ids, ","))
 	}
 	if d.ProgramID != nil {
 		q.Set("prog", strconv.FormatInt(*d.ProgramID, 10))
@@ -164,6 +182,14 @@ func DecodeDrill(q url.Values) Drill {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
 			d.FundID = &id
 		}
+	}
+	if v := strings.TrimSpace(q.Get("funds")); v != "" {
+		for _, part := range strings.Split(v, ",") {
+			if id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64); err == nil && id != 0 {
+				d.FundIDs = append(d.FundIDs, id)
+			}
+		}
+		sort.Slice(d.FundIDs, func(i, j int) bool { return d.FundIDs[i] < d.FundIDs[j] })
 	}
 	if v := strings.TrimSpace(q.Get("prog")); v != "" {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil {

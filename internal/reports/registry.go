@@ -36,6 +36,7 @@ func Default() *Registry {
 	registerAccountLedger(reg)
 	registerFunctionalExpenses(reg)
 	registerFundActivity(reg)
+	registerActivitiesByRestriction(reg)
 	return reg
 }
 

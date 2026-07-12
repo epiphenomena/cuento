@@ -109,17 +109,31 @@ func (s *server) reportDrill(w http.ResponseWriter, r *http.Request) {
 		Class:     d.Class,
 	}
 	// The trial-balance retrofit drills exactly one account per cell; the Drill
-	// framework carries an account SET for a future rollup cell. Fetch each account's
-	// splits and merge (bounded: today one, at most a subtree later).
-	var rows []store.DrillRow
-	for _, acct := range d.AccountIDs {
-		filter.AccountID = acct
-		part, err := s.store.DrillSplits(ctx, filter)
-		if err != nil {
-			s.serverError(w)
-			return
+	// framework carries an account SET for a rollup cell. A p15.9 "released" cell also
+	// carries a fund SET (Drill.FundIDs) — it aggregates applications across several
+	// RESTRICTED funds, so the drill unions the per-(account, fund) split sets (the
+	// store query still filters ONE fund per call, no SQL change). With no fund set the
+	// single FundID applies (the established shape). Fetch each combination and merge.
+	fundFilters := []*int64{d.FundID}
+	if len(d.FundIDs) > 0 {
+		fundFilters = fundFilters[:0]
+		for i := range d.FundIDs {
+			id := d.FundIDs[i]
+			fundFilters = append(fundFilters, &id)
 		}
-		rows = append(rows, part...)
+	}
+	var rows []store.DrillRow
+	for _, fund := range fundFilters {
+		filter.FundID = fund
+		for _, acct := range d.AccountIDs {
+			filter.AccountID = acct
+			part, err := s.store.DrillSplits(ctx, filter)
+			if err != nil {
+				s.serverError(w)
+				return
+			}
+			rows = append(rows, part...)
+		}
 	}
 
 	opts := formatOptsFor(u)

@@ -1130,3 +1130,30 @@ other = "Final (disponible)"
 other = "Total de activos del fondo"
 [reports.fund_activity.all_funds]
 other = "— todos los fondos —"
+
+# p15.9 actividades por restriccion — el estado de actividades FASB con las dos columnas
+# por restriccion del donante (Sin / Con) + una columna Total, por moneda. La linea
+# "activos netos liberados de restricciones" es DERIVADA (D20, sin traspaso asentado):
+# neta a cero en el Total (traslada recursos restringidos a no restringidos al gastarse).
+[reports.activities_by_restriction.title]
+other = "Estado de actividades (por restriccion)"
+[reports.activities_by_restriction.col.line]
+other = "Linea"
+[reports.activities_by_restriction.col.currency]
+other = "Moneda"
+[reports.activities_by_restriction.col.without]
+other = "Sin restriccion del donante"
+[reports.activities_by_restriction.col.with]
+other = "Con restriccion del donante"
+[reports.activities_by_restriction.col.total]
+other = "Total"
+[reports.activities_by_restriction.revenue]
+other = "Ingresos y apoyo"
+[reports.activities_by_restriction.released]
+other = "Activos netos liberados de restricciones"
+[reports.activities_by_restriction.total_support]
+other = "Total de apoyo e ingresos"
+[reports.activities_by_restriction.expenses]
+other = "Gastos"
+[reports.activities_by_restriction.change]
+other = "Cambio en activos netos"

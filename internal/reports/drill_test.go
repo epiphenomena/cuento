@@ -48,6 +48,18 @@ func TestDrillRoundTrip(t *testing.T) {
 			},
 		},
 		{
+			name: "period with fund SET (p15.9 released)",
+			d: reports.Drill{
+				Scope:      1,
+				AccountIDs: []int64{5, 6, 7},
+				Currency:   "USD",
+				FundIDs:    []int64{2, 3},
+				Mode:       reports.DrillPeriod,
+				From:       "2025-01-01",
+				To:         "2026-06-30",
+			},
+		},
+		{
 			name: "period with program and class",
 			d: reports.Drill{
 				Scope:      1,
