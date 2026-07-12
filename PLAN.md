@@ -190,7 +190,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 
 ## Phase 10 — Web shell & asset pipeline
 
-- [ ] **p10.1 web: hashed assets.**
+- [x] **p10.1 web: hashed assets.**
   Tests: `TestAssetURLHashed` (`asset "app.css"` → `/static/app.<8hex>.css`), `TestAssetImmutableCacheHeaders`, `TestHTMLNoStore`, `TestDevModeUnhashed`.
   Build: startup manifest from embedded FS (SHA-256 → 8 hex), serving handler, `asset` template func.
 - [ ] **p10.2 web: base layout + theme + i18n wiring + CSS foundation.**

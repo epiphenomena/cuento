@@ -24,7 +24,14 @@ func mustParseTemplates() *template.Template {
 	// The parse-time t is a no-op stub only so parsing type-checks; every render
 	// re-binds t to the request's language before Execute, so this stub never
 	// actually runs.
-	stub := template.FuncMap{"t": func(key string, _ ...any) string { return key }}
+	// t is re-bound per request in render (below); asset is re-bound per request
+	// too (it depends on the server's -dev flag and manifest). Both stubs exist
+	// only so parsing type-checks a template calling {{t}} or {{asset}}; neither
+	// stub actually runs.
+	stub := template.FuncMap{
+		"t":     func(key string, _ ...any) string { return key },
+		"asset": func(name string) string { return name },
+	}
 	t, err := template.New("").Funcs(stub).ParseFS(templatesFS, "templates/*.tmpl")
 	if err != nil {
 		panic("web: parse templates: " + err.Error())
@@ -50,7 +57,8 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name
 		return
 	}
 	clone = clone.Funcs(template.FuncMap{
-		"t": func(key string, args ...any) string { return i18n.T(lang, key, args...) },
+		"t":     func(key string, args ...any) string { return i18n.T(lang, key, args...) },
+		"asset": s.assetURL, // hashed URL in prod, unhashed in -dev (p10.1)
 	})
 
 	// Render into a buffer first so a template error becomes a clean 500 rather

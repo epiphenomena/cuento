@@ -66,7 +66,11 @@ func NewApp(cfg Config, db *sql.DB, st *store.Store) *App {
 		store:    st,
 		sessions: sessions,
 		tmpl:     mustParseTemplates(),
-		limiter:  newLoginLimiter(),
+		// The asset manifest is built ONCE here (a single walk of the embedded
+		// static FS), not per request: it maps each asset's logical name to its
+		// content-hashed URL and back (p10.1).
+		assets:  buildAssetManifest(),
+		limiter: newLoginLimiter(),
 		// A single fixed decoy hash lets the unknown-user login path spend the
 		// same argon2id time as a real verify, closing the timing side channel
 		// that would otherwise enumerate usernames (rule 13). Built once at
@@ -91,6 +95,7 @@ type server struct {
 	store     *store.Store
 	sessions  *scs.SessionManager
 	tmpl      *htmltemplate.Template
+	assets    *assetManifest
 	limiter   *loginLimiter
 	decoyHash string
 }

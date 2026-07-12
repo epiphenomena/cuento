@@ -125,7 +125,7 @@ func SyncReportGroups(ctx context.Context, st *store.Store) error {
 func (s *server) routes() []Route {
 	return []Route{
 		{http.MethodGet, "/healthz", Public, http.HandlerFunc(healthz(s.cfg.Version))},
-		{http.MethodGet, "/static/", Public, http.FileServer(http.FS(staticFS))},
+		{http.MethodGet, "/static/", Public, s.staticHandler()},
 		{http.MethodGet, "/login", Public, http.HandlerFunc(s.loginPage)},
 		{http.MethodPost, "/login", Public, http.HandlerFunc(s.loginSubmit)},
 		{http.MethodPost, "/logout", AnyUser, http.HandlerFunc(s.logout)},
