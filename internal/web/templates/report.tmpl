@@ -1,0 +1,99 @@
+{{/*
+  p15.1 generic report page (/reports/{id}, ReportGroup(group)). ONE template
+  renders ANY report: p15.3–p15.11 add reports without touching it. A self-contained
+  shell page; .Page is a reportPageModel.
+
+  Structure:
+    - the shared PARAMS FORM: a plain <form method="get"> (no JS, strict CSP -- rule
+      12) that submits the params as query string back to the same report. The
+      SUBSIDIARY SCOPE selector is ALWAYS present (every report is scoped, D18); the
+      as-of / period (from–to) / granularity / target-currency controls render only
+      when the report's ParamsSpec declares them. Dates are plain text inputs (never
+      input[type=date] -- rule 10/12); the placeholder shows the resolved value.
+    - a CSV export link (an <a href>, no JS) carrying the current params.
+    - the rendered TABLE: localized column headers with alignment, and typed cells
+      already formatted per the user's settings (rule 10). Rows carry indent (tree
+      depth), subtotal/total emphasis, and the D19 warning kind.
+
+  Every label via {{t}} (rule 9); amounts/dates pre-formatted in the handler; names
+  are stored proper nouns rendered verbatim.
+*/ -}}
+{{define "report.tmpl" -}}
+{{template "shell-open" (shellTitle . .Page.Title)}}
+  {{- with .Page}}
+  <h1>{{.Title}}</h1>
+
+  <form class="report-params" method="get" action="/reports/{{.Params.ReportID}}">
+    <fieldset class="report-scope">
+      <legend>{{t "reports.params.scope"}}</legend>
+      <label for="rp-scope">{{t "reports.params.scope"}}</label>
+      <select id="rp-scope" name="scope" class="report-scope-select">
+        {{- range .Params.Scopes}}
+        <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Name}}</option>
+        {{- end}}
+      </select>
+
+      {{if .Params.ShowAsOf}}
+      <label for="rp-asof">{{t "reports.params.asof"}}</label>
+      <input type="text" id="rp-asof" name="asof" value="{{.Params.AsOf}}"
+             inputmode="numeric" autocomplete="off">
+      {{end}}
+
+      {{if .Params.ShowPeriod}}
+      <label for="rp-from">{{t "reports.params.from"}}</label>
+      <input type="text" id="rp-from" name="from" value="{{.Params.From}}"
+             inputmode="numeric" autocomplete="off">
+      <label for="rp-to">{{t "reports.params.to"}}</label>
+      <input type="text" id="rp-to" name="to" value="{{.Params.To}}"
+             inputmode="numeric" autocomplete="off">
+      {{end}}
+
+      {{if .Params.ShowGranularity}}
+      <label for="rp-gran">{{t "reports.params.granularity"}}</label>
+      <select id="rp-gran" name="granularity">
+        <option value="none"{{if eq .Params.Granularity "none"}} selected{{end}}>{{t "reports.gran.none"}}</option>
+        <option value="month"{{if eq .Params.Granularity "month"}} selected{{end}}>{{t "reports.gran.month"}}</option>
+        <option value="quarter"{{if eq .Params.Granularity "quarter"}} selected{{end}}>{{t "reports.gran.quarter"}}</option>
+      </select>
+      {{end}}
+
+      {{if .Params.ShowCurrency}}
+      <label for="rp-ccy">{{t "reports.params.currency"}}</label>
+      <select id="rp-ccy" name="currency">
+        {{- range .Params.Currencies}}
+        <option value="{{.Code}}"{{if .Selected}} selected{{end}}>{{.Code}}</option>
+        {{- end}}
+      </select>
+      {{end}}
+
+      <button type="submit" class="btn btn-primary">{{t "reports.params.run"}}</button>
+    </fieldset>
+  </form>
+
+  <p class="report-export">
+    <a href="{{.CSVHref}}" class="report-csv-link" download>{{t "reports.export.csv"}}</a>
+  </p>
+
+  <table class="report-table">
+    <thead>
+      <tr>
+        {{- range .Table.Columns}}
+        <th{{if .Right}} class="amount"{{end}}>{{.Header}}</th>
+        {{- end}}
+      </tr>
+    </thead>
+    <tbody>
+      {{- range .Table.Rows}}
+      <tr class="report-row report-indent-{{.Indent}}{{if .Subtotal}} report-subtotal{{end}}{{if .Total}} report-total{{end}}{{if .Warning}} report-warning{{end}}"{{if .Warning}} role="alert"{{end}}>
+        {{- range .Cells}}
+        <td{{if .Right}} class="amount"{{end}}>{{.Text}}</td>
+        {{- end}}
+      </tr>
+      {{- else}}
+      <tr class="report-empty"><td colspan="{{len .Table.Columns}}">{{t "reports.empty"}}</td></tr>
+      {{- end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

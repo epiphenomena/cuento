@@ -926,3 +926,45 @@ other = "Importe"
 other = "Fondo"
 [void.confirm]
 other = "Anular esta transacción"
+
+# p15.1 marco de informes. Etiquetas del formulario de parámetros compartido (el
+# selector de alcance se muestra en TODOS los informes; el resto según el informe),
+# el enlace de exportación CSV, el texto de tabla vacía y el informe de humo
+# provisional del marco (se reemplaza cuando llegan los informes reales p15.3+). Los
+# NOMBRES de grupo (financial/funds/programs/tax) son valores de referencia crudos
+# mostrados tal cual en la interfaz de concesión de administración, no entradas del
+# catálogo.
+[reports.params.scope]
+other = "Alcance de subsidiaria"
+[reports.params.asof]
+other = "A la fecha"
+[reports.params.from]
+other = "Desde"
+[reports.params.to]
+other = "Hasta"
+[reports.params.granularity]
+other = "Granularidad"
+[reports.params.currency]
+other = "Moneda"
+[reports.params.run]
+other = "Generar informe"
+[reports.gran.none]
+other = "Total"
+[reports.gran.month]
+other = "Mensual"
+[reports.gran.quarter]
+other = "Trimestral"
+[reports.export.csv]
+other = "Descargar CSV"
+[reports.empty]
+other = "No hay datos para estos parámetros."
+[reports.smoke.title]
+other = "Informe de humo del marco (provisional)"
+[reports.smoke.col.line]
+other = "Línea"
+[reports.smoke.col.amount]
+other = "Importe"
+[reports.smoke.section.balances]
+other = "Saldos a la fecha"
+[reports.smoke.subtotal]
+other = "Subtotal"

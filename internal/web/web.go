@@ -21,6 +21,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
+	"cuento/internal/reports"
 	"cuento/internal/store"
 )
 
@@ -66,6 +67,12 @@ func NewApp(cfg Config, db *sql.DB, st *store.Store) *App {
 		store:    st,
 		sessions: sessions,
 		tmpl:     mustParseTemplates(),
+		// The report registry is assembled ONCE at startup (p15.1): every shipped
+		// report registered, iterable so routes() auto-mounts one route pair per
+		// report and the index lists them. reports.Default panics on a malformed
+		// registration -- a build-time defect surfaced at startup, like template
+		// parsing (mustParseTemplates).
+		reports: reports.Default(),
 		// The asset manifest is built ONCE here (a single walk of the embedded
 		// static FS), not per request: it maps each asset's logical name to its
 		// content-hashed URL and back (p10.1).
@@ -98,6 +105,7 @@ type server struct {
 	assets    *assetManifest
 	limiter   *loginLimiter
 	decoyHash string
+	reports   *reports.Registry
 }
 
 // healthz reports liveness as JSON: {"status":"ok","version":<version>}.

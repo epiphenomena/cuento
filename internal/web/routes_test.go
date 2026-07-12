@@ -128,9 +128,16 @@ func buildPersonas(t *testing.T, st *store.Store, db *sql.DB) []persona {
 	reportsOnly := mk("reportsonly", store.CreateUserInput{TxnPerm: "none"})
 	admin := mk("admin", store.CreateUserInput{IsAdmin: true})
 
+	// Grant the ReportsOnly persona the "financial" report group -- the group the
+	// p15.1 smoke report (the first real mounted report route) is gated by. This is
+	// what makes the permission matrix prove per-group report enforcement with ZERO
+	// extra test code: ReportsOnly reaches GET /reports/_smoke (200), NoAccess is
+	// forbidden (403), all via the existing matrix mechanism. p13.2's grant WRITERS
+	// land later; raw SQL here is in-convention (p05.3). The group must exist first
+	// (FK), which the startup SyncReportGroups (newMatrixApp) guarantees.
 	if _, err := db.ExecContext(ctx,
 		`INSERT INTO user_report_grants (user_id, group_name) VALUES (?, ?)`,
-		reportsOnly.ID, placeholderReportGroup); err != nil {
+		reportsOnly.ID, grantedReportGroup); err != nil {
 		t.Fatalf("grant report group to reportsonly: %v", err)
 	}
 
@@ -139,10 +146,16 @@ func buildPersonas(t *testing.T, st *store.Store, db *sql.DB) []persona {
 		{name: "NoAccess", user: noAccess},
 		{name: "ReadOnly", user: readOnly},
 		{name: "Bookkeeper", user: bookkeeper},
-		{name: "ReportsOnly", user: reportsOnly, grants: []string{placeholderReportGroup}},
+		{name: "ReportsOnly", user: reportsOnly, grants: []string{grantedReportGroup}},
 		{name: "Admin", user: admin},
 	}
 }
+
+// grantedReportGroup is the report group the ReportsOnly matrix persona holds: the
+// group the p15.1 smoke report is mounted under, so the matrix covers "granted ->
+// 200, ungranted -> 403" on a real report route automatically. When p15.3+ add
+// reports, this stays a valid grant for any report in the same group.
+const grantedReportGroup = "financial"
 
 // mintCookie fabricates a fresh authenticated session for userID by writing a new
 // scs session row (user_id bound under the SAME key authMiddleware reads) and

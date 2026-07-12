@@ -260,7 +260,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 
 ## Phase 15 — Reporting
 
-- [ ] **p15.1 reports: framework.**
+- [x] **p15.1 reports: framework.**
   Tests: registry sync creates groups; unknown report id → 404; new reports appear in the permission matrix automatically; CSV output escapes correctly; params form includes the subsidiary scope selector on every report.
   Build: `reports.Report{ID, TitleKey, Group, ParamsSpec, Run(ctx, *Toolkit, Params) (Table, error)}`; `Table` with typed cells (money/date/text), indent levels, subtotal flags, warning rows (for D19); HTML + CSV renderers; auto-mounted routes under `/reports/{id}` gated by `ReportGroup`; shared params form (**subsidiary scope** — default user's, consolidating descendants per D18; as-of / period; granularity; target currency defaulting to the scope's base).
 - [ ] **p15.2 reports: toolkit.**

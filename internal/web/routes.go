@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"cuento/internal/reports"
 	"cuento/internal/store"
 )
 
@@ -96,15 +97,12 @@ type Route struct {
 }
 
 // codeReportGroups is the code-declared report-group set synced to report_groups
-// at startup (D10). Report routes and their real groups arrive in phase 15; until
-// then a single placeholder makes the sync mechanism real and gives the
-// permission tests a concrete ReportGroup to grant. Phase 15 replaces this with
-// the real groups (each report route's Perm references a name here).
-func codeReportGroups() []string { return []string{placeholderReportGroup} }
-
-// placeholderReportGroup is the lone code-declared group until p15 defines the
-// real set. Kept as a named constant so tests reference it symbolically.
-const placeholderReportGroup = "_placeholder"
+// at startup (D10). p15.1 replaced the lone "_placeholder" with the REAL set,
+// owned by the reports package (reports.Groups()) since that is where reports
+// declare their Group. Every mounted report route's Perm is ReportGroup(one of
+// these); p13.2's admin grant UI now offers exactly this set. A group may be
+// declared before any report references it (SyncReportGroups syncs all names).
+func codeReportGroups() []string { return reports.Groups() }
 
 // SyncReportGroups upserts the code-declared report groups (codeReportGroups)
 // into the report_groups reference table, idempotently (D10). It is the startup
@@ -284,6 +282,27 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/funds/{id}", TxnWrite, http.HandlerFunc(s.fundUpdate)},
 		{http.MethodPost, "/funds/{id}/close", TxnWrite, http.HandlerFunc(s.fundClose)},
 		{http.MethodPost, "/funds/{id}/reopen", TxnWrite, http.HandlerFunc(s.fundReopen)},
+	}
+	// p15.1 reports: auto-mount ONE concrete route pair per registered report --
+	// GET /reports/{id} (HTML, into the app shell) and GET /reports/{id}.csv (the
+	// machine export) -- gated by ReportGroup(report.Group). Mounting CONCRETE
+	// literal paths (not a /reports/{id} wildcard) is deliberate: (a) each report
+	// carries its OWN group Perm, which a single wildcard route could not express;
+	// (b) the permission-matrix + registry-completeness tests substitute {id}->1 in
+	// wildcards, so a wildcard would resolve to a bogus report id and 404; (c) an
+	// unknown /reports/{id} then simply never matches a route and the mux 404s on
+	// its own (rule 8: the whole surface is these declared routes). Because these
+	// are appended to the SAME registry the matrix iterates, every report route is
+	// permission-tested with ZERO test edits -- the "appears in the matrix
+	// automatically" requirement. p15.3–p15.11 add reports to reports.Default();
+	// the routes appear here with no change to this loop.
+	for _, rep := range s.reports.All() {
+		perm := ReportGroup(rep.Group)
+		routes = append(
+			routes,
+			Route{http.MethodGet, "/reports/" + rep.ID, perm, http.HandlerFunc(s.reportPage)},
+			Route{http.MethodGet, "/reports/" + rep.ID + ".csv", perm, http.HandlerFunc(s.reportCSV)},
+		)
 	}
 	// The -dev-only styleguide (Appendix F): a component gallery for visual review.
 	// Registered ONLY in -dev so it 404s in production (it is not in the registry

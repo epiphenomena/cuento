@@ -403,3 +403,35 @@ input[aria-invalid="true"] {
 .txn-payee-suggestion:hover { background: var(--color-surface-muted, rgba(0,0,0,0.06)); }
 .txn-autofill-notice { display: block; color: var(--color-text-muted); font-size: 0.9rem; }
 .txn-autofill-notice[hidden] { display: none; }
+
+/* p15.1 reports framework: the generic report page (report.tmpl). The shared
+   params form is a plain inline row of controls; the table renders any Table with
+   indent (tree depth), subtotal/total emphasis, and the D19 warning row. Amounts
+   are right-aligned via the .amount marker the renderer stamps on money cells. No
+   inline style anywhere (strict CSP, rule 12) -- everything is here. */
+.report-params { margin: var(--space-4) 0; }
+.report-params fieldset {
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+}
+.report-params legend { font-weight: 600; padding: 0 var(--space-2); }
+.report-params label { display: block; font-weight: 600; margin-bottom: var(--space-1); }
+.report-export { margin: var(--space-3) 0; }
+.report-table { width: 100%; border-collapse: collapse; margin-top: var(--space-4); }
+.report-table th, .report-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border);
+  text-align: left;
+}
+.report-table th.amount, .report-table td.amount { text-align: right; font-variant-numeric: tabular-nums; }
+.report-indent-1 td:first-child { padding-left: calc(var(--space-4) * 1.5); }
+.report-indent-2 td:first-child { padding-left: calc(var(--space-4) * 3); }
+.report-indent-3 td:first-child { padding-left: calc(var(--space-4) * 4.5); }
+.report-subtotal { font-weight: 600; }
+.report-total { font-weight: 700; border-top: 2px solid var(--color-border); }
+.report-warning { background: var(--color-danger-bg); color: var(--color-danger); font-weight: 600; }

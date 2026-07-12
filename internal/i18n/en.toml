@@ -932,3 +932,43 @@ other = "Amount"
 other = "Fund"
 [void.confirm]
 other = "Void this transaction"
+
+# p15.1 reports framework. The shared params form labels (scope selector shown on
+# EVERY report; the rest gated per report), the CSV export link, the empty-table
+# fallback, and the throwaway framework SMOKE report's title/labels (replaced when
+# p15.3+ land the real reports). Group NAMES (financial/funds/programs/tax) are raw
+# reference values shown verbatim in the admin grant UI, not catalog entries.
+[reports.params.scope]
+other = "Subsidiary scope"
+[reports.params.asof]
+other = "As of"
+[reports.params.from]
+other = "From"
+[reports.params.to]
+other = "To"
+[reports.params.granularity]
+other = "Granularity"
+[reports.params.currency]
+other = "Currency"
+[reports.params.run]
+other = "Run report"
+[reports.gran.none]
+other = "Total"
+[reports.gran.month]
+other = "Monthly"
+[reports.gran.quarter]
+other = "Quarterly"
+[reports.export.csv]
+other = "Download CSV"
+[reports.empty]
+other = "No data for these parameters."
+[reports.smoke.title]
+other = "Framework smoke report (placeholder)"
+[reports.smoke.col.line]
+other = "Line"
+[reports.smoke.col.amount]
+other = "Amount"
+[reports.smoke.section.balances]
+other = "Balances as of date"
+[reports.smoke.subtotal]
+other = "Subtotal"
