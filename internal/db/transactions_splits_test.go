@@ -537,8 +537,9 @@ func TestTransactionsSplitsIndexesExist(t *testing.T) {
 }
 
 // TestTransactionsSplitsVersionsTablesExist proves the three *_versions twins exist
-// and are queryable (AGENTS rule 5). reconciliation_id must NOT appear on
-// splits_versions -- it is deferred to p16.1.
+// and are queryable (AGENTS rule 5). reconciliation_id stays OFF splits_versions:
+// p16.1 adds it to splits (live), but it is LIVE-ONLY (a clearing toggle mints no
+// split version -- DECISIONS p16.1), so splits_versions must never carry it.
 func TestTransactionsSplitsVersionsTablesExist(t *testing.T) {
 	sqldb := testutil.NewDB(t)
 
@@ -551,12 +552,9 @@ func TestTransactionsSplitsVersionsTablesExist(t *testing.T) {
 		}
 	}
 
-	// reconciliation_id is deferred to p16.1: it must be absent from both splits
-	// and splits_versions. A SELECT of the column must fail with "no such column".
-	if _, err := sqldb.Exec(`SELECT reconciliation_id FROM splits LIMIT 0`); err == nil {
-		t.Error("splits.reconciliation_id exists; it must be deferred to p16.1")
-	}
+	// splits_versions must NOT carry reconciliation_id: it is live-only (versioning
+	// the clearing state would mint spurious split versions on every toggle).
 	if _, err := sqldb.Exec(`SELECT reconciliation_id FROM splits_versions LIMIT 0`); err == nil {
-		t.Error("splits_versions.reconciliation_id exists; it must be deferred to p16.1")
+		t.Error("splits_versions.reconciliation_id exists; reconciliation_id is live-only (must NOT be versioned)")
 	}
 }

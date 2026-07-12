@@ -54,10 +54,8 @@ type check struct {
 }
 
 // checks is THE reviewed registry (AGENTS rule 6): the whole integrity suite in
-// one place, in rule-number order. Z8/Z9 are deferred to p16.1 (they reference
-// reconciliations / splits.reconciliation_id, which do not exist until then);
-// they are present as clearly-marked placeholders returning no violations so the
-// numbering and registry stay stable and p16.1 need only fill their SQL.
+// one place, in rule-number order. Z8/Z9 are the reconciliation checks, active
+// since p16.1 (reconciliations + splits.reconciliation_id landed there, D13).
 var checks = []check{
 	{Rule: "Z1", Severity: Error, SQL: sqlZ1},
 	{Rule: "Z2", Severity: Error, SQL: sqlZ2},
@@ -66,12 +64,12 @@ var checks = []check{
 	{Rule: "Z5", Severity: Error, SQL: sqlZ5},
 	{Rule: "Z6", Severity: Error, SQL: sqlZ6},
 	{Rule: "Z7", Severity: Error, SQL: sqlZ7},
-	// Z8/Z9 -- reconciliation checks. TODO(p16.1): fill the SQL once
-	// reconciliations + splits.reconciliation_id exist (D13). Until then these are
-	// no-op placeholders (SELECT that returns no rows) so the registry numbering is
-	// stable and p16.1 is a pure fill-in.
-	{Rule: "Z8", Severity: Error, SQL: sqlDeferred},
-	{Rule: "Z9", Severity: Error, SQL: sqlDeferred},
+	// Z8/Z9 -- reconciliation checks (D13), active since p16.1: Z8 verifies every
+	// cleared split matches its recon's account and currency; Z9 verifies each
+	// finalized recon's opening + cleared splits equal its statement balance. On a
+	// db with no reconciliation rows both find nothing (check stays clean).
+	{Rule: "Z8", Severity: Error, SQL: sqlZ8},
+	{Rule: "Z9", Severity: Error, SQL: sqlZ9},
 	{Rule: "Z10", Severity: Error, SQL: sqlZ10},
 	{Rule: "Z11", Severity: Error, SQL: sqlZ11},
 	{Rule: "Z12", Severity: Error, SQL: sqlZ12},

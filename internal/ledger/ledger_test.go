@@ -384,6 +384,72 @@ func TestZ7AccountCycle(t *testing.T) {
 	assertFlags(t, w.d, "Z7")
 }
 
+// --- Z8: cleared split matches its recon's account and currency --------------
+
+func TestZ8ClearedSplitAccountMismatch(t *testing.T) {
+	w := newWorld(t)
+	// A recon on checkingUS (USD). Clear the txPlain SALARIES split (a different
+	// account) against it -- account mismatch. reconciliation_id is live-only and
+	// unversioned, so this raw UPDATE trips Z8 without disturbing Z3. The lock
+	// trigger only guards financial fields (amount/account/txn/fund/recon_id), and
+	// the recon here is open, so the reconciliation_id set is not blocked.
+	exec(t, w.d, `INSERT INTO reconciliations (account_id, statement_date, statement_balance, currency, status)
+		VALUES (?, '2025-03-31', 0, 'USD', 'open')`, w.checkingUS)
+	exec(t, w.d, `UPDATE splits SET reconciliation_id = (SELECT MAX(id) FROM reconciliations)
+		WHERE account_id = ? AND transaction_id = ?`, w.salaries, w.txPlain)
+	assertFlags(t, w.d, "Z8")
+}
+
+func TestZ8ClearedSplitCurrencyMismatch(t *testing.T) {
+	w := newWorld(t)
+	// A recon on checkingUS but declared in MXN. Clear the checkingUS split of
+	// txFund (a USD txn) against it -- account matches, currency (USD txn vs MXN
+	// recon) does not.
+	exec(t, w.d, `INSERT INTO reconciliations (account_id, statement_date, statement_balance, currency, status)
+		VALUES (?, '2025-03-31', 0, 'MXN', 'open')`, w.checkingUS)
+	exec(t, w.d, `UPDATE splits SET reconciliation_id = (SELECT MAX(id) FROM reconciliations)
+		WHERE account_id = ? AND transaction_id = ?`, w.checkingUS, w.txFund)
+	assertFlags(t, w.d, "Z8")
+}
+
+// --- Z9: finalized recon reconciles to its statement chain -------------------
+
+func TestZ9FinalizedStatementMismatch(t *testing.T) {
+	w := newWorld(t)
+	// Clear the checkingUS split of txPlain (amount -10000) against a finalized
+	// recon whose statement_balance is a wrong number (first recon, so opening = 0;
+	// -10000 + 0 != 99999). Insert the recon OPEN, clear the split, then flip it to
+	// finalized (the lock trigger only guards financial-field UPDATEs on splits, not
+	// UPDATEs to reconciliations.status).
+	exec(t, w.d, `INSERT INTO reconciliations (account_id, statement_date, statement_balance, currency, status)
+		VALUES (?, '2025-03-31', 99999, 'USD', 'open')`, w.checkingUS)
+	exec(t, w.d, `UPDATE splits SET reconciliation_id = (SELECT MAX(id) FROM reconciliations)
+		WHERE account_id = ? AND transaction_id = ?`, w.checkingUS, w.txPlain)
+	exec(t, w.d, `UPDATE reconciliations SET status = 'finalized' WHERE id = (SELECT MAX(id) FROM reconciliations)`)
+	assertFlags(t, w.d, "Z9")
+}
+
+func TestZ8Z9CleanRecon(t *testing.T) {
+	w := newWorld(t)
+	// A CORRECT finalized recon must trip neither Z8 nor Z9. Recon on checkingUS in
+	// USD; clear the checkingUS split of txPlain (amount -10000); statement_balance
+	// = -10000 (opening 0 + cleared -10000). Account/currency match (Z8 clean) and
+	// the chain balances (Z9 clean). Build it OPEN, clear, then finalize.
+	exec(t, w.d, `INSERT INTO reconciliations (account_id, statement_date, statement_balance, currency, status)
+		VALUES (?, '2025-03-31', -10000, 'USD', 'open')`, w.checkingUS)
+	exec(t, w.d, `UPDATE splits SET reconciliation_id = (SELECT MAX(id) FROM reconciliations)
+		WHERE account_id = ? AND transaction_id = ?`, w.checkingUS, w.txPlain)
+	exec(t, w.d, `UPDATE reconciliations SET status = 'finalized' WHERE id = (SELECT MAX(id) FROM reconciliations)`)
+	got := rulesOf(checkAll(t, w.d))
+	if got["Z8"] {
+		t.Errorf("Z8 fired on a valid cleared split; got %v", keys(got))
+	}
+	if got["Z9"] {
+		t.Errorf("Z9 fired on a correctly-reconciled finalized recon; got %v", keys(got))
+	}
+	assertClean(t, w.d)
+}
+
 // --- Z10: per-fund zero-sum --------------------------------------------------
 
 func TestZ10FundUnbalanced(t *testing.T) {

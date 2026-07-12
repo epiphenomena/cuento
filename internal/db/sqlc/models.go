@@ -191,6 +191,30 @@ type ProgramsVersion struct {
 	SortOrder int64
 }
 
+type Reconciliation struct {
+	ID               int64
+	AccountID        int64
+	StatementDate    string
+	StatementBalance int64
+	Currency         string
+	Status           string
+	Notes            string
+}
+
+type ReconciliationsVersion struct {
+	ID               int64
+	EntityID         int64
+	ChangeID         int64
+	ValidFrom        string
+	Op               string
+	AccountID        int64
+	StatementDate    string
+	StatementBalance int64
+	Currency         string
+	Status           string
+	Notes            string
+}
+
 type ReportGroup struct {
 	Name string
 	Sort int64
@@ -203,15 +227,16 @@ type Session struct {
 }
 
 type Split struct {
-	ID              int64
-	TransactionID   int64
-	AccountID       int64
-	Amount          int64
-	FundID          sql.NullInt64
-	ProgramID       sql.NullInt64
-	FunctionalClass sql.NullString
-	Memo            string
-	Position        int64
+	ID               int64
+	TransactionID    int64
+	AccountID        int64
+	Amount           int64
+	FundID           sql.NullInt64
+	ProgramID        sql.NullInt64
+	FunctionalClass  sql.NullString
+	Memo             string
+	Position         int64
+	ReconciliationID sql.NullInt64
 }
 
 type SplitsVersion struct {

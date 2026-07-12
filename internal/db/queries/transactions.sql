@@ -155,9 +155,11 @@ WHERE id = ?;
 DELETE FROM splits WHERE id = ?;
 
 -- name: SplitsByTransaction :many
--- The current live split set for one transaction, in display order.
+-- The current live split set for one transaction, in display order. Selects the
+-- full splits row (incl. reconciliation_id, added p16.1) so this maps to the
+-- sqlc.Split model; consumers that ignore reconciliation_id are unaffected.
 SELECT id, transaction_id, account_id, amount, fund_id, program_id,
-       functional_class, memo, position
+       functional_class, memo, position, reconciliation_id
 FROM splits
 WHERE transaction_id = ?
 ORDER BY position, id;

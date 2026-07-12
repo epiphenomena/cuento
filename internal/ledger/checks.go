@@ -16,11 +16,6 @@ package ledger
 //     as-of reconstruction and testutil.AssertVersioned use, so Z3 agrees with
 //     the store's own notion of "current snapshot".
 
-// sqlDeferred is the no-op body for a rule whose real SQL is not writable yet
-// (Z8/Z9 depend on reconciliations, added in p16.1). It returns zero rows, so the
-// rule always passes; p16.1 replaces the placeholder with the real query.
-const sqlDeferred = `SELECT '' WHERE 0`
-
 // --- Z1: every non-deleted transaction sums to zero (D2) ---------------------
 // Group splits by transaction; a non-deleted txn whose split amounts do not net
 // to 0 in its (single) currency is a violation.
@@ -253,6 +248,55 @@ SELECT 'account tree cycle at ' || CAST(start AS TEXT)
 FROM up
 WHERE (depth > 0 AND id = start) OR depth >= 100000
 GROUP BY start`
+
+// --- Z8: a cleared split matches its reconciliation's account and currency (D13) --
+// A reconciliation is per (account, currency) and a bank statement covers one
+// balance, so every split cleared against a recon (reconciliation_id NOT NULL)
+// must be on that recon's account and carry that recon's currency (the currency
+// lives on the split's transaction, D3). Any status (open or finalized): a
+// cross-account or cross-currency clearing is wrong regardless. Non-deleted txns
+// only (a soft-deleted txn is out of the ledger; its splits' stale clearing does
+// not corrupt a statement).
+const sqlZ8 = `
+SELECT 'split ' || CAST(s.id AS TEXT) || ' cleared against reconciliation '
+       || CAST(s.reconciliation_id AS TEXT)
+       || ' but account/currency mismatch (split account ' || CAST(s.account_id AS TEXT)
+       || '/' || t.currency || ' vs recon account ' || CAST(r.account_id AS TEXT)
+       || '/' || r.currency || ')'
+FROM splits s
+JOIN transactions t ON t.id = s.transaction_id
+JOIN reconciliations r ON r.id = s.reconciliation_id
+WHERE t.deleted = 0
+  AND (s.account_id <> r.account_id OR t.currency <> r.currency)`
+
+// --- Z9: a finalized reconciliation reconciles to its statement chain (D13) ----
+// For each FINALIZED reconciliation, opening + the net-debit sum of the splits
+// cleared against it must equal its statement_balance (all in minor units, D2
+// sign -- no flip). Opening = the statement_balance of the prior finalized recon
+// for the SAME (account, currency), by (statement_date, id) order; COALESCE 0
+// when this is the first. Splits on a soft-deleted txn are excluded from the sum
+// (out of the ledger). A mismatch means the finalized statement no longer proves
+// (tampering after finalize, or a bad chain).
+const sqlZ9 = `
+SELECT 'finalized reconciliation ' || CAST(r.id AS TEXT)
+       || ' opening + cleared <> statement_balance ' || CAST(r.statement_balance AS TEXT)
+FROM reconciliations r
+WHERE r.status = 'finalized'
+  AND (
+    COALESCE((
+      SELECT p.statement_balance FROM reconciliations p
+      WHERE p.status = 'finalized' AND p.account_id = r.account_id
+        AND p.currency = r.currency
+        AND (p.statement_date < r.statement_date
+             OR (p.statement_date = r.statement_date AND p.id < r.id))
+      ORDER BY p.statement_date DESC, p.id DESC LIMIT 1
+    ), 0)
+    + COALESCE((
+      SELECT SUM(s.amount) FROM splits s
+      JOIN transactions t ON t.id = s.transaction_id
+      WHERE s.reconciliation_id = r.id AND t.deleted = 0
+    ), 0)
+  ) <> r.statement_balance`
 
 // --- Z10: every non-deleted txn sums to zero within each fund group (D20) -----
 // NULL fund_id is one group (the unrestricted group). A (transaction, fund-group)

@@ -679,13 +679,15 @@ func (q *Queries) SplitVersionsAsOf(ctx context.Context, arg SplitVersionsAsOfPa
 
 const splitsByTransaction = `-- name: SplitsByTransaction :many
 SELECT id, transaction_id, account_id, amount, fund_id, program_id,
-       functional_class, memo, position
+       functional_class, memo, position, reconciliation_id
 FROM splits
 WHERE transaction_id = ?
 ORDER BY position, id
 `
 
-// The current live split set for one transaction, in display order.
+// The current live split set for one transaction, in display order. Selects the
+// full splits row (incl. reconciliation_id, added p16.1) so this maps to the
+// sqlc.Split model; consumers that ignore reconciliation_id are unaffected.
 func (q *Queries) SplitsByTransaction(ctx context.Context, transactionID int64) ([]Split, error) {
 	rows, err := q.db.QueryContext(ctx, splitsByTransaction, transactionID)
 	if err != nil {
@@ -705,6 +707,7 @@ func (q *Queries) SplitsByTransaction(ctx context.Context, transactionID int64) 
 			&i.FunctionalClass,
 			&i.Memo,
 			&i.Position,
+			&i.ReconciliationID,
 		); err != nil {
 			return nil, err
 		}
