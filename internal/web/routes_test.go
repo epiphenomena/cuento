@@ -129,12 +129,12 @@ func buildPersonas(t *testing.T, st *store.Store, db *sql.DB) []persona {
 	admin := mk("admin", store.CreateUserInput{IsAdmin: true})
 
 	// Grant the ReportsOnly persona the "financial" report group -- the group the
-	// p15.1 smoke report (the first real mounted report route) is gated by. This is
-	// what makes the permission matrix prove per-group report enforcement with ZERO
-	// extra test code: ReportsOnly reaches GET /reports/_smoke (200), NoAccess is
-	// forbidden (403), all via the existing matrix mechanism. p13.2's grant WRITERS
-	// land later; raw SQL here is in-convention (p05.3). The group must exist first
-	// (FK), which the startup SyncReportGroups (newMatrixApp) guarantees.
+	// p15.3 trial-balance report (the first real mounted report route) is gated by.
+	// This is what makes the permission matrix prove per-group report enforcement with
+	// ZERO extra test code: ReportsOnly reaches GET /reports/trial_balance (200),
+	// NoAccess is forbidden (403), all via the existing matrix mechanism. p13.2's grant
+	// WRITERS land later; raw SQL here is in-convention (p05.3). The group must exist
+	// first (FK), which the startup SyncReportGroups (newMatrixApp) guarantees.
 	if _, err := db.ExecContext(ctx,
 		`INSERT INTO user_report_grants (user_id, group_name) VALUES (?, ?)`,
 		reportsOnly.ID, grantedReportGroup); err != nil {
@@ -152,9 +152,9 @@ func buildPersonas(t *testing.T, st *store.Store, db *sql.DB) []persona {
 }
 
 // grantedReportGroup is the report group the ReportsOnly matrix persona holds: the
-// group the p15.1 smoke report is mounted under, so the matrix covers "granted ->
-// 200, ungranted -> 403" on a real report route automatically. When p15.3+ add
-// reports, this stays a valid grant for any report in the same group.
+// group the p15.3 trial-balance report is mounted under, so the matrix covers
+// "granted -> 200, ungranted -> 403" on a real report route automatically. It stays a
+// valid grant for any p15.4+ report in the same group.
 const grantedReportGroup = "financial"
 
 // mintCookie fabricates a fresh authenticated session for userID by writing a new

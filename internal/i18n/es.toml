@@ -958,13 +958,17 @@ other = "Trimestral"
 other = "Descargar CSV"
 [reports.empty]
 other = "No hay datos para estos parámetros."
-[reports.smoke.title]
-other = "Informe de humo del marco (provisional)"
-[reports.smoke.col.line]
-other = "Línea"
-[reports.smoke.col.amount]
-other = "Importe"
-[reports.smoke.section.balances]
-other = "Saldos a la fecha"
-[reports.smoke.subtotal]
-other = "Subtotal"
+[reports.trial_balance.title]
+other = "Balance de comprobación"
+[reports.trial_balance.col.account]
+other = "Cuenta"
+[reports.trial_balance.col.currency]
+other = "Moneda"
+[reports.trial_balance.col.native]
+other = "Importe nativo"
+[reports.trial_balance.col.converted]
+other = "Convertido"
+[reports.trial_balance.total_native]
+other = "Total (nativo)"
+[reports.trial_balance.total_converted]
+other = "Total (convertido)"

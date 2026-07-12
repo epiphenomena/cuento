@@ -22,14 +22,15 @@ import (
 // The PERMISSION-matrix requirement ("new reports appear in the matrix
 // automatically") is covered with ZERO edits by routes_test.go: because report
 // routes are appended to the SAME registry TestPermissionMatrix iterates, and the
-// ReportsOnly persona is granted the smoke report's group, the matrix already
-// asserts granted->200 / ungranted->403 on GET /reports/_smoke. These tests cover
-// the p15.1-specific behaviors: unknown id -> 404, the scope selector on EVERY
-// report, and the smoke report rendering typed cells + CSV.
+// ReportsOnly persona is granted the trial-balance report's group ("financial"),
+// the matrix already asserts granted->200 / ungranted->403 on GET
+// /reports/trial_balance. These tests cover the framework/report behaviors: unknown
+// id -> 404, the scope selector on EVERY report, and the trial-balance report
+// rendering typed cells + CSV.
 
 // reportsApp builds a real app with the report groups synced (so a ReportGroup grant
 // has a valid FK) and returns the handler + store + sessions. It seeds one account
-// with a posted balance so the smoke report reads REAL data through the toolkit.
+// with a posted balance so the trial-balance report reads REAL data through the toolkit.
 func reportsApp(t *testing.T) (http.Handler, *store.Store, *sql.DB, *scs.SessionManager) {
 	t.Helper()
 	db := testutil.NewDB(t)
@@ -52,6 +53,8 @@ func reportsApp(t *testing.T) (http.Handler, *store.Store, *sql.DB, *scs.Session
 		return id
 	}
 	a1, a2 := mkAcct("Cash"), mkAcct("Bank")
+	// A balanced 250.00/-250.00 posting: the trial-balance report shows Cash +250.00
+	// and Bank -250.00, whose native USD total nets to zero (a real trial balance).
 	if _, err := st.PostTransaction(ctx, store.PostTransactionInput{
 		Date: "2025-06-01", SubsidiaryID: 1, Currency: "USD",
 		Splits: []store.SplitInput{
@@ -130,7 +133,7 @@ func TestScopeSelectorOnEveryReport(t *testing.T) {
 
 	all := reports.Default().All()
 	if len(all) == 0 {
-		t.Fatal("no reports registered; expected at least the smoke report")
+		t.Fatal("no reports registered; expected at least the trial-balance report")
 	}
 	for _, rep := range all {
 		rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+rep.ID, nil)
@@ -154,53 +157,57 @@ func TestScopeSelectorOnEveryReport(t *testing.T) {
 	}
 }
 
-// TestSmokeReportRenders: the smoke report renders its typed cells (a money cell
-// formatted with a currency prefix, an indented data row, and a subtotal row) into
-// the HTML page. Proves the framework is end-to-end: route -> params -> toolkit ->
-// store -> Table -> renderer.
-func TestSmokeReportRenders(t *testing.T) {
+// TestTrialBalanceReportRenders: the trial-balance report renders its typed cells (a
+// money cell formatted with a currency prefix and a native total row) into the HTML
+// page. Proves the framework is end-to-end: route -> params -> toolkit -> store ->
+// Table -> renderer, with real account names from account_names.
+func TestTrialBalanceReportRenders(t *testing.T) {
 	h, st, _, sm := reportsApp(t)
 	admin := mkUser(t, st, "admin", "none", true)
 
-	rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.SmokeReportID, nil)
+	rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.TrialBalanceReportID, nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("smoke report status = %d, want 200", rec.Code)
+		t.Fatalf("trial balance status = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
 
 	if !strings.Contains(body, "report-table") {
-		t.Errorf("smoke report page missing the report table")
+		t.Errorf("trial balance page missing the report table")
 	}
-	// A money cell with the currency prefix (the seeded 250.00 balance).
+	// A money cell with the currency prefix (the seeded 250.00 Cash balance).
 	if !strings.Contains(body, "USD 250.00") {
-		t.Errorf("smoke report missing formatted money cell USD 250.00; body:\n%s", body)
+		t.Errorf("trial balance missing formatted money cell USD 250.00; body:\n%s", body)
 	}
-	// The subtotal row emphasis class (a subtotal row was emitted).
+	// A resolved account name (a stored proper noun, verbatim).
+	if !strings.Contains(body, "Cash") {
+		t.Errorf("trial balance missing the Cash account name; body:\n%s", body)
+	}
+	// The total (native) subtotal row emphasis class (a total row was emitted).
 	if !strings.Contains(body, "report-subtotal") {
-		t.Errorf("smoke report missing the subtotal row")
+		t.Errorf("trial balance missing the native total row")
 	}
-	// An indented data row (indent level 1).
-	if !strings.Contains(body, "report-indent-1") {
-		t.Errorf("smoke report missing the indented data row")
+	// The grand converted total row (RowTotal styling).
+	if !strings.Contains(body, "report-total") {
+		t.Errorf("trial balance missing the converted total row")
 	}
 }
 
-// TestSmokeReportCSV: the CSV endpoint returns text/csv, an attachment filename, and
-// a parseable body whose header + rows reflect the report (proving the CSV renderer
-// is wired through the route with the same params).
-func TestSmokeReportCSV(t *testing.T) {
+// TestTrialBalanceReportCSV: the CSV endpoint returns text/csv, an attachment
+// filename, and a parseable body whose header + rows reflect the report (proving the
+// CSV renderer is wired through the route with the same params).
+func TestTrialBalanceReportCSV(t *testing.T) {
 	h, st, _, sm := reportsApp(t)
 	admin := mkUser(t, st, "admin", "none", true)
 
-	rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.SmokeReportID+".csv", nil)
+	rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.TrialBalanceReportID+".csv", nil)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("smoke report CSV status = %d, want 200", rec.Code)
+		t.Fatalf("trial balance CSV status = %d, want 200", rec.Code)
 	}
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/csv") {
 		t.Errorf("CSV Content-Type = %q, want text/csv", ct)
 	}
-	if cd := rec.Header().Get("Content-Disposition"); !strings.Contains(cd, "_smoke.csv") {
-		t.Errorf("CSV Content-Disposition = %q, want attachment filename _smoke.csv", cd)
+	if cd := rec.Header().Get("Content-Disposition"); !strings.Contains(cd, "trial_balance.csv") {
+		t.Errorf("CSV Content-Disposition = %q, want attachment filename trial_balance.csv", cd)
 	}
 	body := rec.Body.String()
 	// Machine-plain money (no grouping separators): 250.00 for the seeded balance.
@@ -212,20 +219,20 @@ func TestSmokeReportCSV(t *testing.T) {
 // TestReportPermissionThroughGrant: a report route enforces its group grant like any
 // registry route -- a user WITH the group grant gets 200, a user WITHOUT gets 403.
 // This is what "appears in the matrix automatically" gives at the HTTP level for the
-// concrete smoke report (routes_test.go's matrix asserts it across all personas; this
-// pins it explicitly for the framework's example report).
+// concrete trial-balance report (routes_test.go's matrix asserts it across all
+// personas; this pins it explicitly).
 func TestReportPermissionThroughGrant(t *testing.T) {
 	h, st, db, sm := reportsApp(t)
 
 	granted := mkUser(t, st, "granted", "none", false)
-	grantGroup(t, db, granted, "financial") // the smoke report's group
+	grantGroup(t, db, granted, "financial") // the trial-balance report's group
 	ungranted := mkUser(t, st, "ungranted", "none", false)
 
-	rec := asUser(t, h, sm, granted, http.MethodGet, "/reports/"+reports.SmokeReportID, nil)
+	rec := asUser(t, h, sm, granted, http.MethodGet, "/reports/"+reports.TrialBalanceReportID, nil)
 	if rec.Code != http.StatusOK {
 		t.Errorf("granted user status = %d, want 200", rec.Code)
 	}
-	rec = asUser(t, h, sm, ungranted, http.MethodGet, "/reports/"+reports.SmokeReportID, nil)
+	rec = asUser(t, h, sm, ungranted, http.MethodGet, "/reports/"+reports.TrialBalanceReportID, nil)
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("ungranted user status = %d, want 403", rec.Code)
 	}

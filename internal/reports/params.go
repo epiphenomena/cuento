@@ -29,6 +29,24 @@ type Params struct {
 	// the scope subsidiary's base currency. Meaningful when ParamsSpec.Currency is
 	// set; otherwise reports render native currencies.
 	TargetCurrency string
+
+	// Lang is the request UI language (a catalog lang code, e.g. "en"/"es") a report
+	// resolves STORED per-language names in (account_names, D5) — the ONE piece of
+	// request context a report needs beyond the scope/dates that isn't carried on
+	// ctx (the lang ctx key is web-private, and AGENTS "nothing but the actor rides
+	// the context"). The web layer sets it from langOf(ctx); it defaults to "en"
+	// (the report author reads it via LangOr so a zero Params still resolves names).
+	Lang string
+}
+
+// LangOr returns p.Lang, or "en" when it is empty, so a report resolving stored
+// per-language names (account_names) always has a valid catalog lang even for a
+// zero-value Params (a test that builds Params by hand need not set Lang).
+func (p Params) LangOr() string {
+	if p.Lang == "" {
+		return "en"
+	}
+	return p.Lang
 }
 
 // Granularity is the period-column breakdown a comparative activity report uses

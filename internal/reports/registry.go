@@ -22,14 +22,15 @@ func NewRegistry() *Registry {
 }
 
 // Default builds the registry with every shipped report registered, in declared
-// order. Today that is the p15.1 framework smoke report only; p15.3–p15.11 append
-// their registration here (one line each) and the web layer auto-mounts them. This
-// is the single place the app assembles its report set; the web layer calls it once
-// at startup. It PANICS on a malformed registration (a build-time defect), so a bad
-// report declaration fails fast at startup.
+// order. Today that is the p15.3 trial-balance report (which replaced the p15.1
+// framework smoke placeholder); p15.4–p15.11 append their registration here (one
+// line each) and the web layer auto-mounts them. This is the single place the app
+// assembles its report set; the web layer calls it once at startup. It PANICS on a
+// malformed registration (a build-time defect), so a bad report declaration fails
+// fast at startup.
 func Default() *Registry {
 	reg := NewRegistry()
-	registerSmoke(reg)
+	registerTrialBalance(reg)
 	return reg
 }
 

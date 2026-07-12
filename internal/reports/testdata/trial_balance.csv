@@ -1,0 +1,29 @@
+Account,Currency,Native amount,Converted
+Checking US,USD,35935.00,35935.00
+Checking MX,MXN,395000.00,21823.20
+Savings,USD,20000.00,20000.00
+Cash MXN,MXN,6400.00,353.59
+Building,USD,160000.00,160000.00
+Due from RV Mexico,USD,10000.00,10000.00
+FX Clearing,MXN,5000.00,276.24
+FX Clearing,USD,9740.00,9740.00
+Credit Card,USD,-3000.00,-3000.00
+Due to RV Internacional,USD,-10000.00,-10000.00
+Opening Balances,MXN,-315000.00,-17403.31
+Opening Balances,USD,-187000.00,-187000.00
+Contributions,USD,-52750.00,-52750.00
+Government Grants,MXN,-100000.00,-5524.86
+Government Grants,USD,-2000.00,-2000.00
+Program Service Fees,USD,-1200.00,-1200.00
+Event Income,USD,-3000.00,-3000.00
+Salaries,USD,16500.00,16500.00
+Program Supplies,MXN,5000.00,276.24
+Program Supplies,USD,2100.00,2100.00
+Food Purchases,MXN,3600.00,198.90
+Occupancy,USD,3050.00,3050.00
+Insurance,USD,600.00,600.00
+Bank Fees,USD,25.00,25.00
+Event Costs,USD,1000.00,1000.00
+Total (native),MXN,0.00,
+Total (native),USD,0.00,
+Total (converted),,,0.00

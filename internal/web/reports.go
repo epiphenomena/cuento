@@ -87,7 +87,7 @@ func (s *server) resolveParams(
 		}
 	}
 
-	p := reports.Params{Scope: scope}
+	p := reports.Params{Scope: scope, Lang: langOf(ctx)}
 	df := dateFormatFor(u)
 	today := s.now()
 

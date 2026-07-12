@@ -962,13 +962,17 @@ other = "Quarterly"
 other = "Download CSV"
 [reports.empty]
 other = "No data for these parameters."
-[reports.smoke.title]
-other = "Framework smoke report (placeholder)"
-[reports.smoke.col.line]
-other = "Line"
-[reports.smoke.col.amount]
-other = "Amount"
-[reports.smoke.section.balances]
-other = "Balances as of date"
-[reports.smoke.subtotal]
-other = "Subtotal"
+[reports.trial_balance.title]
+other = "Trial balance"
+[reports.trial_balance.col.account]
+other = "Account"
+[reports.trial_balance.col.currency]
+other = "Currency"
+[reports.trial_balance.col.native]
+other = "Native amount"
+[reports.trial_balance.col.converted]
+other = "Converted"
+[reports.trial_balance.total_native]
+other = "Total (native)"
+[reports.trial_balance.total_converted]
+other = "Total (converted)"

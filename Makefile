@@ -88,9 +88,11 @@ fixture:
 	$(LEDGERIMPORT) build -source $(FIXTURE_SOURCE) -map $(FIXTURE_MAP) \
 		-config $(FIXTURE_CONFIG) -o $(FIXTURE_DB) --anonymize
 
-## golden — regenerate report goldens; diffs must be reviewed, never blind-committed (phase 15).
+## golden — regenerate report goldens (internal/reports/testdata/*.{txt,csv}) via the
+## -update test flag; deterministic (params/currency/locale pinned in the tests). The
+## resulting diff MUST be reviewed, never blind-committed (phase 15).
 golden:
-	@echo "golden: report goldens land in phase 15"
+	$(GO) test ./internal/reports/ -run Golden -update
 
 ## run — dev server in -dev mode (phase 0 hello server onward).
 run: build
