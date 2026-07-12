@@ -213,7 +213,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p11.4 [P] web+db: org settings & languages.**
   Tests: adding a language exposes a name column in account forms; org settings persist.
   Build: `org_settings(key, value)` migration (org name, enabled languages); minimal admin form. (Report base currency is no longer an org setting — it follows the scoped subsidiary, D18.)
-- [ ] **p11.5 [P] web: programs management.**
+- [x] **p11.5 [P] web: programs management.**
   Tests: CRUD + perms (view TxnRead, manage TxnWrite — program structure is bookkeeping, like funds); root protected; move options exclude descendants; deactivate messaging (blocks new use, history intact); activity totals match p08.4.
   Build: `/programs` — tree list with period R/E activity totals per program, inline create/edit/move/deactivate.
 

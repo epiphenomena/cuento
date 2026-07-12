@@ -358,3 +358,43 @@ other = "The root subsidiary cannot be given a parent."
 other = "A subsidiary cannot be moved under itself or its descendants."
 [error.subsidiary.has_active_children]
 other = "This subsidiary still has active children and cannot be deactivated."
+[programs.title]
+other = "Programs"
+[programs.intro]
+other = "Your program tree — the mission dimension on every revenue and expense split. One root (\"General\", the unallocated default); managing it is bookkeeping."
+[programs.period]
+other = "Activity shown for the period %s to %s."
+[programs.new]
+other = "New program"
+[programs.deactivate]
+other = "Deactivate"
+[programs.inactive]
+other = "inactive"
+[programs.empty]
+other = "No programs yet."
+[programs.col.name]
+other = "Program"
+[programs.col.activity]
+other = "Activity this period"
+[programs.col.actions]
+other = "Actions"
+[programs.form.new_title]
+other = "New program"
+[programs.form.edit_title]
+other = "Edit program"
+[programs.form.name]
+other = "Name"
+[programs.form.parent]
+other = "Parent program"
+[programs.form.root_note]
+other = "This is the root program; it has no parent and cannot be moved."
+[error.program.second_root]
+other = "A program must have a parent; there is already a root."
+[error.program.parent_missing]
+other = "The selected parent program does not exist."
+[error.program.root_immovable]
+other = "The root program cannot be given a parent."
+[error.program.cycle]
+other = "A program cannot be moved under itself or its descendants."
+[error.program.has_active_children]
+other = "This program still has active children and cannot be deactivated."

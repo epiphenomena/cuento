@@ -1,0 +1,70 @@
+{{/*
+  p11.5 programs management page (/programs, TxnRead view / TxnWrite manage). Like
+  the other shell pages it is a self-contained top-level template that emits
+  shell-open, its <main> content, then shell-close. .Page is a programsPageModel.
+
+  Programs are a DIMENSION (D24): the tree table shows each program (indented by
+  depth), its per-currency period R/E activity total (store.ProgramActivity, matching
+  the p08.4 numbers, formatted through the money formatters -- rule 10), and its
+  active state, with manage actions (Edit / Deactivate). The inline create/edit form
+  is fetched into #program-form via htmx (GET .../new or .../{id}/edit) and swapped in
+  place -- reusing the p10.3 form-error convention on a bad submit. A blocked
+  deactivate (active children) re-renders THIS page at 422 with .ErrorKey shown as a
+  page-level alert (no execution). Program names are stored data (proper nouns), so
+  names render verbatim; every OTHER string via {{t}} (rule 9); no inline script
+  (rule 12).
+*/ -}}
+{{define "programs.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "programs.title"))}}
+  {{- with .Page}}
+  <h1>{{t "programs.title"}}</h1>
+  <p class="hint">{{t "programs.intro"}}</p>
+  <p class="hint">{{t "programs.period" .From .To}}</p>
+
+  {{if .ErrorKey}}
+  <p class="field-error" role="alert">{{t .ErrorKey}}</p>
+  {{end}}
+
+  <div id="program-form" class="program-form-region">
+    {{/* The inline form fetches here. GET /programs/new htmx-swaps its form in. */}}
+    <button type="button" class="btn btn-primary"
+            hx-get="/programs/new" hx-target="#program-form" hx-swap="outerHTML">
+      {{t "programs.new"}}
+    </button>
+  </div>
+
+  <table class="tree-table">
+    <thead>
+      <tr>
+        <th>{{t "programs.col.name"}}</th>
+        <th>{{t "programs.col.activity"}}</th>
+        <th>{{t "programs.col.actions"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="prog-row{{if not .Active}} prog-inactive{{end}}" data-depth="{{.Depth}}">
+        <td class="prog-name acct-depth-{{.Depth}}">{{.Name}}{{if not .Active}} <span class="badge">{{t "programs.inactive"}}</span>{{end}}</td>
+        <td class="prog-activity">
+          {{range .Activity}}<span class="amount">{{.}}</span>{{else}}<span class="muted">—</span>{{end}}
+        </td>
+        <td class="prog-actions">
+          <button type="button" class="btn btn-ghost"
+                  hx-get="/programs/{{.ID}}/edit" hx-target="#program-form" hx-swap="outerHTML">
+            {{t "common.edit"}}
+          </button>
+          {{if .Active}}
+          <form method="post" action="/programs/{{.ID}}/deactivate" class="inline">
+            <button type="submit" class="btn btn-ghost">{{t "programs.deactivate"}}</button>
+          </form>
+          {{end}}
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="3">{{t "programs.empty"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

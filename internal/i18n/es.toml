@@ -353,3 +353,43 @@ other = "A la subsidiaria raiz no se le puede asignar un padre."
 other = "Una subsidiaria no puede moverse bajo si misma ni sus descendientes."
 [error.subsidiary.has_active_children]
 other = "Esta subsidiaria aun tiene hijas activas y no se puede desactivar."
+[programs.title]
+other = "Programas"
+[programs.intro]
+other = "Su arbol de programas — la dimension de mision en cada partida de ingreso y gasto. Una raiz (\"General\", el valor por defecto sin asignar); administrarlo es contabilidad."
+[programs.period]
+other = "Actividad mostrada para el periodo %s a %s."
+[programs.new]
+other = "Nuevo programa"
+[programs.deactivate]
+other = "Desactivar"
+[programs.inactive]
+other = "inactivo"
+[programs.empty]
+other = "Aun no hay programas."
+[programs.col.name]
+other = "Programa"
+[programs.col.activity]
+other = "Actividad del periodo"
+[programs.col.actions]
+other = "Acciones"
+[programs.form.new_title]
+other = "Nuevo programa"
+[programs.form.edit_title]
+other = "Editar programa"
+[programs.form.name]
+other = "Nombre"
+[programs.form.parent]
+other = "Programa padre"
+[programs.form.root_note]
+other = "Este es el programa raiz; no tiene padre y no se puede mover."
+[error.program.second_root]
+other = "Un programa debe tener un padre; ya existe una raiz."
+[error.program.parent_missing]
+other = "El programa padre seleccionado no existe."
+[error.program.root_immovable]
+other = "Al programa raiz no se le puede asignar un padre."
+[error.program.cycle]
+other = "Un programa no puede moverse bajo si mismo ni sus descendientes."
+[error.program.has_active_children]
+other = "Este programa aun tiene hijos activos y no se puede desactivar."

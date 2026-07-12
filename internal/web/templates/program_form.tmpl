@@ -1,0 +1,57 @@
+{{/*
+  p11.5 program create/edit form partial ("program-form"). SINGLE SOURCE of the form
+  region: the page renders the "New program" trigger inside #program-form; GET
+  /programs/new and /programs/{id}/edit swap THIS partial in (hx-target #program-form,
+  outerHTML), and a failed POST re-renders it at 422 -- so input ids stay stable
+  across every swap (anti-jank, Appendix C). The dot is always a programForm.
+
+  hx-post targets /programs (create) when .ID is 0, else /programs/{id} (edit). Field
+  errors come from .Errors (formErrors): .Errors.ErrorKey "field" is the i18n KEY (or
+  "") rendered via {{t}} (rule 9); autofocus is stamped on .Errors.FirstInvalid only.
+
+  The parent select is OMITTED for the root (.IsRoot) -- the root is immovable (D24);
+  the store still enforces it. On a child, the options exclude the subject + its
+  descendants so a cycle is never offered (presentation only; the store rejects a raw
+  cycle too). Program names are stored data, so option labels render the stored
+  names; every other string via {{t}} (rule 9). No inline script/style (strict CSP,
+  rule 12).
+*/ -}}
+{{define "program-form" -}}
+<form id="program-form" class="program-form"
+      hx-post="{{if .ID}}/programs/{{.ID}}{{else}}/programs{{end}}"
+      hx-target="#program-form" hx-swap="outerHTML">
+
+  <h2>{{if .ID}}{{t "programs.form.edit_title"}}{{else}}{{t "programs.form.new_title"}}{{end}}</h2>
+
+  <div class="field">
+    <label for="pf-name">{{t "programs.form.name"}}</label>
+    <input id="pf-name" name="name" type="text" value="{{.Name}}"
+      {{- if .Errors.ErrorKey "name"}} aria-invalid="true" aria-describedby="pf-name-err"{{end}}
+      {{- if eq .Errors.FirstInvalid "name"}} autofocus{{end}}>
+    {{with .Errors.ErrorKey "name"}}<p id="pf-name-err" class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+
+  {{if not .IsRoot}}
+  <div class="field">
+    <label for="pf-parent">{{t "programs.form.parent"}}</label>
+    <select id="pf-parent" name="parent_id"
+      {{- if eq .Errors.FirstInvalid "parent_id"}} autofocus{{end}}>
+      {{range .Parents}}<option value="{{.ID}}"{{if eq .ID $.ParentID}} selected{{end}}>{{.Name}}</option>
+      {{end}}
+    </select>
+    {{with .Errors.ErrorKey "parent_id"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+  {{else}}
+  <p class="hint">{{t "programs.form.root_note"}}</p>
+  {{/* A raw submit that tries to reparent the root still reaches the store, which
+       rejects it; surface that parent_id error here even though the select is
+       omitted (D24 root immovability). */}}
+  {{with .Errors.ErrorKey "parent_id"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  {{end}}
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">{{t "common.save"}}</button>
+    <a class="btn btn-ghost" href="/programs">{{t "common.cancel"}}</a>
+  </div>
+</form>
+{{- end}}

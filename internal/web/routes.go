@@ -181,6 +181,20 @@ func (s *server) routes() []Route {
 		// NOT a setting here -- it follows the scoped subsidiary (D18).
 		{http.MethodGet, "/admin/org", Admin, http.HandlerFunc(s.orgPage)},
 		{http.MethodPost, "/admin/org", Admin, http.HandlerFunc(s.orgUpdate)},
+		// p11.5 programs management (Appendix B/F). Programs are a DIMENSION and their
+		// structure is BOOKKEEPING (D24), so GET /programs is TxnRead (the tree list +
+		// per-program activity totals + the inline form fetches) and the create/edit/
+		// move/deactivate mutations are TxnWrite -- unlike subsidiaries (org structure,
+		// all Admin). The literal ".../new" segment is more specific than ".../{id}",
+		// so the Go 1.22+ mux routes them precisely. The nav.programs entry (shell.go)
+		// lights up now that GET /programs is registered. The permission-matrix test
+		// picks these up automatically (rule 8).
+		{http.MethodGet, "/programs", TxnRead, http.HandlerFunc(s.programsPage)},
+		{http.MethodGet, "/programs/new", TxnWrite, http.HandlerFunc(s.programNewForm)},
+		{http.MethodGet, "/programs/{id}/edit", TxnWrite, http.HandlerFunc(s.programEditForm)},
+		{http.MethodPost, "/programs", TxnWrite, http.HandlerFunc(s.programCreate)},
+		{http.MethodPost, "/programs/{id}", TxnWrite, http.HandlerFunc(s.programUpdate)},
+		{http.MethodPost, "/programs/{id}/deactivate", TxnWrite, http.HandlerFunc(s.programDeactivate)},
 	}
 	// The -dev-only styleguide (Appendix F): a component gallery for visual review.
 	// Registered ONLY in -dev so it 404s in production (it is not in the registry
