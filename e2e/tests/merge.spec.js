@@ -35,6 +35,10 @@ async function createLeaf(page, name, type) {
   }
   await page.getByRole('button', { name: /^save$/i }).click();
   await page.waitForURL('**/accounts');
+  // The save responds with an htmx HX-Redirect; wait for the redirect-driven load
+  // to fully settle before the next action, or a following goto/click can abort
+  // the in-flight navigation (net::ERR_ABORTED).
+  await page.waitForLoadState('load');
   await expect(page.getByText(name, { exact: true })).toBeVisible();
 }
 
@@ -64,11 +68,15 @@ test.describe('merge accounts', () => {
     // Step 2: confirm -> executes, redirects to /accounts.
     await page.getByRole('button', { name: /confirm merge/i }).click();
     await page.waitForURL('**/accounts');
+    await page.waitForLoadState('load');
 
-    // The source is deactivated: it drops out of the active tree. With the default
-    // "active only" filter OFF it still shows, but marked inactive; filtering to
-    // active-only hides it. Assert via the active filter.
-    await page.goto('/accounts?active=1');
+    // The source is deactivated: it drops out of the active tree. Filter to
+    // active-only via the REAL filter form (a plain JS-free GET form) rather than a
+    // raw page.goto right after the htmx redirect (which races the in-flight
+    // navigation -> intermittent net::ERR_ABORTED). This also exercises the filter.
+    await page.locator('form.filters input[name="active"]').check();
+    await page.locator('form.filters button[type="submit"]').click();
+    await page.waitForLoadState('load');
     await expect(page.getByText('Supplies E2E', { exact: true })).toHaveCount(0);
     // The destination survives.
     await expect(page.getByText('Office E2E', { exact: true })).toBeVisible();
