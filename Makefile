@@ -61,9 +61,23 @@ check: build
 e2e: build
 	cd e2e && npm ci && npx playwright test
 
-## fixture — local only: run ledgerimport to produce fixtures/sample.db (phase 9).
+## fixture — local only: run ledgerimport build to produce fixtures/sample.db
+## (p09.3). Reads the gitignored real export + reviewed mapping that live under
+## fixtures/source/ (AGENTS rule 11: never committed, never run in CI). The
+## mapping is CSV + JSON (no YAML, D15). This target is NEVER part of `make test`
+## or CI; it is the p09.4 human-run go-live rehearsal step (D26). sample.db is
+## gitignored. Override the paths to point at your local mapping files.
+LEDGERIMPORT   ?= $(BINDIR)/ledgerimport
+FIXTURE_SOURCE ?= fixtures/source/jrnl.csv
+FIXTURE_MAP    ?= fixtures/source/mapping-accounts.csv
+FIXTURE_CONFIG ?= fixtures/source/mapping.json
+FIXTURE_DB     ?= fixtures/sample.db
 fixture:
-	@echo "fixture: ledgerimport wiring lands in phase 9"
+	@mkdir -p $(BINDIR)
+	$(GO) build -o $(LEDGERIMPORT) ./cmd/ledgerimport
+	rm -f $(FIXTURE_DB) $(FIXTURE_DB)-* $(FIXTURE_DB).*
+	$(LEDGERIMPORT) build -source $(FIXTURE_SOURCE) -map $(FIXTURE_MAP) \
+		-config $(FIXTURE_CONFIG) -o $(FIXTURE_DB) --anonymize
 
 ## golden — regenerate report goldens; diffs must be reviewed, never blind-committed (phase 15).
 golden:

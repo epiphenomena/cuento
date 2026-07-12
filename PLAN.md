@@ -181,7 +181,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
   Build: `testutil.Fixture(t)` constructing Appendix D exactly — deterministic dates, amounts, edit history, one finalized reconciliation, FX pair, intercompany pair, restricted grant lifecycle. This is what CI and goldens use; the real export never is.
 - [x] **p09.2 docs: inspect the real export.** *(needs the CSV in `fixtures/source/`)*
   Deliverable: `docs/ledger-export.md` describing file format, columns, encodings, quirks — **structure only, zero data values copied**. No code.
-- [ ] **p09.3 import: ledger converter.**
+- [x] **p09.3 import: ledger converter.**
   Tests: parsers exercised against synthetic lines embedded in tests (shape per `docs/ledger-export.md`, fake values); `TestMappingAppliesSubFundProgramFunction` (defaults + per-account/per-column overrides per D22/D26 — program defaults account default → root); `TestImportedBooksBalance` (every produced txn balances overall and per fund; `ledger.Check` clean on output, warnings surfaced).
   Build: `cmd/ledgerimport accounts` emits a reviewable account-mapping YAML (type, parent, subsidiaries, functional default, default program, 990 code, en/es names); `cmd/ledgerimport build -o fixtures/sample.db` creates subsidiaries, programs, and funds (from mapping), accounts, opening balances (via `Equity:Opening Balances`, per subsidiary), payees, transactions with sub/fund/program/function assigned per D22; `--anonymize` hashes payees/memos. `make fixture` wires it (local only).
 - [ ] **p09.4 import: production mapping & go-live rehearsal.** *(needs human — iterative)*
