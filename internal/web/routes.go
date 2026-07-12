@@ -147,6 +147,13 @@ func (s *server) routes() []Route {
 		// /accounts is registered. The permission-matrix test picks these up
 		// automatically (rule 8).
 		{http.MethodGet, "/accounts", TxnRead, http.HandlerFunc(s.accountsPage)},
+		// p12.1 account register (Appendix B/F). TxnRead: the register table + its
+		// filters + keyset htmx paging (the sentinel's next-page fetch is the SAME
+		// route with a cursor param, rendering a rows fragment). The ".../new" and
+		// ".../merge" literals are more specific than ".../{id}/register", so the Go
+		// 1.22+ mux routes them precisely. The permission-matrix test picks it up
+		// automatically (rule 8); /accounts links each row here.
+		{http.MethodGet, "/accounts/{id}/register", TxnRead, http.HandlerFunc(s.registerPage)},
 		{http.MethodGet, "/accounts/new", TxnWrite, http.HandlerFunc(s.accountNewForm)},
 		{http.MethodGet, "/accounts/{id}/edit", TxnWrite, http.HandlerFunc(s.accountEditForm)},
 		// p11.2 merge UI (TxnWrite). GET renders the merge form (source/destination

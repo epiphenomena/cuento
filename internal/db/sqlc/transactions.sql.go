@@ -296,6 +296,36 @@ func (q *Queries) InsertTransactionVersion(ctx context.Context, arg InsertTransa
 	return err
 }
 
+const listPayees = `-- name: ListPayees :many
+SELECT id, name, active FROM payees ORDER BY id
+`
+
+// Every payee (id -> name), for the register's payee-name lookup (p12.1). The
+// payee set is tiny; the store loads it once per page render into an id->name map
+// rather than joining per row. Ordered by id for determinism.
+func (q *Queries) ListPayees(ctx context.Context) ([]Payee, error) {
+	rows, err := q.db.QueryContext(ctx, listPayees)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Payee
+	for rows.Next() {
+		var i Payee
+		if err := rows.Scan(&i.ID, &i.Name, &i.Active); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const programSubtreeIDs = `-- name: ProgramSubtreeIDs :many
 WITH RECURSIVE subtree(id, parent_id, name, active, sort_order) AS (
   SELECT p0.id, p0.parent_id, p0.name, p0.active, p0.sort_order

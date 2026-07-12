@@ -1,0 +1,131 @@
+{{/*
+  p12.1 account register (/accounts/{id}/register, TxnRead). A self-contained
+  shell page (shell-open / <main> / shell-close, like the other pages). .Page is a
+  registerPageModel.
+
+  Columns: date, subsidiary badge (only when .ShowSubBadge -- the account maps to
+  >1 sub, D18), payee, memo, counter-account (or the "Split" word for a >2-split
+  txn), fund chip (only on a restricted/non-NULL fund, D20), amount, running
+  balance per currency, and -- only for a reconcilable account -- a recon column
+  (the mark itself is wired in p16; here it is a gated placeholder).
+
+  Anti-jank paging (Appendix C): all rows live in ONE <tbody>. The "load more"
+  control is the LAST <tr> (the sentinel); its hx-get points at THIS route with the
+  next cursor + the active filters, hx-target is itself, hx-swap outerHTML -- so the
+  next page's response (the register-rows fragment: more rows + a fresh sentinel)
+  APPENDS at the end and nothing above shifts (scroll preserved). Row ids
+  (reg-row-<split_id>) are stable across swaps; the filter form lives OUTSIDE the
+  tbody so it is never re-rendered on a page fetch, keeping its input ids stable.
+
+  Every string via {{t}} (rule 9); amounts/dates already formatted through the money
+  formatters (rule 10); account/subsidiary/fund/payee names are stored proper nouns
+  rendered verbatim; no inline script (rule 12).
+*/ -}}
+
+{{/* register-row: one <tr>. Shared by the full page and the paging fragment so the
+     two never drift. The data is a regRowCtx: .Row is the regRow, .ShowSubBadge /
+     .Reconcilable are the page-level column gates. */ -}}
+{{define "register-row" -}}
+{{- with .Row -}}
+<tr id="reg-row-{{.SplitID}}" class="reg-row">
+  <td class="reg-date">{{.Date}}</td>
+  {{if $.ShowSubBadge}}<td class="reg-sub"><span class="badge">{{.SubName}}</span></td>{{end}}
+  <td class="reg-payee">{{if .PayeeName}}{{.PayeeName}}{{else}}<span class="muted">—</span>{{end}}</td>
+  <td class="reg-memo">{{if .Memo}}{{.Memo}}{{else}}<span class="muted">—</span>{{end}}</td>
+  <td class="reg-counter">{{if .IsSplit}}{{t "register.split"}}{{else}}{{.CounterAccount}}{{end}}</td>
+  <td class="reg-fund">{{if .FundName}}<span class="chip">{{.FundName}}</span>{{end}}</td>
+  <td class="reg-amount amount">{{.AmountFmt}}</td>
+  <td class="reg-running amount">{{.RunningBalanceFmt}}</td>
+  {{if $.Reconcilable}}<td class="reg-recon" data-col="recon"></td>{{end}}
+</tr>
+{{- end}}
+{{- end}}
+
+{{/* register-rows: the paging FRAGMENT. Rendered for a cursor-carrying (sentinel)
+     request; the data is the registerPageModel DIRECTLY (not wrapped in a shell).
+     It is just the next rows plus a fresh sentinel (or nothing when there are no
+     more). It is NOT a full document -- htmx swaps it in place of the old sentinel,
+     appending at the end. */ -}}
+{{define "register-rows" -}}
+{{range .Rows}}{{template "register-row" (regRowCtx $ .)}}
+{{end -}}
+{{template "register-sentinel" .}}
+{{- end}}
+
+{{/* register-sentinel: the self-replacing "load more" row. When .HasMore it is a
+     <tr> whose hx-get fetches the next page (cursor + active filters) and replaces
+     ITSELF (hx-swap outerHTML) with the register-rows fragment -> append, no shift.
+     When there are no more rows it renders nothing (paging terminates). */ -}}
+{{define "register-sentinel" -}}
+{{if .HasMore}}
+<tr id="reg-sentinel" class="reg-sentinel">
+  <td colspan="{{regColspan .}}">
+    <button type="button" class="btn btn-ghost"
+            hx-get="{{regMoreURL .}}"
+            hx-target="#reg-sentinel" hx-swap="outerHTML">
+      {{t "register.load_more"}}
+    </button>
+  </td>
+</tr>
+{{end}}
+{{- end}}
+
+{{define "register.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "register.title"))}}
+  {{- with .Page}}
+  <h1>{{t "register.title"}}: {{.AccountName}}</h1>
+  <p><a href="/accounts">{{t "register.back_to_accounts"}}</a></p>
+
+  <form class="filters" method="get" action="/accounts/{{.AccountID}}/register">
+    <label for="reg-from">{{t "register.filter.from"}}</label>
+    <input type="text" id="reg-from" name="from" value="{{.FilterFrom}}" placeholder="{{t "register.filter.date_hint"}}">
+    <label for="reg-to">{{t "register.filter.to"}}</label>
+    <input type="text" id="reg-to" name="to" value="{{.FilterTo}}" placeholder="{{t "register.filter.date_hint"}}">
+    <label for="reg-text">{{t "register.filter.text"}}</label>
+    <input type="text" id="reg-text" name="text" value="{{.FilterText}}">
+    <label for="reg-fund">{{t "register.filter.fund"}}</label>
+    <select id="reg-fund" name="fund">
+      <option value="0">{{t "register.filter.any_fund"}}</option>
+      {{range .Funds}}<option value="{{.ID}}"{{if eq .ID $.Page.FilterFund}} selected{{end}}>{{.Name}}</option>
+      {{end}}
+    </select>
+    <label for="reg-sub">{{t "register.filter.subsidiary"}}</label>
+    <select id="reg-sub" name="sub">
+      <option value="0">{{t "register.filter.any_subsidiary"}}</option>
+      {{range .Subs}}<option value="{{.ID}}"{{if eq .ID $.Page.FilterSub}} selected{{end}}>{{.Name}}</option>
+      {{end}}
+    </select>
+    <label for="reg-prog">{{t "register.filter.program"}}</label>
+    <select id="reg-prog" name="prog">
+      <option value="0">{{t "register.filter.any_program"}}</option>
+      {{range .Programs}}<option value="{{.ID}}"{{if eq .ID $.Page.FilterProg}} selected{{end}}>{{.Name}}</option>
+      {{end}}
+    </select>
+    <button type="submit" class="btn">{{t "register.filter.apply"}}</button>
+  </form>
+
+  <table class="register-table">
+    <thead>
+      <tr>
+        <th>{{t "register.col.date"}}</th>
+        {{if .ShowSubBadge}}<th>{{t "register.col.subsidiary"}}</th>{{end}}
+        <th>{{t "register.col.payee"}}</th>
+        <th>{{t "register.col.memo"}}</th>
+        <th>{{t "register.col.counter"}}</th>
+        <th>{{t "register.col.fund"}}</th>
+        <th>{{t "register.col.amount"}}</th>
+        <th>{{t "register.col.running"}}</th>
+        {{if .Reconcilable}}<th data-col="recon">{{t "register.col.recon"}}</th>{{end}}
+      </tr>
+    </thead>
+    <tbody id="reg-rows">
+      {{range .Rows}}{{template "register-row" (regRowCtx $.Page .)}}
+      {{else}}
+      <tr class="reg-empty"><td colspan="{{regColspan .}}">{{t "register.empty"}}</td></tr>
+      {{end}}
+      {{template "register-sentinel" .}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

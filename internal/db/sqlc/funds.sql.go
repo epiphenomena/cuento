@@ -284,6 +284,51 @@ func (q *Queries) InsertFundVersion(ctx context.Context, arg InsertFundVersionPa
 	return err
 }
 
+const listFunds = `-- name: ListFunds :many
+SELECT id, name, funder, purpose, restriction, program_id,
+       start_date, end_date, notes, active
+FROM funds
+ORDER BY id
+`
+
+// Every fund (active AND closed), id-ordered, for the register (p12.1): the
+// fund-name lookup (a chip may name a now-closed fund) and the fund-filter option
+// list. Unlike ActiveFunds this is NOT scoped to a subsidiary and includes closed
+// funds, because a historical split may reference either.
+func (q *Queries) ListFunds(ctx context.Context) ([]Fund, error) {
+	rows, err := q.db.QueryContext(ctx, listFunds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Fund
+	for rows.Next() {
+		var i Fund
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Funder,
+			&i.Purpose,
+			&i.Restriction,
+			&i.ProgramID,
+			&i.StartDate,
+			&i.EndDate,
+			&i.Notes,
+			&i.Active,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateFund = `-- name: UpdateFund :exec
 UPDATE funds
 SET name = ?, funder = ?, purpose = ?, restriction = ?, program_id = ?,

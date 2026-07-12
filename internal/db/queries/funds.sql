@@ -34,6 +34,16 @@ SELECT id, name, funder, purpose, restriction, program_id,
 FROM funds
 WHERE id = ?;
 
+-- name: ListFunds :many
+-- Every fund (active AND closed), id-ordered, for the register (p12.1): the
+-- fund-name lookup (a chip may name a now-closed fund) and the fund-filter option
+-- list. Unlike ActiveFunds this is NOT scoped to a subsidiary and includes closed
+-- funds, because a historical split may reference either.
+SELECT id, name, funder, purpose, restriction, program_id,
+       start_date, end_date, notes, active
+FROM funds
+ORDER BY id;
+
 -- name: UpdateFund :exec
 -- Live update: rename / funder / purpose / restriction / program-scope / dates /
 -- notes / active. The store reads the current row (GetFund), overrides the

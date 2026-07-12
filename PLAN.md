@@ -219,7 +219,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 
 ## Phase 12 — Transaction entry & register (the heart of the app)
 
-- [ ] **p12.1 web: account register.**
+- [x] **p12.1 web: account register.**
   Tests: keyset paging (boundaries, stable ordering by date+id), filters (date range, text, fund, subsidiary, program), running balance per currency, fund chip renders on restricted splits, subsidiary badge renders when the account maps to >1 sub, recon mark rendered only for `reconcilable` accounts, perms.
   Build: `/accounts/{id}/register` — date, sub badge, payee, memo, counter-account (or "Split"), fund chip, amount, running balance; htmx paging that appends/replaces without scroll loss.
 - [ ] **p12.2 web+js: transaction editor.**

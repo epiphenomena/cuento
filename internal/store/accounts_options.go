@@ -128,3 +128,39 @@ func (s *Store) AccountSubsidiaryIDs(ctx context.Context, id int64) ([]int64, er
 func (s *Store) AllSubsidiaries(ctx context.Context) ([]sqlc.SubTreeRow, error) {
 	return s.SubTree(ctx)
 }
+
+// ListPayees returns every payee (id, name, active), id-ordered. The register
+// (p12.1) loads it once per render into an id->name map so each row can show its
+// payee's name without a per-row join. A read via sqlc (rule 2).
+func (s *Store) ListPayees(ctx context.Context) ([]sqlc.Payee, error) {
+	rows, err := s.q.ListPayees(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("store: list payees: %w", err)
+	}
+	return rows, nil
+}
+
+// ListFunds returns every fund (active AND closed), id-ordered. The register
+// (p12.1) uses it for the fund-name lookup (a chip may name a now-closed fund) and
+// the fund-filter option list; unlike ActiveFunds it is NOT subsidiary-scoped and
+// includes closed funds, since a historical split may reference either. A read via
+// sqlc (rule 2).
+func (s *Store) ListFunds(ctx context.Context) ([]sqlc.Fund, error) {
+	rows, err := s.q.ListFunds(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("store: list funds: %w", err)
+	}
+	return rows, nil
+}
+
+// TransactionSplits returns the live split set of one transaction in display
+// order. The register (p12.1) uses it to resolve a row's COUNTER-ACCOUNT: for a
+// 2-split transaction the other split's account is the counter-account; for >2 the
+// UI shows "Split". A read via sqlc (rule 2).
+func (s *Store) TransactionSplits(ctx context.Context, txnID int64) ([]sqlc.Split, error) {
+	rows, err := s.q.SplitsByTransaction(ctx, txnID)
+	if err != nil {
+		return nil, fmt.Errorf("store: splits for transaction %d: %w", txnID, err)
+	}
+	return rows, nil
+}

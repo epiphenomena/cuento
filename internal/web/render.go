@@ -34,6 +34,9 @@ func mustParseTemplates() *template.Template {
 		"asset":      func(name string) string { return name },
 		"shellTitle": shellTitle,
 		"strs":       strs,
+		"regRowCtx":  makeRegRowCtx, // p12.1 register: pair a row with the page-level column gates
+		"regColspan": regColspan,    // p12.1 register: full-width colspan for empty/sentinel cells
+		"regMoreURL": regMoreURL,    // p12.1 register: the sentinel's next-page hx-get URL
 	}
 	t, err := template.New("").Funcs(stub).ParseFS(templatesFS, "templates/*.tmpl")
 	if err != nil {

@@ -31,6 +31,12 @@ RETURNING id;
 -- name: GetPayee :one
 SELECT id, name, active FROM payees WHERE id = ?;
 
+-- name: ListPayees :many
+-- Every payee (id -> name), for the register's payee-name lookup (p12.1). The
+-- payee set is tiny; the store loads it once per page render into an id->name map
+-- rather than joining per row. Ordered by id for determinism.
+SELECT id, name, active FROM payees ORDER BY id;
+
 -- name: InsertPayeeVersion :exec
 -- Snapshot-from-live version append for payees (STANDARD single-id entity,
 -- entity_id = payees.id). Runs AFTER the live insert. Snapshot column set matches

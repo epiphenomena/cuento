@@ -64,6 +64,7 @@
           {{range .Balances}}<span class="bal">{{.}}</span> {{end}}
         </td>
         <td class="acct-actions">
+          <a class="btn btn-ghost" href="/accounts/{{.ID}}/register">{{t "accounts.register"}}</a>
           <button type="button" class="btn btn-ghost"
                   hx-get="/accounts/{{.ID}}/edit" hx-target="#account-form" hx-swap="outerHTML">
             {{t "common.edit"}}

@@ -180,6 +180,8 @@ other = "Chart of accounts"
 other = "New account"
 [accounts.merge]
 other = "Merge accounts"
+[accounts.register]
+other = "Register"
 [accounts.deactivate]
 other = "Deactivate"
 [accounts.inactive]
@@ -264,6 +266,58 @@ other = "%d reconciliations will move."
 other = "%s will be deactivated (its history is kept)."
 [merge.confirm]
 other = "Confirm merge"
+# p12.1 account register (/accounts/{id}/register). Columns, filters, keyset paging
+# ("load more"), the "Split" counter-account word, and the recon column header.
+[register.title]
+other = "Register"
+[register.back_to_accounts]
+other = "← Back to chart of accounts"
+[register.empty]
+other = "No transactions match."
+[register.split]
+other = "Split"
+[register.load_more]
+other = "Load more"
+[register.col.date]
+other = "Date"
+[register.col.subsidiary]
+other = "Subsidiary"
+[register.col.payee]
+other = "Payee"
+[register.col.memo]
+other = "Memo"
+[register.col.counter]
+other = "Account"
+[register.col.fund]
+other = "Fund"
+[register.col.amount]
+other = "Amount"
+[register.col.running]
+other = "Balance"
+[register.col.recon]
+other = "Reconciled"
+[register.filter.from]
+other = "From"
+[register.filter.to]
+other = "To"
+[register.filter.date_hint]
+other = "YYYY-MM-DD"
+[register.filter.text]
+other = "Search"
+[register.filter.fund]
+other = "Fund"
+[register.filter.any_fund]
+other = "Any fund"
+[register.filter.subsidiary]
+other = "Subsidiary"
+[register.filter.any_subsidiary]
+other = "Any subsidiary"
+[register.filter.program]
+other = "Program"
+[register.filter.any_program]
+other = "Any program"
+[register.filter.apply]
+other = "Apply"
 [account.type.asset]
 other = "Asset"
 [account.type.liability]

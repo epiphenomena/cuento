@@ -175,6 +175,8 @@ other = "Plan de cuentas"
 other = "Nueva cuenta"
 [accounts.merge]
 other = "Combinar cuentas"
+[accounts.register]
+other = "Registro"
 [accounts.deactivate]
 other = "Desactivar"
 [accounts.inactive]
@@ -259,6 +261,57 @@ other = "%d conciliaciones se moverán."
 other = "%s se desactivara (se conserva su historial)."
 [merge.confirm]
 other = "Confirmar combinacion"
+# p12.1 registro de cuenta (/accounts/{id}/register).
+[register.title]
+other = "Registro"
+[register.back_to_accounts]
+other = "← Volver al catalogo de cuentas"
+[register.empty]
+other = "Ninguna transaccion coincide."
+[register.split]
+other = "Varias"
+[register.load_more]
+other = "Cargar mas"
+[register.col.date]
+other = "Fecha"
+[register.col.subsidiary]
+other = "Subsidiaria"
+[register.col.payee]
+other = "Beneficiario"
+[register.col.memo]
+other = "Nota"
+[register.col.counter]
+other = "Cuenta"
+[register.col.fund]
+other = "Fondo"
+[register.col.amount]
+other = "Importe"
+[register.col.running]
+other = "Saldo"
+[register.col.recon]
+other = "Conciliado"
+[register.filter.from]
+other = "Desde"
+[register.filter.to]
+other = "Hasta"
+[register.filter.date_hint]
+other = "AAAA-MM-DD"
+[register.filter.text]
+other = "Buscar"
+[register.filter.fund]
+other = "Fondo"
+[register.filter.any_fund]
+other = "Cualquier fondo"
+[register.filter.subsidiary]
+other = "Subsidiaria"
+[register.filter.any_subsidiary]
+other = "Cualquier subsidiaria"
+[register.filter.program]
+other = "Programa"
+[register.filter.any_program]
+other = "Cualquier programa"
+[register.filter.apply]
+other = "Aplicar"
 [account.type.asset]
 other = "Activo"
 [account.type.liability]
