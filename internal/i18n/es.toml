@@ -946,8 +946,14 @@ other = "Hasta"
 other = "Granularidad"
 [reports.params.currency]
 other = "Moneda"
+[reports.params.detail]
+other = "Detalle"
 [reports.params.run]
 other = "Generar informe"
+[reports.detail.converted]
+other = "Totales convertidos"
+[reports.detail.currency]
+other = "Por moneda"
 [reports.gran.none]
 other = "Total"
 [reports.gran.month]
@@ -972,6 +978,42 @@ other = "Convertido"
 other = "Total (nativo)"
 [reports.trial_balance.total_converted]
 other = "Total (convertido)"
+
+# p15.4 balance general: estado de situacion financiera (A/P/PN, division de activos netos).
+[reports.balance_sheet.title]
+other = "Balance general"
+[reports.balance_sheet.col.line]
+other = "Linea"
+[reports.balance_sheet.col.amount]
+other = "Importe"
+[reports.balance_sheet.col.currency]
+other = "Moneda"
+[reports.balance_sheet.col.native]
+other = "Importe nativo"
+[reports.balance_sheet.col.converted]
+other = "Convertido"
+[reports.balance_sheet.section.assets]
+other = "Activos"
+[reports.balance_sheet.section.liabilities]
+other = "Pasivos"
+[reports.balance_sheet.section.net_assets]
+other = "Activos netos"
+[reports.balance_sheet.total.assets]
+other = "Total de activos"
+[reports.balance_sheet.total.liabilities]
+other = "Total de pasivos"
+[reports.balance_sheet.total.net_assets]
+other = "Total de activos netos"
+[reports.balance_sheet.total.liabilities_net_assets]
+other = "Total de pasivos y activos netos"
+[reports.balance_sheet.na.without]
+other = "Activos netos sin restricciones de donantes"
+[reports.balance_sheet.na.with]
+other = "Activos netos con restricciones de donantes"
+[reports.balance_sheet.na.surplus_of_which]
+other = "de los cuales superavit neto a la fecha"
+[reports.balance_sheet.intercompany_warning]
+other = "Las cuentas intercompania no se compensan a cero"
 
 # p15.3d drill-down: la lista de transacciones detras de una cifra del informe.
 [reports.drill.title]

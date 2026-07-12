@@ -24,6 +24,7 @@ const { test, expect } = require('../fixtures');
 const { saveAndReload } = require('../helpers');
 
 const TB = '/reports/trial_balance';
+const BS = '/reports/balance_sheet';
 
 async function login(page, server) {
   await page.goto('/login');
@@ -157,4 +158,69 @@ test('reports: drill a trial-balance figure to its transactions (each linking to
 
   // The reconciled figure header is shown (the signed native sum of the listed rows).
   await expect(page.locator('.report-drill-figure')).toBeVisible();
+});
+
+// p15.4 BALANCE SHEET: open it, see the A/L/Net-assets sections + the by-restriction
+// net-asset split lines + a balancing (grand-total) row, toggle the per-currency
+// DETAIL, and confirm the CSV returns. READ-ONLY (opens the report, changes URL
+// params, downloads CSV -- mutates nothing durable). Assertions are STRUCTURAL (the
+// fresh worker db has no seeded ledger, so numbers would be brittle): the section
+// labels (localized text present anywhere on the page), the net-asset split labels,
+// the params form + scope selector + the DETAIL toggle, a grand-total row, the
+// per-currency column shape after the toggle, and a text/csv response. No
+// page.waitForFunction (strict CSP) -- only locator/URL/response waits.
+test('reports: open the balance sheet, see the sections + net-asset split + a balancing total, toggle detail, CSV returns', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  // --- open the balance sheet at the root scope, a fixed as-of ---
+  await page.goto(`${BS}?scope=1&asof=2026-06-30`);
+
+  // The shared params form + the always-present subsidiary SCOPE selector (D18).
+  await expect(page.locator('form.report-params')).toBeVisible();
+  await expect(page.locator('select.report-scope-select[name="scope"]')).toBeVisible();
+
+  // The per-currency DETAIL toggle is present (a balance-sheet-only control).
+  const detail = page.locator('select.report-detail-select[name="detail"]');
+  await expect(detail).toBeVisible();
+
+  // The report table renders with the three SECTIONS and the by-restriction net-asset
+  // split lines. These are localized labels rendered verbatim in the first column;
+  // assert their default-language (en) text is present on the page (structural, not
+  // numeric). The section + split labels come straight from the report's Table.
+  const table = page.locator('table.report-table');
+  await expect(table).toBeVisible();
+  await expect(table).toContainText('Assets');
+  await expect(table).toContainText('Liabilities');
+  await expect(table).toContainText('Net assets');
+  await expect(table).toContainText('Net assets without donor restrictions');
+  await expect(table).toContainText('Net assets with donor restrictions');
+  await expect(table).toContainText('net surplus to date');
+
+  // A BALANCING grand-total row is present -- the identity's right-hand side (Total
+  // liabilities and net assets == total assets). The renderer marks it report-total.
+  await expect(
+    page.locator('table.report-table tr.report-total, table.report-table tr.report-subtotal'),
+  ).not.toHaveCount(0);
+
+  // --- toggle the per-currency DETAIL view (navigate with detail=currency, the same
+  // GET round trip the Run button makes) and confirm the extra Currency column ---
+  await page.goto(`${BS}?scope=1&asof=2026-06-30&detail=currency`);
+  await expect(page.locator('table.report-table')).toBeVisible();
+  // The detail view has 4 columns (Line / Currency / Native / Converted) vs 2 in the
+  // converted-only view; assert at least 4 header cells (structural).
+  const headers = page.locator('table.report-table thead th');
+  expect(await headers.count()).toBeGreaterThanOrEqual(4);
+  // The detail select now shows the "currency" option selected.
+  await expect(page.locator('select.report-detail-select[name="detail"]')).toHaveValue('currency');
+
+  // --- the CSV export link is present and the endpoint returns text/csv ---
+  await expect(page.locator('a.report-csv-link')).toBeVisible();
+  const resp = await page.request.get(`${BS}.csv?scope=1&asof=2026-06-30`);
+  expect(resp.status()).toBe(200);
+  expect(resp.headers()['content-type']).toContain('text/csv');
+  const body = await resp.text();
+  expect(body.split('\n')[0]).toContain(',');
 });

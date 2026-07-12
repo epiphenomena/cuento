@@ -266,3 +266,90 @@ func TestReportPageEmitsDrillLinks(t *testing.T) {
 		t.Errorf("drill link does not point at the drill route")
 	}
 }
+
+// TestBalanceSheetDrillReconciles: the balance-sheet report attaches a Drill to its
+// asset/liability ACCOUNT cells; the drill for a cell lists exactly the transactions
+// whose signed NATIVE sum equals that account's native figure (p15.3d reconciliation,
+// against the toolkit's BalancesAsOf oracle). This runs the REAL balance-sheet report,
+// pulls the Drill off a drillable cell, and reconciles it -- so the report's actual
+// drill wiring (not a hand-built Drill) is what is tested.
+func TestBalanceSheetDrillReconciles(t *testing.T) {
+	fx := fixture.New(t)
+	ctx := context.Background()
+	st := fx.Store
+	ids := fx.IDs
+	asof := fx.Expected.AsOf
+
+	// Native toolkit oracle at root scope.
+	tk := reports.NewToolkit(st, reports.Params{Scope: ids.Root, AsOf: asof})
+	balances, err := tk.BalancesAsOf(ctx, reports.Scope{Sub: ids.Root}, asof, reports.ConvertOpts{Mode: reports.RateNone})
+	if err != nil {
+		t.Fatalf("BalancesAsOf: %v", err)
+	}
+
+	// Run the real balance sheet (native mode: no target, so each account cell drills
+	// its single currency directly). Detail=currency exposes a per-currency drill on
+	// every native cell.
+	rep, ok := reports.Default().Get(reports.BalanceSheetReportID)
+	if !ok {
+		t.Fatalf("balance-sheet report not registered")
+	}
+	p := reports.Params{Scope: ids.Root, AsOf: asof, Lang: "en", Detail: "currency"}
+	table, err := rep.Run(ctx, reports.NewToolkit(st, p), p)
+	if err != nil {
+		t.Fatalf("run balance sheet: %v", err)
+	}
+
+	// Collect every drillable cell's Drill and reconcile it against the toolkit native
+	// figure for (account, currency). Assets are stored net-debit positive; the drill
+	// sum equals the STORED native figure (the balance sheet's sign-normalization of
+	// liabilities does not change the drilled splits -- the drill lists the raw splits,
+	// whose sum is the stored net-debit balance).
+	nativeFor := func(acct int64, ccy string) (int64, bool) {
+		for _, a := range balances[acct] {
+			if a.Currency == ccy {
+				return a.Minor, true
+			}
+		}
+		return 0, false
+	}
+
+	drills := 0
+	for _, row := range table.Rows {
+		for _, c := range row.Cells {
+			if c.Drill == nil {
+				continue
+			}
+			d := c.Drill
+			if len(d.AccountIDs) != 1 {
+				continue
+			}
+			acct := d.AccountIDs[0]
+			want, ok := nativeFor(acct, d.Currency)
+			if !ok {
+				t.Errorf("drill for account %d %s has no toolkit native figure", acct, d.Currency)
+				continue
+			}
+			got, n := drillSum(t, st, store.DrillFilter{
+				Scope:     d.Scope,
+				AccountID: acct,
+				Currency:  d.Currency,
+				AsOf:      d.AsOf,
+			})
+			if got != want {
+				t.Errorf("balance-sheet drill account %d %s: sum %d, want %d (toolkit native)", acct, d.Currency, got, want)
+			}
+			if n == 0 {
+				t.Errorf("balance-sheet drill account %d %s returned no rows", acct, d.Currency)
+			}
+			drills++
+		}
+	}
+	if drills == 0 {
+		t.Fatalf("balance sheet emitted no drillable cells")
+	}
+	// Sanity: Checking MX MXN is among the drilled accounts and reconciles to 39,500,000.
+	if got, _ := drillSum(t, st, store.DrillFilter{Scope: ids.Root, AccountID: ids.CheckingMX, Currency: "MXN", AsOf: asof}); got != 39_500_000 {
+		t.Errorf("Checking MX drill = %d, want 39,500,000", got)
+	}
+}

@@ -31,6 +31,7 @@ func NewRegistry() *Registry {
 func Default() *Registry {
 	reg := NewRegistry()
 	registerTrialBalance(reg)
+	registerBalanceSheet(reg)
 	return reg
 }
 

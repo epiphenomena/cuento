@@ -66,6 +66,14 @@
       </select>
       {{end}}
 
+      {{if .Params.ShowDetail}}
+      <label for="rp-detail">{{t "reports.params.detail"}}</label>
+      <select id="rp-detail" name="detail" class="report-detail-select">
+        <option value=""{{if ne .Params.Detail "currency"}} selected{{end}}>{{t "reports.detail.converted"}}</option>
+        <option value="currency"{{if eq .Params.Detail "currency"}} selected{{end}}>{{t "reports.detail.currency"}}</option>
+      </select>
+      {{end}}
+
       <button type="submit" class="btn btn-primary">{{t "reports.params.run"}}</button>
     </fieldset>
   </form>

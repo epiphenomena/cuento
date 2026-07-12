@@ -37,7 +37,19 @@ type Params struct {
 	// the context"). The web layer sets it from langOf(ctx); it defaults to "en"
 	// (the report author reads it via LangOr so a zero Params still resolves names).
 	Lang string
+
+	// Detail requests an expanded per-currency breakdown (p15.4 balance sheet): the
+	// empty string is the default (converted totals only, one column), "currency"
+	// expands each section line into one row per native currency plus its converted
+	// amount. Meaningful only when ParamsSpec.Detail is set; a report reads it via
+	// DetailCurrency() so an unset value defaults to the converted-only view.
+	Detail string
 }
+
+// DetailCurrency reports whether the per-currency detail toggle is on (Detail ==
+// "currency"). A report gated by ParamsSpec.Detail branches on it to expand
+// per-currency rows vs. showing only converted totals.
+func (p Params) DetailCurrency() bool { return p.Detail == "currency" }
 
 // LangOr returns p.Lang, or "en" when it is empty, so a report resolving stored
 // per-language names (account_names) always has a valid catalog lang even for a
@@ -107,4 +119,8 @@ type ParamsSpec struct {
 	// Currency: the report converts to a chosen target currency (D12); the form
 	// offers a currency select defaulting to the scope's base currency.
 	Currency bool
+	// Detail: the report offers a per-currency detail toggle (p15.4 balance sheet);
+	// the form offers a "converted only" vs "per currency" select bound to
+	// Params.Detail.
+	Detail bool
 }

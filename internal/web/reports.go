@@ -109,6 +109,13 @@ func (s *server) resolveParams(
 			p.TargetCurrency = v
 		}
 	}
+	if rep.ParamsSpec.Detail {
+		// Only "currency" turns detail on; any other value (incl. empty) is the
+		// default converted-only view.
+		if first(q, "detail") == "currency" {
+			p.Detail = "currency"
+		}
+	}
 
 	form, err := s.buildParamsForm(ctx, u, rep, p, subs)
 	if err != nil {
@@ -157,6 +164,7 @@ type paramsForm struct {
 	ShowPeriod      bool
 	ShowGranularity bool
 	ShowCurrency    bool
+	ShowDetail      bool
 
 	// Resolved control values (formatted for display where dated).
 	AsOf        string // user-formatted date
@@ -164,6 +172,7 @@ type paramsForm struct {
 	To          string // user-formatted date
 	Granularity string // token: none|month|quarter
 	Currency    string // selected target currency code
+	Detail      string // token: ""|currency (per-currency detail toggle)
 
 	// Options for the selects.
 	Currencies []ccyChoice
@@ -202,8 +211,10 @@ func (s *server) buildParamsForm(
 		ShowPeriod:      rep.ParamsSpec.Period,
 		ShowGranularity: rep.ParamsSpec.Granularity,
 		ShowCurrency:    rep.ParamsSpec.Currency,
+		ShowDetail:      rep.ParamsSpec.Detail,
 		Granularity:     p.Granularity.String(),
 		Currency:        p.TargetCurrency,
+		Detail:          p.Detail,
 	}
 	for _, sub := range subs {
 		f.Scopes = append(f.Scopes, scopeOption{

@@ -950,8 +950,14 @@ other = "To"
 other = "Granularity"
 [reports.params.currency]
 other = "Currency"
+[reports.params.detail]
+other = "Detail"
 [reports.params.run]
 other = "Run report"
+[reports.detail.converted]
+other = "Converted totals"
+[reports.detail.currency]
+other = "Per currency"
 [reports.gran.none]
 other = "Total"
 [reports.gran.month]
@@ -976,6 +982,42 @@ other = "Converted"
 other = "Total (native)"
 [reports.trial_balance.total_converted]
 other = "Total (converted)"
+
+# p15.4 balance sheet: statement of financial position (A/L/E, net-asset split).
+[reports.balance_sheet.title]
+other = "Balance sheet"
+[reports.balance_sheet.col.line]
+other = "Line"
+[reports.balance_sheet.col.amount]
+other = "Amount"
+[reports.balance_sheet.col.currency]
+other = "Currency"
+[reports.balance_sheet.col.native]
+other = "Native amount"
+[reports.balance_sheet.col.converted]
+other = "Converted"
+[reports.balance_sheet.section.assets]
+other = "Assets"
+[reports.balance_sheet.section.liabilities]
+other = "Liabilities"
+[reports.balance_sheet.section.net_assets]
+other = "Net assets"
+[reports.balance_sheet.total.assets]
+other = "Total assets"
+[reports.balance_sheet.total.liabilities]
+other = "Total liabilities"
+[reports.balance_sheet.total.net_assets]
+other = "Total net assets"
+[reports.balance_sheet.total.liabilities_net_assets]
+other = "Total liabilities and net assets"
+[reports.balance_sheet.na.without]
+other = "Net assets without donor restrictions"
+[reports.balance_sheet.na.with]
+other = "Net assets with donor restrictions"
+[reports.balance_sheet.na.surplus_of_which]
+other = "of which net surplus to date"
+[reports.balance_sheet.intercompany_warning]
+other = "Intercompany accounts do not net to zero"
 
 # p15.3d drill-down: the transaction list behind one report figure.
 [reports.drill.title]
