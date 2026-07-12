@@ -18,6 +18,7 @@
 import { parseAmountMinor, drcrToSigned, formatSignedMinor } from './txnamount.js';
 import { fundImbalances, applyFundToAll } from './txnfund.js';
 import { nextCell, invalidRowsForSubsidiary } from './txngrid.js';
+import { allRowsEmpty } from './txnpayee.js';
 
 function initEditor(form) {
   const exp = 2; // currency exponent; USD/MXN are 2. Amounts are display-only here.
@@ -230,6 +231,135 @@ function initEditor(form) {
     });
     const fundSel = form.querySelector(`#txn-fund-${i}`);
     if (fundSel) fundSel.addEventListener('change', recompute);
+  }
+
+  // --- payee autocomplete + autofill (p12.3) ------------------------------
+  // Progressive enhancement: hide the native <select> (the no-JS value sink) and
+  // reveal the autocomplete input. Picking a suggestion writes the id into the select
+  // (so submit is unchanged), then fetches the payee's template and applies it -- but
+  // ONLY when every current row is empty (never-overwrites, allRowsEmpty; the pure
+  // guard). The template fetch is triggered PROGRAMMATICALLY (not an hx-* trigger on a
+  // freshly-swapped suggestion node) so it never races htmx's settle-tick wiring.
+  const payeeSelect = form.querySelector('#txn-payee');
+  const payeeAuto = form.querySelector('.txn-payee-autocomplete');
+  const payeeInput = form.querySelector('#txn-payee-input');
+  const payeeName = form.querySelector('#txn-payee-name');
+  const payeeList = form.querySelector('#txn-payee-suggestions');
+  if (payeeSelect && payeeAuto && payeeInput && payeeName && payeeList) {
+    payeeSelect.style.display = 'none';
+    payeeAuto.hidden = false;
+
+    // Typing a name (without picking a suggestion) is a NEW payee: post the typed
+    // name via payee_name and reset the id sink so the handler find-or-creates by
+    // name (create-on-save). Picking a suggestion overrides both (setPayee).
+    payeeInput.addEventListener('input', () => {
+      payeeName.value = payeeInput.value;
+      payeeSelect.value = '0';
+    });
+
+    function currentRowValues() {
+      return [...form.querySelectorAll('.txn-row')].map((row) => {
+        const i = row.dataset.row;
+        const acct = form.querySelector(`#txn-account-${i}`);
+        const amount = form.querySelector(`#txn-amount-${i}`);
+        const dr = form.querySelector(`#txn-dr-${i}`);
+        const cr = form.querySelector(`#txn-cr-${i}`);
+        const memo = form.querySelector(`#txn-memo-${i}`);
+        return {
+          account: acct ? acct.value : '',
+          amount: amount ? amount.value : '',
+          dr: dr ? dr.value : '',
+          cr: cr ? cr.value : '',
+          memo: memo ? memo.value : '',
+        };
+      });
+    }
+
+    function setPayee(id, name) {
+      // Ensure the select has an option for this id (it may be a payee not in the
+      // initial option list), then select it so submit posts the chosen payee.
+      let opt = payeeSelect.querySelector(`option[value="${id}"]`);
+      if (!opt) {
+        opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = name;
+        payeeSelect.appendChild(opt);
+      }
+      payeeSelect.value = id;
+      payeeInput.value = name;
+      payeeName.value = name;
+    }
+
+    function clearSuggestions() {
+      payeeList.textContent = '';
+      payeeInput.setAttribute('aria-expanded', 'false');
+    }
+
+    function applyTemplateRows(html) {
+      // The partial is #txn-rows content plus an oob notice; parse and take the rows.
+      const tmp = document.createElement('tbody');
+      tmp.innerHTML = html;
+      const newRows = [...tmp.querySelectorAll('.txn-row')];
+      if (newRows.length === 0) return; // nothing to apply (e.g. all dropped)
+      const tbody = form.querySelector('#txn-rows');
+      tbody.textContent = '';
+      newRows.forEach((r) => tbody.appendChild(r));
+      form.querySelector('#txn-rows-count').value = String(newRows.length);
+      // Re-wire + re-gate the swapped-in rows (they are fresh nodes).
+      form.querySelectorAll('.txn-row').forEach(wireRow);
+      gateAll();
+      markSubsidiaryConflicts();
+      recompute();
+    }
+
+    function fetchAndApplyTemplate(id) {
+      // Never overwrite user input: apply only when the grid is entirely empty.
+      if (!allRowsEmpty(currentRowValues())) return;
+      const base = payeeAuto.dataset.templateUrl || '/payees';
+      const sub = subSel ? subSel.value : '';
+      const url = `${base}/${encodeURIComponent(id)}/template?sub=${encodeURIComponent(sub)}`;
+      // A manual fetch (not htmx) so the request fires immediately on pick, dodging the
+      // settle-tick wiring race; we apply the rows + the out-of-band notice ourselves.
+      fetch(url, { headers: { 'HX-Request': 'true' } })
+        .then((resp) => (resp.ok ? resp.text() : ''))
+        .then((html) => {
+          if (!html) return;
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+          // The notice comes as an oob element; swap it into the live notice region.
+          const oob = doc.querySelector('#txn-autofill-notice');
+          const dest = form.querySelector('#txn-autofill-notice');
+          if (oob && dest) dest.replaceWith(oob);
+          applyTemplateRows(html);
+        })
+        .catch(() => {});
+    }
+
+    function pick(item) {
+      if (!item) return;
+      setPayee(item.dataset.payeeId, item.dataset.payeeName);
+      clearSuggestions();
+      fetchAndApplyTemplate(item.dataset.payeeId);
+    }
+
+    payeeList.addEventListener('click', (evt) => {
+      const item = evt.target.closest('.txn-payee-suggestion');
+      if (item) pick(item);
+    });
+    payeeInput.addEventListener('keydown', (evt) => {
+      if (evt.key === 'Enter') {
+        const first = payeeList.querySelector('.txn-payee-suggestion');
+        if (first) {
+          evt.preventDefault();
+          pick(first);
+        }
+      } else if (evt.key === 'Escape') {
+        clearSuggestions();
+      }
+    });
+    // Reflect suggestion presence in aria-expanded after each htmx swap of the list.
+    payeeList.addEventListener('htmx:afterSwap', () => {
+      payeeInput.setAttribute('aria-expanded', payeeList.children.length > 0 ? 'true' : 'false');
+    });
   }
 
   form.querySelectorAll('.txn-row').forEach(wireRow);

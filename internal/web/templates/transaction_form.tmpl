@@ -95,6 +95,38 @@
 {{- end}}
 {{- end}}
 
+{{/* txn-rows: the split-grid rows fragment. p12.3 autofill swaps THIS into #txn-rows
+     (the payee-template partial wraps it with an optional out-of-subsidiary notice).
+     It ranges the SAME single-sourced "txn-row" (no fork), so an autofilled row is
+     byte-identical to a page-rendered one (stable ids / gating / wiring). The model is
+     the txnEditorModel directly (the handler renders "txn-rows"/"payee-template" with
+     the model as data, not a shellPage). */ -}}
+{{define "txn-rows" -}}
+{{range .Rows}}{{template "txn-row" (txnRowCtx $ .)}}
+{{end}}
+{{- end}}
+
+{{/* payee-template: the p12.3 autofill partial htmx swaps into #txn-rows on a payee
+     pick. It is the txn-rows fragment PLUS, when template splits were dropped because
+     their account is outside the selected subsidiary, an out-of-band notice (hx-swap-oob
+     targets the dedicated #txn-autofill-notice region so it lands even though the main
+     swap replaces #txn-rows). The client applies these rows ONLY when every current row
+     is empty (never-overwrites guard, txnpayee.js); the server just renders them. */ -}}
+{{define "payee-template" -}}
+{{template "txn-rows" .}}
+<span id="txn-autofill-notice" hx-swap-oob="true" class="txn-autofill-notice"{{if not .AutofillNotice}} hidden{{end}}>{{if .AutofillNotice}}{{t .AutofillNotice}}{{end}}</span>
+{{- end}}
+
+{{/* payee-suggest: the p12.3 autocomplete results fragment htmx swaps into the payee
+     suggestion list on each input. Each item carries data-id/data-name so the DOM glue
+     (txneditor.js) can pick it (set the hidden payee id, fetch the template) WITHOUT an
+     hx-* trigger on the freshly-swapped node (that would hit the settle-wiring race).
+     Empty query / no matches renders nothing. */ -}}
+{{define "payee-suggest" -}}
+{{range .Suggestions}}<li class="txn-payee-suggestion" role="option" data-payee-id="{{.ID}}" data-payee-name="{{.Name}}">{{.Name}}</li>
+{{end}}
+{{- end}}
+
 {{/* transaction-form: the single-sourced form region. Rendered inside the full page
      AND written alone at 422 on a validation error (the p10.3 convention). The model
      is a shellPage whose .Page is the txnEditorModel. */ -}}
@@ -125,13 +157,35 @@
              placeholder="{{t "txn.date_hint"}}"
              {{if eq $.Page.FirstErrorRow -2}}autofocus{{end}}>
     </div>
-    <div class="txn-field">
+    <div class="txn-field txn-payee-field">
       <label for="txn-payee">{{t "txn.payee"}}</label>
+      {{/* No-JS fallback: the native <select> posts `payee` (an EXISTING payee id).
+           p12.3 progressive enhancement (txneditor.js) HIDES this select and reveals the
+           autocomplete below, keeping the select as the id value sink. A TYPED new name
+           posts via payee_name (below); the handler prefers the id, else find-or-creates
+           by name (create-on-save, DECISIONS p12.3). No-JS degrades to pick-existing. */}}
       <select name="payee" id="txn-payee" class="txn-payee combo-input">
         <option value="0">{{t "txn.payee_none"}}</option>
         {{range .Payees}}<option value="{{.ID}}"{{if eq .ID $.Page.Payee}} selected{{end}}>{{.Name}}</option>
         {{end}}
       </select>
+      {{/* Autocomplete (JS-revealed; starts hidden so no-JS shows only the select). The
+           input's hx-get fetches the ranked suggestion fragment into
+           #txn-payee-suggestions; the DOM glue turns a clicked/keyed option into a pick
+           (sets #txn-payee + #txn-payee-name + fetches the template). payee_name carries
+           the typed/picked NAME so a brand-new payee (select id 0) is find-or-created on
+           save. data-template-url is the base for the per-payee template fetch. */}}
+      <div class="txn-payee-autocomplete" data-template-url="/payees" hidden>
+        <input type="text" id="txn-payee-input" class="txn-payee-input" autocomplete="off"
+               role="combobox" aria-expanded="false" aria-autocomplete="list"
+               aria-controls="txn-payee-suggestions" placeholder="{{t "txn.payee_search"}}"
+               value="{{.PayeeName}}"
+               hx-get="/payees/suggest" hx-trigger="input changed delay:150ms"
+               hx-target="#txn-payee-suggestions" hx-swap="innerHTML"
+               name="q">
+        <input type="hidden" name="payee_name" id="txn-payee-name" value="{{.PayeeName}}">
+        <ul id="txn-payee-suggestions" class="txn-payee-suggestions" role="listbox"></ul>
+      </div>
     </div>
     <div class="txn-field">
       <label for="txn-memo">{{t "txn.memo"}}</label>
@@ -148,6 +202,10 @@
       <button type="button" id="txn-apply-fund-btn" class="btn btn-ghost">{{t "txn.fund.apply_all_btn"}}</button>
     </div>
   </div>
+
+  {{/* p12.3 autofill notice region: the payee-template partial oob-swaps into this
+       span when out-of-subsidiary splits were dropped. Empty/hidden by default. */}}
+  <span id="txn-autofill-notice" class="txn-autofill-notice" hidden></span>
 
   <table class="txn-grid">
     <thead>

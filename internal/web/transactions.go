@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"cuento/internal/money"
@@ -84,6 +85,7 @@ type txnEditorModel struct {
 	Subsidiary int64
 	Date       string // echoed in the user's date format
 	Payee      int64
+	PayeeName  string // the typed/picked payee name (create-on-save + 422 echo)
 	Memo       string
 	Currency   string
 
@@ -101,6 +103,10 @@ type txnEditorModel struct {
 	Classes      []string // program|management|fundraising
 
 	RootProgram int64 // the program-defaulting fallback (D24)
+
+	// AutofillNotice is the i18n key shown when a payee template (p12.3) had splits
+	// dropped because their account is outside the selected subsidiary; "" = none.
+	AutofillNotice string
 
 	// Errors (trap 5). TotalsError is the overall/fund-imbalance key rendered in the
 	// sticky totals bar; row errors live on each row's ErrorKey.
@@ -230,6 +236,14 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 	model.Date = money.FormatDate(parseISOForDisplay(hdr.Date), dateFormatFor(u))
 	if hdr.PayeeID.Valid {
 		model.Payee = hdr.PayeeID.Int64
+		// Echo the payee's name into the autocomplete input (the option list already
+		// loaded it; no extra query).
+		for _, p := range model.Payees {
+			if p.ID == model.Payee {
+				model.PayeeName = p.Name
+				break
+			}
+		}
 	}
 	model.Memo = hdr.Memo
 
@@ -315,8 +329,23 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 	model.IsEdit = txnID != 0
 	model.Currency = currency
 	model.Payee = parseID(r.FormValue("payee"))
+	model.PayeeName = strings.TrimSpace(r.FormValue("payee_name"))
 	model.Memo = r.FormValue("memo")
 	model.FirstErrorRow = -1
+
+	// Resolve the payee (p12.3 create-on-save): prefer a picked existing id; else, if a
+	// name was typed, find-or-create it (its OWN change, before the txn write, so a
+	// later txn-validation failure leaves the payee reusable on retry). A create failure
+	// (e.g. a name collision race) surfaces as a server error, not a lost entry.
+	payeeID := model.Payee
+	if payeeID == 0 && model.PayeeName != "" {
+		payeeID, err = s.store.EnsurePayee(s.actorCtx(ctx), model.PayeeName)
+		if err != nil {
+			s.serverError(w)
+			return
+		}
+		model.Payee = payeeID
+	}
 
 	// Parse the date input honoring the user's format (ISO always accepted, D16). A
 	// malformed date is a form error surfaced on the totals bar (a header field).
@@ -339,8 +368,8 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 		Currency:     currency,
 		Splits:       splits,
 	}
-	if model.Payee != 0 {
-		p := model.Payee
+	if payeeID != 0 {
+		p := payeeID
 		in.PayeeID = &p
 	}
 

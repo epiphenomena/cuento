@@ -31,11 +31,49 @@ RETURNING id;
 -- name: GetPayee :one
 SELECT id, name, active FROM payees WHERE id = ?;
 
+-- name: GetPayeeByName :one
+-- Look up a payee by name for find-or-create (p12.3 create-on-save). payees.name is
+-- UNIQUE COLLATE NOCASE, so the equality is case-insensitive: "Acme" finds "acme".
+-- Returns no rows when the name is new (the caller then inserts).
+SELECT id, name, active FROM payees WHERE name = ?;
+
 -- name: ListPayees :many
 -- Every payee (id -> name), for the register's payee-name lookup (p12.1). The
 -- payee set is tiny; the store loads it once per page render into an id->name map
 -- rather than joining per row. Ordered by id for determinism.
 SELECT id, name, active FROM payees ORDER BY id;
+
+-- name: SuggestPayees :many
+-- Autocomplete ranking (p12.3): active payees whose name PREFIX-matches the query
+-- (case-insensitive; payees.name is COLLATE NOCASE), ordered MOST-RECENT-FIRST by
+-- the payee's latest NON-DELETED transaction date. Payees never used, or with only
+-- deleted transactions, have a NULL max date and sort LAST, then by name for a
+-- deterministic tail. The prefix is the caller-built LIKE pattern (query + '%'),
+-- passed once; the store escapes LIKE metacharacters (% _) in the raw query before
+-- appending the wildcard, so a literal % / _ in the query is not treated as a
+-- wildcard (sqlc's parser rejects an explicit ESCAPE clause, so escaping is done in
+-- Go against the default backslash-free LIKE -- see the store). Payees sharing the
+-- same latest date (or all in the never-used/only-deleted tail) tiebreak by name
+-- (COLLATE NOCASE), then id, for a deterministic order.
+SELECT p.id, p.name,
+       MAX(t.date) AS last_date
+FROM payees p
+LEFT JOIN transactions t
+  ON t.payee_id = p.id AND t.deleted = 0
+WHERE p.active = 1 AND p.name LIKE ?
+GROUP BY p.id, p.name
+ORDER BY (MAX(t.date) IS NULL), MAX(t.date) DESC, p.name COLLATE NOCASE, p.id;
+
+-- name: LastTransactionForPayee :one
+-- The id of a payee's LAST non-deleted transaction (p12.3 template autofill): the
+-- greatest (date, id) among that payee's live transactions. Returns no rows when the
+-- payee has no non-deleted transaction (never used / only deleted). The store then
+-- reuses SplitsByTransaction to read its splits (the existing splits reader).
+SELECT id, currency
+FROM transactions
+WHERE payee_id = ? AND deleted = 0
+ORDER BY date DESC, id DESC
+LIMIT 1;
 
 -- name: InsertPayeeVersion :exec
 -- Snapshot-from-live version append for payees (STANDARD single-id entity,

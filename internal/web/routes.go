@@ -216,6 +216,15 @@ func (s *server) routes() []Route {
 		{http.MethodGet, "/transactions/{id}/edit", TxnWrite, http.HandlerFunc(s.txnEditForm)},
 		{http.MethodPost, "/transactions", TxnWrite, http.HandlerFunc(s.txnCreate)},
 		{http.MethodPost, "/transactions/{id}", TxnWrite, http.HandlerFunc(s.txnUpdate)},
+		// p12.3 payee autocomplete + autofill (Appendix B/F). Both feed the transaction
+		// ENTRY flow, so both are TxnWrite (matching the editor GET forms -- they exist
+		// only to author an entry). GET /payees/suggest returns a ranked suggestion
+		// fragment; GET /payees/{id}/template returns the split-rows editor partial the
+		// grid swaps in on a payee pick. The literal "/payees/suggest" is more specific
+		// than "/payees/{id}/template", so the Go 1.22+ mux routes them precisely. The
+		// permission-matrix test picks these up automatically (rule 8).
+		{http.MethodGet, "/payees/suggest", TxnWrite, http.HandlerFunc(s.payeeSuggest)},
+		{http.MethodGet, "/payees/{id}/template", TxnWrite, http.HandlerFunc(s.payeeTemplate)},
 	}
 	// The -dev-only styleguide (Appendix F): a component gallery for visual review.
 	// Registered ONLY in -dev so it 404s in production (it is not in the registry

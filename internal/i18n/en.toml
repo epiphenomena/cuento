@@ -466,6 +466,8 @@ other = "Type a date; t = today, + / - shift a day"
 other = "Payee"
 [txn.payee_none]
 other = "No payee"
+[txn.payee_search]
+other = "Search payees..."
 [txn.memo]
 other = "Memo"
 [txn.account.choose]
@@ -510,6 +512,8 @@ other = "Memo"
 other = "Error"
 [txn.add_row]
 other = "Add row"
+[txn.autofill.dropped_out_of_sub]
+other = "Some lines from this payee's last transaction were left out because their accounts are not in the selected subsidiary."
 [register.new_txn]
 other = "New transaction"
 [register.edit_txn]

@@ -460,6 +460,8 @@ other = "Escriba una fecha; t = hoy, + / - cambian un dia"
 other = "Beneficiario"
 [txn.payee_none]
 other = "Sin beneficiario"
+[txn.payee_search]
+other = "Buscar beneficiarios..."
 [txn.memo]
 other = "Nota"
 [txn.account.choose]
@@ -504,6 +506,8 @@ other = "Nota"
 other = "Error"
 [txn.add_row]
 other = "Agregar fila"
+[txn.autofill.dropped_out_of_sub]
+other = "Se omitieron algunas lineas de la ultima transaccion de este beneficiario porque sus cuentas no estan en la subsidiaria seleccionada."
 [register.new_txn]
 other = "Nueva transaccion"
 [register.edit_txn]

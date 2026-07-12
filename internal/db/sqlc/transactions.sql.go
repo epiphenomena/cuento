@@ -50,6 +50,20 @@ func (q *Queries) GetPayee(ctx context.Context, id int64) (Payee, error) {
 	return i, err
 }
 
+const getPayeeByName = `-- name: GetPayeeByName :one
+SELECT id, name, active FROM payees WHERE name = ?
+`
+
+// Look up a payee by name for find-or-create (p12.3 create-on-save). payees.name is
+// UNIQUE COLLATE NOCASE, so the equality is case-insensitive: "Acme" finds "acme".
+// Returns no rows when the name is new (the caller then inserts).
+func (q *Queries) GetPayeeByName(ctx context.Context, name string) (Payee, error) {
+	row := q.db.QueryRowContext(ctx, getPayeeByName, name)
+	var i Payee
+	err := row.Scan(&i.ID, &i.Name, &i.Active)
+	return i, err
+}
+
 const getTransaction = `-- name: GetTransaction :one
 SELECT id, date, subsidiary_id, payee_id, memo, currency, deleted
 FROM transactions
@@ -294,6 +308,30 @@ type InsertTransactionVersionParams struct {
 func (q *Queries) InsertTransactionVersion(ctx context.Context, arg InsertTransactionVersionParams) error {
 	_, err := q.db.ExecContext(ctx, insertTransactionVersion, arg.Op, arg.ID, arg.ID_2)
 	return err
+}
+
+const lastTransactionForPayee = `-- name: LastTransactionForPayee :one
+SELECT id, currency
+FROM transactions
+WHERE payee_id = ? AND deleted = 0
+ORDER BY date DESC, id DESC
+LIMIT 1
+`
+
+type LastTransactionForPayeeRow struct {
+	ID       int64
+	Currency string
+}
+
+// The id of a payee's LAST non-deleted transaction (p12.3 template autofill): the
+// greatest (date, id) among that payee's live transactions. Returns no rows when the
+// payee has no non-deleted transaction (never used / only deleted). The store then
+// reuses SplitsByTransaction to read its splits (the existing splits reader).
+func (q *Queries) LastTransactionForPayee(ctx context.Context, payeeID sql.NullInt64) (LastTransactionForPayeeRow, error) {
+	row := q.db.QueryRowContext(ctx, lastTransactionForPayee, payeeID)
+	var i LastTransactionForPayeeRow
+	err := row.Scan(&i.ID, &i.Currency)
+	return i, err
 }
 
 const listPayees = `-- name: ListPayees :many
@@ -597,6 +635,57 @@ func (q *Queries) SplitsByTransaction(ctx context.Context, transactionID int64) 
 			&i.Memo,
 			&i.Position,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const suggestPayees = `-- name: SuggestPayees :many
+SELECT p.id, p.name,
+       MAX(t.date) AS last_date
+FROM payees p
+LEFT JOIN transactions t
+  ON t.payee_id = p.id AND t.deleted = 0
+WHERE p.active = 1 AND p.name LIKE ?
+GROUP BY p.id, p.name
+ORDER BY (MAX(t.date) IS NULL), MAX(t.date) DESC, p.name COLLATE NOCASE, p.id
+`
+
+type SuggestPayeesRow struct {
+	ID       int64
+	Name     string
+	LastDate interface{}
+}
+
+// Autocomplete ranking (p12.3): active payees whose name PREFIX-matches the query
+// (case-insensitive; payees.name is COLLATE NOCASE), ordered MOST-RECENT-FIRST by
+// the payee's latest NON-DELETED transaction date. Payees never used, or with only
+// deleted transactions, have a NULL max date and sort LAST, then by name for a
+// deterministic tail. The prefix is the caller-built LIKE pattern (query + '%'),
+// passed once; the store escapes LIKE metacharacters (% _) in the raw query before
+// appending the wildcard, so a literal % / _ in the query is not treated as a
+// wildcard (sqlc's parser rejects an explicit ESCAPE clause, so escaping is done in
+// Go against the default backslash-free LIKE -- see the store). Payees sharing the
+// same latest date (or all in the never-used/only-deleted tail) tiebreak by name
+// (COLLATE NOCASE), then id, for a deterministic order.
+func (q *Queries) SuggestPayees(ctx context.Context, name string) ([]SuggestPayeesRow, error) {
+	rows, err := q.db.QueryContext(ctx, suggestPayees, name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SuggestPayeesRow
+	for rows.Next() {
+		var i SuggestPayeesRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.LastDate); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -378,3 +378,28 @@ input[aria-invalid="true"] {
 .theme-preview h3 { margin: 0 0 var(--space-3); }
 .theme-preview .brand-lockup { font-size: 1.5rem; }
 .theme-preview .brand-lockup .brand-icon { width: 2.25rem; height: 2.25rem; }
+
+/* p12.3 payee autocomplete + autofill. The native <select id=txn-payee> is the
+   no-JS value sink; txneditor.js reveals this autocomplete and hides the select.
+   The suggestion list is a positioned dropdown of pickable options. */
+.txn-payee-field { position: relative; }
+.txn-payee-autocomplete { position: relative; }
+.txn-payee-suggestions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--color-surface);
+  border: var(--border);
+  border-radius: var(--radius);
+  max-height: 14rem;
+  overflow-y: auto;
+}
+.txn-payee-suggestions:empty { display: none; }
+.txn-payee-suggestion { padding: var(--space-2) var(--space-3); cursor: pointer; }
+.txn-payee-suggestion:hover { background: var(--color-surface-muted, rgba(0,0,0,0.06)); }
+.txn-autofill-notice { display: block; color: var(--color-text-muted); font-size: 0.9rem; }
+.txn-autofill-notice[hidden] { display: none; }
