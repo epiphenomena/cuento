@@ -1,0 +1,20 @@
+   Line                         2025-Q1        2025-Q2       2025-Q3      2025-Q4        2026-Q1       2026-Q2          Total
+-  ---------------------  -------------  -------------  ------------  -----------  -------------  ------------  -------------
+   Revenue
+>  Revenue                 USD 2,000.00  USD 57,815.94  USD 3,000.00     USD 0.00   USD 1,200.00    USD 750.00  USD 64,765.94
+   Contributions           USD 2,000.00  USD 50,000.00      USD 0.00     USD 0.00       USD 0.00    USD 750.00  USD 52,750.00
+   Government Grants           USD 0.00   USD 7,815.94      USD 0.00     USD 0.00       USD 0.00      USD 0.00   USD 7,815.94
+   Program Service Fees        USD 0.00       USD 0.00      USD 0.00     USD 0.00   USD 1,200.00      USD 0.00   USD 1,200.00
+   Event Income                USD 0.00       USD 0.00  USD 3,000.00     USD 0.00       USD 0.00      USD 0.00   USD 3,000.00
+>  Total revenue           USD 2,000.00  USD 57,815.94  USD 3,000.00     USD 0.00   USD 1,200.00    USD 750.00  USD 64,765.94
+   Expenses
+>  Expenses               USD 10,195.05   USD 1,842.05  USD 1,000.00   USD 600.00   USD 8,583.77  USD 1,550.00  USD 23,770.87
+   Salaries                USD 8,000.00       USD 0.00      USD 0.00     USD 0.00   USD 8,500.00      USD 0.00  USD 16,500.00
+   Program Supplies            USD 0.00   USD 1,789.71      USD 0.00   USD 600.00       USD 0.00      USD 0.00   USD 2,389.71
+   Food Purchases             USD 70.05      USD 52.34      USD 0.00     USD 0.00      USD 83.77      USD 0.00     USD 206.16
+   Occupancy               USD 1,500.00       USD 0.00      USD 0.00     USD 0.00       USD 0.00  USD 1,550.00   USD 3,050.00
+   Insurance                 USD 600.00       USD 0.00      USD 0.00     USD 0.00       USD 0.00      USD 0.00     USD 600.00
+   Bank Fees                  USD 25.00       USD 0.00      USD 0.00     USD 0.00       USD 0.00      USD 0.00      USD 25.00
+   Event Costs                 USD 0.00       USD 0.00  USD 1,000.00     USD 0.00       USD 0.00      USD 0.00   USD 1,000.00
+>  Total expenses         USD 10,195.05   USD 1,842.05  USD 1,000.00   USD 600.00   USD 8,583.77  USD 1,550.00  USD 23,770.87
+=  Net surplus (deficit)  USD -8,195.05  USD 55,973.89  USD 2,000.00  USD -600.00  USD -7,383.77   USD -800.00  USD 40,995.07

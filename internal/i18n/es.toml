@@ -1015,6 +1015,28 @@ other = "de los cuales superavit neto a la fecha"
 [reports.balance_sheet.intercompany_warning]
 other = "Las cuentas intercompania no se compensan a cero"
 
+# p15.5 estado de resultados: estado de actividades de un periodo (Ingresos - Gastos =
+# superavit/deficit neto), con columnas comparativas mensuales/trimestrales y conversion
+# a la tasa de la fecha de transaccion.
+[reports.income_statement.title]
+other = "Estado de resultados"
+[reports.income_statement.col.line]
+other = "Linea"
+[reports.income_statement.col.period]
+other = "Periodo"
+[reports.income_statement.col.total]
+other = "Total"
+[reports.income_statement.section.revenue]
+other = "Ingresos"
+[reports.income_statement.section.expenses]
+other = "Gastos"
+[reports.income_statement.total.revenue]
+other = "Total ingresos"
+[reports.income_statement.total.expenses]
+other = "Total gastos"
+[reports.income_statement.net]
+other = "Superavit (deficit) neto"
+
 # p15.3d drill-down: la lista de transacciones detras de una cifra del informe.
 [reports.drill.title]
 other = "Transacciones detras de esta cifra"

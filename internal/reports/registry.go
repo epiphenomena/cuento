@@ -32,6 +32,7 @@ func Default() *Registry {
 	reg := NewRegistry()
 	registerTrialBalance(reg)
 	registerBalanceSheet(reg)
+	registerIncomeStatement(reg)
 	return reg
 }
 

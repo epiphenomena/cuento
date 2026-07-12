@@ -1019,6 +1019,27 @@ other = "of which net surplus to date"
 [reports.balance_sheet.intercompany_warning]
 other = "Intercompany accounts do not net to zero"
 
+# p15.5 income statement: statement of activities over a period (Revenue - Expense =
+# net surplus/deficit), with comparative month/quarter columns and txn-date conversion.
+[reports.income_statement.title]
+other = "Income statement"
+[reports.income_statement.col.line]
+other = "Line"
+[reports.income_statement.col.period]
+other = "Period"
+[reports.income_statement.col.total]
+other = "Total"
+[reports.income_statement.section.revenue]
+other = "Revenue"
+[reports.income_statement.section.expenses]
+other = "Expenses"
+[reports.income_statement.total.revenue]
+other = "Total revenue"
+[reports.income_statement.total.expenses]
+other = "Total expenses"
+[reports.income_statement.net]
+other = "Net surplus (deficit)"
+
 # p15.3d drill-down: the transaction list behind one report figure.
 [reports.drill.title]
 other = "Transactions behind this figure"

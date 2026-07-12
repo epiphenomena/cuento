@@ -25,6 +25,7 @@ const { saveAndReload } = require('../helpers');
 
 const TB = '/reports/trial_balance';
 const BS = '/reports/balance_sheet';
+const IS = '/reports/income_statement';
 
 async function login(page, server) {
   await page.goto('/login');
@@ -99,6 +100,71 @@ test('reports: open the trial balance, set as-of/scope, see the balancing total,
   expect(resp.status()).toBe(200);
   expect(resp.headers()['content-type']).toContain('text/csv');
   // A CSV body has at least the localized header row (comma-separated columns).
+  const body = await resp.text();
+  expect(body.split('\n')[0]).toContain(',');
+});
+
+// p15.5 INCOME STATEMENT (statement of activities): open it, set a period + QUARTERLY
+// granularity, see the R/E TREE (Revenue + Expenses section labels), the comparative
+// period COLUMNS (more than the Line+Total pair), and the NET surplus/deficit line, then
+// confirm the CSV returns. READ-ONLY (opens the report, changes URL params, downloads
+// CSV -- mutates nothing durable). Assertions are STRUCTURAL (the fresh worker db has no
+// seeded ledger, so numbers would be brittle): the params form + scope selector + the
+// GRANULARITY select + the period from/to inputs, the section + net labels (localized en
+// text present in the table), the comparative-column header count, a net (report-total)
+// row, and a text/csv response. No page.waitForFunction (strict CSP) -- only locator/
+// URL/response waits.
+test('reports: open the income statement, set period + granularity, see the R/E tree + comparative columns + net line, CSV returns', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  // --- open the income statement at the root scope, a fixed period, quarterly columns ---
+  await page.goto(`${IS}?scope=1&from=2025-01-01&to=2026-06-30&granularity=quarter&currency=USD`);
+
+  // The shared params form + the always-present subsidiary SCOPE selector (D18).
+  await expect(page.locator('form.report-params')).toBeVisible();
+  await expect(page.locator('select.report-scope-select[name="scope"]')).toBeVisible();
+
+  // The GRANULARITY select is present (an income-statement comparative control), set to
+  // "quarter" from the query round trip.
+  const gran = page.locator('form.report-params select[name="granularity"]');
+  await expect(gran).toBeVisible();
+  await expect(gran).toHaveValue('quarter');
+
+  // The period FROM/TO controls are present -- plain text inputs (never input[type=date],
+  // rule 12), named "from"/"to".
+  await expect(page.locator('form.report-params [name="from"]')).toBeVisible();
+  await expect(page.locator('form.report-params [name="to"]')).toBeVisible();
+
+  // The report table renders the R/E TREE: the Revenue and Expenses SECTION labels and
+  // the NET surplus/deficit line are localized labels rendered verbatim; assert their
+  // default-language (en) text is present (structural, not numeric).
+  const table = page.locator('table.report-table');
+  await expect(table).toBeVisible();
+  await expect(table).toContainText('Revenue');
+  await expect(table).toContainText('Expenses');
+  await expect(table).toContainText('Net surplus');
+
+  // The COMPARATIVE columns: quarterly over 18 months => 6 period columns + Line + Total
+  // = 8 header cells. Assert at least 4 (structural: Line + >=2 periods + Total), which a
+  // non-comparative single-column layout could not produce.
+  const headers = page.locator('table.report-table thead th');
+  expect(await headers.count()).toBeGreaterThanOrEqual(4);
+
+  // A NET (report-total) row is present -- the surplus/deficit line, marked report-total.
+  await expect(
+    page.locator('table.report-table tr.report-total, table.report-table tr.report-subtotal'),
+  ).not.toHaveCount(0);
+
+  // --- the CSV export link is present and the endpoint returns text/csv ---
+  await expect(page.locator('a.report-csv-link')).toBeVisible();
+  const resp = await page.request.get(
+    `${IS}.csv?scope=1&from=2025-01-01&to=2026-06-30&granularity=quarter&currency=USD`,
+  );
+  expect(resp.status()).toBe(200);
+  expect(resp.headers()['content-type']).toContain('text/csv');
   const body = await resp.text();
   expect(body.split('\n')[0]).toContain(',');
 });

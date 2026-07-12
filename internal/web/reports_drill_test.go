@@ -353,3 +353,95 @@ func TestBalanceSheetDrillReconciles(t *testing.T) {
 		t.Errorf("Checking MX drill = %d, want 39,500,000", got)
 	}
 }
+
+// TestIncomeStatementDrillReconciles: every drillable income-statement cell (a single-
+// currency R/E leaf, DrillPeriod over its column's sub-period range) lists exactly the
+// transactions whose signed NATIVE sum equals the toolkit's NATIVE Activity figure for
+// that (account, currency) over that same range -- the p15.5 flow-cell reconciliation.
+// The report cell was CONVERTED (txn-date, D12) but the drill lists NATIVE splits; the
+// invariant holds against the pre-conversion native figure (drill.go). Quarterly
+// comparative columns exercise several distinct sub-period ranges.
+func TestIncomeStatementDrillReconciles(t *testing.T) {
+	fx := fixture.New(t)
+	fx.ExtendRates(t)
+	ctx := context.Background()
+	st := fx.Store
+	ids := fx.IDs
+	from, to := fx.Expected.ActivityFrom, fx.Expected.ActivityTo
+
+	rep, ok := reports.Default().Get(reports.IncomeStatementReportID)
+	if !ok {
+		t.Fatalf("income-statement report not registered")
+	}
+	p := reports.Params{
+		Scope: ids.Root, From: from, To: to,
+		Granularity: reports.GranQuarter, TargetCurrency: "USD", Lang: "en",
+	}
+	table, err := rep.Run(ctx, reports.NewToolkit(st, p), p)
+	if err != nil {
+		t.Fatalf("run income statement: %v", err)
+	}
+
+	// nativeActivity returns the toolkit's NATIVE Activity figure for (account, currency)
+	// over [pf,pt] at root scope -- the reconciliation oracle (never the drill's output).
+	tk := reports.NewToolkit(st, p)
+	nativeActivity := func(acct int64, ccy, pf, pt string) (int64, bool) {
+		act, err := tk.Activity(ctx, reports.Scope{Sub: ids.Root}, pf, pt, reports.ConvertOpts{Mode: reports.RateNone})
+		if err != nil {
+			t.Fatalf("Activity native: %v", err)
+		}
+		for _, a := range act[acct] {
+			if a.Currency == ccy {
+				return a.Minor, true
+			}
+		}
+		return 0, false // no activity in this sub-period => figure 0
+	}
+
+	drills, nonzero := 0, 0
+	for _, row := range table.Rows {
+		for _, c := range row.Cells {
+			if c.Drill == nil {
+				continue
+			}
+			d := c.Drill
+			if len(d.AccountIDs) != 1 || d.Mode != reports.DrillPeriod {
+				t.Errorf("income-statement drill not a single-account period drill: %+v", d)
+				continue
+			}
+			acct := d.AccountIDs[0]
+			want, _ := nativeActivity(acct, d.Currency, d.From, d.To)
+			got, n := drillSum(t, st, store.DrillFilter{
+				Scope:     d.Scope,
+				AccountID: acct,
+				Currency:  d.Currency,
+				From:      d.From,
+				To:        d.To,
+			})
+			if got != want {
+				t.Errorf("income-statement drill account %d %s [%s..%s]: sum %d, want %d (toolkit native)",
+					acct, d.Currency, d.From, d.To, got, want)
+			}
+			if want != 0 && n == 0 {
+				t.Errorf("income-statement drill account %d %s [%s..%s] returned no rows for a nonzero figure",
+					acct, d.Currency, d.From, d.To)
+			}
+			drills++
+			if want != 0 {
+				nonzero++
+			}
+		}
+	}
+	if drills == 0 {
+		t.Fatalf("income statement emitted no drillable cells")
+	}
+	if nonzero == 0 {
+		t.Fatalf("income statement emitted no NONZERO drillable cells (reconciliation vacuous)")
+	}
+
+	// Concrete anchor: Food Purchases (MXN) whole-range native activity is 360,000 (the
+	// fixture R/E oracle), reconciled through the drill over the full span.
+	if got, _ := drillSum(t, st, store.DrillFilter{Scope: ids.Root, AccountID: ids.FoodPurchases, Currency: "MXN", From: from, To: to}); got != 360_000 {
+		t.Errorf("Food Purchases whole-range drill = %d, want 360,000", got)
+	}
+}
