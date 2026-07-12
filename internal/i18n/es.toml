@@ -554,3 +554,78 @@ other = "La moneda de la transaccion esta inactiva."
 other = "Esa transaccion ya no existe."
 [error.txn.generic]
 other = "No se pudo guardar la transaccion."
+
+# p12.4 editar/anular/duplicar + historial (Perm: historial=TxnRead, anular/
+# duplicar/editar=TxnWrite). Enlaces de accion por fila, la linea de tiempo del
+# historial y la pagina de confirmacion de anulacion.
+[register.col.actions]
+other = "Acciones"
+[register.action.edit]
+other = "Editar"
+[register.action.duplicate]
+other = "Duplicar"
+[register.action.void]
+other = "Anular"
+[register.action.history]
+other = "Historial"
+
+[history.title]
+other = "Historial de la transacción"
+[history.back_to_txn]
+other = "Volver a la transacción"
+[history.empty]
+other = "No hay historial para esta transacción."
+[history.op.created]
+other = "Creada"
+[history.op.updated]
+other = "Actualizada"
+[history.op.voided]
+other = "Anulada"
+[history.split.added]
+other = "Línea agregada"
+[history.split.removed]
+other = "Línea eliminada"
+[history.split.changed]
+other = "Línea modificada"
+[history.split.line]
+one = "Línea %d"
+other = "Línea %d"
+[history.field.date]
+other = "Fecha"
+[history.field.subsidiary]
+other = "Subsidiaria"
+[history.field.payee]
+other = "Beneficiario"
+[history.field.memo]
+other = "Nota"
+[history.field.currency]
+other = "Moneda"
+[history.field.account]
+other = "Cuenta"
+[history.field.amount]
+other = "Importe"
+[history.field.fund]
+other = "Fondo"
+[history.field.program]
+other = "Programa"
+[history.field.functional_class]
+other = "Clase funcional"
+
+[void.title]
+other = "Anular transacción"
+[void.intro]
+other = "Anular quita esta transacción del libro mayor. Su historial se conserva. Esto no se puede deshacer desde la aplicación."
+[void.date]
+other = "Fecha"
+[void.payee]
+other = "Beneficiario"
+[void.memo]
+other = "Nota"
+[void.col.account]
+other = "Cuenta"
+[void.col.amount]
+other = "Importe"
+[void.col.fund]
+other = "Fondo"
+[void.confirm]
+other = "Anular esta transacción"

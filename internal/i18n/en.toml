@@ -560,3 +560,78 @@ other = "The transaction currency is inactive."
 other = "That transaction no longer exists."
 [error.txn.generic]
 other = "The transaction could not be saved."
+
+# p12.4 edit/void/duplicate + history (Perm: history=TxnRead, void/duplicate/edit=
+# TxnWrite). Per-row register action links, the history timeline, and the void
+# confirm-review page. Field/op labels are structured so the timeline reads uniformly.
+[register.col.actions]
+other = "Actions"
+[register.action.edit]
+other = "Edit"
+[register.action.duplicate]
+other = "Duplicate"
+[register.action.void]
+other = "Void"
+[register.action.history]
+other = "History"
+
+[history.title]
+other = "Transaction history"
+[history.back_to_txn]
+other = "Back to the transaction"
+[history.empty]
+other = "No history for this transaction."
+[history.op.created]
+other = "Created"
+[history.op.updated]
+other = "Updated"
+[history.op.voided]
+other = "Voided"
+[history.split.added]
+other = "Line added"
+[history.split.removed]
+other = "Line removed"
+[history.split.changed]
+other = "Line changed"
+[history.split.line]
+one = "Line %d"
+other = "Line %d"
+[history.field.date]
+other = "Date"
+[history.field.subsidiary]
+other = "Subsidiary"
+[history.field.payee]
+other = "Payee"
+[history.field.memo]
+other = "Memo"
+[history.field.currency]
+other = "Currency"
+[history.field.account]
+other = "Account"
+[history.field.amount]
+other = "Amount"
+[history.field.fund]
+other = "Fund"
+[history.field.program]
+other = "Program"
+[history.field.functional_class]
+other = "Functional class"
+
+[void.title]
+other = "Void transaction"
+[void.intro]
+other = "Voiding removes this transaction from the ledger. Its history is preserved. This cannot be undone from the app."
+[void.date]
+other = "Date"
+[void.payee]
+other = "Payee"
+[void.memo]
+other = "Memo"
+[void.col.account]
+other = "Account"
+[void.col.amount]
+other = "Amount"
+[void.col.fund]
+other = "Fund"
+[void.confirm]
+other = "Void this transaction"

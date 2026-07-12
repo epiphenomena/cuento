@@ -37,6 +37,14 @@
   <td class="reg-amount amount">{{.AmountFmt}}</td>
   <td class="reg-running amount">{{.RunningBalanceFmt}}</td>
   {{if $.Reconcilable}}<td class="reg-recon" data-col="recon"></td>{{end}}
+  {{/* p12.4 per-row entry points: edit / duplicate / void / history. Plain links
+       (full-page nav) so the CSP stays trivial and no htmx-settle dance is needed. */}}
+  <td class="reg-actions">
+    <a href="/transactions/{{.TxnID}}/edit">{{t "register.action.edit"}}</a>
+    <a href="/transactions/{{.TxnID}}/duplicate">{{t "register.action.duplicate"}}</a>
+    <a href="/transactions/{{.TxnID}}/void">{{t "register.action.void"}}</a>
+    <a href="/transactions/{{.TxnID}}/history">{{t "register.action.history"}}</a>
+  </td>
 </tr>
 {{- end}}
 {{- end}}
@@ -119,6 +127,7 @@
         <th>{{t "register.col.amount"}}</th>
         <th>{{t "register.col.running"}}</th>
         {{if .Reconcilable}}<th data-col="recon">{{t "register.col.recon"}}</th>{{end}}
+        <th>{{t "register.col.actions"}}</th>
       </tr>
     </thead>
     <tbody id="reg-rows">

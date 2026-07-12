@@ -228,7 +228,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p12.3 web: payee autocomplete + autofill.**
   Tests: `TestPayeeSuggestRanking` (prefix match, most-recent first), `TestPayeeTemplatePrefills` (last non-deleted txn's splits — accounts, memos, amounts, funds, programs, functional classes — become editable rows), `TestAutofillNeverOverwrites` (fires only when all split rows are empty), `TestAutofillRespectsSubsidiary` (template splits with accounts outside the selected sub are dropped with a notice).
   Build: `GET /payees/suggest?q=`, `GET /payees/{id}/template?sub=` returning an editor partial.
-- [ ] **p12.4 web: edit / void / duplicate + history panel.**
+- [x] **p12.4 web: edit / void / duplicate + history panel.**
   Tests: history timeline renders actor, timestamp, per-field diffs and split-set diffs (including fund and functional-class changes) for create/update/delete; TxnRead may view history; void requires confirm and TxnWrite.
   Build: edit loads the same editor; delete = void with confirm; `/transactions/{id}/history` from versions.
 - [ ] **p12.5 web: funds workspace.**

@@ -483,11 +483,11 @@ func makeRegRowCtx(m registerPageModel, row regRow) regRowCtx {
 }
 
 // regColspan is the `regColspan` template func: the register table's column count,
-// so the empty-row and sentinel cells span the full width. Base columns are 7
-// (date, payee, memo, counter, fund, amount, running); +1 for the sub badge, +1 for
-// the recon column when each is shown.
+// so the empty-row and sentinel cells span the full width. Base columns are 8 (date,
+// payee, memo, counter, fund, amount, running, and the p12.4 actions column); +1 for
+// the sub badge, +1 for the recon column when each is shown.
 func regColspan(m registerPageModel) int {
-	n := 7
+	n := 8
 	if m.ShowSubBadge {
 		n++
 	}

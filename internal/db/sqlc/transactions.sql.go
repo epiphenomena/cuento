@@ -542,6 +542,77 @@ func (q *Queries) SplitUsesFundInSubsidiary(ctx context.Context, arg SplitUsesFu
 	return in_use, err
 }
 
+const splitVersionHistory = `-- name: SplitVersionHistory :many
+SELECT sv.entity_id, sv.change_id, sv.op, sv.valid_from,
+       sv.account_id, sv.amount, sv.fund_id, sv.program_id,
+       sv.functional_class, sv.memo, sv.position,
+       c.actor_id, u.display_name AS actor_name, c.at
+FROM splits_versions sv
+JOIN changes c ON c.id = sv.change_id
+JOIN users u ON u.id = c.actor_id
+WHERE sv.transaction_id = ?
+ORDER BY sv.valid_from, sv.id
+`
+
+type SplitVersionHistoryRow struct {
+	EntityID        int64
+	ChangeID        int64
+	Op              string
+	ValidFrom       string
+	AccountID       int64
+	Amount          int64
+	FundID          sql.NullInt64
+	ProgramID       sql.NullInt64
+	FunctionalClass sql.NullString
+	Memo            string
+	Position        int64
+	ActorID         int64
+	ActorName       string
+	At              string
+}
+
+// Every splits_versions row for one transaction's splits, oldest first, with the
+// change actor + timestamp. entity_id (the split id) lets the store group a split's
+// consecutive snapshots to diff them; change_id groups a row into its timeline
+// entry. Params (positional): transaction_id.
+func (q *Queries) SplitVersionHistory(ctx context.Context, transactionID int64) ([]SplitVersionHistoryRow, error) {
+	rows, err := q.db.QueryContext(ctx, splitVersionHistory, transactionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SplitVersionHistoryRow
+	for rows.Next() {
+		var i SplitVersionHistoryRow
+		if err := rows.Scan(
+			&i.EntityID,
+			&i.ChangeID,
+			&i.Op,
+			&i.ValidFrom,
+			&i.AccountID,
+			&i.Amount,
+			&i.FundID,
+			&i.ProgramID,
+			&i.FunctionalClass,
+			&i.Memo,
+			&i.Position,
+			&i.ActorID,
+			&i.ActorName,
+			&i.At,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const splitVersionsAsOf = `-- name: SplitVersionsAsOf :many
 SELECT entity_id, op, transaction_id, account_id, amount, fund_id, program_id,
        functional_class, memo, position
@@ -743,6 +814,82 @@ func (q *Queries) TransactionVersionAsOf(ctx context.Context, arg TransactionVer
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const transactionVersionHistory = `-- name: TransactionVersionHistory :many
+
+SELECT tv.change_id, tv.op, tv.valid_from,
+       tv.date, tv.subsidiary_id, tv.payee_id, tv.memo, tv.currency, tv.deleted,
+       c.actor_id, u.display_name AS actor_name, c.at
+FROM transactions_versions tv
+JOIN changes c ON c.id = tv.change_id
+JOIN users u ON u.id = c.actor_id
+WHERE tv.entity_id = ?
+ORDER BY tv.valid_from, tv.id
+`
+
+type TransactionVersionHistoryRow struct {
+	ChangeID     int64
+	Op           string
+	ValidFrom    string
+	Date         string
+	SubsidiaryID int64
+	PayeeID      sql.NullInt64
+	Memo         string
+	Currency     string
+	Deleted      int64
+	ActorID      int64
+	ActorName    string
+	At           string
+}
+
+// ---------------------------------------------------------------------------
+// history reconstruction (p12.4) -- the FULL version timeline of one transaction,
+// for /transactions/{id}/history. Unlike the AsOf queries above these fetch EVERY
+// version row (not a LIMIT-1 snapshot) so the store can walk consecutive snapshots
+// per entity and compute per-change diffs in Go (testable; SQL only orders). Each
+// row carries its change_id + the change's actor + timestamp (JOIN changes, and
+// users for the actor's display name), so the store groups rows into timeline
+// entries by change_id. Ordered by valid_from then id so an entity's snapshots are
+// consecutive in append order; the store re-groups by change_id afterwards.
+// ---------------------------------------------------------------------------
+// Every transactions_versions row for one transaction, oldest first, with the
+// change's actor id, actor display name, and timestamp. Includes op='delete' rows
+// (a voided txn's history must still render). Params (positional): entity_id.
+func (q *Queries) TransactionVersionHistory(ctx context.Context, entityID int64) ([]TransactionVersionHistoryRow, error) {
+	rows, err := q.db.QueryContext(ctx, transactionVersionHistory, entityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []TransactionVersionHistoryRow
+	for rows.Next() {
+		var i TransactionVersionHistoryRow
+		if err := rows.Scan(
+			&i.ChangeID,
+			&i.Op,
+			&i.ValidFrom,
+			&i.Date,
+			&i.SubsidiaryID,
+			&i.PayeeID,
+			&i.Memo,
+			&i.Currency,
+			&i.Deleted,
+			&i.ActorID,
+			&i.ActorName,
+			&i.At,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateSplit = `-- name: UpdateSplit :exec

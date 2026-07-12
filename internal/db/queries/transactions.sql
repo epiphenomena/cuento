@@ -249,6 +249,45 @@ WHERE transaction_id = ? AND valid_from <= ?
 ORDER BY entity_id, valid_from DESC, id DESC;
 
 -- ---------------------------------------------------------------------------
+-- history reconstruction (p12.4) -- the FULL version timeline of one transaction,
+-- for /transactions/{id}/history. Unlike the AsOf queries above these fetch EVERY
+-- version row (not a LIMIT-1 snapshot) so the store can walk consecutive snapshots
+-- per entity and compute per-change diffs in Go (testable; SQL only orders). Each
+-- row carries its change_id + the change's actor + timestamp (JOIN changes, and
+-- users for the actor's display name), so the store groups rows into timeline
+-- entries by change_id. Ordered by valid_from then id so an entity's snapshots are
+-- consecutive in append order; the store re-groups by change_id afterwards.
+-- ---------------------------------------------------------------------------
+
+-- name: TransactionVersionHistory :many
+-- Every transactions_versions row for one transaction, oldest first, with the
+-- change's actor id, actor display name, and timestamp. Includes op='delete' rows
+-- (a voided txn's history must still render). Params (positional): entity_id.
+SELECT tv.change_id, tv.op, tv.valid_from,
+       tv.date, tv.subsidiary_id, tv.payee_id, tv.memo, tv.currency, tv.deleted,
+       c.actor_id, u.display_name AS actor_name, c.at
+FROM transactions_versions tv
+JOIN changes c ON c.id = tv.change_id
+JOIN users u ON u.id = c.actor_id
+WHERE tv.entity_id = ?
+ORDER BY tv.valid_from, tv.id;
+
+-- name: SplitVersionHistory :many
+-- Every splits_versions row for one transaction's splits, oldest first, with the
+-- change actor + timestamp. entity_id (the split id) lets the store group a split's
+-- consecutive snapshots to diff them; change_id groups a row into its timeline
+-- entry. Params (positional): transaction_id.
+SELECT sv.entity_id, sv.change_id, sv.op, sv.valid_from,
+       sv.account_id, sv.amount, sv.fund_id, sv.program_id,
+       sv.functional_class, sv.memo, sv.position,
+       c.actor_id, u.display_name AS actor_name, c.at
+FROM splits_versions sv
+JOIN changes c ON c.id = sv.change_id
+JOIN users u ON u.id = c.actor_id
+WHERE sv.transaction_id = ?
+ORDER BY sv.valid_from, sv.id;
+
+-- ---------------------------------------------------------------------------
 -- deferred p08 guards (complete the p05.2 / p07.3 TODOs)
 -- ---------------------------------------------------------------------------
 

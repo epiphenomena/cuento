@@ -1,0 +1,53 @@
+{{/*
+  p12.4 void confirm-review page (/transactions/{id}/void, TxnWrite). Voiding a
+  transaction is a soft-delete (rule 14) but feels destructive, so it is a two-step
+  flow mirroring the merge confirm UX: this page SUMMARIZES the transaction (date,
+  payee, memo, split lines) and offers a Confirm button that POSTs back with
+  confirm=1 to execute. A plain full-page form (no htmx swap) -- on success the
+  handler redirects to /accounts. .Page is a voidReviewModel.
+
+  Every string via {{t}} (rule 9); amounts/dates already formatted (rule 10);
+  account/fund/payee names are stored proper nouns rendered verbatim; no inline
+  script (rule 12).
+*/ -}}
+{{define "void.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "void.title"))}}
+  {{- with .Page}}
+  <h1>{{t "void.title"}}</h1>
+  <p class="hint">{{t "void.intro"}}</p>
+
+  <dl class="void-summary">
+    <dt>{{t "void.date"}}</dt><dd>{{.Date}}</dd>
+    <dt>{{t "void.payee"}}</dt><dd>{{if .Payee}}{{.Payee}}{{else}}<span class="muted">&mdash;</span>{{end}}</dd>
+    <dt>{{t "void.memo"}}</dt><dd>{{if .Memo}}{{.Memo}}{{else}}<span class="muted">&mdash;</span>{{end}}</dd>
+  </dl>
+
+  <table class="void-lines">
+    <thead>
+      <tr>
+        <th>{{t "void.col.account"}}</th>
+        <th>{{t "void.col.amount"}}</th>
+        <th>{{t "void.col.fund"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Lines}}
+      <tr>
+        <td>{{.Account}}</td>
+        <td class="amount">{{.Amount}}</td>
+        <td>{{if .Fund}}<span class="chip">{{.Fund}}</span>{{else}}<span class="muted">&mdash;</span>{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+
+  <form method="post" action="/transactions/{{.TxnID}}/void" class="void-form">
+    <input type="hidden" name="confirm" value="1">
+    <div class="form-actions">
+      <button type="submit" class="btn btn-danger">{{t "void.confirm"}}</button>
+      <a class="btn btn-ghost" href="/transactions/{{.TxnID}}/edit">{{t "common.cancel"}}</a>
+    </div>
+  </form>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

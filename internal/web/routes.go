@@ -216,6 +216,17 @@ func (s *server) routes() []Route {
 		{http.MethodGet, "/transactions/{id}/edit", TxnWrite, http.HandlerFunc(s.txnEditForm)},
 		{http.MethodPost, "/transactions", TxnWrite, http.HandlerFunc(s.txnCreate)},
 		{http.MethodPost, "/transactions/{id}", TxnWrite, http.HandlerFunc(s.txnUpdate)},
+		// p12.4 edit/void/duplicate + history. History is TxnRead (a viewer may audit
+		// the change trail); void (delete = soft-delete with confirm) and duplicate
+		// (open the editor prefilled as a NEW entry) are TxnWrite. The literal ".../
+		// history", ".../void", ".../duplicate" segments are more specific than the
+		// ".../{id}" POST, so the Go 1.22+ mux routes them precisely. GET /void is the
+		// confirm-review; POST /void executes. The permission-matrix test picks these up
+		// automatically (rule 8); the register row links edit/void/duplicate/history.
+		{http.MethodGet, "/transactions/{id}/history", TxnRead, http.HandlerFunc(s.txnHistory)},
+		{http.MethodGet, "/transactions/{id}/void", TxnWrite, http.HandlerFunc(s.voidReview)},
+		{http.MethodPost, "/transactions/{id}/void", TxnWrite, http.HandlerFunc(s.void)},
+		{http.MethodGet, "/transactions/{id}/duplicate", TxnWrite, http.HandlerFunc(s.txnDuplicate)},
 		// p12.3 payee autocomplete + autofill (Appendix B/F). Both feed the transaction
 		// ENTRY flow, so both are TxnWrite (matching the editor GET forms -- they exist
 		// only to author an entry). GET /payees/suggest returns a ranked suggestion
