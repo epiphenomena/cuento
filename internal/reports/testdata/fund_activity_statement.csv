@@ -1,0 +1,7 @@
+Line,Currency,Amount
+Opening (spendable),USD,0.00
+Received,USD,50000.00
+Applied — expenses,USD,0.00
+"Applied — non-expense (assets, principal)",USD,40000.00
+Closing (spendable),USD,10000.00
+Total fund assets,USD,50000.00

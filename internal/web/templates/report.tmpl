@@ -84,6 +84,16 @@
       </select>
       {{end}}
 
+      {{if .Params.ShowFund}}
+      <label for="rp-fund">{{t "reports.params.fund"}}</label>
+      <select id="rp-fund" name="fund" class="report-fund-select">
+        <option value="0"{{if eq .Params.Fund 0}} selected{{end}}>{{t "reports.fund_activity.all_funds"}}</option>
+        {{- range .Params.Funds}}
+        <option value="{{.ID}}"{{if eq .ID $.Page.Params.Fund}} selected{{end}}>{{.Name}}</option>
+        {{- end}}
+      </select>
+      {{end}}
+
       <button type="submit" class="btn btn-primary">{{t "reports.params.run"}}</button>
     </fieldset>
   </form>

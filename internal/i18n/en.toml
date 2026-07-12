@@ -954,6 +954,8 @@ other = "Currency"
 other = "Detail"
 [reports.params.account]
 other = "Account"
+[reports.params.fund]
+other = "Fund"
 [reports.params.run]
 other = "Run report"
 [reports.detail.converted]
@@ -1090,3 +1092,43 @@ other = "Total"
 other = "(Unmapped)"
 [reports.functional_expenses.total]
 other = "Total functional expenses"
+
+# p15.8 fund balances & activity — the donor-restricted fund tracking / per-grant
+# funder view (D20). TWO views: the fund ROSTER (list — as-of balance per fund with
+# funder/restriction metadata + the Unrestricted line) and the single-fund period
+# STATEMENT (Opening + Received − Applied == Closing, Applied split into expense vs
+# non-expense applications). The restriction-kind labels reuse funds.restriction.<kind>.
+[reports.fund_activity.title]
+other = "Fund balances & activity"
+[reports.fund_activity.col.fund]
+other = "Fund"
+[reports.fund_activity.col.funder]
+other = "Funder"
+[reports.fund_activity.col.restriction]
+other = "Restriction"
+[reports.fund_activity.col.purpose]
+other = "Purpose"
+[reports.fund_activity.col.currency]
+other = "Currency"
+[reports.fund_activity.col.balance]
+other = "Balance"
+[reports.fund_activity.col.line]
+other = "Line"
+[reports.fund_activity.col.amount]
+other = "Amount"
+[reports.fund_activity.unrestricted]
+other = "Unrestricted"
+[reports.fund_activity.opening]
+other = "Opening (spendable)"
+[reports.fund_activity.received]
+other = "Received"
+[reports.fund_activity.applied_expense]
+other = "Applied — expenses"
+[reports.fund_activity.applied_nonexpense]
+other = "Applied — non-expense (assets, principal)"
+[reports.fund_activity.closing]
+other = "Closing (spendable)"
+[reports.fund_activity.total_assets]
+other = "Total fund assets"
+[reports.fund_activity.all_funds]
+other = "— all funds —"

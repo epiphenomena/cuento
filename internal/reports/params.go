@@ -54,6 +54,16 @@ type Params struct {
 	// report-specific param the web layer parses only for a report whose spec declares
 	// it, and validates against the real leaf-account set.
 	Account int64
+
+	// Fund is the single fund a report-specific "which fund" control names (p15.8 fund
+	// balances & activity): the fund whose period statement the report prints. Meaningful
+	// only when ParamsSpec.Fund is set; the empty value (0) means "no fund chosen" and the
+	// fund report renders its LIST view (the fund roster) rather than a single-fund
+	// statement. Mirrors Account: a report-specific param the web layer parses only for a
+	// report whose spec declares it, validated against the real fund set (active, plus
+	// closed when a closed fund is explicitly requested). Fund id 0 is never a valid
+	// selection (it is the synthetic unrestricted group, which appears only in the list).
+	Fund int64
 }
 
 // DetailCurrency reports whether the per-currency detail toggle is on (Detail ==
@@ -138,4 +148,8 @@ type ParamsSpec struct {
 	// control (unlike the always-present subsidiary scope), so only a report whose
 	// spec sets this parses/validates the account param and renders the selector.
 	Account bool
+	// Fund: the report takes a single FUND (p15.8 fund balances & activity); the form
+	// offers a fund select bound to Params.Fund (with a "— all funds —" default that
+	// yields the list view). Report-SPECIFIC, like Account.
+	Fund bool
 }

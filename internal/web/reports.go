@@ -131,6 +131,21 @@ func (s *server) resolveParams(
 			}
 		}
 	}
+	if rep.ParamsSpec.Fund {
+		// The report-specific FUND param (p15.8): parse it and validate against the real
+		// fund set (an arbitrary id is dropped -> no fund, the LIST view). Fund 0 is never
+		// a valid selection (the synthetic unrestricted group, list-only). Only fetched for
+		// a report whose spec declares it.
+		funds, err := s.fundActivityOptions(ctx)
+		if err != nil {
+			return reports.Params{}, paramsForm{}, err
+		}
+		if v := first(q, "fund"); v != "" {
+			if id := parseID(v); id != 0 && fundExists(funds, id) {
+				p.Fund = id
+			}
+		}
+	}
 
 	form, err := s.buildParamsForm(ctx, u, rep, p, subs)
 	if err != nil {
@@ -193,6 +208,41 @@ func acctExists(accts []acctOption, id int64) bool {
 	return false
 }
 
+// fundOption is one selectable fund in the fund-activity report's FUND selector
+// (p15.8): a fund with its resolved name (a stored proper noun). The report-specific
+// analogue of acctOption; picking one switches the report from its LIST view (the fund
+// roster) to that fund's period statement.
+type fundOption struct {
+	ID   int64
+	Name string
+}
+
+// fundActivityOptions returns every fund (active and closed — a closed fund may still
+// carry a residual balance worth a statement) with its name, id-ordered, for the fund
+// report's fund selector.
+func (s *server) fundActivityOptions(ctx context.Context) ([]fundOption, error) {
+	fs, err := s.store.ListFunds(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]fundOption, 0, len(fs))
+	for _, f := range fs {
+		out = append(out, fundOption{ID: f.ID, Name: f.Name})
+	}
+	return out, nil
+}
+
+// fundExists reports whether id is one of the offered funds (a query fund override must
+// name a real fund, else the LIST view stands).
+func fundExists(funds []fundOption, id int64) bool {
+	for _, f := range funds {
+		if f.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveDate parses a query date value per the user's date format (ISO always
 // accepted), falling back to fallback (a time.Time) rendered ISO when the value is
 // empty or unparseable. The stored/param form is always ISO (YYYY-MM-DD), the
@@ -226,6 +276,7 @@ type paramsForm struct {
 	ShowCurrency    bool
 	ShowDetail      bool
 	ShowAccount     bool
+	ShowFund        bool
 
 	// Resolved control values (formatted for display where dated).
 	AsOf        string // user-formatted date
@@ -235,10 +286,12 @@ type paramsForm struct {
 	Currency    string // selected target currency code
 	Detail      string // token: ""|currency (per-currency detail toggle)
 	Account     int64  // selected leaf account id (0 = none chosen)
+	Fund        int64  // selected fund id (0 = all funds / list view)
 
 	// Options for the selects.
 	Currencies []ccyChoice
 	Accounts   []acctOption // the leaf-account options (account-ledger only)
+	Funds      []fundOption // the fund options (fund-activity report only)
 }
 
 // scopeOption is one subsidiary choice in the scope selector.
@@ -276,10 +329,12 @@ func (s *server) buildParamsForm(
 		ShowCurrency:    rep.ParamsSpec.Currency,
 		ShowDetail:      rep.ParamsSpec.Detail,
 		ShowAccount:     rep.ParamsSpec.Account,
+		ShowFund:        rep.ParamsSpec.Fund,
 		Granularity:     p.Granularity.String(),
 		Currency:        p.TargetCurrency,
 		Detail:          p.Detail,
 		Account:         p.Account,
+		Fund:            p.Fund,
 	}
 	for _, sub := range subs {
 		f.Scopes = append(f.Scopes, scopeOption{
@@ -315,6 +370,13 @@ func (s *server) buildParamsForm(
 			return paramsForm{}, err
 		}
 		f.Accounts = accts
+	}
+	if rep.ParamsSpec.Fund {
+		funds, err := s.fundActivityOptions(ctx)
+		if err != nil {
+			return paramsForm{}, err
+		}
+		f.Funds = funds
 	}
 	return f, nil
 }

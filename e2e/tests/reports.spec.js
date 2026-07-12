@@ -28,6 +28,7 @@ const BS = '/reports/balance_sheet';
 const IS = '/reports/income_statement';
 const AL = '/reports/account_ledger';
 const FE = '/reports/functional_expenses';
+const FA = '/reports/fund_activity';
 
 async function login(page, server) {
   await page.goto('/login');
@@ -451,6 +452,146 @@ test('reports: open the balance sheet, see the sections + net-asset split + a ba
   // --- the CSV export link is present and the endpoint returns text/csv ---
   await expect(page.locator('a.report-csv-link')).toBeVisible();
   const resp = await page.request.get(`${BS}.csv?scope=1&asof=2026-06-30`);
+  expect(resp.status()).toBe(200);
+  expect(resp.headers()['content-type']).toContain('text/csv');
+  const body = await resp.text();
+  expect(body.split('\n')[0]).toContain(',');
+});
+
+// p15.8 FUND BALANCES & ACTIVITY: the donor-restricted fund tracking / per-grant funder
+// view (D20). It has TWO views selected by the report-specific FUND param: the LIST
+// (fund roster with as-of balances + funder/restriction metadata) and the SINGLE-FUND
+// STATEMENT (Opening + Received − Applied == Closing, Applied split into EXPENSE vs
+// NON-EXPENSE applications). This spec SEEDS a restricted fund, a receipt into it, and a
+// capital-asset PURCHASE from it (the non-expense application), then:
+//   - opens the LIST, confirms the fund selector is present and the fund's roster row +
+//     funder metadata render;
+//   - picks the fund -> the single-fund STATEMENT with the applied SPLIT (the Received,
+//     Applied — expenses, and Applied — non-expense lines) renders;
+//   - the CSV endpoint returns text/csv.
+//
+// This test MUTATES (creates a fund, three accounts, two txns); names are unique so it
+// never collides with sibling specs sharing the worker db, and it only ADDS rows (never
+// asserts a global count). Strict CSP (script-src 'self') => NO page.waitForFunction;
+// only locator/URL/response waits + a plain page.request fetch for the CSV. Selectors are
+// the report/params marker classes, the fund-select name, and the localized line labels.
+
+// createRevenueAccount makes a leaf REVENUE account mapped to the root subsidiary (the
+// type change triggers an htmx form-swap, like the expense path in txn-editor.spec.js);
+// a revenue split is the "Received" side of a fund receipt.
+async function createRevenueAccount(page, name) {
+  await page.goto('/accounts');
+  await page.getByRole('button', { name: /new account/i }).click();
+  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+  await page.locator('#af-type').selectOption('revenue');
+  await expect(page.locator('#af-name-en')).toBeVisible();
+  await page.locator('#af-name-en').fill(name);
+  const rootSub = page.locator('input[name="sub_1"]');
+  if (!(await rootSub.isChecked())) await rootSub.check();
+  await saveAndReload(page, { reloadPath: '/accounts' });
+  await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
+}
+
+// createFund makes a restricted fund scoped to the root subsidiary via the /funds form.
+async function createFund(page, name, funder) {
+  await page.goto('/funds');
+  await page.getByRole('button', { name: /new fund/i }).click();
+  await expect(page.locator('form#fund-form.e2e-settled')).toBeVisible();
+  await page.locator('#ff-name').fill(name);
+  await page.locator('#ff-funder').fill(funder);
+  const rootSub = page.locator('input[name="sub_1"]');
+  if (!(await rootSub.isChecked())) await rootSub.check();
+  const reloaded = page.waitForResponse(
+    (r) => r.url().endsWith('/funds') && r.request().method() === 'GET',
+  );
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await reloaded;
+  await expect(page.locator('tr.fund-row', { hasText: name })).toBeVisible();
+}
+
+test('reports: open the fund report (list), pick a fund, see its period statement with the applied split, CSV returns', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  // --- seed: a restricted fund, its cash + a capital (Building) asset, a revenue line ---
+  await createFund(page, 'Stmt Fund E2E', 'Anonymous Donor E2E');
+  await createAsset(page, 'Stmt Cash E2E');
+  await createAsset(page, 'Stmt Building E2E');
+  await createRevenueAccount(page, 'Stmt Gift E2E');
+
+  // Receipt INTO the fund: DR Stmt Cash 100.00 (fund), CR Stmt Gift 100.00 (fund). Both
+  // splits tagged the fund so the txn nets to zero WITHIN the fund (D20). The revenue
+  // split's program prefills from the seeded root program.
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await page.locator('#txn-account-0').selectOption({ label: 'Stmt Cash E2E' });
+  await page.locator('#txn-amount-0').fill('100.00');
+  await page.locator('#txn-fund-0').selectOption({ label: 'Stmt Fund E2E' });
+  await page.locator('#txn-account-1').selectOption({ label: 'Stmt Gift E2E' });
+  await page.locator('#txn-amount-1').fill('-100.00');
+  await page.locator('#txn-fund-1').selectOption({ label: 'Stmt Fund E2E' });
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL('**/register**');
+
+  // Capital-asset PURCHASE applying the fund (the NON-EXPENSE application): DR Stmt
+  // Building 40.00 (fund), CR Stmt Cash 40.00 (fund). Both asset splits, fund-tagged.
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await page.locator('#txn-account-0').selectOption({ label: 'Stmt Building E2E' });
+  await page.locator('#txn-amount-0').fill('40.00');
+  await page.locator('#txn-fund-0').selectOption({ label: 'Stmt Fund E2E' });
+  await page.locator('#txn-account-1').selectOption({ label: 'Stmt Cash E2E' });
+  await page.locator('#txn-amount-1').fill('-40.00');
+  await page.locator('#txn-fund-1').selectOption({ label: 'Stmt Fund E2E' });
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL('**/register**');
+
+  // --- LIST view: the fund roster with the report-specific FUND selector ---
+  await page.goto(`${FA}?scope=1`);
+  await expect(page.locator('form.report-params')).toBeVisible();
+  await expect(page.locator('select.report-scope-select[name="scope"]')).toBeVisible();
+  const fundSelect = page.locator('select.report-fund-select[name="fund"]');
+  await expect(fundSelect).toBeVisible();
+  // The roster shows the fund row with its funder metadata (a restricted fund line).
+  const listTable = page.locator('table.report-table');
+  await expect(listTable).toBeVisible();
+  await expect(listTable).toContainText('Stmt Fund E2E');
+  await expect(listTable).toContainText('Anonymous Donor E2E');
+  // The Unrestricted line is always present (fund 0).
+  await expect(listTable).toContainText('Unrestricted');
+
+  // --- pick the fund -> the SINGLE-FUND STATEMENT with the applied split ---
+  await fundSelect.selectOption({ label: 'Stmt Fund E2E' });
+  await page.locator('form.report-params [name="from"]').fill('2025-01-01');
+  await page.locator('form.report-params [name="to"]').fill('2030-12-31');
+  await page.locator('form.report-params button[type="submit"]').click();
+  await page.waitForURL('**/reports/fund_activity?**');
+
+  // The statement renders Opening/Received/Applied(expense + NON-expense)/Closing +
+  // the total-fund-assets reconciliation line. Assert the localized line labels (en)
+  // are present -- the applied SPLIT is the point of the report.
+  const stmt = page.locator('table.report-table');
+  await expect(stmt).toBeVisible();
+  await expect(stmt).toContainText('Opening');
+  await expect(stmt).toContainText('Received');
+  await expect(stmt).toContainText('Applied — expenses');
+  await expect(stmt).toContainText('Applied — non-expense');
+  await expect(stmt).toContainText('Closing');
+  await expect(stmt).toContainText('Total fund assets');
+  // Opening/Closing (spendable) and Total assets are framing rows (subtotal/total).
+  await expect(
+    page.locator('table.report-table tr.report-subtotal, table.report-table tr.report-total'),
+  ).not.toHaveCount(0);
+  // A drillable figure is present (the reconciliation invariant is unit-tested; here we
+  // confirm the statement cells render as drill links).
+  await expect(page.locator('a.report-drill-link').first()).toBeVisible();
+
+  // --- the CSV export link is present and the endpoint returns text/csv ---
+  await expect(page.locator('a.report-csv-link')).toBeVisible();
+  const csvHref = await page.locator('a.report-csv-link').getAttribute('href');
+  const resp = await page.request.get(csvHref);
   expect(resp.status()).toBe(200);
   expect(resp.headers()['content-type']).toContain('text/csv');
   const body = await resp.text();

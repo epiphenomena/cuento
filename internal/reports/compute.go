@@ -235,6 +235,174 @@ func (tk *Toolkit) FundBalancesAsOf(ctx context.Context, s Scope, d string, o Co
 	return out, nil
 }
 
+// FundStatement is one fund's period statement (p15.8): the opening and closing
+// SPENDABLE (cash) balances that frame the period, and the RECEIVED / APPLIED flows
+// that move between them, per currency. It is the per-grant funder view (Q3) and the
+// D20 "released from restrictions" derivation feeding p15.9.
+//
+// The identity that holds per currency BY CONSTRUCTION (asserted by the golden and
+// verified by cuento's fund conservation, D20/Z10):
+//
+//	Opening + Received − AppliedExpense − AppliedNonExpense == Closing
+//
+// where every figure is a per-currency map keyed by ISO code. Opening/Closing are the
+// fund's SPENDABLE (cash) position — its asset accounts EXCLUDING those it capitalized
+// via a non-expense application in-period (a Building purchase, a loan advance). A fund
+// that holds only cash (Beca Agua) has spendable == FundBalancesAsOf; a fund that
+// capitalized a fixed asset (Building Fund) has spendable == FundBalancesAsOf − the
+// capitalized non-expense applications (Capitalized below), so the two reconcile.
+type FundStatement struct {
+	// Opening is the spendable balance the day before From, per currency (minor).
+	Opening map[string]int64
+	// Received is the period's inflows (contributions/revenue INTO the fund), per
+	// currency, as a POSITIVE magnitude (−Σ revenue splits, since revenue is a credit
+	// / negative net-debit).
+	Received map[string]int64
+	// AppliedExpense is the period's EXPENSE applications (Σ expense splits tagged the
+	// fund — positive net-debit), per currency.
+	AppliedExpense map[string]int64
+	// AppliedNonExpense is the period's NON-EXPENSE applications (asset purchases, loan
+	// principal — positive net-debit debits to asset/liability accounts, EXCLUDING the
+	// cash accounts that merely sourced a receipt/spend), per currency. The fixture's
+	// Building purchase (Building +40,000.00) lands here, NOT in AppliedExpense.
+	AppliedNonExpense map[string]int64
+	// Closing is the spendable balance as of To, per currency (minor). Equals
+	// Opening + Received − AppliedExpense − AppliedNonExpense by construction.
+	Closing map[string]int64
+	// Capitalized is the running total of NON-EXPENSE applications still held as fund
+	// assets (the Building), per currency, so Closing + Capitalized reconciles to the
+	// all-asset FundBalancesAsOf(To). For a cash-only fund it is empty.
+	Capitalized map[string]int64
+	// CapitalAccounts is the set of asset accounts the fund capitalized into (received
+	// a non-expense application debit) over the period — the accounts EXCLUDED from the
+	// spendable position. Used to drill / reconcile the spendable figure.
+	CapitalAccounts map[AccountID]bool
+	// Currencies is the sorted union of every currency any figure above uses (a stable
+	// section order for the report).
+	Currencies []string
+}
+
+// FundPeriodStatement derives fund f's period statement over [from,to] in the scope's
+// descendant closure (native currency; a fund's splits already live only in its
+// subsidiaries so scope narrows nothing but is honored via the store's FundLedger).
+// It reads the fund's splits to To (FundLedger), classifies each by its account TYPE
+// (revenue / expense / asset / liability), and folds them into the Received/Applied
+// buckets, with the day-before-From cut giving the opening balance. NON-EXPENSE
+// applications are debits to a NON-CASH asset (or a liability) — the fund CAPITALIZING
+// its cash into a held asset; the cash accounts that source those debits stay in the
+// spendable balance. The identity Opening+Received−AppliedExpense−AppliedNonExpense ==
+// Closing holds per currency because the fund nets to zero within itself (D20/Z10).
+func (tk *Toolkit) FundPeriodStatement(ctx context.Context, s Scope, f FundID, from, to string) (FundStatement, error) {
+	// Account type per id (revenue/expense/asset/liability/equity), read once.
+	tree, err := tk.store.Tree(ctx, "en", nil)
+	if err != nil {
+		return FundStatement{}, err
+	}
+	acctType := make(map[AccountID]string, len(tree))
+	for _, r := range tree {
+		acctType[r.ID] = r.Type
+	}
+
+	// All the fund's splits up to To, ordered (date, split_id), with IsAsset and the
+	// per-currency asset-side running balance already computed by the store.
+	rows, err := tk.store.FundLedger(ctx, f, to)
+	if err != nil {
+		return FundStatement{}, err
+	}
+
+	// PASS 1: find the CAPITAL asset accounts — asset accounts that received a
+	// non-expense application DEBIT (amount > 0) inside the period on a DISBURSEMENT
+	// transaction (a txn with no revenue split for this fund). These are excluded from
+	// the spendable position; every OTHER asset account is "cash" (spendable).
+	revenueTxn := make(map[int64]bool) // txn id -> has a revenue split for this fund
+	for _, r := range rows {
+		if acctType[r.AccountID] == "revenue" {
+			revenueTxn[r.TxnID] = true
+		}
+	}
+	capital := make(map[AccountID]bool)
+	for _, r := range rows {
+		if r.Date < from || r.Date > to {
+			continue
+		}
+		if acctType[r.AccountID] == "asset" && r.Amount > 0 && !revenueTxn[r.TxnID] {
+			// A positive (debit) asset movement on a disbursement txn = capitalizing
+			// cash into a held asset (the Building purchase). That target account is a
+			// capital account for this fund.
+			capital[r.AccountID] = true
+		}
+	}
+
+	st := FundStatement{
+		Opening:           map[string]int64{},
+		Received:          map[string]int64{},
+		AppliedExpense:    map[string]int64{},
+		AppliedNonExpense: map[string]int64{},
+		Closing:           map[string]int64{},
+		Capitalized:       map[string]int64{},
+		CapitalAccounts:   capital,
+	}
+	seen := map[string]bool{}
+
+	// PASS 2: fold every split. Opening (< from) accumulates only the SPENDABLE (cash)
+	// asset movements. In-period splits fold into the flow buckets by account type.
+	for _, r := range rows {
+		ccy := r.Currency
+		seen[ccy] = true
+		spendableAsset := acctType[r.AccountID] == "asset" && !capital[r.AccountID]
+
+		if r.Date < from {
+			if spendableAsset {
+				st.Opening[ccy] += r.Amount
+			}
+			continue
+		}
+		// In period.
+		switch acctType[r.AccountID] {
+		case "revenue":
+			st.Received[ccy] += -r.Amount // credit → positive inflow
+		case "expense":
+			st.AppliedExpense[ccy] += r.Amount
+		case "asset":
+			if capital[r.AccountID] {
+				if r.Amount > 0 {
+					st.AppliedNonExpense[ccy] += r.Amount
+					st.Capitalized[ccy] += r.Amount
+				}
+				// A credit on a capital account (a disposal) would reduce Capitalized;
+				// the fixture has none, but handle it for correctness.
+				if r.Amount < 0 {
+					st.Capitalized[ccy] += r.Amount
+					st.AppliedNonExpense[ccy] += r.Amount
+				}
+			}
+			// Non-capital (cash) asset movements do not enter Received/Applied — they
+			// are the SOURCE/DESTINATION side, already reflected via the counterpart.
+		case "liability":
+			// A liability DEBIT in a disbursement (principal paydown) is a non-expense
+			// application; a liability CREDIT (a loan draw) is a receipt of resources.
+			if r.Amount > 0 {
+				st.AppliedNonExpense[ccy] += r.Amount
+			} else {
+				st.Received[ccy] += -r.Amount
+			}
+		}
+	}
+
+	// Closing (spendable) = Opening + Received − AppliedExpense − AppliedNonExpense,
+	// per currency — the identity, computed from the folded flows.
+	for ccy := range seen {
+		st.Closing[ccy] = st.Opening[ccy] + st.Received[ccy] - st.AppliedExpense[ccy] - st.AppliedNonExpense[ccy]
+	}
+
+	// Currency section order: the sorted union of every currency any figure uses.
+	for ccy := range seen {
+		st.Currencies = append(st.Currencies, ccy)
+	}
+	sort.Strings(st.Currencies)
+	return st, nil
+}
+
 // FunctionalMatrix returns, per (expense account, class), the per-currency activity
 // over [from,to] in the scope (D21). Only expense splits carry a class, so the
 // result is exactly the functional expense matrix cells. Conversion (RateClosing)

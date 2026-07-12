@@ -950,6 +950,8 @@ other = "Moneda"
 other = "Detalle"
 [reports.params.account]
 other = "Cuenta"
+[reports.params.fund]
+other = "Fondo"
 [reports.params.run]
 other = "Generar informe"
 [reports.detail.converted]
@@ -1087,3 +1089,44 @@ other = "Total"
 other = "(No asignado)"
 [reports.functional_expenses.total]
 other = "Total de gastos funcionales"
+
+# p15.8 saldos y actividad de fondos — seguimiento de fondos con restriccion del
+# donante / vista por subvencion (D20). DOS vistas: el LISTADO de fondos (saldo a la
+# fecha por fondo con metadatos de financiador/restriccion + la linea No restringido)
+# y el ESTADO por fondo del periodo (Inicial + Recibido − Aplicado == Final, Aplicado
+# dividido en gastos vs aplicaciones no de gasto). Las etiquetas de restriccion
+# reutilizan funds.restriction.<tipo>.
+[reports.fund_activity.title]
+other = "Saldos y actividad de fondos"
+[reports.fund_activity.col.fund]
+other = "Fondo"
+[reports.fund_activity.col.funder]
+other = "Financiador"
+[reports.fund_activity.col.restriction]
+other = "Restriccion"
+[reports.fund_activity.col.purpose]
+other = "Proposito"
+[reports.fund_activity.col.currency]
+other = "Moneda"
+[reports.fund_activity.col.balance]
+other = "Saldo"
+[reports.fund_activity.col.line]
+other = "Linea"
+[reports.fund_activity.col.amount]
+other = "Importe"
+[reports.fund_activity.unrestricted]
+other = "No restringido"
+[reports.fund_activity.opening]
+other = "Inicial (disponible)"
+[reports.fund_activity.received]
+other = "Recibido"
+[reports.fund_activity.applied_expense]
+other = "Aplicado — gastos"
+[reports.fund_activity.applied_nonexpense]
+other = "Aplicado — no de gasto (activos, principal)"
+[reports.fund_activity.closing]
+other = "Final (disponible)"
+[reports.fund_activity.total_assets]
+other = "Total de activos del fondo"
+[reports.fund_activity.all_funds]
+other = "— todos los fondos —"
