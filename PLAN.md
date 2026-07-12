@@ -170,7 +170,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p08.4 store: balance queries.**
   Tests: hand-computed expectations on a small in-test dataset for `SubtreeBalancesAsOf(date, scope)` (per account, per currency; scope = subsidiary + descendants), `PeriodActivity(from, to, scope)`, `FundBalancesAsOf(date, scope)` (per fund incl. NULL/unrestricted, per currency), `FunctionalActivity(from, to, scope)` (expense account × class), `ProgramActivity(from, to, scope)` (R/E account × program, rollup-ready over both trees), `RegisterPage(account, cursor, filters)` including window-function running balance per currency, fund/sub/program filters, and keyset paging edges.
   Build: recursive CTE + window functions; these queries are the backbone of registers, fund pages, program pages, and reports.
-- [ ] **p08.5 store: merge accounts.**
+- [x] **p08.5 store: merge accounts.**
   Tests: `TestMergeRepointsSplitsAndRecons`, `TestMergeBlockedCrossTypeClass`, `TestMergeBlockedIntoPlaceholder`, `TestMergeBlockedSubsetSubs` (destination's sub set must cover the source's), `TestMergeFunctionDefaultKept`, `TestMergeHistoryIntact` (as-of before the merge still shows splits on the source account), all under a single change.
   Build: `MergeAccount(src, dst)` — both leaves, same type-class, dst subs ⊇ src subs; repoint splits and reconciliations; deactivate source; fully versioned.
 

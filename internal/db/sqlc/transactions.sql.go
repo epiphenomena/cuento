@@ -335,6 +335,23 @@ func (q *Queries) ProgramSubtreeIDs(ctx context.Context, id int64) ([]int64, err
 	return items, nil
 }
 
+const repointSplitAccount = `-- name: RepointSplitAccount :exec
+UPDATE splits SET account_id = ? WHERE id = ?
+`
+
+type RepointSplitAccountParams struct {
+	AccountID int64
+	ID        int64
+}
+
+// Move ONE split to a new account_id (the merge repoint). The store versions the
+// split op='update' AFTER this so the snapshot-from-live row records account_id =
+// the destination. id last.
+func (q *Queries) RepointSplitAccount(ctx context.Context, arg RepointSplitAccountParams) error {
+	_, err := q.db.ExecContext(ctx, repointSplitAccount, arg.AccountID, arg.ID)
+	return err
+}
+
 const rootProgram = `-- name: RootProgram :one
 SELECT id, parent_id, name, active, sort_order
 FROM programs
@@ -366,6 +383,45 @@ UPDATE transactions SET deleted = 1 WHERE id = ?
 func (q *Queries) SoftDeleteTransaction(ctx context.Context, id int64) error {
 	_, err := q.db.ExecContext(ctx, softDeleteTransaction, id)
 	return err
+}
+
+const splitIdsByAccount = `-- name: SplitIdsByAccount :many
+
+SELECT id FROM splits WHERE account_id = ? ORDER BY id
+`
+
+// ---------------------------------------------------------------------------
+// account merge (p08.5) -- repoint every split from a source account to a
+// destination account, versioning each moved split op='update'.
+// ---------------------------------------------------------------------------
+// All split ids currently on an account, oldest first. Used by MergeAccount to
+// repoint each split individually and version it (snapshot-from-live). NOT
+// filtered by transaction.deleted: a merge clears the source account entirely so
+// its history reads coherently (even a soft-deleted txn's split moves), and Z2
+// (splits on active leaves) would otherwise still see splits stranded on the
+// deactivated source. Captured BEFORE any repoint write so the moved rows are not
+// confused with the destination's pre-existing splits.
+func (q *Queries) SplitIdsByAccount(ctx context.Context, accountID int64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, splitIdsByAccount, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const splitUsesAccountInSubsidiary = `-- name: SplitUsesAccountInSubsidiary :one

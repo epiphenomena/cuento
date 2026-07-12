@@ -227,3 +227,24 @@ SELECT EXISTS (
   JOIN transactions t ON t.id = s.transaction_id
   WHERE s.fund_id = ? AND t.subsidiary_id = ? AND t.deleted = 0
 ) AS in_use;
+
+-- ---------------------------------------------------------------------------
+-- account merge (p08.5) -- repoint every split from a source account to a
+-- destination account, versioning each moved split op='update'.
+-- ---------------------------------------------------------------------------
+
+-- name: SplitIdsByAccount :many
+-- All split ids currently on an account, oldest first. Used by MergeAccount to
+-- repoint each split individually and version it (snapshot-from-live). NOT
+-- filtered by transaction.deleted: a merge clears the source account entirely so
+-- its history reads coherently (even a soft-deleted txn's split moves), and Z2
+-- (splits on active leaves) would otherwise still see splits stranded on the
+-- deactivated source. Captured BEFORE any repoint write so the moved rows are not
+-- confused with the destination's pre-existing splits.
+SELECT id FROM splits WHERE account_id = ? ORDER BY id;
+
+-- name: RepointSplitAccount :exec
+-- Move ONE split to a new account_id (the merge repoint). The store versions the
+-- split op='update' AFTER this so the snapshot-from-live row records account_id =
+-- the destination. id last.
+UPDATE splits SET account_id = ? WHERE id = ?;
