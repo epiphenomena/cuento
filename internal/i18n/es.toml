@@ -948,6 +948,8 @@ other = "Granularidad"
 other = "Moneda"
 [reports.params.detail]
 other = "Detalle"
+[reports.params.account]
+other = "Cuenta"
 [reports.params.run]
 other = "Generar informe"
 [reports.detail.converted]
@@ -1046,3 +1048,26 @@ other = "Cifra"
 other = "total subyacente nativo; la cifra del informe se mostro convertida"
 [reports.drill.empty]
 other = "Ninguna transaccion contribuye a esta cifra."
+
+# p15.6 libro mayor de cuenta: registro imprimible de una cuenta en un periodo, con
+# saldos de apertura/cierre y columna de fondo.
+[reports.account_ledger.title]
+other = "Libro mayor de cuenta"
+[reports.account_ledger.col.date]
+other = "Fecha"
+[reports.account_ledger.col.description]
+other = "Descripcion"
+[reports.account_ledger.col.fund]
+other = "Fondo"
+[reports.account_ledger.col.amount]
+other = "Importe"
+[reports.account_ledger.col.balance]
+other = "Saldo"
+[reports.account_ledger.opening]
+other = "Saldo de apertura"
+[reports.account_ledger.closing]
+other = "Saldo de cierre"
+[reports.account_ledger.unrestricted]
+other = "Sin restriccion"
+[reports.account.choose]
+other = "Elija una cuenta…"

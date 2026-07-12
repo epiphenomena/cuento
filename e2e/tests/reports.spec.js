@@ -26,6 +26,7 @@ const { saveAndReload } = require('../helpers');
 const TB = '/reports/trial_balance';
 const BS = '/reports/balance_sheet';
 const IS = '/reports/income_statement';
+const AL = '/reports/account_ledger';
 
 async function login(page, server) {
   await page.goto('/login');
@@ -224,6 +225,82 @@ test('reports: drill a trial-balance figure to its transactions (each linking to
 
   // The reconciled figure header is shown (the signed native sum of the listed rows).
   await expect(page.locator('.report-drill-figure')).toBeVisible();
+});
+
+// p15.6 ACCOUNT LEDGER: seed a balanced transfer (so the chosen account has a real
+// opening/closing balance and an in-range line), open the account ledger, pick the
+// ACCOUNT (the report-specific selector) + a period, and see the opening/closing
+// framing rows, the in-range LINE with its FUND column, and the line's LINK to the txn
+// editor (p12.4) -- then confirm the CSV returns. This test MUTATES (creates two
+// accounts + one txn); names are unique so it never collides with sibling specs sharing
+// the worker db, and it only ADDS rows (never asserts a global count).
+//
+// Strict CSP (script-src 'self', no unsafe-eval) => NO page.waitForFunction; only
+// locator/URL/response waits. Selectors are the account-select marker class, the
+// framing-row kind classes, and the register/editor link href -- language-independent.
+test('reports: open the account ledger, pick an account + range, see opening/lines/closing + fund column, CSV returns', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  // Two leaf asset accounts and a balanced transfer, so the ledgered account carries a
+  // real balance and an in-range line to print.
+  await createAsset(page, 'Ledger Checking');
+  await createAsset(page, 'Ledger Savings');
+
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await page.locator('#txn-account-0').selectOption({ label: 'Ledger Checking' });
+  await page.locator('#txn-amount-0').fill('55.00');
+  await page.locator('#txn-account-1').selectOption({ label: 'Ledger Savings' });
+  await page.locator('#txn-amount-1').fill('-55.00');
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL('**/register**');
+
+  // --- open the account ledger; the account SELECTOR (report-specific control) is present ---
+  await page.goto(AL);
+  await expect(page.locator('form.report-params')).toBeVisible();
+  await expect(page.locator('select.report-scope-select[name="scope"]')).toBeVisible();
+  const acctSelect = page.locator('select.report-account-select[name="account"]');
+  await expect(acctSelect).toBeVisible();
+
+  // Pick the account and set a wide period, then Run (the GET form round trip). The
+  // account's option value is its id; select by its (unique) label.
+  await acctSelect.selectOption({ label: 'Ledger Checking' });
+  await page.locator('form.report-params [name="from"]').fill('2025-01-01');
+  // The default To is today, which includes the just-posted (today-dated) txn.
+  await page.locator('form.report-params button[type="submit"]').click();
+  await page.waitForURL('**/reports/account_ledger?**');
+
+  // The report table renders with the OPENING (subtotal) and CLOSING (total) framing
+  // rows and at least one in-range data line.
+  const table = page.locator('table.report-table');
+  await expect(table).toBeVisible();
+  await expect(table.locator('tr.report-subtotal')).not.toHaveCount(0); // opening
+  await expect(table.locator('tr.report-total')).not.toHaveCount(0); // closing
+  // At least one in-range DATA line (report-row that is neither the opening subtotal nor
+  // the closing total) carries the txn-editor link -- the in-range 55.00 posting.
+  const dataLines = table.locator('tr.report-row:not(.report-subtotal):not(.report-total)');
+  await expect(dataLines).not.toHaveCount(0);
+
+  // The FUND column shows the seeded (unrestricted) split's "Unrestricted" label.
+  await expect(table).toContainText('Unrestricted');
+
+  // The in-range line LINKS to the transaction editor (Cell.TxnID -> /transactions/{id}/edit).
+  await expect(table.locator('a[href*="/transactions/"][href*="/edit"]').first()).toBeVisible();
+
+  // The opening/closing balance cells are DRILL links (as-of Drill on the framing rows).
+  await expect(page.locator('a.report-drill-link').first()).toBeVisible();
+
+  // --- the CSV export link is present and the endpoint returns text/csv ---
+  await expect(page.locator('a.report-csv-link')).toBeVisible();
+  const csvHref = await page.locator('a.report-csv-link').getAttribute('href');
+  const resp = await page.request.get(csvHref);
+  expect(resp.status()).toBe(200);
+  expect(resp.headers()['content-type']).toContain('text/csv');
+  const body = await resp.text();
+  expect(body.split('\n')[0]).toContain(',');
 });
 
 // p15.4 BALANCE SHEET: open it, see the A/L/Net-assets sections + the by-restriction

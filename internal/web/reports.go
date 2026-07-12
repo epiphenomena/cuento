@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -116,6 +117,20 @@ func (s *server) resolveParams(
 			p.Detail = "currency"
 		}
 	}
+	if rep.ParamsSpec.Account {
+		// The report-specific ACCOUNT param (p15.6): parse it and validate against the
+		// real leaf-account set (an arbitrary/non-leaf id is dropped -> no account,
+		// empty table). Only fetched for a report whose spec declares it.
+		accts, err := s.accountLedgerOptions(ctx, langOf(ctx))
+		if err != nil {
+			return reports.Params{}, paramsForm{}, err
+		}
+		if v := first(q, "account"); v != "" {
+			if id := parseID(v); id != 0 && acctExists(accts, id) {
+				p.Account = id
+			}
+		}
+	}
 
 	form, err := s.buildParamsForm(ctx, u, rep, p, subs)
 	if err != nil {
@@ -131,6 +146,51 @@ type subInfo struct {
 	ID   int64
 	Name string
 	Base string
+}
+
+// acctOption is one selectable account in the account-ledger's ACCOUNT selector
+// (p15.6): a LEAF account (splits post only to leaves) with its resolved name. It is
+// the report-specific analogue of scopeOption.
+type acctOption struct {
+	ID   int64
+	Name string
+}
+
+// accountLedgerOptions returns the LEAF accounts (name-resolved for lang, tree order)
+// the account-ledger's account selector offers — splits post only to leaf accounts, so
+// a placeholder parent is not a valid ledger target. Leaf = an account that is not the
+// parent of any other account (derived from the tree, matching the reports Rollup /
+// indexTree convention).
+func (s *server) accountLedgerOptions(ctx context.Context, lang string) ([]acctOption, error) {
+	tree, err := s.store.Tree(ctx, lang, nil)
+	if err != nil {
+		return nil, err
+	}
+	isParent := make(map[int64]bool, len(tree))
+	for _, r := range tree {
+		if r.ParentID.Valid {
+			isParent[r.ParentID.Int64] = true
+		}
+	}
+	var out []acctOption
+	for _, r := range tree {
+		if isParent[r.ID] {
+			continue // placeholder parent: not a split target
+		}
+		out = append(out, acctOption{ID: r.ID, Name: r.Name})
+	}
+	return out, nil
+}
+
+// acctExists reports whether id is one of the offered leaf accounts (a query account
+// override must name a real leaf account, else no account is selected).
+func acctExists(accts []acctOption, id int64) bool {
+	for _, a := range accts {
+		if a.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveDate parses a query date value per the user's date format (ISO always
@@ -165,6 +225,7 @@ type paramsForm struct {
 	ShowGranularity bool
 	ShowCurrency    bool
 	ShowDetail      bool
+	ShowAccount     bool
 
 	// Resolved control values (formatted for display where dated).
 	AsOf        string // user-formatted date
@@ -173,9 +234,11 @@ type paramsForm struct {
 	Granularity string // token: none|month|quarter
 	Currency    string // selected target currency code
 	Detail      string // token: ""|currency (per-currency detail toggle)
+	Account     int64  // selected leaf account id (0 = none chosen)
 
 	// Options for the selects.
 	Currencies []ccyChoice
+	Accounts   []acctOption // the leaf-account options (account-ledger only)
 }
 
 // scopeOption is one subsidiary choice in the scope selector.
@@ -212,9 +275,11 @@ func (s *server) buildParamsForm(
 		ShowGranularity: rep.ParamsSpec.Granularity,
 		ShowCurrency:    rep.ParamsSpec.Currency,
 		ShowDetail:      rep.ParamsSpec.Detail,
+		ShowAccount:     rep.ParamsSpec.Account,
 		Granularity:     p.Granularity.String(),
 		Currency:        p.TargetCurrency,
 		Detail:          p.Detail,
+		Account:         p.Account,
 	}
 	for _, sub := range subs {
 		f.Scopes = append(f.Scopes, scopeOption{
@@ -243,6 +308,13 @@ func (s *server) buildParamsForm(
 				Code: c.Code, Selected: c.Code == p.TargetCurrency,
 			})
 		}
+	}
+	if rep.ParamsSpec.Account {
+		accts, err := s.accountLedgerOptions(ctx, langOf(ctx))
+		if err != nil {
+			return paramsForm{}, err
+		}
+		f.Accounts = accts
 	}
 	return f, nil
 }
@@ -330,6 +402,12 @@ func renderCell(c reports.Cell, reportID, lang string, opts money.FormatOpts, df
 	href := ""
 	if c.Drill != nil {
 		href = "/reports/" + reportID + "/drill?" + c.Drill.Encode()
+	} else if c.TxnID != 0 {
+		// p15.6: a ledger LINE cell links to the transaction editor/history (p12.4).
+		// The reports package carries only the txn id; the web layer builds the URL
+		// (parallel to how it builds the drill URL from Drill), keeping URL
+		// construction out of reports.
+		href = "/transactions/" + strconv.FormatInt(c.TxnID, 10) + "/edit"
 	}
 	switch c.Kind {
 	case reports.CellMoney:
@@ -345,7 +423,7 @@ func renderCell(c reports.Cell, reportID, lang string, opts money.FormatOpts, df
 		if c.Text == "" {
 			return renderedCell{}
 		}
-		return renderedCell{Text: money.FormatDate(parseISOForDisplay(c.Text), df)}
+		return renderedCell{Text: money.FormatDate(parseISOForDisplay(c.Text), df), Href: href}
 	case reports.CellLabel:
 		return renderedCell{Text: i18n.T(lang, c.Text)}
 	default: // CellText -- a stored proper noun, verbatim

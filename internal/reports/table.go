@@ -121,6 +121,17 @@ type Cell struct {
 	// to drill). It is data-only and pure, so the CSV/text renderers ignore it (the
 	// golden is unchanged) and the reconciliation invariant is unit-testable.
 	Drill *Drill
+
+	// TxnID, when nonzero, links this cell to the transaction editor/history (p12.4):
+	// the web layer renders the cell's value as a link to /transactions/{TxnID}/edit.
+	// It is the account-ledger's (p15.6) line->txn link — a REGISTER line names one
+	// split, whose transaction the reviewer clicks to open. Unlike Drill (which lists
+	// the splits behind an aggregate figure), TxnID points at ONE concrete
+	// transaction, so it is a distinct mechanism, not a drill. Like Drill it is
+	// data-only and pure: the reports package never builds the URL (the web layer
+	// does, keeping URL construction out of reports), and the CSV/text renderers
+	// ignore it (the golden is unchanged). A cell carries at most one of Drill/TxnID.
+	TxnID int64
 }
 
 // WithDrill returns a copy of c carrying the drill descriptor d, so a report builds
@@ -129,6 +140,15 @@ type Cell struct {
 // (labels, totals) stay unchanged and only drillable cells opt in (p15.4+ pattern).
 func (c Cell) WithDrill(d *Drill) Cell {
 	c.Drill = d
+	return c
+}
+
+// WithTxn returns a copy of c linked to transaction txnID (p15.6): the web layer
+// renders it as a link to the transaction editor/history (/transactions/{txnID}/edit).
+// Kept a method (not a MoneyCell/TextCell parameter) so the many non-linked call
+// sites stay unchanged and only a ledger LINE cell opts in.
+func (c Cell) WithTxn(txnID int64) Cell {
+	c.TxnID = txnID
 	return c
 }
 

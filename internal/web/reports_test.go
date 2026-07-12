@@ -237,3 +237,52 @@ func TestReportPermissionThroughGrant(t *testing.T) {
 		t.Errorf("ungranted user status = %d, want 403", rec.Code)
 	}
 }
+
+// TestAccountLedgerReportRenders: the account-ledger report (p15.6) renders its
+// account SELECTOR (the report-specific param), and with an account + period chosen it
+// prints the opening/closing balances, the in-range line, its FUND column, and a LINE
+// LINK to the transaction editor (/transactions/{id}/edit, the p12.4 link mechanism
+// via Cell.TxnID). Proves the account-param plumbing and the line-link renderer are
+// wired end to end through the real route.
+func TestAccountLedgerReportRenders(t *testing.T) {
+	h, st, _, sm := reportsApp(t)
+	admin := mkUser(t, st, "admin", "none", true)
+
+	// The bare report page shows the account selector (report-specific control) and,
+	// with no account chosen, an empty table (200).
+	rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.AccountLedgerReportID, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("account ledger status = %d, want 200", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), `class="report-account-select"`) {
+		t.Errorf("account ledger page missing the account selector")
+	}
+
+	// The Cash account id (seeded by reportsApp) via the account tree.
+	cash := accountIDByName(t, st, "Cash")
+
+	// Run the ledger for Cash over a range covering the seeded 2025-06-01 +250.00 posting.
+	url := "/reports/" + reports.AccountLedgerReportID +
+		"?account=" + itoa(cash) + "&from=2025-06-01&to=2025-06-30"
+	rec = asUser(t, h, sm, admin, http.MethodGet, url, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("account ledger (Cash) status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	// The formatted seeded amount (+250.00) appears on the line and the closing balance.
+	if !strings.Contains(body, "USD 250.00") {
+		t.Errorf("account ledger missing the 250.00 line/balance; body:\n%s", body)
+	}
+	// The line links to the transaction editor (Cell.TxnID -> /transactions/{id}/edit).
+	if !strings.Contains(body, "/transactions/") || !strings.Contains(body, "/edit") {
+		t.Errorf("account ledger line missing the txn-editor link; body:\n%s", body)
+	}
+	// The opening (subtotal) and closing (total) framing rows render.
+	if !strings.Contains(body, "report-subtotal") || !strings.Contains(body, "report-total") {
+		t.Errorf("account ledger missing opening/closing framing rows")
+	}
+	// The unrestricted seeded split shows the "Unrestricted" fund label.
+	if !strings.Contains(body, "Unrestricted") {
+		t.Errorf("account ledger missing the Unrestricted fund label")
+	}
+}

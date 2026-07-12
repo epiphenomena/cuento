@@ -33,6 +33,7 @@ func Default() *Registry {
 	registerTrialBalance(reg)
 	registerBalanceSheet(reg)
 	registerIncomeStatement(reg)
+	registerAccountLedger(reg)
 	return reg
 }
 

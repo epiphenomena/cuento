@@ -74,6 +74,16 @@
       </select>
       {{end}}
 
+      {{if .Params.ShowAccount}}
+      <label for="rp-account">{{t "reports.params.account"}}</label>
+      <select id="rp-account" name="account" class="report-account-select">
+        <option value="0"{{if eq .Params.Account 0}} selected{{end}}>{{t "reports.account.choose"}}</option>
+        {{- range .Params.Accounts}}
+        <option value="{{.ID}}"{{if eq .ID $.Page.Params.Account}} selected{{end}}>{{.Name}}</option>
+        {{- end}}
+      </select>
+      {{end}}
+
       <button type="submit" class="btn btn-primary">{{t "reports.params.run"}}</button>
     </fieldset>
   </form>

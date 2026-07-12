@@ -952,6 +952,8 @@ other = "Granularity"
 other = "Currency"
 [reports.params.detail]
 other = "Detail"
+[reports.params.account]
+other = "Account"
 [reports.params.run]
 other = "Run report"
 [reports.detail.converted]
@@ -1049,3 +1051,26 @@ other = "Figure"
 other = "native underlying total; the report figure was shown converted"
 [reports.drill.empty]
 other = "No transactions contribute to this figure."
+
+# p15.6 account ledger: a printable register for one account over a period, with
+# opening/closing balances and a fund column.
+[reports.account_ledger.title]
+other = "Account ledger"
+[reports.account_ledger.col.date]
+other = "Date"
+[reports.account_ledger.col.description]
+other = "Description"
+[reports.account_ledger.col.fund]
+other = "Fund"
+[reports.account_ledger.col.amount]
+other = "Amount"
+[reports.account_ledger.col.balance]
+other = "Balance"
+[reports.account_ledger.opening]
+other = "Opening balance"
+[reports.account_ledger.closing]
+other = "Closing balance"
+[reports.account_ledger.unrestricted]
+other = "Unrestricted"
+[reports.account.choose]
+other = "Choose an account…"

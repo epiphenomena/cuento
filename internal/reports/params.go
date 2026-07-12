@@ -44,6 +44,16 @@ type Params struct {
 	// amount. Meaningful only when ParamsSpec.Detail is set; a report reads it via
 	// DetailCurrency() so an unset value defaults to the converted-only view.
 	Detail string
+
+	// Account is the single account a report-specific "which account" control names
+	// (p15.6 account ledger): the account whose register the report prints. Meaningful
+	// only when ParamsSpec.Account is set; the empty value (0) means "no account
+	// chosen" and the report returns an empty Table (the framework's nothing-to-show
+	// rule), so a bare hit (the permission-matrix / scope-selector test) still renders
+	// 200. Unlike Scope (always present, every report is scoped), Account is a
+	// report-specific param the web layer parses only for a report whose spec declares
+	// it, and validates against the real leaf-account set.
+	Account int64
 }
 
 // DetailCurrency reports whether the per-currency detail toggle is on (Detail ==
@@ -123,4 +133,9 @@ type ParamsSpec struct {
 	// the form offers a "converted only" vs "per currency" select bound to
 	// Params.Detail.
 	Detail bool
+	// Account: the report takes a single ACCOUNT (p15.6 account ledger); the form
+	// offers a leaf-account select bound to Params.Account. It is a report-SPECIFIC
+	// control (unlike the always-present subsidiary scope), so only a report whose
+	// spec sets this parses/validates the account param and renders the selector.
+	Account bool
 }
