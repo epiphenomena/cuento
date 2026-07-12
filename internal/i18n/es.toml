@@ -1,204 +1,355 @@
-# Spanish catalog. Same flat subset and the SAME key set as en.toml
-# (TestCatalogParity enforces identical keys in both directions).
+# Spanish catalog, in the go-i18n TOML message format (see en.toml). The SAME
+# message-ID set as en.toml (TestCatalogParity enforces identical IDs both ways);
+# count messages carry Spanish one/other forms selected by x/text CLDR rules.
 
-app.name = "cuento"
+[app.name]
+other = "cuento"
 
 # Lema de la marca, solo en la pagina de inicio de sesion (identidad "Open Ledger
 # & Star"). Se mantiene en espanol en ambos catalogos por diseno (es el texto
 # propio de la marca, como el logotipo).
-brand.tagline = "contabilidad abierta para el bien común"
+[brand.tagline]
+other = "contabilidad abierta para el bien común"
 
 # Marcador de la pagina de inicio autenticada (p06.3). El panel/nav real es la
 # fase 10; GET /{$} muestra esto para ejercer la ruta AnyUser con una ruta real
 # e internacionalizada en vez de un stub.
-home.title = "cuento"
-home.welcome = "Sesion iniciada."
+[home.title]
+other = "cuento"
+[home.welcome]
+other = "Sesion iniciada."
 
-common.save = "Guardar"
-common.cancel = "Cancelar"
-common.skip_to_content = "Ir al contenido"
+[common.save]
+other = "Guardar"
+[common.cancel]
+other = "Cancelar"
+[common.skip_to_content]
+other = "Ir al contenido"
 
 # Shell autenticado (p10.2): las secciones de navegacion de nivel superior
 # (Apendice F). Cada entrada se muestra solo para personas permitidas Y solo
 # cuando su ruta existe; fases posteriores (p11-p18) conectan el resto.
-nav.label = "Principal"
-nav.home = "Inicio"
-nav.accounts = "Cuentas"
-nav.funds = "Fondos"
-nav.programs = "Programas"
-nav.reconciliations = "Conciliaciones"
-nav.reports = "Informes"
-nav.settings = "Ajustes"
-nav.admin = "Administracion"
+[nav.label]
+other = "Principal"
+[nav.home]
+other = "Inicio"
+[nav.accounts]
+other = "Cuentas"
+[nav.funds]
+other = "Fondos"
+[nav.programs]
+other = "Programas"
+[nav.reconciliations]
+other = "Conciliaciones"
+[nav.reports]
+other = "Informes"
+[nav.settings]
+other = "Ajustes"
+[nav.admin]
+other = "Administracion"
 
 # Control de tema (p10.2). Los valores mapean a data-theme (auto sigue al SO).
-theme.label = "Tema"
-theme.light = "Claro"
-theme.dark = "Oscuro"
-theme.auto = "Automatico"
-theme.apply = "Aplicar"
+[theme.label]
+other = "Tema"
+[theme.light]
+other = "Claro"
+[theme.dark]
+other = "Oscuro"
+[theme.auto]
+other = "Automatico"
+[theme.apply]
+other = "Aplicar"
 
 # Selector de idioma en la pagina de inicio de sesion (p10.2). Cada idioma se
 # etiqueta en SU propia lengua (lang.<code> es identico en cada catalogo).
-lang.label = "Idioma"
-lang.en = "English"
-lang.es = "Español"
+[lang.label]
+other = "Idioma"
+[lang.en]
+other = "English"
+[lang.es]
+other = "Español"
 
 # Pie de pagina.
-footer.version = "Version %s"
+[footer.version]
+other = "Version %s"
 
 # Guia de estilos solo en dev (p10.2): revision visual de los componentes.
-styleguide.title = "Guia de estilos"
-styleguide.brand = "Marca"
-styleguide.palette = "Paleta"
-styleguide.buttons = "Botones"
-styleguide.forms = "Formularios"
-styleguide.alerts = "Alertas"
+[styleguide.title]
+other = "Guia de estilos"
+[styleguide.brand]
+other = "Marca"
+[styleguide.palette]
+other = "Paleta"
+[styleguide.buttons]
+other = "Botones"
+[styleguide.forms]
+other = "Formularios"
+[styleguide.alerts]
+other = "Alertas"
 
 # Demostrador de errores de formulario solo en dev (p10.3): un POST validado que
 # ejercita la convencion reutilizable de errores de formulario (422 + swap parcial
 # de la region del formulario, errores de campo localizados, autofocus en el primer
 # campo invalido). Los formularios grandes (cuentas p11, transacciones p12) la
 # REUTILIZAN.
-styleguide.form_demo = "Errores de formulario"
-form.demo.name = "Nombre"
-form.demo.email = "Correo"
-form.demo.submit = "Enviar"
-form.demo.ok = "Todo correcto."
+[styleguide.form_demo]
+other = "Errores de formulario"
+[form.demo.name]
+other = "Nombre"
+[form.demo.email]
+other = "Correo"
+[form.demo.submit]
+other = "Enviar"
+[form.demo.ok]
+other = "Todo correcto."
 
 # Claves reutilizables de error de validacion de campo (regla 9: Go devuelve
 # claves, la plantilla las muestra con {{t}}). Formularios posteriores reutilizan
 # estos mensajes genericos.
-error.required = "Este campo es obligatorio."
-error.email = "Introduzca un correo electronico valido."
+[error.required]
+other = "Este campo es obligatorio."
+[error.email]
+other = "Introduzca un correo electronico valido."
 
 # Ajustes (stub, p10.2); la pagina completa es p13.1.
-settings.title = "Ajustes"
-settings.coming_soon = "Los ajustes llegan en un paso posterior."
+[settings.title]
+other = "Ajustes"
+[settings.coming_soon]
+other = "Los ajustes llegan en un paso posterior."
 
 # Landing de administracion (stub, p10.2); las paginas reales llegan despues.
-admin.coming_soon = "Las herramientas de administracion llegan en un paso posterior."
+[admin.coming_soon]
+other = "Las herramientas de administracion llegan en un paso posterior."
 
 # Ajustes de la organizacion e idiomas (p11.4). Los idiomas habilitados son los
 # idiomas en que se pueden nombrar las cuentas (D14); la interfaz sigue en/es.
-org.title = "Ajustes de la organizacion"
-org.intro = "El nombre de su organizacion y los idiomas en que se pueden nombrar las cuentas."
-org.saved = "Ajustes guardados."
-org.form.name = "Nombre de la organizacion"
-org.form.enabled_languages = "Idiomas de nombres de cuenta"
-org.form.enabled_languages_hint = "Codigos de idioma separados por comas (por ejemplo en,es). El ingles siempre esta disponible. Anadir un idioma agrega un campo de nombre al formulario de cuenta."
+[org.title]
+other = "Ajustes de la organizacion"
+[org.intro]
+other = "El nombre de su organizacion y los idiomas en que se pueden nombrar las cuentas."
+[org.saved]
+other = "Ajustes guardados."
+[org.form.name]
+other = "Nombre de la organizacion"
+[org.form.enabled_languages]
+other = "Idiomas de nombres de cuenta"
+[org.form.enabled_languages_hint]
+other = "Codigos de idioma separados por comas (por ejemplo en,es). El ingles siempre esta disponible. Anadir un idioma agrega un campo de nombre al formulario de cuenta."
 
 # Etiqueta para un fondo sin restricciones (fund_id NULL), segun D20.
-fund.unrestricted = "Fondo General No Restringido"
+[fund.unrestricted]
+other = "Fondo General No Restringido"
 
 # Muestra de interpolacion posicional (%s), usada por TestInterpolation.
-greeting = "Hola, %s"
+[greeting]
+other = "Hola, %s"
 
 # Pagina de inicio de sesion (p06.2). Los errores auth.invalid /
 # auth.rate_limited son deliberadamente genericos: un mensaje uniforme que no
 # revela si un usuario existe (sin enumeracion de usuarios, regla 13).
-auth.login_title = "Iniciar sesion"
-auth.username = "Usuario"
-auth.password = "Contraseña"
-auth.sign_in = "Iniciar sesion"
-auth.sign_out = "Cerrar sesion"
-auth.invalid = "Usuario o contraseña incorrectos."
-auth.rate_limited = "Demasiados intentos. Espere e intente de nuevo."
+[auth.login_title]
+other = "Iniciar sesion"
+[auth.username]
+other = "Usuario"
+[auth.password]
+other = "Contraseña"
+[auth.sign_in]
+other = "Iniciar sesion"
+[auth.sign_out]
+other = "Cerrar sesion"
+[auth.invalid]
+other = "Usuario o contraseña incorrectos."
+[auth.rate_limited]
+other = "Demasiados intentos. Espere e intente de nuevo."
 
 # Plan de cuentas (p11.1). Titulo de la pagina, columnas del arbol, filtros, los
 # campos del formulario en linea de creacion/edicion, y las traducciones de las
 # claves de error del store (el handler mapea un error tipado del store a una de
 # estas claves, regla 9). Tipos de cuenta: account.type.<tipo>; clases
 # funcionales: functional.<clase>.
-common.edit = "Editar"
-accounts.title = "Plan de cuentas"
-accounts.new = "Nueva cuenta"
-accounts.merge = "Combinar cuentas"
-accounts.deactivate = "Desactivar"
-accounts.inactive = "inactiva"
-accounts.empty = "Aun no hay cuentas."
-accounts.balances_as_of = "Saldos al"
-accounts.filter.subsidiary = "Subsidiaria"
-accounts.filter.all_subsidiaries = "Todas las subsidiarias"
-accounts.filter.active_only = "Solo activas"
-accounts.filter.apply = "Aplicar"
-accounts.col.name = "Cuenta"
-accounts.col.type = "Tipo"
-accounts.col.balances = "Saldo"
-accounts.col.actions = "Acciones"
-accounts.form.new_title = "Nueva cuenta"
-accounts.form.edit_title = "Editar cuenta"
-accounts.form.type = "Tipo"
-accounts.form.name = "Nombre (%s)"
-accounts.form.parent = "Cuenta madre"
-accounts.form.no_parent = "— nivel superior —"
-accounts.form.currency = "Moneda predeterminada"
-accounts.form.reconcilable = "Conciliable"
-accounts.form.intercompany = "Intercompania"
-accounts.form.functional_class = "Clase funcional predeterminada"
-accounts.form.default_program = "Programa predeterminado"
-accounts.form.form990_code = "Linea 990"
-accounts.form.form990_inherited = "Heredado:"
-accounts.form.none = "— ninguno —"
-accounts.form.subsidiaries = "Subsidiarias"
-accounts.form.subs_hint = "Asignar una subsidiaria tambien la agrega a cada cuenta madre (regla de superconjunto)."
-merge.title = "Combinar cuentas"
-merge.intro = "Fusiona una cuenta de origen en una cuenta de destino. Cada transaccion del origen se mueve al destino, y el origen se desactiva."
-merge.source = "Cuenta de origen"
-merge.destination = "Cuenta de destino"
-merge.select_placeholder = "— seleccione una cuenta —"
-merge.coverage_note = "Las subsidiarias del destino deben cubrir las del origen; ambas deben ser cuentas hoja activas del mismo tipo."
-merge.review = "Revisar combinacion"
-merge.confirm_title = "Confirmar combinacion"
-merge.summary = "Combinar %s en %s. Esto no se puede deshacer desde aqui."
-merge.consequence.splits = "%d linea(s) de transaccion se moveran al destino."
-merge.consequence.recons = "%d conciliacion(es) se moveran."
-merge.consequence.deactivate = "%s se desactivara (se conserva su historial)."
-merge.confirm = "Confirmar combinacion"
-account.type.asset = "Activo"
-account.type.liability = "Pasivo"
-account.type.equity = "Patrimonio"
-account.type.revenue = "Ingreso"
-account.type.expense = "Gasto"
-functional.program = "Programa"
-functional.management = "Administracion y general"
-functional.fundraising = "Recaudacion de fondos"
-error.account.name_required = "Se requiere un nombre en ingles."
-error.account.no_subsidiary = "Seleccione al menos una subsidiaria."
-error.account.cross_type_class = "El tipo de esa cuenta madre no admite este tipo de cuenta."
-error.account.cycle = "Una cuenta no puede moverse bajo si misma o sus descendientes."
-error.account.sub_mismatch = "La nueva cuenta madre debe cubrir todas las subsidiarias de esta cuenta."
-error.account.sub_in_use_by_child = "Una subsidiaria aun la usa una cuenta hija y no puede quitarse."
-error.account.form990_type_mismatch = "Esa linea 990 no es valida para este tipo de cuenta."
-error.account.functional_not_expense = "Una clase funcional aplica solo a cuentas de gasto."
-error.account.default_program_not_re = "Un programa predeterminado aplica solo a cuentas de ingreso y gasto."
-error.account.default_program_missing = "El programa seleccionado no existe."
-error.account.default_program_inactive = "El programa seleccionado esta inactivo."
-error.account.parent_not_found = "La cuenta madre seleccionada no existe."
-error.merge.select_both = "Seleccione una cuenta de origen y una de destino."
-error.merge.self = "Una cuenta no puede combinarse consigo misma."
-error.merge.not_leaf = "El origen debe ser una cuenta hoja (tiene cuentas hijas)."
-error.merge.cross_type_class = "El origen y el destino deben ser del mismo tipo de cuenta."
-error.merge.subset_subs = "Las subsidiarias del destino deben cubrir todas las del origen."
-error.merge.into_placeholder = "El destino no puede ser un marcador (tiene cuentas hijas)."
-error.merge.into_inactive = "La cuenta de destino esta inactiva."
-subsidiaries.title = "Subsidiarias"
-subsidiaries.intro = "El arbol de subsidiarias de su organizacion. Una raiz, cada una con una moneda base; asigne cuentas y transacciones a las subsidiarias en otro lugar."
-subsidiaries.new = "Nueva subsidiaria"
-subsidiaries.deactivate = "Desactivar"
-subsidiaries.inactive = "inactiva"
-subsidiaries.empty = "Aun no hay subsidiarias."
-subsidiaries.col.name = "Subsidiaria"
-subsidiaries.col.base_currency = "Moneda base"
-subsidiaries.col.actions = "Acciones"
-subsidiaries.form.new_title = "Nueva subsidiaria"
-subsidiaries.form.edit_title = "Editar subsidiaria"
-subsidiaries.form.name = "Nombre"
-subsidiaries.form.parent = "Subsidiaria padre"
-subsidiaries.form.base_currency = "Moneda base"
-subsidiaries.form.root_note = "Esta es la subsidiaria raiz; no tiene padre y no se puede mover."
-error.subsidiary.second_root = "Una subsidiaria debe tener un padre; ya existe una raiz."
-error.subsidiary.parent_missing = "La subsidiaria padre seleccionada no existe."
-error.subsidiary.root_immovable = "A la subsidiaria raiz no se le puede asignar un padre."
-error.subsidiary.cycle = "Una subsidiaria no puede moverse bajo si misma ni sus descendientes."
-error.subsidiary.has_active_children = "Esta subsidiaria aun tiene hijas activas y no se puede desactivar."
+[common.edit]
+other = "Editar"
+[accounts.title]
+other = "Plan de cuentas"
+[accounts.new]
+other = "Nueva cuenta"
+[accounts.merge]
+other = "Combinar cuentas"
+[accounts.deactivate]
+other = "Desactivar"
+[accounts.inactive]
+other = "inactiva"
+[accounts.empty]
+other = "Aun no hay cuentas."
+[accounts.balances_as_of]
+other = "Saldos al"
+[accounts.filter.subsidiary]
+other = "Subsidiaria"
+[accounts.filter.all_subsidiaries]
+other = "Todas las subsidiarias"
+[accounts.filter.active_only]
+other = "Solo activas"
+[accounts.filter.apply]
+other = "Aplicar"
+[accounts.col.name]
+other = "Cuenta"
+[accounts.col.type]
+other = "Tipo"
+[accounts.col.balances]
+other = "Saldo"
+[accounts.col.actions]
+other = "Acciones"
+[accounts.form.new_title]
+other = "Nueva cuenta"
+[accounts.form.edit_title]
+other = "Editar cuenta"
+[accounts.form.type]
+other = "Tipo"
+[accounts.form.name]
+other = "Nombre (%s)"
+[accounts.form.parent]
+other = "Cuenta madre"
+[accounts.form.no_parent]
+other = "— nivel superior —"
+[accounts.form.currency]
+other = "Moneda predeterminada"
+[accounts.form.reconcilable]
+other = "Conciliable"
+[accounts.form.intercompany]
+other = "Intercompania"
+[accounts.form.functional_class]
+other = "Clase funcional predeterminada"
+[accounts.form.default_program]
+other = "Programa predeterminado"
+[accounts.form.form990_code]
+other = "Linea 990"
+[accounts.form.form990_inherited]
+other = "Heredado:"
+[accounts.form.none]
+other = "— ninguno —"
+[accounts.form.subsidiaries]
+other = "Subsidiarias"
+[accounts.form.subs_hint]
+other = "Asignar una subsidiaria tambien la agrega a cada cuenta madre (regla de superconjunto)."
+[merge.title]
+other = "Combinar cuentas"
+[merge.intro]
+other = "Fusiona una cuenta de origen en una cuenta de destino. Cada transaccion del origen se mueve al destino, y el origen se desactiva."
+[merge.source]
+other = "Cuenta de origen"
+[merge.destination]
+other = "Cuenta de destino"
+[merge.select_placeholder]
+other = "— seleccione una cuenta —"
+[merge.coverage_note]
+other = "Las subsidiarias del destino deben cubrir las del origen; ambas deben ser cuentas hoja activas del mismo tipo."
+[merge.review]
+other = "Revisar combinacion"
+[merge.confirm_title]
+other = "Confirmar combinacion"
+[merge.summary]
+other = "Combinar %s en %s. Esto no se puede deshacer desde aqui."
+[merge.consequence.splits]
+one = "%d línea de transacción se moverá al destino."
+other = "%d líneas de transacción se moverán al destino."
+[merge.consequence.recons]
+one = "%d conciliación se moverá."
+other = "%d conciliaciones se moverán."
+[merge.consequence.deactivate]
+other = "%s se desactivara (se conserva su historial)."
+[merge.confirm]
+other = "Confirmar combinacion"
+[account.type.asset]
+other = "Activo"
+[account.type.liability]
+other = "Pasivo"
+[account.type.equity]
+other = "Patrimonio"
+[account.type.revenue]
+other = "Ingreso"
+[account.type.expense]
+other = "Gasto"
+[functional.program]
+other = "Programa"
+[functional.management]
+other = "Administracion y general"
+[functional.fundraising]
+other = "Recaudacion de fondos"
+[error.account.name_required]
+other = "Se requiere un nombre en ingles."
+[error.account.no_subsidiary]
+other = "Seleccione al menos una subsidiaria."
+[error.account.cross_type_class]
+other = "El tipo de esa cuenta madre no admite este tipo de cuenta."
+[error.account.cycle]
+other = "Una cuenta no puede moverse bajo si misma o sus descendientes."
+[error.account.sub_mismatch]
+other = "La nueva cuenta madre debe cubrir todas las subsidiarias de esta cuenta."
+[error.account.sub_in_use_by_child]
+other = "Una subsidiaria aun la usa una cuenta hija y no puede quitarse."
+[error.account.form990_type_mismatch]
+other = "Esa linea 990 no es valida para este tipo de cuenta."
+[error.account.functional_not_expense]
+other = "Una clase funcional aplica solo a cuentas de gasto."
+[error.account.default_program_not_re]
+other = "Un programa predeterminado aplica solo a cuentas de ingreso y gasto."
+[error.account.default_program_missing]
+other = "El programa seleccionado no existe."
+[error.account.default_program_inactive]
+other = "El programa seleccionado esta inactivo."
+[error.account.parent_not_found]
+other = "La cuenta madre seleccionada no existe."
+[error.merge.select_both]
+other = "Seleccione una cuenta de origen y una de destino."
+[error.merge.self]
+other = "Una cuenta no puede combinarse consigo misma."
+[error.merge.not_leaf]
+other = "El origen debe ser una cuenta hoja (tiene cuentas hijas)."
+[error.merge.cross_type_class]
+other = "El origen y el destino deben ser del mismo tipo de cuenta."
+[error.merge.subset_subs]
+other = "Las subsidiarias del destino deben cubrir todas las del origen."
+[error.merge.into_placeholder]
+other = "El destino no puede ser un marcador (tiene cuentas hijas)."
+[error.merge.into_inactive]
+other = "La cuenta de destino esta inactiva."
+[subsidiaries.title]
+other = "Subsidiarias"
+[subsidiaries.intro]
+other = "El arbol de subsidiarias de su organizacion. Una raiz, cada una con una moneda base; asigne cuentas y transacciones a las subsidiarias en otro lugar."
+[subsidiaries.new]
+other = "Nueva subsidiaria"
+[subsidiaries.deactivate]
+other = "Desactivar"
+[subsidiaries.inactive]
+other = "inactiva"
+[subsidiaries.empty]
+other = "Aun no hay subsidiarias."
+[subsidiaries.col.name]
+other = "Subsidiaria"
+[subsidiaries.col.base_currency]
+other = "Moneda base"
+[subsidiaries.col.actions]
+other = "Acciones"
+[subsidiaries.form.new_title]
+other = "Nueva subsidiaria"
+[subsidiaries.form.edit_title]
+other = "Editar subsidiaria"
+[subsidiaries.form.name]
+other = "Nombre"
+[subsidiaries.form.parent]
+other = "Subsidiaria padre"
+[subsidiaries.form.base_currency]
+other = "Moneda base"
+[subsidiaries.form.root_note]
+other = "Esta es la subsidiaria raiz; no tiene padre y no se puede mover."
+[error.subsidiary.second_root]
+other = "Una subsidiaria debe tener un padre; ya existe una raiz."
+[error.subsidiary.parent_missing]
+other = "La subsidiaria padre seleccionada no existe."
+[error.subsidiary.root_immovable]
+other = "A la subsidiaria raiz no se le puede asignar un padre."
+[error.subsidiary.cycle]
+other = "Una subsidiaria no puede moverse bajo si misma ni sus descendientes."
+[error.subsidiary.has_active_children]
+other = "Esta subsidiaria aun tiene hijas activas y no se puede desactivar."

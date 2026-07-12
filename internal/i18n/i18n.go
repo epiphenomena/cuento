@@ -1,57 +1,81 @@
-// Package i18n holds the embedded en/es UI string catalogs and the lookup
-// funnel behind AGENTS rule 9 / D14: every user-visible string is a catalog
-// key, the two catalogs share an identical key set (TestCatalogParity), and a
-// missing key falls back to English. There is deliberately NO i18n/CLDR
-// dependency (D15) — the catalogs are a page of data and a tiny parser, not a
-// framework. Registering the {{t}} template func is a later step (phase 10);
-// this package only exposes T, Langs, and the parser.
+// Package i18n holds the embedded en/es UI string catalogs and the lookup funnel
+// behind AGENTS rule 9 / D14 / D15: every user-visible string is a catalog key,
+// the two catalogs share an identical message-ID set (TestCatalogParity), and a
+// missing key falls back to English.
+//
+// Since D15 the engine is go-i18n (github.com/nicksnyder/go-i18n/v2) with the
+// BurntSushi/toml unmarshaler and x/text's CLDR plural rules — this supersedes
+// D14's hand-rolled parser. The PUBLIC facade is deliberately unchanged: T does
+// positional fmt.Sprintf interpolation over the go-i18n-selected message (catalog
+// values keep %s/%d verbs, NOT go-i18n {{.X}} template data), so every existing
+// call site and the {{t}} template func keep working exactly as before. TN adds
+// CLDR pluralization (one/other) where counts appear — the D15 payoff.
 package i18n
 
 import (
+	"embed"
 	"fmt"
-	"strings"
 	"sync"
 
-	_ "embed"
+	"github.com/BurntSushi/toml"
+	goi18n "github.com/nicksnyder/go-i18n/v2/i18n"
+	"golang.org/x/text/language"
 )
 
-// baseLang is the fallback language: any unknown language or missing key
-// resolves against it before giving up and returning the raw key (D14).
+// baseLang is the fallback language: any unknown language or missing key resolves
+// against it before giving up and returning the raw key (D14).
 const baseLang = "en"
 
-// The catalogs are embedded build assets, not runtime input; a parse failure is
-// a programmer error caught by the loader (see catalogs()), never by T.
+// catalogFS holds the embedded go-i18n TOML message catalogs. They are build
+// assets, not runtime input; a parse failure is a programmer error caught by the
+// loader (see bundle()), never by T.
 //
-//go:embed en.toml
-var enCatalog string
-
-//go:embed es.toml
-var esCatalog string
+//go:embed en.toml es.toml
+var catalogFS embed.FS
 
 var (
-	catalogsOnce sync.Once
-	loaded       map[string]map[string]string
+	bundleOnce sync.Once
+	shared     *goi18n.Bundle
+	// localizers caches one Localizer per language, each configured with the
+	// [lang, en] fallback chain so an unknown lang or a locally-missing key
+	// resolves against English before we surface the raw key.
+	localizers map[string]*goi18n.Localizer
+	localizeMu sync.Mutex
 )
 
-// catalogs parses the embedded catalogs exactly once into lang → key → value.
-// A malformed embedded file is a build-time defect, so it panics here (the one
-// sanctioned panic in this package) rather than degrading silently; T stays
-// panic-free because it only ever reads the already-loaded maps.
-func catalogs() map[string]map[string]string {
-	catalogsOnce.Do(func() {
-		loaded = make(map[string]map[string]string, len(Langs()))
-		for lang, src := range map[string]string{
-			"en": enCatalog,
-			"es": esCatalog,
-		} {
-			m, err := parseCatalog(src)
-			if err != nil {
-				panic(fmt.Sprintf("i18n: parse embedded %s catalog: %v", lang, err))
+// bundle loads the embedded catalogs into a go-i18n Bundle exactly once, with the
+// TOML unmarshaler registered and English as the default language. A malformed
+// embedded file is a build-time defect, so it panics here (the one sanctioned
+// panic in this package) rather than degrading silently; T/TN stay panic-free
+// because they only ever read the already-loaded bundle.
+func bundle() *goi18n.Bundle {
+	bundleOnce.Do(func() {
+		b := goi18n.NewBundle(language.English)
+		b.RegisterUnmarshalFunc("toml", toml.Unmarshal)
+		for _, lang := range Langs() {
+			if _, err := b.LoadMessageFileFS(catalogFS, lang+".toml"); err != nil {
+				panic(fmt.Sprintf("i18n: load embedded %s catalog: %v", lang, err))
 			}
-			loaded[lang] = m
 		}
+		shared = b
+		localizers = make(map[string]*goi18n.Localizer, len(Langs()))
 	})
-	return loaded
+	return shared
+}
+
+// localizer returns the cached Localizer for lang, building it on first use with
+// the [lang, baseLang] fallback chain. Unknown languages get a [lang, en]
+// localizer too; go-i18n simply finds no lang messages and falls through to en.
+func localizer(lang string) *goi18n.Localizer {
+	b := bundle()
+	localizeMu.Lock()
+	defer localizeMu.Unlock()
+	if lc, ok := localizers[lang]; ok {
+		return lc
+	}
+	lc := goi18n.NewLocalizer(b, lang, baseLang)
+	localizers[lang] = lc
+	return lc
 }
 
 // Langs returns the available languages in a stable order (base language first).
@@ -59,110 +83,53 @@ func Langs() []string {
 	return []string{"en", "es"}
 }
 
-// T looks up key in lang's catalog, applies fmt.Sprintf interpolation with args
-// (catalog values carry %s/%d verbs), and follows the fallback chain: unknown
-// lang or missing key → the base (en) catalog → the key itself. It never panics
-// and never returns empty for a real key. Interpolating a trusted embedded
-// catalog string via fmt.Sprintf is stdlib-only and safe (values are ours).
+// T looks up key in lang (with en fallback), then applies fmt.Sprintf positional
+// interpolation with args over the returned message text (which carries %s/%d
+// verbs — go-i18n leaves non-{{}} text untouched). Fallback chain: unknown lang
+// or locally-missing key → en → the key itself. It never panics and never returns
+// empty for a real key. Interpolating a trusted embedded catalog string via
+// fmt.Sprintf is stdlib-only and safe (values are ours).
 func T(lang, key string, args ...any) string {
-	return tr(catalogs(), lang, key, args...)
-}
-
-// tr is the fallback + interpolation core, parameterized over the catalog set so
-// tests can drive the "valid lang, key present in en but missing locally" branch
-// with a bespoke asymmetric map — a state the parity-clean real catalogs forbid.
-func tr(cats map[string]map[string]string, lang, key string, args ...any) string {
-	value, ok := lookup(cats, lang, key)
-	if !ok {
-		// Unknown lang or missing key: try the base language.
-		value, ok = lookup(cats, baseLang, key)
-	}
-	if !ok {
-		// Truly absent everywhere: surface the key so the gap is visible,
-		// never a blank string or a panic.
+	msg := localize(lang, key, nil)
+	if msg == "" {
+		// Absent everywhere: surface the key so the gap is visible, never blank.
 		return key
 	}
 	if len(args) == 0 {
-		return value
+		return msg
 	}
-	return fmt.Sprintf(value, args...)
+	return fmt.Sprintf(msg, args...)
 }
 
-// lookup returns the value for key in the given lang's catalog, if both exist.
-func lookup(cats map[string]map[string]string, lang, key string) (string, bool) {
-	m, ok := cats[lang]
-	if !ok {
-		return "", false
+// TN is T with CLDR pluralization: count selects the one/other form (via x/text
+// plural rules for lang) and is also the first positional Sprintf arg, so the
+// message's leading %d is filled by the same count the template passes once.
+// Additional args follow count in order. Same fallback chain as T.
+func TN(lang, key string, count int, args ...any) string {
+	msg := localize(lang, key, count)
+	if msg == "" {
+		return key
 	}
-	v, ok := m[key]
-	return v, ok
+	all := make([]any, 0, len(args)+1)
+	all = append(all, count)
+	all = append(all, args...)
+	return fmt.Sprintf(msg, all...)
 }
 
-// parseCatalog parses the flat catalog subset (NOT full TOML): each significant
-// line is `key = "value"`; `#` lines and blank lines are ignored; values are
-// double-quoted with \n, \" and \\ escapes. Anything else (no `=`, unquoted or
-// unterminated value, unknown escape) is rejected with a line-numbered error so
-// a bad embedded catalog fails loudly at load rather than mis-translating.
-func parseCatalog(src string) (map[string]string, error) {
-	out := make(map[string]string)
-	for i, raw := range strings.Split(src, "\n") {
-		lineNo := i + 1
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		eq := strings.IndexByte(line, '=')
-		if eq < 0 {
-			return nil, fmt.Errorf("line %d: missing '=' in %q", lineNo, raw)
-		}
-		key := strings.TrimSpace(line[:eq])
-		if key == "" {
-			return nil, fmt.Errorf("line %d: empty key in %q", lineNo, raw)
-		}
-		if _, dup := out[key]; dup {
-			return nil, fmt.Errorf("line %d: duplicate key %q", lineNo, key)
-		}
-
-		value, err := unquote(strings.TrimSpace(line[eq+1:]))
-		if err != nil {
-			return nil, fmt.Errorf("line %d: %w", lineNo, err)
-		}
-		out[key] = value
+// localize resolves key in lang with en fallback and returns the raw message text
+// (verbs intact) or "" if the key exists in no catalog. pluralCount is nil for a
+// non-count lookup, or *int to select the plural form. A go-i18n "not found"
+// error still returns the English fallback text when the [lang, en] chain found
+// it; only a truly-absent key yields an empty string, which the callers map to
+// the raw key.
+func localize(lang, key string, pluralCount any) string {
+	cfg := &goi18n.LocalizeConfig{MessageID: key}
+	if pluralCount != nil {
+		cfg.PluralCount = pluralCount
 	}
-	return out, nil
-}
-
-// unquote decodes a double-quoted catalog value with the supported escapes
-// (\n, \", \\). It is intentionally stricter and smaller than strconv.Unquote:
-// only the escapes this format documents are accepted.
-func unquote(s string) (string, error) {
-	if len(s) < 2 || s[0] != '"' || s[len(s)-1] != '"' {
-		return "", fmt.Errorf("value %q must be double-quoted", s)
-	}
-	body := s[1 : len(s)-1]
-
-	var b strings.Builder
-	for i := 0; i < len(body); i++ {
-		c := body[i]
-		if c != '\\' {
-			b.WriteByte(c)
-			continue
-		}
-		i++
-		if i >= len(body) {
-			return "", fmt.Errorf("value %q: dangling escape", s)
-		}
-		switch body[i] {
-		case 'n':
-			b.WriteByte('\n')
-		case '"':
-			b.WriteByte('"')
-		case '\\':
-			b.WriteByte('\\')
-		default:
-			return "", fmt.Errorf("value %q: unknown escape \\%c", s, body[i])
-		}
-	}
-	return b.String(), nil
+	// Localize returns the (possibly fallback) text plus an error when the ID is
+	// missing in the requested language; we key off the text, not the error, so
+	// the en fallback value is honored and only a truly-absent key returns "".
+	msg, _ := localizer(lang).Localize(cfg)
+	return msg
 }

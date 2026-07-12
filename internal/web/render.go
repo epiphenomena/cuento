@@ -30,6 +30,7 @@ func mustParseTemplates() *template.Template {
 	// stub actually runs.
 	stub := template.FuncMap{
 		"t":          func(key string, _ ...any) string { return key },
+		"tn":         func(key string, _ int, _ ...any) string { return key },
 		"asset":      func(name string) string { return name },
 		"shellTitle": shellTitle,
 		"strs":       strs,
@@ -60,6 +61,7 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name
 	}
 	clone = clone.Funcs(template.FuncMap{
 		"t":          func(key string, args ...any) string { return i18n.T(lang, key, args...) },
+		"tn":         func(key string, count int, args ...any) string { return i18n.TN(lang, key, count, args...) },
 		"asset":      s.assetURL, // hashed URL in prod, unhashed in -dev (p10.1)
 		"shellTitle": shellTitle, // pairs a shellPage with a localized head title
 		"strs":       strs,       // literal []string for ranging over static enums

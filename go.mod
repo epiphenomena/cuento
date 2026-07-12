@@ -3,10 +3,13 @@ module cuento
 go 1.25.12
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/alexedwards/argon2id v1.0.0
 	github.com/alexedwards/scs/sqlite3store v0.0.0-20251002162104-209de6e426de
 	github.com/alexedwards/scs/v2 v2.9.0
+	github.com/nicksnyder/go-i18n/v2 v2.6.1
 	github.com/pressly/goose/v3 v3.27.2
+	golang.org/x/text v0.37.0
 	golang.org/x/time v0.15.0
 	modernc.org/sqlite v1.53.0
 )

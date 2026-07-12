@@ -168,11 +168,13 @@ func TestMergeConsequencesSummarized(t *testing.T) {
 	body := rec.Body.String()
 	// The split count (1) and the 0-reconciliations note must appear, anchored to
 	// the rendered en phrases (the book user resolves to en) so the assertion is
-	// about the CONSEQUENCES text, not an incidental id in a hidden input.
-	if !strings.Contains(body, "1 transaction line(s)") {
+	// about the CONSEQUENCES text, not an incidental id in a hidden input. These
+	// are now CLDR-pluralized (D15): count 1 selects the singular "1 transaction
+	// line", count 0 selects the plural "0 reconciliations".
+	if !strings.Contains(body, "1 transaction line will move") {
 		t.Errorf("preview does not surface the split count; body: %s", body)
 	}
-	if !strings.Contains(body, "0 reconciliation(s)") {
+	if !strings.Contains(body, "0 reconciliations will move") {
 		t.Errorf("preview does not surface the 0-reconciliations note; body: %s", body)
 	}
 }

@@ -42,6 +42,14 @@ Seeded at p00.1 from the settled-decisions table in PLAN.md. Later steps append 
 
 Resolved (2026-07): Q1 (funds scope to subsidiaries, not inherited — D20), Q2 (permissions global — D10), Q3 (reports split with/without donor restrictions; per-grant = fund statement), Q4 (hosting, FX, "development" = fundraising column).
 
+## D15 allowlist expansion — i18n + TOML (added 2026-07-12 at the human's request)
+
+The human explicitly authorized adding a TOML parsing library and (conditioned on "lightweight, not taking over the project") an i18n library. Acknowledgment: 2026-07-12. Decision:
+- Adopt **`github.com/nicksnyder/go-i18n/v2`** as the i18n engine, which brings **`github.com/BurntSushi/toml`** (the TOML grant) and **`golang.org/x/text`** (CLDR plural rules + language matching). go-i18n is library-shaped — it does not invert control; the boring-frontend/single-binary posture holds. `x/text` adds ~a few MB of CLDR tables to the CGO-free binary; accepted for correct en/es pluralization.
+- This **supersedes D14's** "hand-rolled minimal parser, no CLDR/i18n dependency" clause and the p03.4 hand-rolled parser. The `internal/i18n` public facade (`T`, `Langs`, `{{t}}`, en-fallback, and the catalog-parity test) is **preserved**; catalogs move to the go-i18n TOML message format; pluralization is available where counts appear.
+- These three modules are now on the D15 allowlist. No YAML lib is added (go-i18n's yaml unmarshaler is an unused transitive; catalogs are TOML).
+- **Direct-require note (2026-07-12):** all three land as **direct** requires in `go.mod`, not the two-indirect shape the adoption task sketched. `go get ...go-i18n/v2/i18n` pulls only go-i18n + x/text (verified: it does **not** vendor BurntSushi/toml transitively). `internal/i18n` then imports `toml` directly (the prescribed `RegisterUnmarshalFunc("toml", toml.Unmarshal)`) and `x/text/language` directly (`NewBundle(language.English)` takes a `language.Tag`, no string form), so `go mod tidy` correctly marks all three direct. This is honest and reproducible (`make gen` stable); it deviates only from that task's descriptive "indirect" expectation, not from rule 1 — every module is D15-allowlisted.
+
 ## Functional testing (Playwright) — added 2026-07-11 at the human's request
 
 The human explicitly asked for browser-based functional tests, **superseding AGENTS rule 12's original "no browser automation dependency" clause** (acknowledgment: 2026-07-11). Decisions:

@@ -1,208 +1,360 @@
-# English catalog (base language). See i18n.go for the supported flat subset:
-# `key = "value"` lines, `#` comments, blank lines, double-quoted values with
-# \n / \" / \\ escapes. This is NOT full TOML — the .toml extension is only for
-# editor syntax familiarity.
+# English catalog (base language), in the go-i18n TOML message format (D15):
+# each message is a [key] table with an `other = "value"` field; count messages
+# also carry a `one = "value"` form for CLDR pluralization. Values keep %s/%d
+# verbs — interpolation is positional fmt.Sprintf in i18n.go, NOT go-i18n {{.X}}
+# template data. Every bare `key = value` must precede any [table]; using a table
+# per key avoids that TOML ordering trap entirely.
 #
 # RULE 9 (AGENTS): every user-visible string lives here and in es.toml with an
-# IDENTICAL key set (TestCatalogParity enforces it). Real UI keys arrive with
-# their features; this is a minimal starter set.
+# IDENTICAL message-ID set (TestCatalogParity enforces it). Real UI keys arrive
+# with their features; this is a minimal starter set.
 
-app.name = "cuento"
+[app.name]
+other = "cuento"
 
 # Brand tagline shown on the login page only ("Open Ledger & Star" identity).
 # Kept in Spanish in both catalogs by design (it is the brand's own wording, like
 # the wordmark) so the mark reads consistently regardless of the UI language.
-brand.tagline = "contabilidad abierta para el bien común"
+[brand.tagline]
+other = "contabilidad abierta para el bien común"
 
 # Authenticated landing placeholder (p06.3). The real dashboard/nav is phase 10;
 # GET /{$} renders this so the AnyUser permission path is exercised by a real,
 # i18n'd route rather than a stub.
-home.title = "cuento"
-home.welcome = "Signed in."
+[home.title]
+other = "cuento"
+[home.welcome]
+other = "Signed in."
 
-common.save = "Save"
-common.cancel = "Cancel"
-common.skip_to_content = "Skip to content"
+[common.save]
+other = "Save"
+[common.cancel]
+other = "Cancel"
+[common.skip_to_content]
+other = "Skip to content"
 
 # Authenticated shell (p10.2): the top-level navigation sections (Appendix F).
 # Each entry renders only for permitted personas AND only once its route exists;
 # later phases (p11-p18) wire the remaining sections as their routes land.
-nav.label = "Primary"
-nav.home = "Home"
-nav.accounts = "Accounts"
-nav.funds = "Funds"
-nav.programs = "Programs"
-nav.reconciliations = "Reconciliations"
-nav.reports = "Reports"
-nav.settings = "Settings"
-nav.admin = "Admin"
+[nav.label]
+other = "Primary"
+[nav.home]
+other = "Home"
+[nav.accounts]
+other = "Accounts"
+[nav.funds]
+other = "Funds"
+[nav.programs]
+other = "Programs"
+[nav.reconciliations]
+other = "Reconciliations"
+[nav.reports]
+other = "Reports"
+[nav.settings]
+other = "Settings"
+[nav.admin]
+other = "Admin"
 
 # Theme control (p10.2). Values map to data-theme (auto follows the OS).
-theme.label = "Theme"
-theme.light = "Light"
-theme.dark = "Dark"
-theme.auto = "Auto"
-theme.apply = "Apply"
+[theme.label]
+other = "Theme"
+[theme.light]
+other = "Light"
+[theme.dark]
+other = "Dark"
+[theme.auto]
+other = "Auto"
+[theme.apply]
+other = "Apply"
 
 # Language switcher on the login page (p10.2). Each language is labelled in its
 # OWN tongue (lang.<code> is the same in every catalog) so a speaker recognizes
 # their language regardless of the page's current locale.
-lang.label = "Language"
-lang.en = "English"
-lang.es = "Español"
+[lang.label]
+other = "Language"
+[lang.en]
+other = "English"
+[lang.es]
+other = "Español"
 
 # Footer.
-footer.version = "Version %s"
+[footer.version]
+other = "Version %s"
 
 # Dev-only styleguide (p10.2): a visual review page for the component primitives.
-styleguide.title = "Styleguide"
-styleguide.brand = "Brand"
-styleguide.palette = "Palette"
-styleguide.buttons = "Buttons"
-styleguide.forms = "Forms"
-styleguide.alerts = "Alerts"
+[styleguide.title]
+other = "Styleguide"
+[styleguide.brand]
+other = "Brand"
+[styleguide.palette]
+other = "Palette"
+[styleguide.buttons]
+other = "Buttons"
+[styleguide.forms]
+other = "Forms"
+[styleguide.alerts]
+other = "Alerts"
 
 # Dev-only form-error demonstrator (p10.3): a tiny validated POST that exercises
 # the reusable form-error convention (422 + form-region partial swap, localized
 # field errors, autofocus on the first invalid field). The heavy forms (accounts
 # p11, transactions p12) REUSE this convention.
-styleguide.form_demo = "Form errors"
-form.demo.name = "Name"
-form.demo.email = "Email"
-form.demo.submit = "Submit"
-form.demo.ok = "Looks good."
+[styleguide.form_demo]
+other = "Form errors"
+[form.demo.name]
+other = "Name"
+[form.demo.email]
+other = "Email"
+[form.demo.submit]
+other = "Submit"
+[form.demo.ok]
+other = "Looks good."
 
 # Reusable field-validation error KEYS (rule 9: Go returns keys, the template
 # renders them via {{t}}). Later forms reuse these generic messages.
-error.required = "This field is required."
-error.email = "Enter a valid email address."
+[error.required]
+other = "This field is required."
+[error.email]
+other = "Enter a valid email address."
 
 # My settings stub (p10.2); the full settings page is p13.1.
-settings.title = "Settings"
-settings.coming_soon = "Settings arrive in a later step."
+[settings.title]
+other = "Settings"
+[settings.coming_soon]
+other = "Settings arrive in a later step."
 
 # Admin landing stub (p10.2); the real admin pages arrive in later phases.
-admin.coming_soon = "Admin tools arrive in a later step."
+[admin.coming_soon]
+other = "Admin tools arrive in a later step."
 
 # Org settings & languages (p11.4). The enabled languages are the languages account
 # NAMES may be entered in (D14); the UI chrome stays en/es.
-org.title = "Organization settings"
-org.intro = "Your organization's name and the languages accounts may be named in."
-org.saved = "Settings saved."
-org.form.name = "Organization name"
-org.form.enabled_languages = "Account name languages"
-org.form.enabled_languages_hint = "Comma-separated language codes (for example en,es). English is always available. Adding a language adds a name field to the account form."
+[org.title]
+other = "Organization settings"
+[org.intro]
+other = "Your organization's name and the languages accounts may be named in."
+[org.saved]
+other = "Settings saved."
+[org.form.name]
+other = "Organization name"
+[org.form.enabled_languages]
+other = "Account name languages"
+[org.form.enabled_languages_hint]
+other = "Comma-separated language codes (for example en,es). English is always available. Adding a language adds a name field to the account form."
 
 # Label for a NULL fund_id (unrestricted general fund), per D20.
-fund.unrestricted = "Unrestricted General"
+[fund.unrestricted]
+other = "Unrestricted General"
 
 # Positional-interpolation sample (%s), exercised by TestInterpolation.
-greeting = "Hello, %s"
+[greeting]
+other = "Hello, %s"
 
 # Login page (p06.2). The auth.invalid / auth.rate_limited errors are
 # deliberately generic: a uniform message that does not reveal whether a
 # username exists (no user enumeration, rule 13).
-auth.login_title = "Sign in"
-auth.username = "Username"
-auth.password = "Password"
-auth.sign_in = "Sign in"
-auth.sign_out = "Sign out"
-auth.invalid = "Incorrect username or password."
-auth.rate_limited = "Too many attempts. Please wait and try again."
+[auth.login_title]
+other = "Sign in"
+[auth.username]
+other = "Username"
+[auth.password]
+other = "Password"
+[auth.sign_in]
+other = "Sign in"
+[auth.sign_out]
+other = "Sign out"
+[auth.invalid]
+other = "Incorrect username or password."
+[auth.rate_limited]
+other = "Too many attempts. Please wait and try again."
 
 # Chart of accounts (p11.1). The page title, tree-table columns, filters, the
 # inline create/edit form fields, and the store-error-key translations (the
 # handler maps a store typed error to one of these keys, rule 9). Account type
 # labels are keyed account.type.<type>; functional classes functional.<class>.
-common.edit = "Edit"
-accounts.title = "Chart of accounts"
-accounts.new = "New account"
-accounts.merge = "Merge accounts"
-accounts.deactivate = "Deactivate"
-accounts.inactive = "inactive"
-accounts.empty = "No accounts yet."
-accounts.balances_as_of = "Balances as of"
-accounts.filter.subsidiary = "Subsidiary"
-accounts.filter.all_subsidiaries = "All subsidiaries"
-accounts.filter.active_only = "Active only"
-accounts.filter.apply = "Apply"
-accounts.col.name = "Account"
-accounts.col.type = "Type"
-accounts.col.balances = "Balance"
-accounts.col.actions = "Actions"
-accounts.form.new_title = "New account"
-accounts.form.edit_title = "Edit account"
-accounts.form.type = "Type"
-accounts.form.name = "Name (%s)"
-accounts.form.parent = "Parent account"
-accounts.form.no_parent = "— top level —"
-accounts.form.currency = "Default currency"
-accounts.form.reconcilable = "Reconcilable"
-accounts.form.intercompany = "Intercompany"
-accounts.form.functional_class = "Default functional class"
-accounts.form.default_program = "Default program"
-accounts.form.form990_code = "990 line"
-accounts.form.form990_inherited = "Inherited:"
-accounts.form.none = "— none —"
-accounts.form.subsidiaries = "Subsidiaries"
-accounts.form.subs_hint = "Assigning a subsidiary also adds it to every parent account (superset rule)."
-merge.title = "Merge accounts"
-merge.intro = "Fold a source account into a destination account. Every transaction on the source moves to the destination, and the source is deactivated."
-merge.source = "Source account"
-merge.destination = "Destination account"
-merge.select_placeholder = "— select an account —"
-merge.coverage_note = "The destination's subsidiaries must cover the source's; both must be active leaf accounts of the same type."
-merge.review = "Review merge"
-merge.confirm_title = "Confirm merge"
-merge.summary = "Merge %s into %s. This cannot be undone from here."
-merge.consequence.splits = "%d transaction line(s) will move to the destination."
-merge.consequence.recons = "%d reconciliation(s) will move."
-merge.consequence.deactivate = "%s will be deactivated (its history is kept)."
-merge.confirm = "Confirm merge"
-account.type.asset = "Asset"
-account.type.liability = "Liability"
-account.type.equity = "Equity"
-account.type.revenue = "Revenue"
-account.type.expense = "Expense"
-functional.program = "Program"
-functional.management = "Management & general"
-functional.fundraising = "Fundraising"
-error.account.name_required = "An English name is required."
-error.account.no_subsidiary = "Select at least one subsidiary."
-error.account.cross_type_class = "That parent's type cannot hold this account type."
-error.account.cycle = "An account cannot be moved under itself or its descendants."
-error.account.sub_mismatch = "The new parent must cover all of this account's subsidiaries."
-error.account.sub_in_use_by_child = "A subsidiary is still used by a child account and cannot be removed."
-error.account.form990_type_mismatch = "That 990 line is not valid for this account type."
-error.account.functional_not_expense = "A functional class applies only to expense accounts."
-error.account.default_program_not_re = "A default program applies only to revenue and expense accounts."
-error.account.default_program_missing = "The selected program does not exist."
-error.account.default_program_inactive = "The selected program is inactive."
-error.account.parent_not_found = "The selected parent account does not exist."
-error.merge.select_both = "Select both a source and a destination account."
-error.merge.self = "An account cannot be merged into itself."
-error.merge.not_leaf = "The source must be a leaf account (it has child accounts)."
-error.merge.cross_type_class = "The source and destination must be the same account type."
-error.merge.subset_subs = "The destination's subsidiaries must cover all of the source's."
-error.merge.into_placeholder = "The destination cannot be a placeholder (it has child accounts)."
-error.merge.into_inactive = "The destination account is inactive."
-subsidiaries.title = "Subsidiaries"
-subsidiaries.intro = "Your organization's subsidiary tree. One root, each with a base currency; assign accounts and transactions to subsidiaries elsewhere."
-subsidiaries.new = "New subsidiary"
-subsidiaries.deactivate = "Deactivate"
-subsidiaries.inactive = "inactive"
-subsidiaries.empty = "No subsidiaries yet."
-subsidiaries.col.name = "Subsidiary"
-subsidiaries.col.base_currency = "Base currency"
-subsidiaries.col.actions = "Actions"
-subsidiaries.form.new_title = "New subsidiary"
-subsidiaries.form.edit_title = "Edit subsidiary"
-subsidiaries.form.name = "Name"
-subsidiaries.form.parent = "Parent subsidiary"
-subsidiaries.form.base_currency = "Base currency"
-subsidiaries.form.root_note = "This is the root subsidiary; it has no parent and cannot be moved."
-error.subsidiary.second_root = "A subsidiary must have a parent; there is already a root."
-error.subsidiary.parent_missing = "The selected parent subsidiary does not exist."
-error.subsidiary.root_immovable = "The root subsidiary cannot be given a parent."
-error.subsidiary.cycle = "A subsidiary cannot be moved under itself or its descendants."
-error.subsidiary.has_active_children = "This subsidiary still has active children and cannot be deactivated."
+[common.edit]
+other = "Edit"
+[accounts.title]
+other = "Chart of accounts"
+[accounts.new]
+other = "New account"
+[accounts.merge]
+other = "Merge accounts"
+[accounts.deactivate]
+other = "Deactivate"
+[accounts.inactive]
+other = "inactive"
+[accounts.empty]
+other = "No accounts yet."
+[accounts.balances_as_of]
+other = "Balances as of"
+[accounts.filter.subsidiary]
+other = "Subsidiary"
+[accounts.filter.all_subsidiaries]
+other = "All subsidiaries"
+[accounts.filter.active_only]
+other = "Active only"
+[accounts.filter.apply]
+other = "Apply"
+[accounts.col.name]
+other = "Account"
+[accounts.col.type]
+other = "Type"
+[accounts.col.balances]
+other = "Balance"
+[accounts.col.actions]
+other = "Actions"
+[accounts.form.new_title]
+other = "New account"
+[accounts.form.edit_title]
+other = "Edit account"
+[accounts.form.type]
+other = "Type"
+[accounts.form.name]
+other = "Name (%s)"
+[accounts.form.parent]
+other = "Parent account"
+[accounts.form.no_parent]
+other = "— top level —"
+[accounts.form.currency]
+other = "Default currency"
+[accounts.form.reconcilable]
+other = "Reconcilable"
+[accounts.form.intercompany]
+other = "Intercompany"
+[accounts.form.functional_class]
+other = "Default functional class"
+[accounts.form.default_program]
+other = "Default program"
+[accounts.form.form990_code]
+other = "990 line"
+[accounts.form.form990_inherited]
+other = "Inherited:"
+[accounts.form.none]
+other = "— none —"
+[accounts.form.subsidiaries]
+other = "Subsidiaries"
+[accounts.form.subs_hint]
+other = "Assigning a subsidiary also adds it to every parent account (superset rule)."
+[merge.title]
+other = "Merge accounts"
+[merge.intro]
+other = "Fold a source account into a destination account. Every transaction on the source moves to the destination, and the source is deactivated."
+[merge.source]
+other = "Source account"
+[merge.destination]
+other = "Destination account"
+[merge.select_placeholder]
+other = "— select an account —"
+[merge.coverage_note]
+other = "The destination's subsidiaries must cover the source's; both must be active leaf accounts of the same type."
+[merge.review]
+other = "Review merge"
+[merge.confirm_title]
+other = "Confirm merge"
+[merge.summary]
+other = "Merge %s into %s. This cannot be undone from here."
+[merge.consequence.splits]
+one = "%d transaction line will move to the destination."
+other = "%d transaction lines will move to the destination."
+[merge.consequence.recons]
+one = "%d reconciliation will move."
+other = "%d reconciliations will move."
+[merge.consequence.deactivate]
+other = "%s will be deactivated (its history is kept)."
+[merge.confirm]
+other = "Confirm merge"
+[account.type.asset]
+other = "Asset"
+[account.type.liability]
+other = "Liability"
+[account.type.equity]
+other = "Equity"
+[account.type.revenue]
+other = "Revenue"
+[account.type.expense]
+other = "Expense"
+[functional.program]
+other = "Program"
+[functional.management]
+other = "Management & general"
+[functional.fundraising]
+other = "Fundraising"
+[error.account.name_required]
+other = "An English name is required."
+[error.account.no_subsidiary]
+other = "Select at least one subsidiary."
+[error.account.cross_type_class]
+other = "That parent's type cannot hold this account type."
+[error.account.cycle]
+other = "An account cannot be moved under itself or its descendants."
+[error.account.sub_mismatch]
+other = "The new parent must cover all of this account's subsidiaries."
+[error.account.sub_in_use_by_child]
+other = "A subsidiary is still used by a child account and cannot be removed."
+[error.account.form990_type_mismatch]
+other = "That 990 line is not valid for this account type."
+[error.account.functional_not_expense]
+other = "A functional class applies only to expense accounts."
+[error.account.default_program_not_re]
+other = "A default program applies only to revenue and expense accounts."
+[error.account.default_program_missing]
+other = "The selected program does not exist."
+[error.account.default_program_inactive]
+other = "The selected program is inactive."
+[error.account.parent_not_found]
+other = "The selected parent account does not exist."
+[error.merge.select_both]
+other = "Select both a source and a destination account."
+[error.merge.self]
+other = "An account cannot be merged into itself."
+[error.merge.not_leaf]
+other = "The source must be a leaf account (it has child accounts)."
+[error.merge.cross_type_class]
+other = "The source and destination must be the same account type."
+[error.merge.subset_subs]
+other = "The destination's subsidiaries must cover all of the source's."
+[error.merge.into_placeholder]
+other = "The destination cannot be a placeholder (it has child accounts)."
+[error.merge.into_inactive]
+other = "The destination account is inactive."
+[subsidiaries.title]
+other = "Subsidiaries"
+[subsidiaries.intro]
+other = "Your organization's subsidiary tree. One root, each with a base currency; assign accounts and transactions to subsidiaries elsewhere."
+[subsidiaries.new]
+other = "New subsidiary"
+[subsidiaries.deactivate]
+other = "Deactivate"
+[subsidiaries.inactive]
+other = "inactive"
+[subsidiaries.empty]
+other = "No subsidiaries yet."
+[subsidiaries.col.name]
+other = "Subsidiary"
+[subsidiaries.col.base_currency]
+other = "Base currency"
+[subsidiaries.col.actions]
+other = "Actions"
+[subsidiaries.form.new_title]
+other = "New subsidiary"
+[subsidiaries.form.edit_title]
+other = "Edit subsidiary"
+[subsidiaries.form.name]
+other = "Name"
+[subsidiaries.form.parent]
+other = "Parent subsidiary"
+[subsidiaries.form.base_currency]
+other = "Base currency"
+[subsidiaries.form.root_note]
+other = "This is the root subsidiary; it has no parent and cannot be moved."
+[error.subsidiary.second_root]
+other = "A subsidiary must have a parent; there is already a root."
+[error.subsidiary.parent_missing]
+other = "The selected parent subsidiary does not exist."
+[error.subsidiary.root_immovable]
+other = "The root subsidiary cannot be given a parent."
+[error.subsidiary.cycle]
+other = "A subsidiary cannot be moved under itself or its descendants."
+[error.subsidiary.has_active_children]
+other = "This subsidiary still has active children and cannot be deactivated."
