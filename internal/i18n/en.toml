@@ -956,6 +956,8 @@ other = "Detail"
 other = "Account"
 [reports.params.fund]
 other = "Fund"
+[reports.params.program]
+other = "Program"
 [reports.params.run]
 other = "Run report"
 [reports.detail.converted]
@@ -1159,3 +1161,21 @@ other = "Total support and revenue"
 other = "Expenses"
 [reports.activities_by_restriction.change]
 other = "Change in net assets"
+[reports.program_statement.title]
+other = "Program statement"
+[reports.program_statement.all_programs]
+other = "— all programs —"
+[reports.program_statement.col.account]
+other = "Account"
+[reports.program_statement.col.currency]
+other = "Currency"
+[reports.program_statement.section.revenue]
+other = "Revenue"
+[reports.program_statement.section.expenses]
+other = "Expenses"
+[reports.program_statement.total.revenue]
+other = "Total revenue"
+[reports.program_statement.total.expenses]
+other = "Total expenses"
+[reports.program_statement.net]
+other = "Net (revenue − expenses)"

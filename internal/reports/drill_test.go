@@ -72,6 +72,18 @@ func TestDrillRoundTrip(t *testing.T) {
 				To:         "2026-06-30",
 			},
 		},
+		{
+			name: "period with program SET (p15.10 rollup cell)",
+			d: reports.Drill{
+				Scope:      1,
+				AccountIDs: []int64{5, 6},
+				Currency:   "USD",
+				ProgramIDs: []int64{1, 2, 3},
+				Mode:       reports.DrillPeriod,
+				From:       "2025-01-01",
+				To:         "2026-06-30",
+			},
+		},
 	}
 
 	for _, tc := range cases {

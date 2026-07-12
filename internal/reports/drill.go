@@ -94,6 +94,17 @@ type Drill struct {
 	// single fund).
 	FundIDs []int64
 
+	// ProgramIDs is an optional program SET (p15.10): the drilled figure sums splits
+	// across SEVERAL programs at once (the program statement's ROLLUP cells — a parent
+	// program's figure includes its descendant programs, so General's cell spans
+	// General + Educación + Food Pantry — which a single ProgramID cannot express). When
+	// non-empty the drill unions the per-program split sets (account SET × program SET),
+	// reconciling to the rolled-up figure; the store's per-cell query still filters ONE
+	// program at a time (no SQL change), the caller loops the set. ProgramID and
+	// ProgramIDs are mutually exclusive: a cell sets at most one (ProgramIDs when it
+	// aggregates a program subtree, ProgramID for a single leaf program).
+	ProgramIDs []int64
+
 	// Mode selects the date treatment (as-of cumulative vs period activity).
 	Mode DrillMode
 
@@ -133,6 +144,13 @@ func (d Drill) Encode() string {
 	}
 	if d.ProgramID != nil {
 		q.Set("prog", strconv.FormatInt(*d.ProgramID, 10))
+	}
+	if len(d.ProgramIDs) > 0 {
+		ids := make([]string, len(d.ProgramIDs))
+		for i, id := range d.ProgramIDs {
+			ids[i] = strconv.FormatInt(id, 10)
+		}
+		q.Set("progs", strings.Join(ids, ","))
 	}
 	if d.Class != nil {
 		q.Set("class", *d.Class)
@@ -195,6 +213,14 @@ func DecodeDrill(q url.Values) Drill {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
 			d.ProgramID = &id
 		}
+	}
+	if v := strings.TrimSpace(q.Get("progs")); v != "" {
+		for _, part := range strings.Split(v, ",") {
+			if id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64); err == nil && id != 0 {
+				d.ProgramIDs = append(d.ProgramIDs, id)
+			}
+		}
+		sort.Slice(d.ProgramIDs, func(i, j int) bool { return d.ProgramIDs[i] < d.ProgramIDs[j] })
 	}
 	if v := q.Get("class"); v != "" {
 		c := v

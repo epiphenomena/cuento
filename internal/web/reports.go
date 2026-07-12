@@ -146,6 +146,20 @@ func (s *server) resolveParams(
 			}
 		}
 	}
+	if rep.ParamsSpec.Program {
+		// The report-specific PROGRAM param (p15.10): parse it and validate against the real
+		// program set (an arbitrary id is dropped -> no program, the comparative view). Only
+		// fetched for a report whose spec declares it.
+		progs, err := s.programStatementOptions(ctx)
+		if err != nil {
+			return reports.Params{}, paramsForm{}, err
+		}
+		if v := first(q, "program"); v != "" {
+			if id := parseID(v); id != 0 && programExists(progs, id) {
+				p.Program = id
+			}
+		}
+	}
 
 	form, err := s.buildParamsForm(ctx, u, rep, p, subs)
 	if err != nil {
@@ -243,6 +257,32 @@ func fundExists(funds []fundOption, id int64) bool {
 	return false
 }
 
+// programStatementOptions returns every program (tree pre-order) with its name, for the
+// program report's program selector. Program names are stored proper nouns (a single
+// Name, no per-language variant), rendered verbatim.
+func (s *server) programStatementOptions(ctx context.Context) ([]programOption, error) {
+	tree, err := s.store.ProgramTree(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]programOption, 0, len(tree))
+	for _, p := range tree {
+		out = append(out, programOption{ID: p.ID, Name: p.Name})
+	}
+	return out, nil
+}
+
+// programExists reports whether id is one of the offered programs (a query program
+// override must name a real program, else the comparative view stands).
+func programExists(progs []programOption, id int64) bool {
+	for _, p := range progs {
+		if p.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveDate parses a query date value per the user's date format (ISO always
 // accepted), falling back to fallback (a time.Time) rendered ISO when the value is
 // empty or unparseable. The stored/param form is always ISO (YYYY-MM-DD), the
@@ -277,6 +317,7 @@ type paramsForm struct {
 	ShowDetail      bool
 	ShowAccount     bool
 	ShowFund        bool
+	ShowProgram     bool
 
 	// Resolved control values (formatted for display where dated).
 	AsOf        string // user-formatted date
@@ -287,11 +328,13 @@ type paramsForm struct {
 	Detail      string // token: ""|currency (per-currency detail toggle)
 	Account     int64  // selected leaf account id (0 = none chosen)
 	Fund        int64  // selected fund id (0 = all funds / list view)
+	Program     int64  // selected program id (0 = all programs / comparative view)
 
 	// Options for the selects.
 	Currencies []ccyChoice
-	Accounts   []acctOption // the leaf-account options (account-ledger only)
-	Funds      []fundOption // the fund options (fund-activity report only)
+	Accounts   []acctOption    // the leaf-account options (account-ledger only)
+	Funds      []fundOption    // the fund options (fund-activity report only)
+	Programs   []programOption // the program options (program-statement report only)
 }
 
 // scopeOption is one subsidiary choice in the scope selector.
@@ -330,11 +373,13 @@ func (s *server) buildParamsForm(
 		ShowDetail:      rep.ParamsSpec.Detail,
 		ShowAccount:     rep.ParamsSpec.Account,
 		ShowFund:        rep.ParamsSpec.Fund,
+		ShowProgram:     rep.ParamsSpec.Program,
 		Granularity:     p.Granularity.String(),
 		Currency:        p.TargetCurrency,
 		Detail:          p.Detail,
 		Account:         p.Account,
 		Fund:            p.Fund,
+		Program:         p.Program,
 	}
 	for _, sub := range subs {
 		f.Scopes = append(f.Scopes, scopeOption{
@@ -377,6 +422,13 @@ func (s *server) buildParamsForm(
 			return paramsForm{}, err
 		}
 		f.Funds = funds
+	}
+	if rep.ParamsSpec.Program {
+		progs, err := s.programStatementOptions(ctx)
+		if err != nil {
+			return paramsForm{}, err
+		}
+		f.Programs = progs
 	}
 	return f, nil
 }

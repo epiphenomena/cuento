@@ -64,6 +64,16 @@ type Params struct {
 	// closed when a closed fund is explicitly requested). Fund id 0 is never a valid
 	// selection (it is the synthetic unrestricted group, which appears only in the list).
 	Fund int64
+
+	// Program is the single program a report-specific "which program" control names
+	// (p15.10 program statement): the program whose subtree the report prints (that
+	// program plus ALL its descendants, rolled up, D24). Meaningful only when
+	// ParamsSpec.Program is set; the empty value (0) means "no program chosen" and the
+	// program statement renders its COMPARATIVE view (every program in the tree as a
+	// side-by-side column) rather than a single-program subtree. Mirrors Account/Fund:
+	// a report-specific param the web layer parses only for a report whose spec declares
+	// it, validated against the real program set.
+	Program int64
 }
 
 // DetailCurrency reports whether the per-currency detail toggle is on (Detail ==
@@ -152,4 +162,8 @@ type ParamsSpec struct {
 	// offers a fund select bound to Params.Fund (with a "— all funds —" default that
 	// yields the list view). Report-SPECIFIC, like Account.
 	Fund bool
+	// Program: the report takes a single PROGRAM (p15.10 program statement); the form
+	// offers a program select bound to Params.Program (with an "— all programs —" default
+	// that yields the comparative side-by-side view). Report-SPECIFIC, like Account/Fund.
+	Program bool
 }

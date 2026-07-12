@@ -952,6 +952,8 @@ other = "Detalle"
 other = "Cuenta"
 [reports.params.fund]
 other = "Fondo"
+[reports.params.program]
+other = "Programa"
 [reports.params.run]
 other = "Generar informe"
 [reports.detail.converted]
@@ -1157,3 +1159,21 @@ other = "Total de apoyo e ingresos"
 other = "Gastos"
 [reports.activities_by_restriction.change]
 other = "Cambio en activos netos"
+[reports.program_statement.title]
+other = "Estado de programas"
+[reports.program_statement.all_programs]
+other = "— todos los programas —"
+[reports.program_statement.col.account]
+other = "Cuenta"
+[reports.program_statement.col.currency]
+other = "Moneda"
+[reports.program_statement.section.revenue]
+other = "Ingresos"
+[reports.program_statement.section.expenses]
+other = "Gastos"
+[reports.program_statement.total.revenue]
+other = "Total de ingresos"
+[reports.program_statement.total.expenses]
+other = "Total de gastos"
+[reports.program_statement.net]
+other = "Neto (ingresos − gastos)"

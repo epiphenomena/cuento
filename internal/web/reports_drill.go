@@ -122,17 +122,32 @@ func (s *server) reportDrill(w http.ResponseWriter, r *http.Request) {
 			fundFilters = append(fundFilters, &id)
 		}
 	}
+	// A p15.10 program-statement ROLLUP cell carries a program SET (Drill.ProgramIDs) —
+	// a parent program's figure folds in its descendant programs, so its drill unions
+	// the per-program split sets (account SET × program SET). With no program set the
+	// single ProgramID applies (the established shape). Mutually exclusive with ProgramID.
+	progFilters := []*int64{d.ProgramID}
+	if len(d.ProgramIDs) > 0 {
+		progFilters = progFilters[:0]
+		for i := range d.ProgramIDs {
+			id := d.ProgramIDs[i]
+			progFilters = append(progFilters, &id)
+		}
+	}
 	var rows []store.DrillRow
 	for _, fund := range fundFilters {
 		filter.FundID = fund
-		for _, acct := range d.AccountIDs {
-			filter.AccountID = acct
-			part, err := s.store.DrillSplits(ctx, filter)
-			if err != nil {
-				s.serverError(w)
-				return
+		for _, prog := range progFilters {
+			filter.ProgramID = prog
+			for _, acct := range d.AccountIDs {
+				filter.AccountID = acct
+				part, err := s.store.DrillSplits(ctx, filter)
+				if err != nil {
+					s.serverError(w)
+					return
+				}
+				rows = append(rows, part...)
 			}
-			rows = append(rows, part...)
 		}
 	}
 

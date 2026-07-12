@@ -30,6 +30,7 @@ const AL = '/reports/account_ledger';
 const FE = '/reports/functional_expenses';
 const FA = '/reports/fund_activity';
 const ABR = '/reports/activities_by_restriction';
+const PS = '/reports/program_statement';
 
 async function login(page, server) {
   await page.goto('/login');
@@ -687,4 +688,113 @@ test('reports: open the activities-by-restriction statement, see the two restric
   expect(abrResp.headers()['content-type']).toContain('text/csv');
   const abrBody = await abrResp.text();
   expect(abrBody.split('\n')[0]).toContain(',');
+});
+
+// p15.10 PROGRAM STATEMENT: the DECISION-MAKER view of revenue/expense per PROGRAM (D24),
+// the source p15.11 draws 990 Part III from. TWO views selected by the report-specific
+// PROGRAM param: the COMPARATIVE side-by-side (every program a column: Account | Currency |
+// <program...>, the root column == org total, no separate Total column) and the SINGLE
+// SUBTREE (?program=, one program rolled up: Account | Currency | Amount). This spec SEEDS a
+// child program + an expense account + a program-tagged expense, then:
+//   - opens the COMPARATIVE view, confirms the program selector + the comparative program
+//     columns (>=3 headers: Account + Currency + >=1 program) + the Revenue/Expenses/Net
+//     section labels + a net (report-total) row;
+//   - picks the single program -> the subtree statement (Account | Currency | Amount = 3
+//     columns) renders;
+//   - the CSV endpoint returns text/csv.
+//
+// This test MUTATES (creates a program, two accounts, one txn); names are unique so it never
+// collides with sibling specs sharing the worker db, and it only ADDS rows (never asserts a
+// global count). Strict CSP (script-src 'self') => NO page.waitForFunction; only locator/
+// URL/response waits + a plain page.request fetch for the CSV. Selectors are the report/
+// params marker classes, the program-select name, and the localized section labels.
+
+// createProgram makes a child program under the seeded root ("General") via the /programs
+// form, so the comparative program statement has more than the single root column.
+async function createProgram(page, name) {
+  await page.goto('/programs');
+  await page.getByRole('button', { name: /new program/i }).click();
+  await expect(page.locator('#pf-name')).toBeVisible();
+  await page.locator('#pf-name').fill(name); // parent defaults to the root program
+  await saveAndReload(page, { reloadPath: '/programs', formSelector: 'form#program-form' });
+  await expect(page.locator('tr.prog-row', { hasText: name })).toBeVisible();
+}
+
+test('reports: open the program statement (comparative), see program columns + accounts + net, pick a single program, CSV returns', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  // --- seed: a child program, a cash asset, an expense account, and a program-tagged expense ---
+  await createProgram(page, 'PS Outreach E2E');
+  await createAsset(page, 'PS Cash E2E');
+  await createExpenseAccount(page, 'PS Cost E2E'); // default functional class program
+
+  // An expense: DR PS Cost 80.00 (fund none), CR PS Cash 80.00. The expense split needs a
+  // program (rule 7 R/E dimension, D24); assign the seeded child program so the comparative
+  // view has a non-empty program column.
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await page.locator('#txn-account-0').selectOption({ label: 'PS Cost E2E' });
+  await expect(page.locator('#txn-program-0')).toBeVisible();
+  await page.locator('#txn-program-0').selectOption({ label: 'PS Outreach E2E' });
+  await page.locator('#txn-amount-0').fill('80.00');
+  await page.locator('#txn-account-1').selectOption({ label: 'PS Cash E2E' });
+  await page.locator('#txn-amount-1').fill('-80.00');
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL('**/register**');
+
+  // --- COMPARATIVE view (no program chosen): the program selector + program columns ---
+  await page.goto(`${PS}?scope=1&from=2025-01-01&to=2030-12-31`);
+  await expect(page.locator('form.report-params')).toBeVisible();
+  await expect(page.locator('select.report-scope-select[name="scope"]')).toBeVisible();
+  // The report-specific PROGRAM selector (comparative default is "— all programs —").
+  const progSelect = page.locator('select.report-program-select[name="program"]');
+  await expect(progSelect).toBeVisible();
+  // The period FROM/TO controls are present -- plain text inputs (never input[type=date]).
+  await expect(page.locator('form.report-params [name="from"]')).toBeVisible();
+  await expect(page.locator('form.report-params [name="to"]')).toBeVisible();
+
+  const table = page.locator('table.report-table');
+  await expect(table).toBeVisible();
+  // The COMPARATIVE columns: Account + Currency + >=1 program column => >=3 header cells (a
+  // single-column layout could not produce this side-by-side comparison).
+  const headers = page.locator('table.report-table thead th');
+  expect(await headers.count()).toBeGreaterThanOrEqual(3);
+  // The child program is a column header (a stored proper noun rendered verbatim).
+  await expect(page.locator('table.report-table thead')).toContainText('PS Outreach E2E');
+  // The section labels (localized en) + the net-per-program line.
+  await expect(table).toContainText('Revenue');
+  await expect(table).toContainText('Expenses');
+  await expect(table).toContainText('Net');
+  // The expense account row is present.
+  await expect(table).toContainText('PS Cost E2E');
+  // A NET (report-total) row is present -- the net-per-program line, marked report-total.
+  await expect(page.locator('table.report-table tr.report-total')).not.toHaveCount(0);
+  // The account cells are DRILL links (program×account drill).
+  await expect(page.locator('a.report-drill-link').first()).toBeVisible();
+
+  // --- pick the SINGLE program -> the subtree statement (Account | Currency | Amount) ---
+  await progSelect.selectOption({ label: 'PS Outreach E2E' });
+  await page.locator('form.report-params [name="from"]').fill('2025-01-01');
+  await page.locator('form.report-params [name="to"]').fill('2030-12-31');
+  await page.locator('form.report-params button[type="submit"]').click();
+  await page.waitForURL('**/reports/program_statement?**');
+
+  const single = page.locator('table.report-table');
+  await expect(single).toBeVisible();
+  // Exactly THREE columns in the single view (Account, Currency, Amount).
+  await expect(page.locator('table.report-table thead th')).toHaveCount(3);
+  await expect(single).toContainText('PS Cost E2E');
+  await expect(single).toContainText('Net');
+
+  // --- the CSV export link is present and the endpoint returns text/csv ---
+  await expect(page.locator('a.report-csv-link')).toBeVisible();
+  const csvHref = await page.locator('a.report-csv-link').getAttribute('href');
+  const resp = await page.request.get(csvHref);
+  expect(resp.status()).toBe(200);
+  expect(resp.headers()['content-type']).toContain('text/csv');
+  const body = await resp.text();
+  expect(body.split('\n')[0]).toContain(',');
 });

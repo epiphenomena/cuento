@@ -37,6 +37,7 @@ func Default() *Registry {
 	registerFunctionalExpenses(reg)
 	registerFundActivity(reg)
 	registerActivitiesByRestriction(reg)
+	registerProgramStatement(reg)
 	return reg
 }
 
