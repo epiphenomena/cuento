@@ -1,0 +1,132 @@
+{{/*
+  p11.1 chart-of-accounts create/edit form partial ("account-form"). SINGLE SOURCE
+  of the form region: the page renders the "New account" trigger inside
+  #account-form; GET /accounts/new and /accounts/{id}/edit swap THIS partial in
+  (hx-target #account-form, outerHTML), and a failed POST re-renders it at 422 --
+  so input ids stay stable across every swap (anti-jank, Appendix C). The dot is
+  always an accountForm.
+
+  hx-post targets /accounts (create) when .ID is 0, else /accounts/{id} (edit).
+  hx-target="#account-form" + hx-swap="outerHTML": the 422 error render lands in
+  place; a 2xx/3xx success is a server redirect to /accounts (htmx follows it),
+  reloading the tree. Field errors come from .Errors (formErrors): .Errors.ErrorKey
+  "field" is the i18n KEY (or "") rendered via {{t}} (rule 9); autofocus is stamped
+  on .Errors.FirstInvalid only. No inline script/style (strict CSP, rule 12).
+
+  Type-dependent regions: the functional-class select shows only for expense
+  accounts (.IsExpense), the default-program select only for revenue/expense
+  (.IsRE). Changing type re-fetches the form (hx-get on the type select) so those
+  regions and the filtered 990/parent options refresh; a full submit still
+  validates server-side (the store is the source of truth).
+*/ -}}
+{{define "account-form" -}}
+<form id="account-form" class="account-form"
+      hx-post="{{if .ID}}/accounts/{{.ID}}{{else}}/accounts{{end}}"
+      hx-target="#account-form" hx-swap="outerHTML">
+
+  <h2>{{if .ID}}{{t "accounts.form.edit_title"}}{{else}}{{t "accounts.form.new_title"}}{{end}}</h2>
+
+  <div class="field">
+    <label for="af-type">{{t "accounts.form.type"}}</label>
+    <select id="af-type" name="type"
+            hx-get="{{if .ID}}/accounts/{{.ID}}/edit{{else}}/accounts/new{{end}}"
+            hx-target="#account-form" hx-swap="outerHTML" hx-include="closest form">
+      {{range $t := (strs "asset" "liability" "equity" "revenue" "expense")}}
+      <option value="{{$t}}"{{if eq $t $.Type}} selected{{end}}>{{t (printf "account.type.%s" $t)}}</option>
+      {{end}}
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="af-name-en">{{t "accounts.form.name_en"}}</label>
+    <input id="af-name-en" name="name_en" type="text" value="{{.NameEN}}"
+      {{- if .Errors.ErrorKey "name_en"}} aria-invalid="true" aria-describedby="af-name-en-err"{{end}}
+      {{- if eq .Errors.FirstInvalid "name_en"}} autofocus{{end}}>
+    {{with .Errors.ErrorKey "name_en"}}<p id="af-name-en-err" class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+
+  <div class="field">
+    <label for="af-name-es">{{t "accounts.form.name_es"}}</label>
+    <input id="af-name-es" name="name_es" type="text" value="{{.NameES}}">
+  </div>
+
+  <div class="field">
+    <label for="af-parent">{{t "accounts.form.parent"}}</label>
+    <select id="af-parent" name="parent_id"
+      {{- if eq .Errors.FirstInvalid "parent_id"}} autofocus{{end}}>
+      <option value="0">{{t "accounts.form.no_parent"}}</option>
+      {{range .Parents}}<option value="{{.ID}}"{{if eq .ID $.ParentID}} selected{{end}}>{{.Name}}</option>
+      {{end}}
+    </select>
+    {{with .Errors.ErrorKey "parent_id"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+
+  <div class="field">
+    <label for="af-currency">{{t "accounts.form.currency"}}</label>
+    <select id="af-currency" name="currency">
+      {{range .Currencies}}<option value="{{.Code}}"{{if eq .Code $.Currency}} selected{{end}}>{{.Code}} — {{.Name}}</option>
+      {{end}}
+    </select>
+  </div>
+
+  <div class="field check">
+    <label><input type="checkbox" name="reconcilable" value="on"{{if .Reconcilable}} checked{{end}}> {{t "accounts.form.reconcilable"}}</label>
+  </div>
+  <div class="field check">
+    <label><input type="checkbox" name="intercompany" value="on"{{if .Intercompany}} checked{{end}}> {{t "accounts.form.intercompany"}}</label>
+  </div>
+
+  {{if .IsExpense}}
+  <div class="field">
+    <label for="af-func">{{t "accounts.form.functional_class"}}</label>
+    <select id="af-func" name="functional_class"
+      {{- if eq .Errors.FirstInvalid "functional_class"}} autofocus{{end}}>
+      <option value="">{{t "accounts.form.none"}}</option>
+      {{range $c := (strs "program" "management" "fundraising")}}
+      <option value="{{$c}}"{{if eq $c $.FunctionalClass}} selected{{end}}>{{t (printf "functional.%s" $c)}}</option>
+      {{end}}
+    </select>
+    {{with .Errors.ErrorKey "functional_class"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+  {{end}}
+
+  {{if .IsRE}}
+  <div class="field">
+    <label for="af-program">{{t "accounts.form.default_program"}}</label>
+    <select id="af-program" name="default_program"
+      {{- if eq .Errors.FirstInvalid "default_program"}} autofocus{{end}}>
+      <option value="0">{{t "accounts.form.none"}}</option>
+      {{range .Programs}}<option value="{{.ID}}"{{if eq .ID $.DefaultProgram}} selected{{end}}>{{.Name}}</option>
+      {{end}}
+    </select>
+    {{with .Errors.ErrorKey "default_program"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+  {{end}}
+
+  <div class="field">
+    <label for="af-990">{{t "accounts.form.form990_code"}}</label>
+    <select id="af-990" name="form990_code"
+      {{- if eq .Errors.FirstInvalid "form990_code"}} autofocus{{end}}>
+      <option value="">{{if .Form990Effective}}{{t "accounts.form.form990_inherited"}} {{.Form990Effective}}{{else}}{{t "accounts.form.none"}}{{end}}</option>
+      {{range .Lines}}<option value="{{.Code}}"{{if eq .Code $.Form990Code}} selected{{end}}>{{.Code}} — {{.Label}}</option>
+      {{end}}
+    </select>
+    {{with .Errors.ErrorKey "form990_code"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+
+  <fieldset class="subs-checklist"
+    {{- if eq .Errors.FirstInvalid "subs"}} autofocus tabindex="-1"{{end}}>
+    <legend>{{t "accounts.form.subsidiaries"}}</legend>
+    <p class="hint">{{t "accounts.form.subs_hint"}}</p>
+    {{range .Subs}}
+    <label class="check"><input type="checkbox" name="sub_{{.ID}}" value="{{.ID}}"{{if index $.CheckedSubs .ID}} checked{{end}}> {{.Name}}</label>
+    {{end}}
+    {{with .Errors.ErrorKey "subs"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  </fieldset>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">{{t "common.save"}}</button>
+    <a class="btn btn-ghost" href="/accounts">{{t "common.cancel"}}</a>
+  </div>
+</form>
+{{- end}}

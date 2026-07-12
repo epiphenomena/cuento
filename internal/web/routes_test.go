@@ -37,6 +37,19 @@ func newMatrixApp(t *testing.T) (http.Handler, []Route, *store.Store, *sql.DB, *
 	if err := SyncReportGroups(context.Background(), st); err != nil {
 		t.Fatalf("sync report groups: %v", err)
 	}
+	// Seed one account so that {id}-parameterized routes (p11.1's
+	// /accounts/{id}/edit, /accounts/{id}/deactivate; p12's register/history)
+	// resolve to a real resource when the reachability check substitutes {id} -> 1.
+	// Its id is not asserted; the routes only need SOME account to exist so an
+	// authorized persona reaches the handler rather than a legitimate 404.
+	seedCtx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	if _, err := st.CreateAccount(seedCtx, store.CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD",
+		Names: map[string]string{"en": "Seed"}, Subsidiaries: []int64{1},
+	}); err != nil {
+		t.Fatalf("seed account: %v", err)
+	}
+
 	app := NewApp(Config{Version: "test"}, db, st)
 	return app.handler, app.srv.routes(), st, db, app.sessions
 }

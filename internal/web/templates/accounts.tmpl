@@ -1,0 +1,80 @@
+{{/*
+  p11.1 chart of accounts page. Like the other shell pages it is a self-contained
+  top-level template that emits shell-open, its <main> content, then shell-close
+  (base.tmpl explains the split-partial frame). .Page is an accountsPageModel.
+
+  The tree table shows each account (indented by depth), its type, its per-currency
+  balances (already formatted through the money formatter honoring user settings,
+  rule 10), and TxnWrite actions (Edit / Deactivate). The subsidiary + active
+  filters are a plain GET form (JS-free; htmx boosts nav only). The inline
+  create/edit form is fetched into #account-form via htmx (GET /accounts/new or
+  /accounts/{id}/edit) and swapped in place -- reusing the p10.3 form-error
+  convention on a bad submit. Every string via {{t}} (rule 9); no inline script
+  (rule 12).
+*/ -}}
+{{define "accounts.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "accounts.title"))}}
+  {{- with .Page}}
+  <h1>{{t "accounts.title"}}</h1>
+
+  <form class="filters" method="get" action="/accounts">
+    <label for="sub-filter">{{t "accounts.filter.subsidiary"}}</label>
+    <select id="sub-filter" name="sub">
+      <option value="0">{{t "accounts.filter.all_subsidiaries"}}</option>
+      {{range .Subs}}<option value="{{.ID}}"{{if eq .ID $.Page.SubFilter}} selected{{end}}>{{.Name}}</option>
+      {{end}}
+    </select>
+    <label class="check">
+      <input type="checkbox" name="active" value="1"{{if .ActiveOnly}} checked{{end}}>
+      {{t "accounts.filter.active_only"}}
+    </label>
+    <button type="submit" class="btn">{{t "accounts.filter.apply"}}</button>
+  </form>
+
+  <p class="asof">{{t "accounts.balances_as_of"}} {{.AsOf}}</p>
+
+  <div id="account-form" class="account-form-region">
+    {{/* The inline form fetches here. Initially a single "New account" trigger. */}}
+    <button type="button" class="btn btn-primary"
+            hx-get="/accounts/new" hx-target="#account-form" hx-swap="outerHTML">
+      {{t "accounts.new"}}
+    </button>
+  </div>
+
+  <table class="tree-table">
+    <thead>
+      <tr>
+        <th>{{t "accounts.col.name"}}</th>
+        <th>{{t "accounts.col.type"}}</th>
+        <th>{{t "accounts.col.balances"}}</th>
+        <th>{{t "accounts.col.actions"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="acct-row{{if not .Active}} acct-inactive{{end}}" data-depth="{{.Depth}}">
+        <td class="acct-name acct-depth-{{.Depth}}">{{.Name}}{{if not .Active}} <span class="badge">{{t "accounts.inactive"}}</span>{{end}}</td>
+        <td>{{t (printf "account.type.%s" .Type)}}</td>
+        <td class="acct-balances">
+          {{range .Balances}}<span class="bal">{{.}}</span> {{end}}
+        </td>
+        <td class="acct-actions">
+          <button type="button" class="btn btn-ghost"
+                  hx-get="/accounts/{{.ID}}/edit" hx-target="#account-form" hx-swap="outerHTML">
+            {{t "common.edit"}}
+          </button>
+          {{if .Active}}
+          <form method="post" action="/accounts/{{.ID}}/deactivate" class="inline">
+            <button type="submit" class="btn btn-ghost">{{t "accounts.deactivate"}}</button>
+          </form>
+          {{end}}
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="4">{{t "accounts.empty"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

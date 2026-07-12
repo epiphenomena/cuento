@@ -168,6 +168,16 @@ SELECT code, part, line, label, account_types, sort
 FROM form990_lines
 WHERE code = ?;
 
+-- name: ListForm990Lines :many
+-- Every 990 line in report order (part, then line by sort). The chart-of-accounts
+-- form (p11.1) offers, for an account of a given type, only the lines whose
+-- account_types CSV includes that type; the CSV-membership filter runs in Go
+-- (Form990LinesForType) reusing the same predicate as check990Type, so this query
+-- stays a simple ordered fetch of the small static reference set (D25).
+SELECT code, part, line, label, account_types, sort
+FROM form990_lines
+ORDER BY sort, code;
+
 -- name: AccountTree :many
 -- All accounts in DEPTH-FIRST (pre-order) order, resolving each account's name via
 -- the fallback chain requested-lang -> en -> any (p05.3). Multiple roots are

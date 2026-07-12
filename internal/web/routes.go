@@ -141,6 +141,17 @@ func (s *server) routes() []Route {
 		// in p11.3/p13.2/p18.3; this stub is the section index they hang off. See
 		// DECISIONS p10.2.
 		{http.MethodGet, "/admin", Admin, http.HandlerFunc(s.adminStub)},
+		// p11.1 chart of accounts (Appendix B/F). GET is TxnRead (the tree table +
+		// balances + filters + the inline form fetches); the POST mutations are
+		// TxnWrite. The nav.accounts entry (shell.go) lights up now that GET
+		// /accounts is registered. The permission-matrix test picks these up
+		// automatically (rule 8).
+		{http.MethodGet, "/accounts", TxnRead, http.HandlerFunc(s.accountsPage)},
+		{http.MethodGet, "/accounts/new", TxnWrite, http.HandlerFunc(s.accountNewForm)},
+		{http.MethodGet, "/accounts/{id}/edit", TxnWrite, http.HandlerFunc(s.accountEditForm)},
+		{http.MethodPost, "/accounts", TxnWrite, http.HandlerFunc(s.accountCreate)},
+		{http.MethodPost, "/accounts/{id}", TxnWrite, http.HandlerFunc(s.accountUpdate)},
+		{http.MethodPost, "/accounts/{id}/deactivate", TxnWrite, http.HandlerFunc(s.accountDeactivate)},
 	}
 	// The -dev-only styleguide (Appendix F): a component gallery for visual review.
 	// Registered ONLY in -dev so it 404s in production (it is not in the registry

@@ -32,6 +32,7 @@ func mustParseTemplates() *template.Template {
 		"t":          func(key string, _ ...any) string { return key },
 		"asset":      func(name string) string { return name },
 		"shellTitle": shellTitle,
+		"strs":       strs,
 	}
 	t, err := template.New("").Funcs(stub).ParseFS(templatesFS, "templates/*.tmpl")
 	if err != nil {
@@ -61,6 +62,7 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name
 		"t":          func(key string, args ...any) string { return i18n.T(lang, key, args...) },
 		"asset":      s.assetURL, // hashed URL in prod, unhashed in -dev (p10.1)
 		"shellTitle": shellTitle, // pairs a shellPage with a localized head title
+		"strs":       strs,       // literal []string for ranging over static enums
 	})
 
 	// Render into a buffer first so a template error becomes a clean 500 rather
@@ -77,3 +79,9 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name
 	w.WriteHeader(status)
 	_, _ = w.Write(buf.Bytes())
 }
+
+// strs is the `strs` template func: it returns its arguments as a []string so a
+// template can range over a static enum (e.g. the account types, functional
+// classes) without the value list living in the page model. Pure and tiny; used
+// by account_form.tmpl.
+func strs(items ...string) []string { return items }

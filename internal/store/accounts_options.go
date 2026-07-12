@@ -1,0 +1,130 @@
+package store
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"cuento/internal/db/sqlc"
+)
+
+// This file holds the READ-ONLY option/lookup queries the chart-of-accounts form
+// (p11.1) needs. They live in the store (rule 2 permits reads via sqlc queries)
+// so the web handler never reasons about tree types, cycles, or the 990 CSV
+// itself -- it just renders what the store returns, and the same predicates that
+// the write path enforces (typeCompatible, the check990Type CSV membership) are
+// reused here so the offered options and the accepted writes can never disagree.
+
+// Form990Option is a 990 line offered in the form's select: its code, a
+// human-facing label (part.line -- label, assembled by the caller if desired) and
+// the raw fields the template shows. Only lines valid for the account's type are
+// returned (D25).
+type Form990Option struct {
+	Code  string
+	Part  string
+	Line  string
+	Label string
+}
+
+// Form990LinesForType returns the 990 lines whose allowed account_types CSV
+// includes accountType (D25), in report order. It reuses the SAME CSV-membership
+// rule as check990Type (the write-side validator), so the select never offers a
+// code the store would reject with Err990TypeMismatch. An empty accountType
+// returns no lines (a not-yet-typed form offers nothing).
+func (s *Store) Form990LinesForType(ctx context.Context, accountType string) ([]Form990Option, error) {
+	if accountType == "" {
+		return nil, nil
+	}
+	lines, err := s.q.ListForm990Lines(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("store: list 990 lines: %w", err)
+	}
+	var out []Form990Option
+	for _, l := range lines {
+		if csvContains(l.AccountTypes, accountType) {
+			out = append(out, Form990Option{Code: l.Code, Part: l.Part, Line: l.Line, Label: l.Label})
+		}
+	}
+	return out, nil
+}
+
+// csvContains reports whether csv (comma-separated, possibly space-padded)
+// contains want. Extracted so Form990LinesForType and check990Type share one
+// membership rule (the write path splits inline; this is the same test).
+func csvContains(csv, want string) bool {
+	for _, part := range strings.Split(csv, ",") {
+		if strings.TrimSpace(part) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// ParentOption is a candidate parent account for the form's move/parent select:
+// its id and resolved name plus its type (so the template can group/label). Only
+// type-compatible, non-self, non-descendant accounts appear.
+type ParentOption struct {
+	ID   int64
+	Name string
+	Type string
+}
+
+// ParentOptions returns the accounts eligible to be the parent of an account of
+// accountType, name-resolved for lang, in tree order. It EXCLUDES:
+//   - the account itself and all its descendants (excludeID; a move there would
+//     make the account its own ancestor -- ErrCycle), and
+//   - any account whose type cannot host a child of accountType (D11), reusing
+//     typeCompatible so the offered set matches exactly what UpdateAccount accepts.
+//
+// excludeID <= 0 means "new account, nothing to exclude" (create form): only the
+// type filter applies. The result never includes leaf-vs-placeholder distinctions
+// -- any type-compatible account may be a parent (it simply stops being a leaf).
+func (s *Store) ParentOptions(ctx context.Context, lang, accountType string, excludeID int64) ([]ParentOption, error) {
+	rows, err := s.q.AccountTree(ctx, lang)
+	if err != nil {
+		return nil, fmt.Errorf("store: parent options tree: %w", err)
+	}
+
+	excluded := map[int64]bool{}
+	if excludeID > 0 {
+		desc, err := s.q.AccountDescendants(ctx, excludeID)
+		if err != nil {
+			return nil, fmt.Errorf("store: parent options descendants of %d: %w", excludeID, err)
+		}
+		for _, id := range desc { // AccountDescendants includes self
+			excluded[id] = true
+		}
+	}
+
+	var out []ParentOption
+	for _, r := range rows {
+		if excluded[r.ID] {
+			continue
+		}
+		if !typeCompatible(r.Type, accountType) {
+			continue
+		}
+		out = append(out, ParentOption{ID: r.ID, Name: r.Name, Type: r.Type})
+	}
+	return out, nil
+}
+
+// AccountSubsidiaryIDs returns the subsidiary ids currently mapped to an account,
+// so the form's subsidiary checklist can pre-check the account's memberships. It
+// wraps the AccountSubsidiaries query directly (read; no ordering guarantee is
+// needed -- the caller builds a set).
+func (s *Store) AccountSubsidiaryIDs(ctx context.Context, id int64) ([]int64, error) {
+	ids, err := s.q.AccountSubsidiaries(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("store: account %d subsidiaries: %w", id, err)
+	}
+	return ids, nil
+}
+
+// AllSubsidiaries returns every subsidiary in tree order for the form's
+// subsidiary checklist (the full option set; the account's own memberships come
+// from AccountSubsidiaryIDs). A thin wrapper over SubTree so the handler need not
+// import sqlc types beyond what the store exposes.
+func (s *Store) AllSubsidiaries(ctx context.Context) ([]sqlc.SubTreeRow, error) {
+	return s.SubTree(ctx)
+}

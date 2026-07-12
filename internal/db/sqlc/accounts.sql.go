@@ -603,6 +603,47 @@ func (q *Queries) InsertAccountVersion(ctx context.Context, arg InsertAccountVer
 	return err
 }
 
+const listForm990Lines = `-- name: ListForm990Lines :many
+SELECT code, part, line, label, account_types, sort
+FROM form990_lines
+ORDER BY sort, code
+`
+
+// Every 990 line in report order (part, then line by sort). The chart-of-accounts
+// form (p11.1) offers, for an account of a given type, only the lines whose
+// account_types CSV includes that type; the CSV-membership filter runs in Go
+// (Form990LinesForType) reusing the same predicate as check990Type, so this query
+// stays a simple ordered fetch of the small static reference set (D25).
+func (q *Queries) ListForm990Lines(ctx context.Context) ([]Form990Line, error) {
+	rows, err := q.db.QueryContext(ctx, listForm990Lines)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Form990Line
+	for rows.Next() {
+		var i Form990Line
+		if err := rows.Scan(
+			&i.Code,
+			&i.Part,
+			&i.Line,
+			&i.Label,
+			&i.AccountTypes,
+			&i.Sort,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateAccount = `-- name: UpdateAccount :exec
 UPDATE accounts
 SET parent_id = ?, type = ?, default_currency = ?, functional_class = ?,

@@ -167,6 +167,14 @@ type CurrentUser struct {
 	IsAdmin  bool
 	Locale   string
 	Theme    string
+	// Money/date display settings (p11.1): carried so every render path can honor
+	// per-user formatting (rule 10) without a second query. Raw column strings
+	// (DB defaults US/signed/minus/ISO for an untouched session); the web layer
+	// maps them to money.FormatOpts / money.DateFormat.
+	DateFormat   string
+	NumberFormat string
+	DisplayMode  string
+	NegStyle     string
 }
 
 // CredentialsByUsername returns the login credentials for username. A username
@@ -197,13 +205,17 @@ func (s *Store) UserByID(ctx context.Context, id int64) (CurrentUser, error) {
 		return CurrentUser{}, err
 	}
 	return CurrentUser{
-		ID:       row.ID,
-		Username: row.Username,
-		Disabled: row.DisabledAt.Valid,
-		TxnPerm:  row.TxnPerm,
-		IsAdmin:  row.IsAdmin != 0,
-		Locale:   row.Locale,
-		Theme:    row.Theme,
+		ID:           row.ID,
+		Username:     row.Username,
+		Disabled:     row.DisabledAt.Valid,
+		TxnPerm:      row.TxnPerm,
+		IsAdmin:      row.IsAdmin != 0,
+		Locale:       row.Locale,
+		Theme:        row.Theme,
+		DateFormat:   row.DateFormat,
+		NumberFormat: row.NumberFormat,
+		DisplayMode:  row.DisplayMode,
+		NegStyle:     row.NegStyle,
 	}, nil
 }
 

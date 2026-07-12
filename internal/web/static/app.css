@@ -239,3 +239,40 @@ input[aria-invalid="true"] {
   box-shadow: var(--shadow);
 }
 .login-card .btn-primary { width: 100%; }
+
+/* p11.1 chart of accounts. Tree-table indentation is expressed as depth classes
+   (no inline style attribute -- strict CSP style-src 'self', rule 12). A handful
+   of levels covers a realistic chart; deeper accounts simply stop indenting. */
+.tree-table { width: 100%; border-collapse: collapse; margin-top: var(--space-4); }
+.tree-table th, .tree-table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border);
+  vertical-align: top;
+}
+.tree-table .acct-balances { font-variant-numeric: tabular-nums; }
+.tree-table .acct-inactive { opacity: 0.6; }
+.acct-depth-0 { padding-left: var(--space-3); }
+.acct-depth-1 { padding-left: calc(var(--space-3) + 1.5rem); }
+.acct-depth-2 { padding-left: calc(var(--space-3) + 3rem); }
+.acct-depth-3 { padding-left: calc(var(--space-3) + 4.5rem); }
+.acct-depth-4 { padding-left: calc(var(--space-3) + 6rem); }
+.acct-depth-5 { padding-left: calc(var(--space-3) + 7.5rem); }
+.acct-actions .inline { display: inline; }
+.acct-balances .bal { display: inline-block; margin-right: var(--space-3); }
+.badge {
+  font-size: 0.75em;
+  padding: 0 var(--space-2);
+  border: var(--border);
+  border-radius: var(--radius);
+  color: var(--color-muted, inherit);
+}
+
+/* The inline create/edit form region. */
+.account-form-region { margin: var(--space-4) 0; }
+.account-form { max-width: 40rem; }
+.account-form .field { margin-bottom: var(--space-3); }
+.account-form .subs-checklist { margin: var(--space-3) 0; padding: var(--space-3); border: var(--border); border-radius: var(--radius); }
+.account-form .hint { font-size: 0.85em; color: var(--color-muted, inherit); margin: 0 0 var(--space-2); }
+.filters { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; margin-bottom: var(--space-3); }
+.filters .check { display: inline-flex; gap: var(--space-2); align-items: center; }

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"cuento/internal/db/sqlc"
@@ -605,10 +604,8 @@ func check990Type(ctx context.Context, q *sqlc.Queries, code, accountType string
 		}
 		return fmt.Errorf("load 990 line %s: %w", code, err)
 	}
-	for _, allowed := range strings.Split(line.AccountTypes, ",") {
-		if strings.TrimSpace(allowed) == accountType {
-			return nil
-		}
+	if csvContains(line.AccountTypes, accountType) {
+		return nil
 	}
 	return Err990TypeMismatch
 }

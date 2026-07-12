@@ -55,10 +55,14 @@ WHERE username = ?;
 
 -- name: UserByID :one
 -- Session-resolution lookup (p06.2): the middleware turns a stored user id back
--- into the current identity + its UI language on every authenticated request.
--- Kept separate from GetUser (whose projection is pinned by
+-- into the current identity + its UI language and money-display settings on every
+-- authenticated request. Kept separate from GetUser (whose projection is pinned by
 -- sqlc/users_changes_test.go, p06.1) so this step touches no existing query.
-SELECT id, username, disabled_at, txn_perm, is_admin, locale, theme
+-- p11.1 extends the projection with the four money/date format columns so every
+-- render path can honor per-user settings (rule 10) without a second query; their
+-- DB defaults (US/signed/minus/ISO) apply for a session that never changed them.
+SELECT id, username, disabled_at, txn_perm, is_admin, locale, theme,
+       date_format, number_format, display_mode, neg_style
 FROM users
 WHERE id = ?;
 
