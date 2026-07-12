@@ -74,7 +74,10 @@
 {{template "shell-open" (shellTitle . (t "register.title"))}}
   {{- with .Page}}
   <h1>{{t "register.title"}}: {{.AccountName}}</h1>
-  <p><a href="/accounts">{{t "register.back_to_accounts"}}</a></p>
+  <p><a href="/accounts">{{t "register.back_to_accounts"}}</a>
+     {{/* p12.2: open the transaction editor for a new entry (the register is the
+          everyday landing for data entry, W3). Edit links live per-row in p12.4. */}}
+     · <a href="/transactions/new" class="btn btn-primary">{{t "register.new_txn"}}</a></p>
 
   <form class="filters" method="get" action="/accounts/{{.AccountID}}/register">
     <label for="reg-from">{{t "register.filter.from"}}</label>

@@ -175,6 +175,9 @@ type CurrentUser struct {
 	NumberFormat string
 	DisplayMode  string
 	NegStyle     string
+	// DefaultSubsidiaryID is the user's preferred subsidiary for new transactions
+	// (p12.2); nil = unset, so the editor falls back to the sole/root subsidiary.
+	DefaultSubsidiaryID *int64
 }
 
 // CredentialsByUsername returns the login credentials for username. A username
@@ -204,7 +207,7 @@ func (s *Store) UserByID(ctx context.Context, id int64) (CurrentUser, error) {
 	if err != nil {
 		return CurrentUser{}, err
 	}
-	return CurrentUser{
+	cu := CurrentUser{
 		ID:           row.ID,
 		Username:     row.Username,
 		Disabled:     row.DisabledAt.Valid,
@@ -216,7 +219,12 @@ func (s *Store) UserByID(ctx context.Context, id int64) (CurrentUser, error) {
 		NumberFormat: row.NumberFormat,
 		DisplayMode:  row.DisplayMode,
 		NegStyle:     row.NegStyle,
-	}, nil
+	}
+	if row.DefaultSubsidiaryID.Valid {
+		v := row.DefaultSubsidiaryID.Int64
+		cu.DefaultSubsidiaryID = &v
+	}
+	return cu, nil
 }
 
 // ErrInvalidTheme is returned by SetUserTheme when the requested theme is not one

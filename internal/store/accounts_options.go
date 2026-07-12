@@ -153,6 +153,79 @@ func (s *Store) ListFunds(ctx context.Context) ([]sqlc.Fund, error) {
 	return rows, nil
 }
 
+// AccountEditorOption is one selectable account in the transaction editor's account
+// combobox (p12.2): a LEAF, ACTIVE account mapped to the editor's subsidiary, with
+// the metadata the editor's row logic needs -- Type (to show the program select on
+// R/E rows and the functional-class select on expense rows) and the account's
+// DEFAULTS (default program id, default functional class) so the client can prefill
+// those selects (the server re-defaults authoritatively, D21/D24). SubsidiaryIDs is
+// the account's full subsidiary set, stamped as data-subsidiaries so the client's
+// pure re-filter (txngrid.js) can flag rows that go out of scope when the header
+// subsidiary changes (Appendix C: never silent-clear).
+type AccountEditorOption struct {
+	ID             int64
+	Name           string
+	Type           string
+	DefaultProgram *int64
+	DefaultClass   string // "" = none
+	SubsidiaryIDs  []int64
+}
+
+// AccountEditorOptions returns the leaf+active accounts mapped to subID, in tree
+// order, name-resolved for lang, with the per-account metadata the editor needs. It
+// mirrors the store's own write-side account rules (leaf via the full tree's parent
+// set, active via the row) so the offered options can never disagree with what
+// PostTransaction accepts. The chart is small; per-account metadata is read once.
+func (s *Store) AccountEditorOptions(ctx context.Context, lang string, subID int64) ([]AccountEditorOption, error) {
+	// Full tree (unfiltered) -> which ids are placeholders (have children).
+	full, err := s.Tree(ctx, lang, nil)
+	if err != nil {
+		return nil, err
+	}
+	hasChild := make(map[int64]bool, len(full))
+	for _, r := range full {
+		if r.ParentID.Valid {
+			hasChild[r.ParentID.Int64] = true
+		}
+	}
+
+	// Sub-filtered tree -> the candidate accounts in tree order.
+	inSub, err := s.Tree(ctx, lang, &subID)
+	if err != nil {
+		return nil, err
+	}
+
+	var out []AccountEditorOption
+	for _, r := range inSub {
+		if hasChild[r.ID] || r.Active == 0 {
+			continue // placeholders and inactive accounts are not selectable
+		}
+		acct, err := s.GetAccount(ctx, r.ID)
+		if err != nil {
+			return nil, err
+		}
+		subs, err := s.AccountSubsidiaryIDs(ctx, r.ID)
+		if err != nil {
+			return nil, err
+		}
+		opt := AccountEditorOption{
+			ID:            r.ID,
+			Name:          r.Name,
+			Type:          r.Type,
+			SubsidiaryIDs: subs,
+		}
+		if acct.DefaultProgramID.Valid {
+			v := acct.DefaultProgramID.Int64
+			opt.DefaultProgram = &v
+		}
+		if acct.FunctionalClass.Valid {
+			opt.DefaultClass = acct.FunctionalClass.String
+		}
+		out = append(out, opt)
+	}
+	return out, nil
+}
+
 // TransactionSplits returns the live split set of one transaction in display
 // order. The register (p12.1) uses it to resolve a row's COUNTER-ACCOUNT: for a
 // 2-split transaction the other split's account is the counter-account; for >2 the

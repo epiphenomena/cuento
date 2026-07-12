@@ -1,0 +1,110 @@
+// @ts-check
+// Functional test of the REAL transaction editor (p12.2). It drives the actual
+// /transactions/new grid served by `cuento serve -dev` against a fresh migrated db
+// with a seeded admin (is_admin -> TxnWrite). It logs in, creates two asset accounts
+// through the inline chart-of-accounts form, opens the editor from an account
+// register, enters a balanced 2-split transfer through the real grid (account
+// comboboxes, signed amounts, fund selects), saves, and asserts the entry posted and
+// appears in the destination account's register. The keyboard-only pass is p12.6.
+// Selectors come from transaction_form.tmpl / register.tmpl / accounts.tmpl.
+
+const { test, expect } = require('../fixtures');
+
+async function login(page, server) {
+  await page.goto('/login');
+  await page.locator('#username').fill(server.username);
+  await page.locator('#password').fill(server.password);
+  await page.getByRole('button', { name: /.+/ }).click();
+  await page.waitForURL('**/');
+}
+
+// createAsset makes a leaf asset account mapped to the root subsidiary and returns
+// nothing (the account is found later by name). Mirrors register.spec's flow.
+async function createAsset(page, name) {
+  await page.goto('/accounts');
+  await page.getByRole('button', { name: /new account/i }).click();
+  await page.locator('#af-name-en').fill(name);
+  await page.locator('#af-type').selectOption('asset');
+  const rootSub = page.locator('input[name="sub_1"]');
+  if (!(await rootSub.isChecked())) {
+    await rootSub.check();
+  }
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL('**/accounts');
+  await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
+}
+
+test.describe('transaction editor', () => {
+  test('enters a balanced 2-split transaction and it appears in the register', async ({ page, server }) => {
+    await login(page, server);
+
+    // Two leaf asset accounts to move money between.
+    await createAsset(page, 'Editor Checking');
+    await createAsset(page, 'Editor Savings');
+
+    // Open the editor from Editor Checking's register (the everyday entry point).
+    const row = page.locator('tr.acct-row', { hasText: 'Editor Checking' });
+    await row.getByRole('link', { name: /^register$/i }).click();
+    await page.waitForURL('**/register');
+    await page.getByRole('link', { name: /new transaction/i }).click();
+    await page.waitForURL('**/transactions/new');
+
+    // The grid renders with its header and two starter rows (stable ids).
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await expect(page.locator('#txn-account-0')).toBeVisible();
+    await expect(page.locator('#txn-account-1')).toBeVisible();
+
+    // Fill a balanced transfer: DR Editor Savings 25.00, CR Editor Checking 25.00.
+    // The account combobox is a real <select> (ARIA listbox enhancement is progressive
+    // -- selectOption drives the underlying control). Amounts are the SIGNED column
+    // (signed display mode; the admin's default).
+    await page.locator('#txn-account-0').selectOption({ label: 'Editor Savings' });
+    await page.locator('#txn-amount-0').fill('25.00');
+    await page.locator('#txn-account-1').selectOption({ label: 'Editor Checking' });
+    await page.locator('#txn-amount-1').fill('-25.00');
+
+    // Save (a plain submit; success redirects to the first split's register).
+    await page.getByRole('button', { name: /^save$/i }).click();
+
+    // We land on a register; the transfer is posted. Navigate to Editor Savings'
+    // register and assert a row with the 25.00 amount is present (the entry exists).
+    await page.waitForURL('**/register**');
+    await expect(page.locator('table.register-table')).toBeVisible();
+
+    // The saved amount appears somewhere in the register table.
+    await expect(page.locator('table.register-table')).toContainText('25.00');
+  });
+
+  test('shows the program/class selects only on R/E rows, prefilled from the account default', async ({ page, server }) => {
+    await login(page, server);
+
+    // A checking account, then an expense account with a default functional class
+    // (Management & general).
+    await createAsset(page, 'Editor Bank');
+    await page.goto('/accounts');
+    await page.getByRole('button', { name: /new account/i }).click();
+    await page.locator('#af-name-en').fill('Editor Rent');
+    await page.locator('#af-type').selectOption('expense');
+    const rootSub = page.locator('input[name="sub_1"]');
+    if (!(await rootSub.isChecked())) await rootSub.check();
+    // The functional-class default select is revealed for expense accounts.
+    await page.locator('#af-func').selectOption('management');
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL('**/accounts');
+    await expect(page.locator('tr.acct-row', { hasText: 'Editor Rent' })).toBeVisible();
+
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+
+    // Row 0: pick the ASSET account -> program + class selects stay hidden.
+    await page.locator('#txn-account-0').selectOption({ label: 'Editor Bank' });
+    await expect(page.locator('#txn-class-0')).toBeHidden();
+
+    // Row 1: pick the EXPENSE account -> the class select becomes visible and is
+    // prefilled from the account's default (management); the program select shows.
+    await page.locator('#txn-account-1').selectOption({ label: 'Editor Rent' });
+    await expect(page.locator('#txn-class-1')).toBeVisible();
+    await expect(page.locator('#txn-class-1')).toHaveValue('management');
+    await expect(page.locator('#txn-program-1')).toBeVisible();
+  });
+});

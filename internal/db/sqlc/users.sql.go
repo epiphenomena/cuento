@@ -189,23 +189,25 @@ func (q *Queries) SetUserTheme(ctx context.Context, arg SetUserThemeParams) erro
 
 const userByID = `-- name: UserByID :one
 SELECT id, username, disabled_at, txn_perm, is_admin, locale, theme,
-       date_format, number_format, display_mode, neg_style
+       date_format, number_format, display_mode, neg_style,
+       default_subsidiary_id
 FROM users
 WHERE id = ?
 `
 
 type UserByIDRow struct {
-	ID           int64
-	Username     string
-	DisabledAt   sql.NullString
-	TxnPerm      string
-	IsAdmin      int64
-	Locale       string
-	Theme        string
-	DateFormat   string
-	NumberFormat string
-	DisplayMode  string
-	NegStyle     string
+	ID                  int64
+	Username            string
+	DisabledAt          sql.NullString
+	TxnPerm             string
+	IsAdmin             int64
+	Locale              string
+	Theme               string
+	DateFormat          string
+	NumberFormat        string
+	DisplayMode         string
+	NegStyle            string
+	DefaultSubsidiaryID sql.NullInt64
 }
 
 // Session-resolution lookup (p06.2): the middleware turns a stored user id back
@@ -215,6 +217,9 @@ type UserByIDRow struct {
 // p11.1 extends the projection with the four money/date format columns so every
 // render path can honor per-user settings (rule 10) without a second query; their
 // DB defaults (US/signed/minus/ISO) apply for a session that never changed them.
+// p12.2 adds default_subsidiary_id (nullable): the transaction editor defaults its
+// header subsidiary to the user's setting, else the sole/root sub -- resolved here
+// so the editor needs no second query.
 func (q *Queries) UserByID(ctx context.Context, id int64) (UserByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, userByID, id)
 	var i UserByIDRow
@@ -230,6 +235,7 @@ func (q *Queries) UserByID(ctx context.Context, id int64) (UserByIDRow, error) {
 		&i.NumberFormat,
 		&i.DisplayMode,
 		&i.NegStyle,
+		&i.DefaultSubsidiaryID,
 	)
 	return i, err
 }

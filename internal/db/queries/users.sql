@@ -61,8 +61,12 @@ WHERE username = ?;
 -- p11.1 extends the projection with the four money/date format columns so every
 -- render path can honor per-user settings (rule 10) without a second query; their
 -- DB defaults (US/signed/minus/ISO) apply for a session that never changed them.
+-- p12.2 adds default_subsidiary_id (nullable): the transaction editor defaults its
+-- header subsidiary to the user's setting, else the sole/root sub -- resolved here
+-- so the editor needs no second query.
 SELECT id, username, disabled_at, txn_perm, is_admin, locale, theme,
-       date_format, number_format, display_mode, neg_style
+       date_format, number_format, display_mode, neg_style,
+       default_subsidiary_id
 FROM users
 WHERE id = ?;
 

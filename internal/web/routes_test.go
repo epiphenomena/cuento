@@ -43,11 +43,31 @@ func newMatrixApp(t *testing.T) (http.Handler, []Route, *store.Store, *sql.DB, *
 	// Its id is not asserted; the routes only need SOME account to exist so an
 	// authorized persona reaches the handler rather than a legitimate 404.
 	seedCtx := store.WithActor(context.Background(), store.Actor{ID: 1})
-	if _, err := st.CreateAccount(seedCtx, store.CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Seed"}, Subsidiaries: []int64{1},
+	seedAcct := func(name string) int64 {
+		id, err := st.CreateAccount(seedCtx, store.CreateAccountInput{
+			Type: "asset", DefaultCurrency: "USD",
+			Names: map[string]string{"en": name}, Subsidiaries: []int64{1},
+		})
+		if err != nil {
+			t.Fatalf("seed account %s: %v", name, err)
+		}
+		return id
+	}
+	a1 := seedAcct("Seed")
+	a2 := seedAcct("Seed 2")
+
+	// Seed one transaction so p12.2's /transactions/{id}/edit resolves to a real
+	// resource when the reachability check substitutes {id} -> 1 (a balanced 2-split
+	// transfer between the two seed accounts). Its id is not asserted; the route only
+	// needs SOME transaction to exist so an authorized persona reaches the handler.
+	if _, err := st.PostTransaction(seedCtx, store.PostTransactionInput{
+		Date: "2025-01-01", SubsidiaryID: 1, Currency: "USD",
+		Splits: []store.SplitInput{
+			{AccountID: a1, Amount: 1000, Position: 0},
+			{AccountID: a2, Amount: -1000, Position: 1},
+		},
 	}); err != nil {
-		t.Fatalf("seed account: %v", err)
+		t.Fatalf("seed transaction: %v", err)
 	}
 
 	app := NewApp(Config{Version: "test"}, db, st)

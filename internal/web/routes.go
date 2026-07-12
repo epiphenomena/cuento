@@ -202,6 +202,20 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/programs", TxnWrite, http.HandlerFunc(s.programCreate)},
 		{http.MethodPost, "/programs/{id}", TxnWrite, http.HandlerFunc(s.programUpdate)},
 		{http.MethodPost, "/programs/{id}/deactivate", TxnWrite, http.HandlerFunc(s.programDeactivate)},
+		// p12.2 transaction editor (Appendix B/F). The daily-use data-entry grid. All
+		// four routes are TxnWrite (the editor both READS to prefill and WRITES on
+		// save; per Appendix B the POST /transactions... family is TxnWrite, and the
+		// GET editor forms are write-gated because they exist only to author an entry).
+		// GET /transactions/new renders a blank grid; GET /transactions/{id}/edit
+		// prefills an existing txn; POST /transactions creates; POST /transactions/{id}
+		// updates (round-tripping split ids, trap 1). The literal ".../new" is more
+		// specific than ".../{id}/edit", so the Go 1.22+ mux routes them precisely. The
+		// permission-matrix test picks these up automatically (rule 8); the register
+		// (p12.1) links "new/edit txn" here.
+		{http.MethodGet, "/transactions/new", TxnWrite, http.HandlerFunc(s.txnNewForm)},
+		{http.MethodGet, "/transactions/{id}/edit", TxnWrite, http.HandlerFunc(s.txnEditForm)},
+		{http.MethodPost, "/transactions", TxnWrite, http.HandlerFunc(s.txnCreate)},
+		{http.MethodPost, "/transactions/{id}", TxnWrite, http.HandlerFunc(s.txnUpdate)},
 	}
 	// The -dev-only styleguide (Appendix F): a component gallery for visual review.
 	// Registered ONLY in -dev so it 404s in production (it is not in the registry

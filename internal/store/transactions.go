@@ -302,6 +302,25 @@ func (s *Store) CreatePayee(ctx context.Context, name string) (int64, error) {
 	return newID, nil
 }
 
+// GetTransaction returns the current LIVE header of one transaction (read; sqlc).
+// The transaction editor (p12.2) loads this plus TransactionSplits to prefill the
+// edit form; a soft-deleted or missing transaction returns ErrTransactionNotFound so
+// the handler can 404. Unlike TransactionAsOf this is the denormalized latest state,
+// which is what the editor edits.
+func (s *Store) GetTransaction(ctx context.Context, id int64) (sqlc.Transaction, error) {
+	row, err := s.q.GetTransaction(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return sqlc.Transaction{}, ErrTransactionNotFound
+		}
+		return sqlc.Transaction{}, fmt.Errorf("store: get transaction %d: %w", id, err)
+	}
+	if row.Deleted != 0 {
+		return sqlc.Transaction{}, ErrTransactionNotFound
+	}
+	return row, nil
+}
+
 // TransactionState is a transaction reconstructed as of a time (D4/D5): the header
 // plus its split set. Present is false when the txn did not exist (or was deleted)
 // at that time.

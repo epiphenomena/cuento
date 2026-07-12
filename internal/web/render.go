@@ -29,14 +29,16 @@ func mustParseTemplates() *template.Template {
 	// only so parsing type-checks a template calling {{t}} or {{asset}}; neither
 	// stub actually runs.
 	stub := template.FuncMap{
-		"t":          func(key string, _ ...any) string { return key },
-		"tn":         func(key string, _ int, _ ...any) string { return key },
-		"asset":      func(name string) string { return name },
-		"shellTitle": shellTitle,
-		"strs":       strs,
-		"regRowCtx":  makeRegRowCtx, // p12.1 register: pair a row with the page-level column gates
-		"regColspan": regColspan,    // p12.1 register: full-width colspan for empty/sentinel cells
-		"regMoreURL": regMoreURL,    // p12.1 register: the sentinel's next-page hx-get URL
+		"t":           func(key string, _ ...any) string { return key },
+		"tn":          func(key string, _ int, _ ...any) string { return key },
+		"asset":       func(name string) string { return name },
+		"shellTitle":  shellTitle,
+		"strs":        strs,
+		"regRowCtx":   makeRegRowCtx, // p12.1 register: pair a row with the page-level column gates
+		"regColspan":  regColspan,    // p12.1 register: full-width colspan for empty/sentinel cells
+		"regMoreURL":  regMoreURL,    // p12.1 register: the sentinel's next-page hx-get URL
+		"txnRowCtx":   makeTxnRowCtx, // p12.2 editor: pair a split row with the page model
+		"txnTitleKey": txnTitleKey,   // p12.2 editor: new vs edit head/heading key
 	}
 	t, err := template.New("").Funcs(stub).ParseFS(templatesFS, "templates/*.tmpl")
 	if err != nil {

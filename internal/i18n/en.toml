@@ -452,3 +452,107 @@ other = "The root program cannot be given a parent."
 other = "A program cannot be moved under itself or its descendants."
 [error.program.has_active_children]
 other = "This program still has active children and cannot be deactivated."
+[txn.new_title]
+other = "New transaction"
+[txn.edit_title]
+other = "Edit transaction"
+[txn.subsidiary]
+other = "Subsidiary"
+[txn.date]
+other = "Date"
+[txn.date_hint]
+other = "Type a date; t = today, + / - shift a day"
+[txn.payee]
+other = "Payee"
+[txn.payee_none]
+other = "No payee"
+[txn.memo]
+other = "Memo"
+[txn.account.choose]
+other = "Choose an account"
+[txn.fund.unrestricted]
+other = "Unrestricted General"
+[txn.fund.apply_all]
+other = "Apply fund to all rows"
+[txn.fund.apply_all_btn]
+other = "Apply to empty rows"
+[txn.amount.debit]
+other = "Debit"
+[txn.amount.credit]
+other = "Credit"
+[txn.amount.signed]
+other = "Amount"
+[txn.class.none]
+other = "No class"
+[txn.class.program]
+other = "Program"
+[txn.class.management]
+other = "Management & general"
+[txn.class.fundraising]
+other = "Fundraising"
+[txn.col.account]
+other = "Account"
+[txn.col.amount]
+other = "Amount"
+[txn.col.debit]
+other = "Debit"
+[txn.col.credit]
+other = "Credit"
+[txn.col.fund]
+other = "Fund"
+[txn.col.program]
+other = "Program"
+[txn.col.class]
+other = "Functional class"
+[txn.col.memo]
+other = "Memo"
+[txn.col.error]
+other = "Error"
+[txn.add_row]
+other = "Add row"
+[register.new_txn]
+other = "New transaction"
+[register.edit_txn]
+other = "Edit"
+[error.txn.unbalanced]
+other = "The transaction does not balance to zero."
+[error.txn.fund_unbalanced]
+other = "The transaction does not balance to zero within each fund."
+[error.txn.too_few_splits]
+other = "A transaction needs at least two split lines."
+[error.txn.bad_date]
+other = "Enter a valid date."
+[error.txn.account_not_in_sub]
+other = "This account is not mapped to the selected subsidiary."
+[error.txn.placeholder_account]
+other = "This account is a heading and cannot hold splits."
+[error.txn.inactive_account]
+other = "This account is inactive."
+[error.txn.account_missing]
+other = "Choose an account for this row."
+[error.txn.inactive_fund]
+other = "The selected fund is inactive."
+[error.txn.fund_sub_scope]
+other = "The selected fund is not available in this subsidiary."
+[error.txn.fund_program_scope]
+other = "This row's program is outside the fund's program scope."
+[error.txn.fund_missing]
+other = "The selected fund does not exist."
+[error.txn.expense_needs_class]
+other = "This expense row needs a functional class."
+[error.txn.non_expense_class]
+other = "Only expense rows may carry a functional class."
+[error.txn.program_on_bs]
+other = "Balance-sheet rows may not carry a program."
+[error.txn.inactive_program]
+other = "The selected program is inactive."
+[error.txn.program_missing]
+other = "The selected program does not exist."
+[error.txn.inactive_sub]
+other = "The selected subsidiary is inactive."
+[error.txn.inactive_currency]
+other = "The transaction currency is inactive."
+[error.txn.not_found]
+other = "That transaction no longer exists."
+[error.txn.generic]
+other = "The transaction could not be saved."

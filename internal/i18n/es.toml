@@ -446,3 +446,107 @@ other = "Al programa raiz no se le puede asignar un padre."
 other = "Un programa no puede moverse bajo si mismo ni sus descendientes."
 [error.program.has_active_children]
 other = "Este programa aun tiene hijos activos y no se puede desactivar."
+[txn.new_title]
+other = "Nueva transaccion"
+[txn.edit_title]
+other = "Editar transaccion"
+[txn.subsidiary]
+other = "Subsidiaria"
+[txn.date]
+other = "Fecha"
+[txn.date_hint]
+other = "Escriba una fecha; t = hoy, + / - cambian un dia"
+[txn.payee]
+other = "Beneficiario"
+[txn.payee_none]
+other = "Sin beneficiario"
+[txn.memo]
+other = "Nota"
+[txn.account.choose]
+other = "Elija una cuenta"
+[txn.fund.unrestricted]
+other = "Fondo General sin restriccion"
+[txn.fund.apply_all]
+other = "Aplicar fondo a todas las filas"
+[txn.fund.apply_all_btn]
+other = "Aplicar a filas vacias"
+[txn.amount.debit]
+other = "Debe"
+[txn.amount.credit]
+other = "Haber"
+[txn.amount.signed]
+other = "Importe"
+[txn.class.none]
+other = "Sin clase"
+[txn.class.program]
+other = "Programa"
+[txn.class.management]
+other = "Administracion y general"
+[txn.class.fundraising]
+other = "Recaudacion de fondos"
+[txn.col.account]
+other = "Cuenta"
+[txn.col.amount]
+other = "Importe"
+[txn.col.debit]
+other = "Debe"
+[txn.col.credit]
+other = "Haber"
+[txn.col.fund]
+other = "Fondo"
+[txn.col.program]
+other = "Programa"
+[txn.col.class]
+other = "Clase funcional"
+[txn.col.memo]
+other = "Nota"
+[txn.col.error]
+other = "Error"
+[txn.add_row]
+other = "Agregar fila"
+[register.new_txn]
+other = "Nueva transaccion"
+[register.edit_txn]
+other = "Editar"
+[error.txn.unbalanced]
+other = "La transaccion no cuadra a cero."
+[error.txn.fund_unbalanced]
+other = "La transaccion no cuadra a cero dentro de cada fondo."
+[error.txn.too_few_splits]
+other = "Una transaccion necesita al menos dos lineas."
+[error.txn.bad_date]
+other = "Ingrese una fecha valida."
+[error.txn.account_not_in_sub]
+other = "Esta cuenta no esta asignada a la subsidiaria seleccionada."
+[error.txn.placeholder_account]
+other = "Esta cuenta es un encabezado y no puede tener movimientos."
+[error.txn.inactive_account]
+other = "Esta cuenta esta inactiva."
+[error.txn.account_missing]
+other = "Elija una cuenta para esta fila."
+[error.txn.inactive_fund]
+other = "El fondo seleccionado esta inactivo."
+[error.txn.fund_sub_scope]
+other = "El fondo seleccionado no esta disponible en esta subsidiaria."
+[error.txn.fund_program_scope]
+other = "El programa de esta fila esta fuera del alcance del fondo."
+[error.txn.fund_missing]
+other = "El fondo seleccionado no existe."
+[error.txn.expense_needs_class]
+other = "Esta fila de gasto necesita una clase funcional."
+[error.txn.non_expense_class]
+other = "Solo las filas de gasto pueden llevar clase funcional."
+[error.txn.program_on_bs]
+other = "Las filas de balance no pueden llevar programa."
+[error.txn.inactive_program]
+other = "El programa seleccionado esta inactivo."
+[error.txn.program_missing]
+other = "El programa seleccionado no existe."
+[error.txn.inactive_sub]
+other = "La subsidiaria seleccionada esta inactiva."
+[error.txn.inactive_currency]
+other = "La moneda de la transaccion esta inactiva."
+[error.txn.not_found]
+other = "Esa transaccion ya no existe."
+[error.txn.generic]
+other = "No se pudo guardar la transaccion."
