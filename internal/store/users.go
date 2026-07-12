@@ -166,6 +166,7 @@ type CurrentUser struct {
 	TxnPerm  string
 	IsAdmin  bool
 	Locale   string
+	Theme    string
 }
 
 // CredentialsByUsername returns the login credentials for username. A username
@@ -202,7 +203,47 @@ func (s *Store) UserByID(ctx context.Context, id int64) (CurrentUser, error) {
 		TxnPerm:  row.TxnPerm,
 		IsAdmin:  row.IsAdmin != 0,
 		Locale:   row.Locale,
+		Theme:    row.Theme,
 	}, nil
+}
+
+// ErrInvalidTheme is returned by SetUserTheme when the requested theme is not one
+// of the allowed values. The web layer maps it to a 400 (a bad theme is a client
+// error, not a server fault).
+var ErrInvalidTheme = errors.New("store: invalid theme")
+
+// ValidTheme reports whether theme is one of the allowed data-theme values
+// (light/dark/auto, matching the p06.1 default and the CSS token layer). Exposed
+// so the web handler can reject a bad value before writing.
+func ValidTheme(theme string) bool {
+	switch theme {
+	case "light", "dark", "auto":
+		return true
+	default:
+		return false
+	}
+}
+
+// SetUserTheme persists a user's theme preference on the live row and appends an
+// op='update' users_versions row under ONE change (p10.2 POST /theme). theme is
+// validated against ValidTheme first so a bad value never reaches the db. The
+// version append is the same snapshot-from-live query CreateUser uses (theme IS
+// in the snapshot), so the change is audited.
+func (s *Store) SetUserTheme(ctx context.Context, userID int64, theme string) error {
+	if !ValidTheme(theme) {
+		return ErrInvalidTheme
+	}
+	_, err := s.write(ctx, "user.theme", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			if err := q.SetUserTheme(ctx, sqlc.SetUserThemeParams{Theme: theme, ID: userID}); err != nil {
+				return fmt.Errorf("set theme: %w", err)
+			}
+			return insertUserVersion(ctx, q, changeID, "update", userID)
+		})
+	if err != nil {
+		return fmt.Errorf("set user theme (id %d): %w", userID, err)
+	}
+	return nil
 }
 
 // insertUserVersion appends the users snapshot-from-live version row. It hides

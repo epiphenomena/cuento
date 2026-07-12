@@ -28,6 +28,14 @@ SELECT id FROM users WHERE username = ?;
 -- the new secret enters only the live table, never the audit trail.
 UPDATE users SET password_hash = ? WHERE id = ?;
 
+-- name: SetUserTheme :exec
+-- Live update of a user's theme preference (p10.2 POST /theme). Versioned as
+-- op='update'; theme IS part of the users_versions snapshot, so the audit trail
+-- records the change. The handler also persists a cookie for the no-flash SSR
+-- read; this write makes the preference durable across devices for a logged-in
+-- user.
+UPDATE users SET theme = ? WHERE id = ?;
+
 -- name: SetUserDisabled :exec
 -- Live update of a user's disabled_at (p06.4 `user disable`). A disabled user
 -- cannot log in (login enforces this). Versioned as op='update'; disabled_at IS
@@ -50,7 +58,7 @@ WHERE username = ?;
 -- into the current identity + its UI language on every authenticated request.
 -- Kept separate from GetUser (whose projection is pinned by
 -- sqlc/users_changes_test.go, p06.1) so this step touches no existing query.
-SELECT id, username, disabled_at, txn_perm, is_admin, locale
+SELECT id, username, disabled_at, txn_perm, is_admin, locale, theme
 FROM users
 WHERE id = ?;
 

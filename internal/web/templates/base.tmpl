@@ -1,0 +1,90 @@
+{{/*
+  p10.2 authenticated shell. base.tmpl defines the reusable chrome as PARTIALS and
+  is itself the authenticated LANDING page (GET /{$}).
+
+  Every shell page provides:
+    - <html lang="{resolved locale}">           (D14)
+    - data-theme="{cookie theme}" set SERVER-SIDE (no flash)
+    - semantic landmarks: <header><nav><main><footer>
+    - a flash message region (aria-live; populated by later phases)
+    - the stylesheet via {{asset "app.css"}}
+    - a perm-gated, data-driven nav
+    - EVERY visible string via {{t "key"}} (rule 9)
+
+  html/template shares ONE parse set, so a page cannot override a shared "content"
+  block (a redefinition error at parse). Instead the frame is split into a
+  shell-open / shell-close partial pair; each shell page (base.tmpl,
+  settings.tmpl, styleguide.tmpl) is a self-contained top-level template that
+  emits shell-open, its own <main> content, then shell-close. The model is a
+  shellPage: .Shell carries the chrome (Lang/Theme/Nav/Version), .Page the page
+  body's data.
+
+  No inline <script> or style attributes -- strict CSP (rule 12); the theme
+  toggle is a plain <form> POST, JS-free.
+*/ -}}
+
+{{define "shell-nav" -}}
+<header class="app-header">
+  <a class="app-brand" href="/">{{t "app.name"}}</a>
+  <nav class="app-nav" aria-label="{{t "nav.label"}}">
+    <ul>
+      {{range .Shell.Nav}}<li><a href="{{.Href}}">{{.Label}}</a></li>
+      {{end}}
+    </ul>
+  </nav>
+  {{template "theme-control" .}}
+  <form class="app-logout" method="post" action="/logout">
+    <button type="submit" class="btn btn-ghost">{{t "auth.sign_out"}}</button>
+  </form>
+</header>
+{{- end}}
+
+{{define "theme-control" -}}
+<form class="theme-control" method="post" action="/theme">
+  <label for="theme-select">{{t "theme.label"}}</label>
+  <select id="theme-select" name="theme">
+    <option value="auto"{{if eq .Shell.Theme "auto"}} selected{{end}}>{{t "theme.auto"}}</option>
+    <option value="light"{{if eq .Shell.Theme "light"}} selected{{end}}>{{t "theme.light"}}</option>
+    <option value="dark"{{if eq .Shell.Theme "dark"}} selected{{end}}>{{t "theme.dark"}}</option>
+  </select>
+  <button type="submit" class="btn">{{t "theme.apply"}}</button>
+</form>
+{{- end}}
+
+{{/* shell-open opens the document through the start of <main>. The caller passes
+     a shellPage plus a localized .Title via a small wrapper (see the page
+     templates), so the head title is a real catalog string. */ -}}
+{{define "shell-open" -}}
+<!DOCTYPE html>
+<html lang="{{.Shell.Lang}}" data-theme="{{.Shell.Theme}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}} — {{t "app.name"}}</title>
+  <link rel="stylesheet" href="{{asset "app.css"}}">
+</head>
+<body>
+  <a class="skip-link" href="#main">{{t "common.skip_to_content"}}</a>
+  {{template "shell-nav" .}}
+  <div class="flash" role="status" aria-live="polite"></div>
+  <main id="main" class="app-main">
+{{- end}}
+
+{{define "shell-close" -}}
+  </main>
+  <footer class="app-footer">
+    <small>{{t "app.name"}} · {{t "footer.version" .Shell.Version}}</small>
+  </footer>
+</body>
+</html>
+{{- end}}
+
+{{/* base.tmpl entry point = the authenticated landing (GET /{$}). Title is the
+     localized "Home" nav label. .Shell/.Page come from the shellPage model; the
+     wrapper struct adds the localized .Title the head needs. */ -}}
+{{define "base.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "nav.home"))}}
+  <h1>{{t "app.name"}}</h1>
+  <p>{{t "home.welcome"}}</p>
+{{template "shell-close" .}}
+{{- end}}

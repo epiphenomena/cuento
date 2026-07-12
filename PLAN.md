@@ -193,7 +193,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p10.1 web: hashed assets.**
   Tests: `TestAssetURLHashed` (`asset "app.css"` → `/static/app.<8hex>.css`), `TestAssetImmutableCacheHeaders`, `TestHTMLNoStore`, `TestDevModeUnhashed`.
   Build: startup manifest from embedded FS (SHA-256 → 8 hex), serving handler, `asset` template func.
-- [ ] **p10.2 web: base layout + theme + i18n wiring + CSS foundation.**
+- [x] **p10.2 web: base layout + theme + i18n wiring + CSS foundation.**
   Tests: `TestThemeCookieSSR` (request with theme cookie → `<html data-theme=...>`, no flash), `TestNavLocalized` (same page, en vs es user → catalog strings differ, keys resolve), nav renders only permitted sections per persona, `<html lang>` matches the resolved locale.
   Build: `base.tmpl` (landmarks, perm-gated nav, flash region, `{{t}}` used for every string), `t` template func bound to the request lang, theme toggle endpoint persisting cookie + user setting, lang switcher on the login page (post-login it's a user setting), CSS token/reset/component layers using `color-scheme` + `light-dark()`, `-dev`-only `/styleguide` page for visual review.
 - [ ] **p10.3 web: htmx wiring + form-error convention.**

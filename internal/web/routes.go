@@ -123,14 +123,33 @@ func SyncReportGroups(ctx context.Context, st *store.Store) error {
 // route. GET /{$} matches ONLY exact "/" -- a bare "/" would be a catch-all,
 // swallowing every unmatched GET and defeating the registry-completeness test.
 func (s *server) routes() []Route {
-	return []Route{
+	routes := []Route{
 		{http.MethodGet, "/healthz", Public, http.HandlerFunc(healthz(s.cfg.Version))},
 		{http.MethodGet, "/static/", Public, s.staticHandler()},
 		{http.MethodGet, "/login", Public, http.HandlerFunc(s.loginPage)},
 		{http.MethodPost, "/login", Public, http.HandlerFunc(s.loginSubmit)},
 		{http.MethodPost, "/logout", AnyUser, http.HandlerFunc(s.logout)},
 		{http.MethodGet, "/{$}", AnyUser, http.HandlerFunc(s.home)},
+		// p10.2 shell: the theme control (persists cookie + user setting) and the
+		// Settings stub (a real, permitted, localized nav target; the full page is
+		// p13.1). Both AnyUser per Appendix B.
+		{http.MethodPost, "/theme", AnyUser, http.HandlerFunc(s.setTheme)},
+		{http.MethodGet, "/settings", AnyUser, http.HandlerFunc(s.settingsStub)},
+		// A minimal Admin landing so the perm-gated nav has a real, Admin-only
+		// target NOW (the shell must prove "Admin sees the admin entry, a non-admin
+		// does not" -- DoD). The real /admin pages (users, subsidiaries, ops) land
+		// in p11.3/p13.2/p18.3; this stub is the section index they hang off. See
+		// DECISIONS p10.2.
+		{http.MethodGet, "/admin", Admin, http.HandlerFunc(s.adminStub)},
 	}
+	// The -dev-only styleguide (Appendix F): a component gallery for visual review.
+	// Registered ONLY in -dev so it 404s in production (it is not in the registry
+	// there, and the matrix/reachability tests never see it). Public so a designer
+	// can view it without a login.
+	if s.cfg.Dev {
+		routes = append(routes, Route{http.MethodGet, "/styleguide", Public, http.HandlerFunc(s.styleguide)})
+	}
+	return routes
 }
 
 // Mount is the ONLY place routes attach to a mux (rule 8). It iterates the
@@ -145,13 +164,6 @@ func (s *server) Mount() http.Handler {
 		mux.Handle(r.Method+" "+r.Pattern, s.enforce(r.Perm, r.Handler))
 	}
 	return s.chain(mux)
-}
-
-// home is the minimal authenticated landing (GET /{$}). The real dashboard/nav is
-// phase 10; this renders a tiny i18n'd placeholder so the AnyUser enforcement path
-// is exercised by a real route rather than a stub.
-func (s *server) home(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, "home.tmpl", nil)
 }
 
 // outcome is what the enforcement policy decides for a (Perm, user) pair. It is

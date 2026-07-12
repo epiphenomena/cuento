@@ -1,0 +1,12 @@
+{{/*
+  p10.2 Settings stub (GET /settings, AnyUser). A real, permitted, localized shell
+  page so the Settings nav entry has a live target to link and test. The full
+  settings page (language / formats / theme / default subsidiary) is p13.1.
+  Reuses the base.tmpl shell partials; every string via {{t}}.
+*/ -}}
+{{define "settings.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "settings.title"))}}
+  <h1>{{t "settings.title"}}</h1>
+  <p>{{t "settings.coming_soon"}}</p>
+{{template "shell-close" .}}
+{{- end}}

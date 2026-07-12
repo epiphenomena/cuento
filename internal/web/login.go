@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"cuento/internal/auth"
+	"cuento/internal/i18n"
 )
 
 // decoyHash is a real argon2id hash of a throwaway password, computed once at
@@ -27,9 +28,37 @@ func mustDecoyHash() string {
 }
 
 // loginData is the login page's template model. Error is a catalog KEY (rule 9),
-// empty when the page is first shown; the template renders it via {{t}}.
+// empty when the page is first shown; the template renders it via {{t}}. Lang is
+// the resolved locale (for <html lang> and to mark the current switcher option);
+// Langs is the p10.2 language switcher's option set.
 type loginData struct {
 	Error string
+	Lang  string
+	Langs []langOption
+}
+
+// langOption is one entry of the login page's language switcher (p10.2): a lang
+// code, its localized label, and whether it is the currently-resolved one.
+type langOption struct {
+	Code    string
+	Label   string
+	Current bool
+}
+
+// langOptions builds the switcher options for the resolved language `cur`: one per
+// catalog language (i18n.Langs), each labelled by its own catalog key
+// (lang.<code>) in ITS OWN language so a speaker recognizes their tongue, with the
+// current one flagged.
+func langOptions(cur string) []langOption {
+	opts := make([]langOption, 0, len(i18n.Langs()))
+	for _, code := range i18n.Langs() {
+		opts = append(opts, langOption{
+			Code:    code,
+			Label:   i18n.T(code, "lang."+code),
+			Current: code == cur,
+		})
+	}
+	return opts
 }
 
 // loginPage renders the login form. If the request already resolves to a
@@ -41,7 +70,16 @@ func (s *server) loginPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	s.render(w, r, http.StatusOK, "login.tmpl", loginData{})
+	s.render(w, r, http.StatusOK, "login.tmpl", s.loginModel(r, ""))
+}
+
+// loginModel builds the login page's template model for the request: the resolved
+// language (drives <html lang> and the switcher's current flag), the switcher
+// options, and an optional error KEY. Centralized so every login render (initial,
+// bad creds, rate-limited) carries the language chrome.
+func (s *server) loginModel(r *http.Request, errKey string) loginData {
+	lang := langOf(r.Context())
+	return loginData{Error: errKey, Lang: lang, Langs: langOptions(lang)}
 }
 
 // loginSubmit authenticates a POST /login. The flow (rule 13):
@@ -57,7 +95,7 @@ func (s *server) loginPage(w http.ResponseWriter, r *http.Request) {
 //     user, wrong password, and disabled account are indistinguishable.
 func (s *server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		s.render(w, r, http.StatusBadRequest, "login.tmpl", loginData{Error: "auth.invalid"})
+		s.render(w, r, http.StatusBadRequest, "login.tmpl", s.loginModel(r, "auth.invalid"))
 		return
 	}
 	username := r.PostFormValue("username")
@@ -66,7 +104,7 @@ func (s *server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	if !s.limiter.allow(clientIP(r), username) {
 		// Over the limit: do no auth work at all. Answer 429 with the login page
 		// carrying a rate-limit message.
-		s.render(w, r, http.StatusTooManyRequests, "login.tmpl", loginData{Error: "auth.rate_limited"})
+		s.render(w, r, http.StatusTooManyRequests, "login.tmpl", s.loginModel(r, "auth.rate_limited"))
 		return
 	}
 
@@ -74,7 +112,7 @@ func (s *server) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		// Uniform failure: identical status + body for unknown user, wrong
 		// password, and disabled account (no user enumeration).
-		s.render(w, r, http.StatusUnauthorized, "login.tmpl", loginData{Error: "auth.invalid"})
+		s.render(w, r, http.StatusUnauthorized, "login.tmpl", s.loginModel(r, "auth.invalid"))
 		return
 	}
 

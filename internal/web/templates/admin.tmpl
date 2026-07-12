@@ -1,0 +1,13 @@
+{{/*
+  p10.2 Admin landing stub (GET /admin, Admin). A minimal, Admin-only shell page
+  so the admin nav section has a real, permitted, no-dead-link target and the perm
+  gate is provable. The real admin pages (users, subsidiaries, currencies, ops)
+  land in p11.3/p13.2/p14.2/p18.3. Reuses the base.tmpl shell partials; every
+  string via {{t}}.
+*/ -}}
+{{define "admin.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "nav.admin"))}}
+  <h1>{{t "nav.admin"}}</h1>
+  <p>{{t "admin.coming_soon"}}</p>
+{{template "shell-close" .}}
+{{- end}}

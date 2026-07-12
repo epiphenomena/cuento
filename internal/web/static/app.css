@@ -1,1 +1,221 @@
-/* cuento static asset placeholder. Real styles land in phase 10 (p10.2). */
+/* cuento — p10.2 CSS foundation.
+ *
+ * Hand-written, no framework/bundler/CDN (rule 12). Strict-CSP-safe: styles live
+ * ONLY in this file (style-src 'self'), never in inline style="" or <style>
+ * (D9). Three layers: (1) TOKENS as CSS custom properties, (2) RESET, (3)
+ * COMPONENT primitives.
+ *
+ * Light/dark: each theme token is a light-dark(light, dark) pair. The active
+ * side is chosen by `color-scheme`, which the shell sets per data-theme on
+ * <html> (server-side, no flash — see base.tmpl):
+ *   data-theme="auto"  -> color-scheme: light dark  (follows the OS)
+ *   data-theme="light" -> color-scheme: light
+ *   data-theme="dark"  -> color-scheme: dark
+ * No media query and no JS are needed: light-dark() + color-scheme do it in CSS.
+ */
+
+/* ------------------------------------------------------------------ *
+ * 1. Tokens
+ * ------------------------------------------------------------------ */
+:root {
+  /* color-scheme drives which side of every light-dark() pair is used AND styles
+     native form controls / scrollbars to match. Overridden per data-theme below. */
+  color-scheme: light dark;
+
+  /* Palette — each is light-dark(<light value>, <dark value>). */
+  --color-bg:          light-dark(#f7f8fa, #16181d);
+  --color-surface:     light-dark(#ffffff, #1e2127);
+  --color-surface-alt: light-dark(#eef0f4, #24272f);
+  --color-text:        light-dark(#1a1d23, #e7e9ee);
+  --color-text-muted:  light-dark(#5b6472, #9aa3b2);
+  --color-border:      light-dark(#d5d9e0, #333843);
+  --color-primary:     light-dark(#2457c5, #6f9bff);
+  --color-primary-text: light-dark(#ffffff, #0d1017);
+  --color-danger:      light-dark(#b3261e, #ff6b61);
+  --color-danger-bg:   light-dark(#fde8e6, #3a1c1a);
+  --color-focus:       light-dark(#2457c5, #9cc0ff);
+
+  /* Spacing scale (rem). */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+
+  /* Radii, borders, typography. */
+  --radius: 6px;
+  --border: 1px solid var(--color-border);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-size: 16px;
+  --line-height: 1.5;
+  --shadow: 0 1px 3px rgb(0 0 0 / 12%);
+}
+
+/* Explicit theme overrides. data-theme is set server-side on <html> from the
+   theme cookie (no flash). "auto" keeps the :root default (light dark). */
+html[data-theme="light"] { color-scheme: light; }
+html[data-theme="dark"]  { color-scheme: dark; }
+
+/* ------------------------------------------------------------------ *
+ * 2. Reset
+ * ------------------------------------------------------------------ */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { font-size: var(--font-size); }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  line-height: var(--line-height);
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+h1, h2, h3, p, ul, figure { margin: 0 0 var(--space-4); }
+ul { padding: 0; }
+
+a { color: var(--color-primary); }
+
+img, svg { max-width: 100%; height: auto; }
+
+button, input, select, textarea { font: inherit; color: inherit; }
+
+/* Visible, consistent focus for keyboard users (accessibility). */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Skip link: off-screen until focused, then anchored top-left. */
+.skip-link {
+  position: absolute;
+  left: -999px;
+  top: 0;
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-surface);
+  border: var(--border);
+  border-radius: var(--radius);
+}
+.skip-link:focus { left: var(--space-2); z-index: 10; }
+
+/* ------------------------------------------------------------------ *
+ * 3. Component primitives
+ * ------------------------------------------------------------------ */
+
+/* App shell layout. */
+.app-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-6);
+  background: var(--color-surface);
+  border-bottom: var(--border);
+  box-shadow: var(--shadow);
+}
+.app-brand { font-weight: 700; text-decoration: none; color: var(--color-text); }
+
+.app-nav { flex: 1 1 auto; }
+.app-nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin: 0;
+  list-style: none;
+}
+.app-nav a {
+  text-decoration: none;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+}
+.app-nav a:hover { background: var(--color-surface-alt); }
+
+.app-main {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+}
+
+.app-footer {
+  padding: var(--space-4) var(--space-6);
+  color: var(--color-text-muted);
+  border-top: var(--border);
+}
+
+/* Theme control + language switcher clusters. */
+.theme-control,
+.lang-switch,
+.cluster {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.lang-switch { margin-top: var(--space-6); color: var(--color-text-muted); }
+.lang-switch a { text-decoration: none; }
+.lang-switch a[aria-current="true"] { font-weight: 700; text-decoration: underline; }
+
+/* Buttons. */
+.btn {
+  display: inline-block;
+  padding: var(--space-2) var(--space-4);
+  border: var(--border);
+  border-radius: var(--radius);
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--color-primary); }
+.btn-primary {
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  border-color: var(--color-primary);
+}
+.btn-ghost { background: transparent; }
+
+/* Form fields. */
+.field { margin-bottom: var(--space-4); }
+.field label { display: block; margin-bottom: var(--space-1); font-weight: 600; }
+.field input,
+.field select,
+select,
+input[type="text"],
+input[type="password"] {
+  padding: var(--space-2) var(--space-3);
+  border: var(--border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+/* Alerts / flash. */
+.alert {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius);
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+.flash:empty { display: none; }
+.flash {
+  max-width: 60rem;
+  margin: var(--space-4) auto 0;
+  padding: 0 var(--space-6);
+}
+
+/* Login card. */
+.login-body {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: var(--space-6);
+}
+.login-card {
+  width: min(24rem, 100%);
+  padding: var(--space-8);
+  background: var(--color-surface);
+  border: var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.login-card .btn-primary { width: 100%; }

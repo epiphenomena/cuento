@@ -17,6 +17,50 @@ home.welcome = "Signed in."
 
 common.save = "Save"
 common.cancel = "Cancel"
+common.skip_to_content = "Skip to content"
+
+# Authenticated shell (p10.2): the top-level navigation sections (Appendix F).
+# Each entry renders only for permitted personas AND only once its route exists;
+# later phases (p11-p18) wire the remaining sections as their routes land.
+nav.label = "Primary"
+nav.home = "Home"
+nav.accounts = "Accounts"
+nav.funds = "Funds"
+nav.programs = "Programs"
+nav.reconciliations = "Reconciliations"
+nav.reports = "Reports"
+nav.settings = "Settings"
+nav.admin = "Admin"
+
+# Theme control (p10.2). Values map to data-theme (auto follows the OS).
+theme.label = "Theme"
+theme.light = "Light"
+theme.dark = "Dark"
+theme.auto = "Auto"
+theme.apply = "Apply"
+
+# Language switcher on the login page (p10.2). Each language is labelled in its
+# OWN tongue (lang.<code> is the same in every catalog) so a speaker recognizes
+# their language regardless of the page's current locale.
+lang.label = "Language"
+lang.en = "English"
+lang.es = "Español"
+
+# Footer.
+footer.version = "Version %s"
+
+# Dev-only styleguide (p10.2): a visual review page for the component primitives.
+styleguide.title = "Styleguide"
+styleguide.buttons = "Buttons"
+styleguide.forms = "Forms"
+styleguide.alerts = "Alerts"
+
+# My settings stub (p10.2); the full settings page is p13.1.
+settings.title = "Settings"
+settings.coming_soon = "Settings arrive in a later step."
+
+# Admin landing stub (p10.2); the real admin pages arrive in later phases.
+admin.coming_soon = "Admin tools arrive in a later step."
 
 # Label for a NULL fund_id (unrestricted general fund), per D20.
 fund.unrestricted = "Unrestricted General"

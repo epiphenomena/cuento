@@ -11,6 +11,49 @@ home.welcome = "Sesion iniciada."
 
 common.save = "Guardar"
 common.cancel = "Cancelar"
+common.skip_to_content = "Ir al contenido"
+
+# Shell autenticado (p10.2): las secciones de navegacion de nivel superior
+# (Apendice F). Cada entrada se muestra solo para personas permitidas Y solo
+# cuando su ruta existe; fases posteriores (p11-p18) conectan el resto.
+nav.label = "Principal"
+nav.home = "Inicio"
+nav.accounts = "Cuentas"
+nav.funds = "Fondos"
+nav.programs = "Programas"
+nav.reconciliations = "Conciliaciones"
+nav.reports = "Informes"
+nav.settings = "Ajustes"
+nav.admin = "Administracion"
+
+# Control de tema (p10.2). Los valores mapean a data-theme (auto sigue al SO).
+theme.label = "Tema"
+theme.light = "Claro"
+theme.dark = "Oscuro"
+theme.auto = "Automatico"
+theme.apply = "Aplicar"
+
+# Selector de idioma en la pagina de inicio de sesion (p10.2). Cada idioma se
+# etiqueta en SU propia lengua (lang.<code> es identico en cada catalogo).
+lang.label = "Idioma"
+lang.en = "English"
+lang.es = "Español"
+
+# Pie de pagina.
+footer.version = "Version %s"
+
+# Guia de estilos solo en dev (p10.2): revision visual de los componentes.
+styleguide.title = "Guia de estilos"
+styleguide.buttons = "Botones"
+styleguide.forms = "Formularios"
+styleguide.alerts = "Alertas"
+
+# Ajustes (stub, p10.2); la pagina completa es p13.1.
+settings.title = "Ajustes"
+settings.coming_soon = "Los ajustes llegan en un paso posterior."
+
+# Landing de administracion (stub, p10.2); las paginas reales llegan despues.
+admin.coming_soon = "Las herramientas de administracion llegan en un paso posterior."
 
 # Etiqueta para un fondo sin restricciones (fund_id NULL), segun D20.
 fund.unrestricted = "Fondo General No Restringido"

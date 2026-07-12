@@ -1,0 +1,42 @@
+{{/*
+  p10.2 -dev-only styleguide (GET /styleguide, Public, registered only in -dev).
+  A component gallery for visual review of the CSS primitives (buttons, forms,
+  alerts) against the token/reset/component layers in app.css. Renders through the
+  shell so the chrome (nav, theme, footer) is reviewable too. Every string via
+  {{t}} (rule 9) so the gallery is bilingual like the rest of the app.
+*/ -}}
+{{define "styleguide.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "styleguide.title"))}}
+  <h1>{{t "styleguide.title"}}</h1>
+
+  <section aria-labelledby="sg-buttons">
+    <h2 id="sg-buttons">{{t "styleguide.buttons"}}</h2>
+    <p class="cluster">
+      <button type="button" class="btn">{{t "common.save"}}</button>
+      <button type="button" class="btn btn-primary">{{t "common.save"}}</button>
+      <button type="button" class="btn btn-ghost">{{t "common.cancel"}}</button>
+    </p>
+  </section>
+
+  <section aria-labelledby="sg-forms">
+    <h2 id="sg-forms">{{t "styleguide.forms"}}</h2>
+    <div class="field">
+      <label for="sg-text">{{t "auth.username"}}</label>
+      <input id="sg-text" type="text" placeholder="{{t "auth.username"}}">
+    </div>
+    <div class="field">
+      <label for="sg-select">{{t "theme.label"}}</label>
+      <select id="sg-select">
+        <option>{{t "theme.auto"}}</option>
+        <option>{{t "theme.light"}}</option>
+        <option>{{t "theme.dark"}}</option>
+      </select>
+    </div>
+  </section>
+
+  <section aria-labelledby="sg-alerts">
+    <h2 id="sg-alerts">{{t "styleguide.alerts"}}</h2>
+    <p class="alert" role="alert">{{t "auth.invalid"}}</p>
+  </section>
+{{template "shell-close" .}}
+{{- end}}

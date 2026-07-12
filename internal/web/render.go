@@ -29,8 +29,9 @@ func mustParseTemplates() *template.Template {
 	// only so parsing type-checks a template calling {{t}} or {{asset}}; neither
 	// stub actually runs.
 	stub := template.FuncMap{
-		"t":     func(key string, _ ...any) string { return key },
-		"asset": func(name string) string { return name },
+		"t":          func(key string, _ ...any) string { return key },
+		"asset":      func(name string) string { return name },
+		"shellTitle": shellTitle,
 	}
 	t, err := template.New("").Funcs(stub).ParseFS(templatesFS, "templates/*.tmpl")
 	if err != nil {
@@ -57,8 +58,9 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name
 		return
 	}
 	clone = clone.Funcs(template.FuncMap{
-		"t":     func(key string, args ...any) string { return i18n.T(lang, key, args...) },
-		"asset": s.assetURL, // hashed URL in prod, unhashed in -dev (p10.1)
+		"t":          func(key string, args ...any) string { return i18n.T(lang, key, args...) },
+		"asset":      s.assetURL, // hashed URL in prod, unhashed in -dev (p10.1)
+		"shellTitle": shellTitle, // pairs a shellPage with a localized head title
 	})
 
 	// Render into a buffer first so a template error becomes a clean 500 rather

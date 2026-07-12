@@ -168,8 +168,27 @@ func (q *Queries) SetUserPassword(ctx context.Context, arg SetUserPasswordParams
 	return err
 }
 
+const setUserTheme = `-- name: SetUserTheme :exec
+UPDATE users SET theme = ? WHERE id = ?
+`
+
+type SetUserThemeParams struct {
+	Theme string
+	ID    int64
+}
+
+// Live update of a user's theme preference (p10.2 POST /theme). Versioned as
+// op='update'; theme IS part of the users_versions snapshot, so the audit trail
+// records the change. The handler also persists a cookie for the no-flash SSR
+// read; this write makes the preference durable across devices for a logged-in
+// user.
+func (q *Queries) SetUserTheme(ctx context.Context, arg SetUserThemeParams) error {
+	_, err := q.db.ExecContext(ctx, setUserTheme, arg.Theme, arg.ID)
+	return err
+}
+
 const userByID = `-- name: UserByID :one
-SELECT id, username, disabled_at, txn_perm, is_admin, locale
+SELECT id, username, disabled_at, txn_perm, is_admin, locale, theme
 FROM users
 WHERE id = ?
 `
@@ -181,6 +200,7 @@ type UserByIDRow struct {
 	TxnPerm    string
 	IsAdmin    int64
 	Locale     string
+	Theme      string
 }
 
 // Session-resolution lookup (p06.2): the middleware turns a stored user id back
@@ -197,6 +217,7 @@ func (q *Queries) UserByID(ctx context.Context, id int64) (UserByIDRow, error) {
 		&i.TxnPerm,
 		&i.IsAdmin,
 		&i.Locale,
+		&i.Theme,
 	)
 	return i, err
 }
