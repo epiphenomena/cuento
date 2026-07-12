@@ -16,12 +16,12 @@
 // (visibility:hidden -> out of native Tab order); linear Tab therefore walks exactly
 // account -> amount -> fund -> memo per row with no dead stops.
 //
-// FINDING documented in docs/qa-entry.md: txngrid.js's nextCell state machine (Enter-
-// advance, Alt+Arrow row-move, Ctrl+Enter save, Escape) is imported by txneditor.js
-// but never wired to the DOM, so those keys are inert in the browser today. Native Tab
-// + native select keyboard operation cover linear entry (proven here). This spec drives
-// what actually works in the browser; it does not (and cannot) exercise the unwired
-// nextCell via real keyboard events. See qa-entry.md "Keyboard grid state machine".
+// p12.6 follow-up (RESOLVED): txngrid.js's nextCell state machine (Enter-advance,
+// Alt+Arrow row-move, Ctrl+Enter save, Escape) is NOW wired to the DOM by
+// txneditor.js's grid keydown handler, with a skip-hidden traversal so advancing/
+// retreating never lands focus on the visibility:hidden program/class cells of a
+// non-R/E row. The second test below drives those shortcuts with REAL keyboard events
+// and asserts focus/save, proving the keys work in a real browser.
 
 const { test, expect } = require('../fixtures');
 const { saveAndReload } = require('../helpers');
@@ -175,6 +175,82 @@ test.describe('keyboard-only entry', () => {
 
     // The posted entry is visible: the 40.00 leg appears in the register we land on
     // (KB Savings, the first split's account).
+    await expect(page.locator('table.register-table')).toContainText('40.00');
+  });
+
+  // p12.6 follow-up: prove the WIRED nextCell shortcuts work in a real browser.
+  // Enter/Tab advance through the grid and SKIP the hidden program/class cells on an
+  // asset row (focus lands on memo, never a hidden <select>); Ctrl+Enter from mid-grid
+  // saves; Alt+ArrowDown reorders two rows. All via real page.keyboard.press.
+  test('wired grid shortcuts: Enter/Tab skip-hidden, Ctrl+Enter saves, Alt+Arrow reorders', async ({
+    page,
+    server,
+  }) => {
+    await login(page, server);
+    await createAsset(page, 'KB2 Checking');
+    await createAsset(page, 'KB2 Savings');
+
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await expect(page.locator('#txn-account-0')).toBeVisible();
+    await expect(page.locator('#txn-account-1')).toBeVisible();
+
+    // --- Enter-advance with skip-hidden on an ASSET row ------------------------
+    // Choose an asset account in row 0 so its program/class cells stay hidden. Then
+    // from the account cell, Enter advances account -> amount (col+1). This exercises
+    // the WIRED Enter handler (native Enter on a <select> would otherwise do nothing).
+    await selectByKeyboard(page, '#txn-account-0', 'KB2 Savings');
+    await page.locator('#txn-account-0').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#txn-amount-0')).toBeFocused();
+
+    // amount -> fund via Enter.
+    await page.keyboard.type('40.00');
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#txn-fund-0')).toBeFocused();
+
+    // fund -> memo via Enter: the program(3)/class(4) cells are hidden on this asset
+    // row, so the wired traversal SKIPS them and lands on memo -- never a hidden cell.
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#txn-memo-0')).toBeFocused();
+    // Explicitly assert focus never sat on the hidden cells.
+    await expect(page.locator('#txn-program-0')).not.toBeFocused();
+    await expect(page.locator('#txn-class-0')).not.toBeFocused();
+
+    // Shift+Tab backward from memo skips the hidden cells back to fund.
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.locator('#txn-fund-0')).toBeFocused();
+
+    // Tab forward from fund skips the hidden cells to memo (same skip, forward).
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#txn-memo-0')).toBeFocused();
+
+    // --- Row 1: complete a balancing leg -------------------------------------
+    await selectByKeyboard(page, '#txn-account-1', 'KB2 Checking');
+    await page.locator('#txn-amount-1').focus();
+    await page.keyboard.type('-40.00');
+
+    // --- Alt+ArrowDown reorders rows 0 and 1 ---------------------------------
+    // Focus row 0's account (KB2 Savings) and move the row down; its values land in
+    // row 1's inputs and focus follows to row 1's account.
+    await page.locator('#txn-account-0').focus();
+    const row0Account = await page.locator('#txn-account-0').inputValue();
+    await page.keyboard.press('Alt+ArrowDown');
+    await expect(page.locator('#txn-account-1')).toBeFocused();
+    // The moved row's account value is now in row 1 (values swapped, ids stable).
+    await expect(page.locator('#txn-account-1')).toHaveValue(row0Account);
+
+    // --- Ctrl+Enter from mid-grid saves --------------------------------------
+    // Set the date, then press Ctrl+Enter while focused inside the grid; it submits
+    // like the Save button (htmx HX-Redirect to the register).
+    await page.locator('#txn-date').focus();
+    await page.keyboard.press('t');
+    await expect(page.locator('#txn-date')).not.toHaveValue('');
+
+    await page.locator('#txn-memo-1').focus();
+    await page.keyboard.press('Control+Enter');
+    await page.waitForURL('**/register**');
+    await expect(page.locator('table.register-table')).toBeVisible();
     await expect(page.locator('table.register-table')).toContainText('40.00');
   });
 });

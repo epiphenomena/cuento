@@ -79,6 +79,19 @@ function initEditor(form) {
   }
 
   // --- program / class gating per account ---------------------------------
+  // rowReveal is the SINGLE source of truth for which conditional cells a row shows,
+  // derived from the chosen account's type. gateRow uses it to toggle visibility;
+  // the keyboard grid's isVisible() (below) uses it to skip hidden cells. `i` is the
+  // row's dataset.row index.
+  function rowReveal(i) {
+    const acctSel = form.querySelector(`#txn-account-${i}`);
+    const opt = acctSel ? acctSel.selectedOptions[0] : null;
+    const type = opt ? opt.dataset.type : '';
+    const isRE = type === 'revenue' || type === 'expense';
+    const isExpense = type === 'expense';
+    return { isRE, isExpense, program: isRE, class: isExpense };
+  }
+
   function gateRow(row) {
     const i = row.dataset.row;
     const acctSel = form.querySelector(`#txn-account-${i}`);
@@ -88,9 +101,7 @@ function initEditor(form) {
     const classSel = form.querySelector(`#txn-class-${i}`);
     if (!acctSel) return;
     const opt = acctSel.selectedOptions[0];
-    const type = opt ? opt.dataset.type : '';
-    const isRE = type === 'revenue' || type === 'expense';
-    const isExpense = type === 'expense';
+    const { isRE, isExpense } = rowReveal(i);
 
     if (progCell) progCell.style.visibility = isRE ? 'visible' : 'hidden';
     if (classCell) classCell.style.visibility = isExpense ? 'visible' : 'hidden';
@@ -231,6 +242,148 @@ function initEditor(form) {
     });
     const fundSel = form.querySelector(`#txn-fund-${i}`);
     if (fundSel) fundSel.addEventListener('change', recompute);
+  }
+
+  // --- keyboard grid (Appendix C, p12.6) ----------------------------------
+  // Wire txngrid.js's pure state machine to the real grid. The column model is the
+  // ordered list of editable cells per row, in DOM/tab order; it depends on the
+  // display mode (DR/CR splits the amount into two visible columns). `field` is the
+  // id stem (#txn-<field>-<i>); `always` marks cells shown on every row; program and
+  // class are shown only on R/E / expense rows (rowReveal, the single source of
+  // truth) and are the cells the traversal must skip on other rows.
+  const gridCols = drcr
+    ? [
+        { field: 'account', always: true },
+        { field: 'dr', always: true },
+        { field: 'cr', always: true },
+        { field: 'fund', always: true },
+        { field: 'program', reveal: 'program' },
+        { field: 'class', reveal: 'class' },
+        { field: 'memo', always: true },
+      ]
+    : [
+        { field: 'account', always: true },
+        { field: 'amount', always: true },
+        { field: 'fund', always: true },
+        { field: 'program', reveal: 'program' },
+        { field: 'class', reveal: 'class' },
+        { field: 'memo', always: true },
+      ];
+
+  // cellInput returns the focusable input/select for (rowIndex, col), or null.
+  function cellInput(rowIndex, col) {
+    const spec = gridCols[col];
+    if (!spec) return null;
+    return form.querySelector(`#txn-${spec.field}-${rowIndex}`);
+  }
+
+  // colOfField maps a focused input's field stem to its column index.
+  function colOfField(field) {
+    return gridCols.findIndex((c) => c.field === field);
+  }
+
+  // gridIsVisible(rowIndex, col) -> is this cell a focus target for that row? Always
+  // cells are; program/class follow rowReveal. Out-of-range cols are not visible.
+  function gridIsVisible(rowIndex, col) {
+    const spec = gridCols[col];
+    if (!spec) return false;
+    if (spec.always) return true;
+    return !!rowReveal(rowIndex)[spec.reveal];
+  }
+
+  // Swap two rows' VALUES field-by-field (ids stay stable -- the whole editor keys
+  // off row index). Used by Alt+Arrow move-row. Copies every editable field plus the
+  // hidden signed-amount and split-id sinks, then re-gates/recomputes.
+  function swapRowValues(a, b) {
+    const fields = drcr
+      ? ['account', 'dr', 'cr', 'amount', 'fund', 'program', 'class', 'memo', 'splitid']
+      : ['account', 'amount', 'fund', 'program', 'class', 'memo', 'splitid'];
+    fields.forEach((f) => {
+      const ea = form.querySelector(`#txn-${f}-${a}`);
+      const eb = form.querySelector(`#txn-${f}-${b}`);
+      if (!ea || !eb) return;
+      const tmp = ea.value;
+      ea.value = eb.value;
+      eb.value = tmp;
+    });
+    const rowA = form.querySelector(`.txn-row[data-row="${a}"]`);
+    const rowB = form.querySelector(`.txn-row[data-row="${b}"]`);
+    if (rowA) gateRow(rowA);
+    if (rowB) gateRow(rowB);
+    markSubsidiaryConflicts();
+    recompute();
+  }
+
+  const submitBtn = form.querySelector('.txn-submit button[type="submit"]');
+  const cancelLink = form.querySelector('.txn-submit a');
+
+  const grid = form.querySelector('.txn-grid');
+  if (grid) {
+    grid.addEventListener('keydown', (evt) => {
+      // Scope: only handle keys fired from a real grid input/select. The payee and
+      // date inputs live in .txn-header (outside .txn-grid), so they keep their own
+      // handlers untouched. Ignore keys with no mapped field (defensive).
+      const el = evt.target;
+      if (!el || !el.id) return;
+      const m = /^txn-([a-z]+)-(\d+)$/.exec(el.id);
+      if (!m) return;
+      const col = colOfField(m[1]);
+      if (col < 0) return; // e.g. #txn-splitid-i (hidden, not a grid column)
+      const rowIndex = Number(m[2]);
+      const rowEls = [...form.querySelectorAll('.txn-row')];
+      const rows = rowEls.length;
+      const gridShape = { rows, cols: gridCols.length };
+
+      const mods = { ctrl: evt.ctrlKey || evt.metaKey, alt: evt.altKey };
+      // Let a plain Enter be handled (advance/add-row); everything else that the
+      // machine reports as 'none' falls through to native behavior (e.g. Arrow keys
+      // operating a <select>, typing into an amount input).
+      const { cell, action } = nextCell(
+        gridShape,
+        { row: rowIndex, col },
+        evt.key,
+        evt.shiftKey,
+        mods,
+        gridIsVisible,
+      );
+      if (action === 'none') return;
+
+      if (action === 'save') {
+        evt.preventDefault();
+        if (submitBtn && typeof form.requestSubmit === 'function') form.requestSubmit(submitBtn);
+        else if (submitBtn) submitBtn.click();
+        return;
+      }
+      if (action === 'cancel') {
+        evt.preventDefault();
+        if (cancelLink) cancelLink.click();
+        return;
+      }
+      if (action === 'add-row') {
+        evt.preventDefault();
+        addRow();
+        const first = cellInput(rows, 0); // new row index == old row count
+        if (first) first.focus();
+        return;
+      }
+      if (action === 'move-row-down' || action === 'move-row-up') {
+        evt.preventDefault();
+        swapRowValues(rowIndex, cell.row);
+        const moved = cellInput(cell.row, col);
+        if (moved) moved.focus();
+        return;
+      }
+      if (action === 'move') {
+        // Boundary no-op (target == current cell): don't trap focus -- let native
+        // Tab carry out of the grid to the Save/Add-row controls.
+        if (cell.row === rowIndex && cell.col === col) return;
+        const target = cellInput(cell.row, cell.col);
+        if (target) {
+          evt.preventDefault();
+          target.focus();
+        }
+      }
+    });
   }
 
   // --- payee autocomplete + autofill (p12.3) ------------------------------

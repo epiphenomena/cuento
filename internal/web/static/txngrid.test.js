@@ -104,6 +104,95 @@ test('an unrelated key is a no-op', () => {
   });
 });
 
+// --- visibility-aware traversal (skip-hidden, p12.6) ---------------------
+// gridRE mirrors the real editor's signed-mode 6-column layout:
+//   account(0) amount(1) fund(2) program(3) class(4) memo(5).
+// On an ASSET row the program(3)/class(4) cells are visibility:hidden, so
+// advance/retreat/Enter must SKIP them and never land focus in a hole. Default
+// isVisible ("all visible") preserves the behavior asserted by every test above.
+const gridRE = { rows: 3, cols: 6 };
+const assetRow = (row, col) => !(col === 3 || col === 4); // program/class hidden
+
+test('Tab forward-skips the hidden program/class cells (fund -> memo)', () => {
+  // From fund (col2), cols 3 and 4 are hidden, so the next visible cell is memo (5).
+  assert.deepEqual(nextCell(gridRE, { row: 0, col: 2 }, 'Tab', false, {}, assetRow), {
+    cell: { row: 0, col: 5 },
+    action: 'move',
+  });
+});
+
+test('Enter forward-skips the hidden program/class cells like Tab', () => {
+  assert.deepEqual(nextCell(gridRE, { row: 0, col: 2 }, 'Enter', false, {}, assetRow), {
+    cell: { row: 0, col: 5 },
+    action: 'move',
+  });
+});
+
+test('Shift+Tab backward-skips the hidden program/class cells (memo -> fund)', () => {
+  // From memo (col5), cols 4 and 3 are hidden, so the previous visible cell is fund (2).
+  assert.deepEqual(nextCell(gridRE, { row: 0, col: 5 }, 'Tab', true, {}, assetRow), {
+    cell: { row: 0, col: 2 },
+    action: 'move',
+  });
+});
+
+test('Tab from the last visible cell wraps to the next row start (skip-hidden)', () => {
+  // memo (col5) is the last cell; Tab wraps to row1 col0 (account, always visible).
+  assert.deepEqual(nextCell(gridRE, { row: 0, col: 5 }, 'Tab', false, {}, assetRow), {
+    cell: { row: 1, col: 0 },
+    action: 'move',
+  });
+});
+
+test('Enter add-row fires when the last VISIBLE cell of the last row is reached', () => {
+  // Last row, memo (col5) is visible and is the last visible cell -> add-row.
+  assert.deepEqual(nextCell(gridRE, { row: 2, col: 5 }, 'Enter', false, {}, assetRow), {
+    cell: { row: 2, col: 5 },
+    action: 'add-row',
+  });
+});
+
+test('Enter add-row fires even when the trailing columns are hidden', () => {
+  // A grid whose LAST columns are hidden: the last visible cell is not cols-1.
+  const g = { rows: 2, cols: 5 };
+  const trailingHidden = (row, col) => col < 3; // cols 3,4 hidden; last visible = col2
+  assert.deepEqual(nextCell(g, { row: 1, col: 2 }, 'Enter', false, {}, trailingHidden), {
+    cell: { row: 1, col: 2 },
+    action: 'add-row',
+  });
+});
+
+test('Tab on the last visible cell of the last row stays put (no add-row on Tab)', () => {
+  const g = { rows: 2, cols: 5 };
+  const trailingHidden = (row, col) => col < 3;
+  assert.deepEqual(nextCell(g, { row: 1, col: 2 }, 'Tab', false, {}, trailingHidden), {
+    cell: { row: 1, col: 2 },
+    action: 'move',
+  });
+});
+
+test('Alt+ArrowDown is unaffected by visibility (moves the whole row)', () => {
+  assert.deepEqual(nextCell(gridRE, { row: 0, col: 3 }, 'ArrowDown', false, { alt: true }, assetRow), {
+    cell: { row: 1, col: 3 },
+    action: 'move-row-down',
+  });
+});
+
+test('a fully hidden row does not loop; Tab stays put at the grid end', () => {
+  // Pathological: nothing is visible. advance/retreat must terminate (boundary)
+  // rather than spin. From the last cell, Tab has nowhere visible -> stay.
+  const none = () => false;
+  const res = nextCell(grid, { row: 2, col: 3 }, 'Tab', false, {}, none);
+  assert.equal(res.action, 'move');
+  assert.deepEqual(res.cell, { row: 2, col: 3 });
+});
+
+test('a fully hidden row: Enter on the grid end asks for a new row (no loop)', () => {
+  const none = () => false;
+  const res = nextCell(grid, { row: 2, col: 3 }, 'Enter', false, {}, none);
+  assert.equal(res.action, 'add-row');
+});
+
 // --- subsidiary re-filter (pure) -----------------------------------------
 
 // Each account option carries the set of subsidiary ids it is valid for (the
