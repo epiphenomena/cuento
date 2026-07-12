@@ -37,18 +37,24 @@
     </select>
   </div>
 
+  {{/*
+    One name input per ENABLED language (p11.4, D14): the .Names set is driven by
+    the org's enabled_languages, so adding a language makes a new column appear. en
+    (.Required) keeps its stable field name "name_en" and id "af-name-en" and shows
+    the ErrNameRequired autofocus/error; the label is the interpolated "Name (%s)"
+    so any language gets a label without a per-language chrome key (chrome stays
+    en/es via fallback).
+  */ -}}
+  {{range .Names}}
+  {{$ni := .}}
   <div class="field">
-    <label for="af-name-en">{{t "accounts.form.name_en"}}</label>
-    <input id="af-name-en" name="name_en" type="text" value="{{.NameEN}}"
-      {{- if .Errors.ErrorKey "name_en"}} aria-invalid="true" aria-describedby="af-name-en-err"{{end}}
-      {{- if eq .Errors.FirstInvalid "name_en"}} autofocus{{end}}>
-    {{with .Errors.ErrorKey "name_en"}}<p id="af-name-en-err" class="field-error" role="alert">{{t .}}</p>{{end}}
+    <label for="{{$ni.ID}}">{{t "accounts.form.name" $ni.LabelArg}}</label>
+    <input id="{{$ni.ID}}" name="{{$ni.Field}}" type="text" value="{{$ni.Value}}"
+      {{- if $.Errors.ErrorKey $ni.Field}} aria-invalid="true" aria-describedby="{{$ni.ID}}-err"{{end}}
+      {{- if eq $.Errors.FirstInvalid $ni.Field}} autofocus{{end}}>
+    {{with $.Errors.ErrorKey $ni.Field}}<p id="{{$ni.ID}}-err" class="field-error" role="alert">{{t .}}</p>{{end}}
   </div>
-
-  <div class="field">
-    <label for="af-name-es">{{t "accounts.form.name_es"}}</label>
-    <input id="af-name-es" name="name_es" type="text" value="{{.NameES}}">
-  </div>
+  {{end}}
 
   <div class="field">
     <label for="af-parent">{{t "accounts.form.parent"}}</label>

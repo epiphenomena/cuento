@@ -1,0 +1,43 @@
+{{/*
+  p11.4 org settings & languages page (/admin/org, Admin). A small settings form:
+  the org name and the enabled-languages CSV (the languages account NAMES may be
+  entered in, D14 -- adding one makes a new name column appear in the account form).
+  Like the other shell pages it is a self-contained top-level template that emits
+  shell-open, its <main> content, then shell-close. .Page is an orgForm.
+
+  A plain full-page form POST to /admin/org (NOT an htmx partial swap -- this page
+  is the whole settings document, not a fetched region like the subsidiaries inline
+  form, so on save it does a normal full-page reload and re-renders with the Saved
+  notice). Report base currency is NOT here: it follows the scoped subsidiary (D18).
+  Every string via {{t}} (rule 9); no inline script (rule 12).
+*/ -}}
+{{define "org.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "org.title"))}}
+  {{- with .Page}}
+  <h1>{{t "org.title"}}</h1>
+  <p class="hint">{{t "org.intro"}}</p>
+
+  {{if .Saved}}
+  <p class="notice" role="status">{{t "org.saved"}}</p>
+  {{end}}
+
+  <form method="post" action="/admin/org" class="org-form">
+    <div class="field">
+      <label for="org-name">{{t "org.form.name"}}</label>
+      <input id="org-name" name="org_name" type="text" value="{{.OrgName}}">
+    </div>
+
+    <div class="field">
+      <label for="org-langs">{{t "org.form.enabled_languages"}}</label>
+      <input id="org-langs" name="enabled_languages" type="text" value="{{.EnabledLanguages}}">
+      <p class="hint">{{t "org.form.enabled_languages_hint"}}</p>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{{t "common.save"}}</button>
+      <a class="btn btn-ghost" href="/admin">{{t "common.cancel"}}</a>
+    </div>
+  </form>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

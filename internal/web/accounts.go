@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"cuento/internal/money"
@@ -222,8 +223,7 @@ type accountForm struct {
 	Type             string
 	Currency         string
 	ParentID         int64
-	NameEN           string
-	NameES           string
+	Names            []nameInput // one per enabled language (p11.4, D14); en first + required
 	Reconcilable     bool
 	Intercompany     bool
 	FunctionalClass  string
@@ -241,6 +241,46 @@ type accountForm struct {
 	IsRE       bool // revenue/expense (default program shown)
 
 	Errors formErrors
+}
+
+// nameInput is one per-language account-name field in the form (p11.4). The set is
+// driven by the org's enabled_languages (D14): adding a language makes a new name
+// column appear. Lang is the code ("en"); Field/ID are the stable form-field name
+// and element id ("name_en"/"af-name-en") the template stamps and the handler
+// reads; Required marks the base language (en) whose name is required (p05.3);
+// LabelArg is the uppercased code shown in the interpolated "Name (%s)" label so
+// any language gets a label without a per-language chrome catalog key.
+type nameInput struct {
+	Lang     string
+	Field    string // form field name, e.g. "name_en"
+	ID       string // element id, e.g. "af-name-en"
+	Value    string
+	Required bool
+	LabelArg string // e.g. "EN"
+}
+
+// nameFieldFor returns the form-field name for a language's account-name input.
+// Stable and used on both render (template via the struct) and parse (handler),
+// so the en/es fields keep their historical names ("name_en"/"name_es") that
+// existing tests and e2e specs select.
+func nameFieldFor(lang string) string { return "name_" + lang }
+
+// nameInputsFor builds the per-language name-input descriptors from the enabled
+// languages, carrying the current value for each from names (lang->value). en is
+// always first and marked required (EnabledLanguages guarantees en first).
+func nameInputsFor(langs []string, names map[string]string) []nameInput {
+	out := make([]nameInput, 0, len(langs))
+	for _, lang := range langs {
+		out = append(out, nameInput{
+			Lang:     lang,
+			Field:    nameFieldFor(lang),
+			ID:       "af-name-" + lang, // hyphenated, stable (e2e specs select #af-name-en)
+			Value:    names[lang],
+			Required: lang == "en",
+			LabelArg: strings.ToUpper(lang),
+		})
+	}
+	return out
 }
 
 type currencyOption struct {
@@ -288,11 +328,12 @@ func overlayFormValues(form *accountForm, r *http.Request) {
 		}
 		return q.Get(k)
 	}
-	if v := get("name_en"); v != "" {
-		form.NameEN = v
-	}
-	if v := get("name_es"); v != "" {
-		form.NameES = v
+	// Overlay each enabled-language name field so a type-change re-fetch preserves
+	// what the user typed (p11.4: the set of fields is the enabled languages).
+	for i := range form.Names {
+		if v := get(form.Names[i].Field); v != "" {
+			form.Names[i].Value = v
+		}
 	}
 	if v := get("currency"); v != "" {
 		form.Currency = v
@@ -349,8 +390,11 @@ func (s *server) accountEditForm(w http.ResponseWriter, r *http.Request) {
 	if acct.Form990Code.Valid {
 		form.Form990Code = acct.Form990Code.String
 	}
-	form.NameEN = s.accountName(ctx, id, "en")
-	form.NameES = s.accountName(ctx, id, "es")
+	// Prefill each enabled-language name from account_names (exact-lang, no
+	// fallback -- an empty box means that language has no name yet, p11.4).
+	for i := range form.Names {
+		form.Names[i].Value = s.accountNameExact(ctx, id, form.Names[i].Lang)
+	}
 	if ids, err := s.store.AccountSubsidiaryIDs(ctx, id); err == nil {
 		for _, sid := range ids {
 			form.CheckedSubs[sid] = true
@@ -362,7 +406,8 @@ func (s *server) accountEditForm(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "account-form", form)
 }
 
-// accountName reads an account's name in a given language (empty when absent).
+// accountName reads an account's name in a given language WITH the p05.3 fallback
+// (en -> any) via Tree -- used where a display name is wanted (merge preview).
 func (s *server) accountName(ctx context.Context, id int64, lang string) string {
 	rows, err := s.store.Tree(ctx, lang, nil)
 	if err != nil {
@@ -374,6 +419,17 @@ func (s *server) accountName(ctx context.Context, id int64, lang string) string 
 		}
 	}
 	return ""
+}
+
+// accountNameExact reads an account's name in EXACTLY the given language (no
+// fallback), for prefilling the per-language edit inputs (p11.4). "" on any error
+// or when that language has no name yet.
+func (s *server) accountNameExact(ctx context.Context, id int64, lang string) string {
+	name, err := s.store.AccountName(ctx, id, lang)
+	if err != nil {
+		return ""
+	}
+	return name
 }
 
 // buildAccountForm assembles the option lists for a form of a given account type.
@@ -391,6 +447,15 @@ func (s *server) buildAccountForm(ctx context.Context, id int64, typ string) (ac
 	if id == 0 {
 		form.CheckedSubs[1] = true // default: root subsidiary checked on a new account
 	}
+
+	// Per-language name inputs, driven by the org's enabled languages (p11.4, D14):
+	// adding a language here makes a new name column appear. en is always first and
+	// required. Values are filled by the caller (prefill on edit, echo on 422).
+	langs, err := s.store.EnabledLanguages(ctx)
+	if err != nil {
+		return form, err
+	}
+	form.Names = nameInputsFor(langs, nil)
 
 	parents, err := s.store.ParentOptions(ctx, langOf(ctx), typ, id)
 	if err != nil {
@@ -456,12 +521,13 @@ func (s *server) accountCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// One name per enabled language that the user filled in (p11.4). en is required;
+	// an empty en yields ErrNameRequired from the store, mapped to the en input.
 	names := map[string]string{}
-	if form.NameEN != "" {
-		names["en"] = form.NameEN
-	}
-	if form.NameES != "" {
-		names["es"] = form.NameES
+	for lang, name := range in.names {
+		if name != "" {
+			names[lang] = name
+		}
 	}
 	create := store.CreateAccountInput{
 		Type:            in.typ,
@@ -539,15 +605,17 @@ func (s *server) accountUpdate(w http.ResponseWriter, r *http.Request) {
 		s.renderAccountFormError(w, r, form, err)
 		return
 	}
-	// Names.
-	if in.nameEN != "" {
-		if err := s.store.SetAccountName(actorCtx, id, "en", in.nameEN); err != nil {
-			s.renderAccountFormError(w, r, form, err)
-			return
+	// Names: write each enabled language the user filled in (p11.4). Iterate the
+	// form's ordered Names (deterministic, en first) rather than the map so behavior
+	// is stable. An empty box is skipped (no name for that language) rather than
+	// erasing an existing one; a now-disabled language is simply not in the set, so
+	// its stored name is left alone (fallback still uses it).
+	for _, ni := range form.Names {
+		name := in.names[ni.Lang]
+		if name == "" {
+			continue
 		}
-	}
-	if in.nameES != "" {
-		if err := s.store.SetAccountName(actorCtx, id, "es", in.nameES); err != nil {
+		if err := s.store.SetAccountName(actorCtx, id, ni.Lang, name); err != nil {
 			s.renderAccountFormError(w, r, form, err)
 			return
 		}
@@ -596,8 +664,7 @@ type parsedAccountForm struct {
 	typ             string
 	currency        string
 	parentID        int64
-	nameEN          string
-	nameES          string
+	names           map[string]string // lang -> submitted name, for each enabled language (p11.4)
 	reconcilable    bool
 	intercompany    bool
 	functionalClass string
@@ -622,8 +689,7 @@ func (s *server) parseAccountForm(r *http.Request, id int64) (accountForm, parse
 		typ:             typ,
 		currency:        r.PostFormValue("currency"),
 		parentID:        parseID(r.PostFormValue("parent_id")),
-		nameEN:          r.PostFormValue("name_en"),
-		nameES:          r.PostFormValue("name_es"),
+		names:           map[string]string{},
 		reconcilable:    r.PostFormValue("reconcilable") != "",
 		intercompany:    r.PostFormValue("intercompany") != "",
 		functionalClass: r.PostFormValue("functional_class"),
@@ -645,11 +711,18 @@ func (s *server) parseAccountForm(r *http.Request, id int64) (accountForm, parse
 	if err != nil {
 		return accountForm{}, parsedAccountForm{}, err
 	}
+	// Per-language names: read one submitted value per ENABLED language (the fields
+	// buildAccountForm rendered), echo it into the form for a 422 re-render, and
+	// carry it in the parsed input for the store call (p11.4). A field the browser
+	// did not send reads as "".
+	for i := range form.Names {
+		v := r.PostFormValue(form.Names[i].Field)
+		in.names[form.Names[i].Lang] = v
+		form.Names[i].Value = v
+	}
 	// Echo submitted values back so a 422 re-render keeps what the user entered.
 	form.Currency = in.currency
 	form.ParentID = in.parentID
-	form.NameEN = in.nameEN
-	form.NameES = in.nameES
 	form.Reconcilable = in.reconcilable
 	form.Intercompany = in.intercompany
 	form.FunctionalClass = in.functionalClass

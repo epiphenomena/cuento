@@ -210,7 +210,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p11.3 [P] web: subsidiaries admin.**
   Tests: CRUD + matrix perms (Admin); root protections; deactivation guard messages.
   Build: `/admin/subsidiaries` — tree list, create/edit (name, parent, base currency), deactivate.
-- [ ] **p11.4 [P] web+db: org settings & languages.**
+- [x] **p11.4 [P] web+db: org settings & languages.**
   Tests: adding a language exposes a name column in account forms; org settings persist.
   Build: `org_settings(key, value)` migration (org name, enabled languages); minimal admin form. (Report base currency is no longer an org setting — it follows the scoped subsidiary, D18.)
 - [ ] **p11.5 [P] web: programs management.**

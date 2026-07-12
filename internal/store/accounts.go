@@ -474,6 +474,22 @@ func (s *Store) DeactivateAccount(ctx context.Context, id int64) error {
 	return nil
 }
 
+// AccountName returns an account's name in EXACTLY the given language, or "" when
+// that (account, lang) name is unset. Unlike Tree (which applies the p05.3 fallback
+// en -> any), this reports the raw per-language row, so the account form's edit
+// prefill shows an empty box for a language that has no name yet rather than
+// echoing the en name into a foreign-language input (p11.4). Read; sqlc.
+func (s *Store) AccountName(ctx context.Context, id int64, lang string) (string, error) {
+	row, err := s.q.GetAccountName(ctx, sqlc.GetAccountNameParams{AccountID: id, Lang: lang})
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("store: account name (%d,%s): %w", id, lang, err)
+	}
+	return row.Name, nil
+}
+
 // GetAccount returns the current live row for one account (read; sqlc).
 func (s *Store) GetAccount(ctx context.Context, id int64) (sqlc.Account, error) {
 	row, err := s.q.GetAccount(ctx, id)

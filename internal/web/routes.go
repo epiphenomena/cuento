@@ -172,6 +172,15 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/admin/subsidiaries", Admin, http.HandlerFunc(s.subsidiaryCreate)},
 		{http.MethodPost, "/admin/subsidiaries/{id}", Admin, http.HandlerFunc(s.subsidiaryUpdate)},
 		{http.MethodPost, "/admin/subsidiaries/{id}/deactivate", Admin, http.HandlerFunc(s.subsidiaryDeactivate)},
+		// p11.4 org settings & languages (Appendix B/F: /admin/** = Admin). GET
+		// renders the settings form; POST stores the org name + enabled languages
+		// (a CSV of the languages account NAMES may be entered in, D14 -- driving the
+		// account form's per-language name inputs). Both Admin -- org config is not
+		// bookkeeping. The permission-matrix test picks these up automatically (rule
+		// 8); the /admin landing (admin.tmpl) links this page. Report base currency is
+		// NOT a setting here -- it follows the scoped subsidiary (D18).
+		{http.MethodGet, "/admin/org", Admin, http.HandlerFunc(s.orgPage)},
+		{http.MethodPost, "/admin/org", Admin, http.HandlerFunc(s.orgUpdate)},
 	}
 	// The -dev-only styleguide (Appendix F): a component gallery for visual review.
 	// Registered ONLY in -dev so it 404s in production (it is not in the registry

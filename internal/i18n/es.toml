@@ -79,6 +79,15 @@ settings.coming_soon = "Los ajustes llegan en un paso posterior."
 # Landing de administracion (stub, p10.2); las paginas reales llegan despues.
 admin.coming_soon = "Las herramientas de administracion llegan en un paso posterior."
 
+# Ajustes de la organizacion e idiomas (p11.4). Los idiomas habilitados son los
+# idiomas en que se pueden nombrar las cuentas (D14); la interfaz sigue en/es.
+org.title = "Ajustes de la organizacion"
+org.intro = "El nombre de su organizacion y los idiomas en que se pueden nombrar las cuentas."
+org.saved = "Ajustes guardados."
+org.form.name = "Nombre de la organizacion"
+org.form.enabled_languages = "Idiomas de nombres de cuenta"
+org.form.enabled_languages_hint = "Codigos de idioma separados por comas (por ejemplo en,es). El ingles siempre esta disponible. Anadir un idioma agrega un campo de nombre al formulario de cuenta."
+
 # Etiqueta para un fondo sin restricciones (fund_id NULL), segun D20.
 fund.unrestricted = "Fondo General No Restringido"
 
@@ -120,8 +129,7 @@ accounts.col.actions = "Acciones"
 accounts.form.new_title = "Nueva cuenta"
 accounts.form.edit_title = "Editar cuenta"
 accounts.form.type = "Tipo"
-accounts.form.name_en = "Nombre (ingles)"
-accounts.form.name_es = "Nombre (espanol)"
+accounts.form.name = "Nombre (%s)"
 accounts.form.parent = "Cuenta madre"
 accounts.form.no_parent = "— nivel superior —"
 accounts.form.currency = "Moneda predeterminada"

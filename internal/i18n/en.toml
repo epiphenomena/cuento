@@ -84,6 +84,15 @@ settings.coming_soon = "Settings arrive in a later step."
 # Admin landing stub (p10.2); the real admin pages arrive in later phases.
 admin.coming_soon = "Admin tools arrive in a later step."
 
+# Org settings & languages (p11.4). The enabled languages are the languages account
+# NAMES may be entered in (D14); the UI chrome stays en/es.
+org.title = "Organization settings"
+org.intro = "Your organization's name and the languages accounts may be named in."
+org.saved = "Settings saved."
+org.form.name = "Organization name"
+org.form.enabled_languages = "Account name languages"
+org.form.enabled_languages_hint = "Comma-separated language codes (for example en,es). English is always available. Adding a language adds a name field to the account form."
+
 # Label for a NULL fund_id (unrestricted general fund), per D20.
 fund.unrestricted = "Unrestricted General"
 
@@ -124,8 +133,7 @@ accounts.col.actions = "Actions"
 accounts.form.new_title = "New account"
 accounts.form.edit_title = "Edit account"
 accounts.form.type = "Type"
-accounts.form.name_en = "Name (English)"
-accounts.form.name_es = "Name (Spanish)"
+accounts.form.name = "Name (%s)"
 accounts.form.parent = "Parent account"
 accounts.form.no_parent = "— top level —"
 accounts.form.currency = "Default currency"

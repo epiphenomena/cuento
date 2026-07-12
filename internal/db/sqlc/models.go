@@ -141,6 +141,11 @@ type FundsVersion struct {
 	Active      int64
 }
 
+type OrgSetting struct {
+	Key   string
+	Value string
+}
+
 type Payee struct {
 	ID     int64
 	Name   string
