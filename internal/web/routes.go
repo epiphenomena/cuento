@@ -283,6 +283,15 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/funds/{id}/close", TxnWrite, http.HandlerFunc(s.fundClose)},
 		{http.MethodPost, "/funds/{id}/reopen", TxnWrite, http.HandlerFunc(s.fundReopen)},
 	}
+	// p15.12 reports index: GET /reports lists the reports the current user may
+	// access, grouped by report group, each a link to a concrete /reports/{id}. The
+	// page itself is AnyUser (visible to any logged-in user); it FILTERS its contents
+	// by grant, reusing decide()+grantChecker (the same enforcement path the concrete
+	// report routes use), so an ungranted user lands on an empty list (200), not a 403.
+	// The exact literal "/reports" does not collide with the "/reports/{id}" literals
+	// mounted below (Go 1.22+ mux). Registering it lights up the nav.reports entry
+	// (shell.go). The permission-matrix test picks it up automatically (rule 8).
+	routes = append(routes, Route{http.MethodGet, "/reports", AnyUser, http.HandlerFunc(s.reportsIndex)})
 	// p15.1 reports: auto-mount ONE concrete route pair per registered report --
 	// GET /reports/{id} (HTML, into the app shell) and GET /reports/{id}.csv (the
 	// machine export) -- gated by ReportGroup(report.Group). Mounting CONCRETE

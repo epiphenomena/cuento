@@ -974,6 +974,24 @@ other = "Quarterly"
 other = "Download CSV"
 [reports.empty]
 other = "No data for these parameters."
+
+# p15.12 reports index (/reports). The index page title, the empty-state message
+# (shown to a user with no report grants -- the page is visible to any user but lists
+# only permitted reports), and the localized GROUP section labels (the audience/
+# permission buckets financial/funds/programs/tax; the raw group NAMES stay reference
+# values in the admin grant UI, but the index shows human labels).
+[reports.index.title]
+other = "Reports"
+[reports.index.empty]
+other = "No reports available. Ask an administrator for report access."
+[reports.group.financial]
+other = "Financial statements"
+[reports.group.funds]
+other = "Funds"
+[reports.group.programs]
+other = "Programs"
+[reports.group.tax]
+other = "Tax (IRS 990)"
 [reports.trial_balance.title]
 other = "Trial balance"
 [reports.trial_balance.col.account]

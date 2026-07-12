@@ -110,6 +110,39 @@ test('reports: open the trial balance, set as-of/scope, see the balancing total,
   expect(body.split('\n')[0]).toContain(',');
 });
 
+// p15.12 REPORTS INDEX (/reports): the grant-filtered directory of reports, grouped by
+// report group, each a link to /reports/{id}. The seeded admin is is_admin, so it sees
+// EVERY group/report (the per-persona grant filtering is unit-tested in the Go layer).
+// This spec confirms the end-to-end path: admin opens /reports, sees grouped report
+// links, clicks the trial balance, and lands on that report. READ-ONLY (navigation
+// only; mutates nothing durable). Strict CSP (script-src 'self') => NO
+// page.waitForFunction; only locator/URL waits. Selectors are the index marker classes
+// and an href (language-independent).
+test('reports: open the index, see grouped report links, click one, land on the report', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  // --- open the index page ---
+  await page.goto('/reports');
+
+  // At least one group SECTION with a report LIST renders (admin sees all four groups).
+  await expect(page.locator('section.reports-group').first()).toBeVisible();
+  await expect(page.locator('ul.reports-list').first()).toBeVisible();
+
+  // The trial-balance report is a link (admin reaches the financial group). Its href is
+  // the concrete report route -- clicking it lands on the real report (no dead link).
+  const tbLink = page.locator('a[href="/reports/trial_balance"]');
+  await expect(tbLink).toBeVisible();
+  await tbLink.click();
+  await page.waitForURL('**/reports/trial_balance');
+
+  // The report page renders (its shared params form + table shell).
+  await expect(page.locator('form.report-params')).toBeVisible();
+  await expect(page.locator('table.report-table')).toBeVisible();
+});
+
 // p15.5 INCOME STATEMENT (statement of activities): open it, set a period + QUARTERLY
 // granularity, see the R/E TREE (Revenue + Expenses section labels), the comparative
 // period COLUMNS (more than the Line+Total pair), and the NET surplus/deficit line, then

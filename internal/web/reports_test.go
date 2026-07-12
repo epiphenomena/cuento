@@ -9,6 +9,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
+	"cuento/internal/i18n"
 	"cuento/internal/reports"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
@@ -235,6 +236,120 @@ func TestReportPermissionThroughGrant(t *testing.T) {
 	rec = asUser(t, h, sm, ungranted, http.MethodGet, "/reports/"+reports.TrialBalanceReportID, nil)
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("ungranted user status = %d, want 403", rec.Code)
+	}
+}
+
+// p15.12 reports index (/reports, AnyUser): the page lists ONLY the report groups
+// and reports the current user may access, grouped by report group, each a link to
+// /reports/{id}. Filtering reuses the enforcement path (decide + grantChecker) so the
+// listing can never drift from what the concrete report routes actually allow.
+
+// reportHref is the exact index link for a report id (used with a trailing quote so a
+// substring check can't false-positive: /reports/functional_expenses must not satisfy
+// a search for /reports/fund_activity, etc.).
+func reportHref(id string) string { return `href="/reports/` + id + `"` }
+
+// TestReportsIndexAdminSeesAll: an admin (is_admin implies every group, D10) sees the
+// index with EVERY registered report as a link -- the "no dead links" guarantee: each
+// id in the registry appears as an /reports/{id} href. The four group section labels
+// are present too.
+func TestReportsIndexAdminSeesAll(t *testing.T) {
+	h, st, _, sm := reportsApp(t)
+	admin := mkUser(t, st, "admin", "none", true)
+
+	rec := asUser(t, h, sm, admin, http.MethodGet, "/reports", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin index status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Every registered report is a link (no dead links; the index and the registry
+	// can't disagree). Admin reaches every group, so ALL ids must appear.
+	for _, rep := range reports.Default().All() {
+		if !strings.Contains(body, reportHref(rep.ID)) {
+			t.Errorf("admin index missing link for report %q (%s)", rep.ID, reportHref(rep.ID))
+		}
+	}
+	// All four group section labels are present (each group has >=1 report).
+	for _, g := range reports.Groups() {
+		if !strings.Contains(body, i18n.T("en", "reports.group."+g)) {
+			t.Errorf("admin index missing group section label for %q", g)
+		}
+	}
+}
+
+// TestReportsIndexGrantFiltersGroups: a user granted ONLY "financial" sees the
+// financial reports and NOT the funds/programs/tax reports -- proving the index
+// filters by the SAME grant resolution the routes enforce.
+func TestReportsIndexGrantFiltersGroups(t *testing.T) {
+	h, st, db, sm := reportsApp(t)
+
+	u := mkUser(t, st, "fin", "none", false)
+	grantGroup(t, db, u, "financial")
+
+	rec := asUser(t, h, sm, u, http.MethodGet, "/reports", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("financial-only index status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// A financial report (trial balance) IS listed; its group label is shown.
+	if !strings.Contains(body, reportHref(reports.TrialBalanceReportID)) {
+		t.Errorf("financial-only index missing trial_balance link")
+	}
+	if !strings.Contains(body, i18n.T("en", "reports.group.financial")) {
+		t.Errorf("financial-only index missing the financial group label")
+	}
+
+	// Reports in the OTHER groups (funds/programs/tax) must NOT appear: fund_activity
+	// (funds), program_statement (programs), functional_expenses + form_990 (tax).
+	for _, id := range []string{"fund_activity", "program_statement", "functional_expenses", "form_990"} {
+		if strings.Contains(body, reportHref(id)) {
+			t.Errorf("financial-only index wrongly lists non-financial report %q", id)
+		}
+	}
+	// And the other group section labels are absent (a section renders only when it
+	// has >=1 permitted report).
+	for _, g := range []string{"funds", "programs", "tax"} {
+		if strings.Contains(body, i18n.T("en", "reports.group."+g)) {
+			t.Errorf("financial-only index wrongly shows the %q group section", g)
+		}
+	}
+}
+
+// TestReportsIndexNoGrantsEmpty: a non-admin with NO grants gets a 200 index (not a
+// 403) with the empty-state message and ZERO report links -- the page itself is
+// AnyUser; it filters its contents, so an ungranted user lands on an empty list, not
+// an error.
+func TestReportsIndexNoGrantsEmpty(t *testing.T) {
+	h, st, _, sm := reportsApp(t)
+	u := mkUser(t, st, "nogrants", "none", false)
+
+	rec := asUser(t, h, sm, u, http.MethodGet, "/reports", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("no-grants index status = %d, want 200 (not 403)", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, i18n.T("en", "reports.index.empty")) {
+		t.Errorf("no-grants index missing the empty-state message")
+	}
+	// No report is linked (every registered id absent).
+	for _, rep := range reports.Default().All() {
+		if strings.Contains(body, reportHref(rep.ID)) {
+			t.Errorf("no-grants index wrongly lists report %q", rep.ID)
+		}
+	}
+}
+
+// TestReportsIndexAnonRedirects: the index is not public -- an anonymous request is
+// bounced to /login (302), like every AnyUser route.
+func TestReportsIndexAnonRedirects(t *testing.T) {
+	h, _, _, _ := reportsApp(t)
+
+	rec := asUser(t, h, nil, 0, http.MethodGet, "/reports", nil)
+	if rec.Code != http.StatusFound {
+		t.Errorf("anon index status = %d, want 302 redirect to login", rec.Code)
 	}
 }
 

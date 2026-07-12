@@ -545,6 +545,78 @@ func renderCell(c reports.Cell, reportID, lang string, opts money.FormatOpts, df
 	}
 }
 
+// ---- index (p15.12) -------------------------------------------------------
+
+// reportsIndexModel is the /reports index template model: the report groups the
+// current user may access, each a section of report links. Empty (no permitted
+// group) renders the empty-state message, not an error.
+type reportsIndexModel struct {
+	Groups []reportGroupSection
+}
+
+// reportGroupSection is one report-group section of the index: a localized group
+// label and the reports in that group the user may reach (each a link + title).
+type reportGroupSection struct {
+	Label   string
+	Reports []reportLink
+}
+
+// reportLink is one report on the index: its /reports/{id} href and localized title.
+type reportLink struct {
+	Href  string
+	Title string
+}
+
+// reportsIndex handles GET /reports (AnyUser): it lists the reports the CURRENT user
+// may access, grouped by report group, each a link to /reports/{id}. Only PERMITTED
+// groups/reports appear -- a user sees a group's reports only if they hold that
+// group's grant (or are admin). It reuses the SAME enforcement path the report routes
+// use (decide + grantChecker), so the listing can never drift from actual access: a
+// report is listed iff decide(ReportGroup(rep.Group), u, ...) == outcomeAllow, exactly
+// the check enforce() runs on GET /reports/{id}. An ungranted (non-admin) user gets a
+// 200 index with an empty list + the empty-state message, never a 403 -- the page
+// itself is AnyUser; it filters its own contents.
+func (s *server) reportsIndex(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	u := currentUser(ctx)
+	lang := langOf(ctx)
+
+	// One grant load, reused across every group check. Passing a ReportGroup perm is
+	// REQUIRED: grantChecker returns the always-false stub for any other perm kind, so
+	// AnyUser here would list nothing. decide() then short-circuits admin -> allow all
+	// and consults this closure per group for a non-admin user -- the identical path
+	// enforce() takes for a concrete report route.
+	checker := s.grantChecker(ctx, u, ReportGroup(""))
+
+	// Bucket the permitted reports by group, preserving reports.Groups() order for the
+	// sections and All() order within each group (both stable), so the index is
+	// deterministic and matches the grant UI's group order (reports.go / D10).
+	byGroup := make(map[string][]reportLink)
+	for _, rep := range s.reports.All() {
+		if decide(ReportGroup(rep.Group), u, checker) != outcomeAllow {
+			continue
+		}
+		byGroup[rep.Group] = append(byGroup[rep.Group], reportLink{
+			Href:  "/reports/" + rep.ID,
+			Title: i18n.T(lang, rep.TitleKey),
+		})
+	}
+
+	var model reportsIndexModel
+	for _, g := range reports.Groups() {
+		links := byGroup[g]
+		if len(links) == 0 {
+			continue // a section renders only when it has >=1 permitted report
+		}
+		model.Groups = append(model.Groups, reportGroupSection{
+			Label:   i18n.T(lang, "reports.group."+g),
+			Reports: links,
+		})
+	}
+
+	s.render(w, r, http.StatusOK, "reports_index.tmpl", s.newShellPage(r, model))
+}
+
 // ---- handlers -------------------------------------------------------------
 
 // reportPage handles GET /reports/{id} (ReportGroup(group)): it resolves the params

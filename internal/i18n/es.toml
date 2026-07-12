@@ -970,6 +970,25 @@ other = "Trimestral"
 other = "Descargar CSV"
 [reports.empty]
 other = "No hay datos para estos parámetros."
+
+# p15.12 índice de informes (/reports). El título del índice, el mensaje de estado
+# vacío (mostrado a un usuario sin concesiones de informes: la página es visible para
+# cualquier usuario pero solo lista los informes permitidos) y las etiquetas de sección
+# de GRUPO localizadas (los grupos de audiencia/permiso financial/funds/programs/tax;
+# los NOMBRES de grupo en bruto siguen siendo valores de referencia en la interfaz de
+# concesión de administración, pero el índice muestra etiquetas legibles).
+[reports.index.title]
+other = "Informes"
+[reports.index.empty]
+other = "No hay informes disponibles. Solicite acceso a un administrador."
+[reports.group.financial]
+other = "Estados financieros"
+[reports.group.funds]
+other = "Fondos"
+[reports.group.programs]
+other = "Programas"
+[reports.group.tax]
+other = "Impuestos (IRS 990)"
 [reports.trial_balance.title]
 other = "Balance de comprobación"
 [reports.trial_balance.col.account]
