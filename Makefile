@@ -34,9 +34,22 @@ test:
 	@if ls internal/web/static/*.test.js internal/web/static/**/*.test.js >/dev/null 2>&1; then \
 		node --test internal/web/static; else echo "test: no JS tests yet, skipping node --test"; fi
 
-## check — build, then run `cuento check` against a fixture db (wired in p08.3).
+## check — build, then run the ledger integrity suite (`cuento check`) against a
+## FRESH temp migrated db, which MUST be clean (an empty migrated db has only the
+## seeded roots and no splits). Hermetic: the temp db is created and removed here,
+## and nothing depends on fixtures/sample.db (p09.3, gitignored). If a local
+## fixtures/sample.db happens to exist we additionally check it (--strict), but the
+## default must never require it. migrate + check share the same cwd and -db value
+## so db.Open resolves them to one physical file (the p06.4 path-escape quirk).
 check: build
-	@echo "check: cuento check wiring lands in p08.3"
+	@tmpdb=$$(mktemp -u -t cuento-check-XXXXXX.db); \
+	trap 'rm -f "$$tmpdb" "$$tmpdb"-* "$$tmpdb".*' EXIT; \
+	echo "check: fresh migrated db -> cuento check (must be clean)"; \
+	$(BINARY) migrate -db "$$tmpdb" >/dev/null && $(BINARY) check -db "$$tmpdb"; \
+	if [ -f fixtures/sample.db ]; then \
+		echo "check: fixtures/sample.db present -> cuento check --strict"; \
+		$(BINARY) check -db fixtures/sample.db --strict; \
+	fi
 
 ## e2e — opt-in Playwright functional tests (pE.1). Builds bin/cuento, installs
 ## the pinned test-only Node deps (@playwright/test, bundled chromium already

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -27,6 +28,17 @@ const defaultDBPath = "cuento.db"
 // version is the build version, overridden at release via
 // -ldflags "-X main.version=...". It is not wired to ldflags yet (p18.1).
 var version = "dev"
+
+// stdout is the writer command output goes to (indirected so tests can capture
+// it). Defaults to os.Stdout.
+var stdout io.Writer = os.Stdout
+
+// exitError carries a specific process exit code up to main from a subcommand
+// that fails deliberately (not a Go error to log). `cuento check` returns it so
+// a ledger with violations exits non-zero without printing a spurious log line.
+type exitError struct{ code int }
+
+func (e exitError) Error() string { return fmt.Sprintf("exit status %d", e.code) }
 
 func main() {
 	if len(os.Args) < 2 {
@@ -48,6 +60,16 @@ func main() {
 		if err := userCmd(args); err != nil {
 			log.Fatalf("user: %v", err)
 		}
+	case "check":
+		if err := checkCmd(args); err != nil {
+			// A deliberate non-zero exit (ledger violations) carries its own
+			// code and needs no log line -- the violations were already printed.
+			var ee exitError
+			if errors.As(err, &ee) {
+				os.Exit(ee.code)
+			}
+			log.Fatalf("check: %v", err)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "cuento: unknown subcommand %q\n\n", cmd)
 		usage()
@@ -56,7 +78,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: cuento <command> [flags]\n\ncommands:\n  serve     run the HTTP server (auto-migrates on start; -dev relaxes cookie Secure)\n  migrate   apply pending database migrations\n  user      manage users (add|passwd|disable)\n")
+	fmt.Fprintf(os.Stderr, "usage: cuento <command> [flags]\n\ncommands:\n  serve     run the HTTP server (auto-migrates on start; -dev relaxes cookie Secure)\n  migrate   apply pending database migrations\n  user      manage users (add|passwd|disable)\n  check     run the ledger integrity suite ([-db PATH] [--strict])\n")
 }
 
 // migrate applies any pending embedded migrations to the configured database
