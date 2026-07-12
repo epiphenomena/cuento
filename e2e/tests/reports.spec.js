@@ -31,6 +31,7 @@ const FE = '/reports/functional_expenses';
 const FA = '/reports/fund_activity';
 const ABR = '/reports/activities_by_restriction';
 const PS = '/reports/program_statement';
+const F990 = '/reports/form_990';
 
 async function login(page, server) {
   await page.goto('/login');
@@ -797,4 +798,111 @@ test('reports: open the program statement (comparative), see program columns + a
   expect(resp.headers()['content-type']).toContain('text/csv');
   const body = await resp.text();
   expect(body.split('\n')[0]).toContain(',');
+});
+
+// p15.11 the 990 PACKAGE: the year-end IRS Form 990 filing package, one labeled section
+// per Part in a SINGLE Table (Part III program service summary from p15.10, Part VIII
+// revenue from p15.5, Part IX functional-expense totals from p15.7, Part X balance sheet
+// from p15.4). EVERY section renders an explicit (Unmapped) bucket rather than dropping
+// rows. This spec SEEDS one program-tagged expense (with an effective Part IX 990 line),
+// one fund-free revenue receipt (an UNMAPPED revenue -> the Part VIII Unmapped bucket),
+// and the asset/liability rows those postings imply, then:
+//   - opens the report over the fiscal year (from/to = period param), root scope, USD;
+//   - confirms the params form + scope selector + period from/to controls;
+//   - sees the FOUR Part section headers (localized en), the (Unmapped) bucket, the Part
+//     VIII/IX total rows, and a balancing Part X (report-total) row;
+//   - the CSV endpoint returns text/csv.
+//
+// This test MUTATES (creates three accounts + two txns); names are unique so it never
+// collides with sibling specs sharing the worker db, and it only ADDS rows (never asserts
+// a global count). Strict CSP (script-src 'self') => NO page.waitForFunction; only
+// locator/URL/response waits + a plain page.request fetch for the CSV.
+test('reports: open the 990 package, see the four Parts + Unmapped buckets + totals, CSV returns', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  // --- seed: an expense account carrying an effective Part IX line (IX.16 Occupancy) +
+  // functional class, a cash asset, and an UNMAPPED revenue account (no 990 code -> the
+  // Part VIII Unmapped bucket). ---
+  await createAsset(page, 'F990 Bank E2E');
+  await createRevenueAccount(page, 'F990 Gift E2E'); // no 990 code -> Unmapped (Part VIII)
+
+  await page.goto('/accounts');
+  await page.getByRole('button', { name: /new account/i }).click();
+  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+  await page.locator('#af-type').selectOption('expense');
+  await expect(page.locator('#af-func')).toBeVisible();
+  await page.locator('#af-name-en').fill('F990 Rent E2E');
+  const rootSub = page.locator('input[name="sub_1"]');
+  if (!(await rootSub.isChecked())) await rootSub.check();
+  await page.locator('#af-func').selectOption('management');
+  await page.locator('#af-990').selectOption('IX.16'); // effective Part IX line
+  await saveAndReload(page, { reloadPath: '/accounts' });
+  await expect(page.locator('tr.acct-row', { hasText: 'F990 Rent E2E' })).toBeVisible();
+
+  // A revenue receipt: DR F990 Bank 90.00, CR F990 Gift 90.00 (the revenue split carries a
+  // program, prefilled from the seeded root -> Part III; F990 Gift has no 990 code -> Part
+  // VIII Unmapped).
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await page.locator('#txn-account-0').selectOption({ label: 'F990 Bank E2E' });
+  await page.locator('#txn-amount-0').fill('90.00');
+  await page.locator('#txn-account-1').selectOption({ label: 'F990 Gift E2E' });
+  await page.locator('#txn-amount-1').fill('-90.00');
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL('**/register**');
+
+  // An expense: DR F990 Rent 30.00 (class management, program prefilled), CR F990 Bank 30.00.
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await page.locator('#txn-account-0').selectOption({ label: 'F990 Rent E2E' });
+  await expect(page.locator('#txn-class-0')).toHaveValue('management');
+  await page.locator('#txn-amount-0').fill('30.00');
+  await page.locator('#txn-account-1').selectOption({ label: 'F990 Bank E2E' });
+  await page.locator('#txn-amount-1').fill('-30.00');
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL('**/register**');
+
+  // --- open the 990 package over the fiscal year (from/to), root scope, USD ---
+  await page.goto(`${F990}?scope=1&from=2025-01-01&to=2030-12-31&currency=USD`);
+
+  // The shared params form + the always-present subsidiary SCOPE selector (D18).
+  await expect(page.locator('form.report-params')).toBeVisible();
+  await expect(page.locator('select.report-scope-select[name="scope"]')).toBeVisible();
+  // The period FROM/TO controls (the fiscal year is the period param) -- plain text inputs.
+  await expect(page.locator('form.report-params [name="from"]')).toBeVisible();
+  await expect(page.locator('form.report-params [name="to"]')).toBeVisible();
+
+  // The report table renders the FOUR Part section headers (localized en) in one Table.
+  const table = page.locator('table.report-table');
+  await expect(table).toBeVisible();
+  await expect(table).toContainText('Part III');
+  await expect(table).toContainText('Part VIII');
+  await expect(table).toContainText('Part IX');
+  await expect(table).toContainText('Part X');
+
+  // Every section renders an explicit (Unmapped) bucket (never drop rows). At least one is
+  // present (Part VIII's is non-empty here: the F990 Gift receipt has no 990 code).
+  await expect(table).toContainText('(Unmapped)');
+
+  // The Part VIII / Part IX total rows + the Part X balancing identity row.
+  await expect(table).toContainText('Total revenue');
+  await expect(table).toContainText('Total functional expenses');
+  await expect(table).toContainText('Total liabilities and net assets');
+  // A balancing (report-total) row is present (Part VIII/IX/X totals are report-total).
+  await expect(page.locator('table.report-table tr.report-total')).not.toHaveCount(0);
+  // The Occupancy Part IX line (IX.16, the effective line of F990 Rent) renders.
+  await expect(table).toContainText('Occupancy');
+  // A drillable figure is present (each amount line drills to its accounts' splits).
+  await expect(page.locator('a.report-drill-link').first()).toBeVisible();
+
+  // --- the CSV export link is present and the endpoint returns text/csv ---
+  await expect(page.locator('a.report-csv-link')).toBeVisible();
+  const resp990 = await page.request.get(`${F990}.csv?scope=1&from=2025-01-01&to=2030-12-31&currency=USD`);
+  expect(resp990.status()).toBe(200);
+  expect(resp990.headers()['content-type']).toContain('text/csv');
+  const body990 = await resp990.text();
+  expect(body990.split('\n')[0]).toContain(',');
 });

@@ -1177,3 +1177,51 @@ other = "Total de ingresos"
 other = "Total de gastos"
 [reports.program_statement.net]
 other = "Neto (ingresos − gastos)"
+
+# p15.11 el PAQUETE 990 — el paquete de presentación del Formulario 990 del IRS de
+# fin de año, una sección etiquetada por Parte en una sola Tabla, cada una compuesta
+# de la ruta del toolkit de un informe hermano para que los números reconcilien
+# (Parte III resumen de servicios del programa de p15.10, Parte VIII ingresos de
+# p15.5, Parte IX totales de gastos funcionales de p15.7, Parte X balance de p15.4).
+# Las etiquetas de LÍNEA del 990 son texto de referencia ALMACENADO (form990_lines,
+# D25) renderizado literalmente, NO claves de catálogo — solo las etiquetas de
+# sección/subtotal/columna del framework de abajo son entradas de catálogo. Cada
+# sección renderiza un depósito "(Sin asignar)" explícito en vez de descartar filas.
+[reports.form_990.title]
+other = "Paquete del Formulario 990"
+[reports.form_990.col.line]
+other = "Línea"
+[reports.form_990.col.currency]
+other = "Moneda"
+[reports.form_990.col.amount]
+other = "Importe"
+[reports.form_990.unmapped]
+other = "(Sin asignar)"
+[reports.form_990.part.iii]
+other = "Parte III — Logros de servicios del programa"
+[reports.form_990.part.viii]
+other = "Parte VIII — Estado de ingresos"
+[reports.form_990.part.ix]
+other = "Parte IX — Estado de gastos funcionales"
+[reports.form_990.part.x]
+other = "Parte X — Balance"
+[reports.form_990.iii.revenue]
+other = "Ingresos"
+[reports.form_990.iii.expenses]
+other = "Gastos"
+[reports.form_990.viii.total]
+other = "Total de ingresos"
+[reports.form_990.ix.total]
+other = "Total de gastos funcionales"
+[reports.form_990.x.total_assets]
+other = "Total de activos"
+[reports.form_990.x.total_liabilities]
+other = "Total de pasivos"
+[reports.form_990.x.na_without]
+other = "Activos netos sin restricciones de donantes"
+[reports.form_990.x.na_with]
+other = "Activos netos con restricciones de donantes"
+[reports.form_990.x.total_net_assets]
+other = "Total de activos netos"
+[reports.form_990.x.total_liabilities_net_assets]
+other = "Total de pasivos y activos netos"

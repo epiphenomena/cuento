@@ -1,0 +1,44 @@
+   Line                                        Currency          Amount
+-  ------------------------------------------  --------  --------------
+   Part III — Program service accomplishments
+   General                                                            0
+>  Revenue                                     MXN       MXN 100,000.00
+>  Revenue                                     USD        USD 58,950.00
+>  Expenses                                    MXN         MXN 8,600.00
+>  Expenses                                    USD        USD 23,275.00
+   Educacion                                                          0
+>  Revenue                                     MXN       MXN 100,000.00
+>  Revenue                                     USD         USD 3,200.00
+>  Expenses                                    MXN         MXN 5,000.00
+>  Expenses                                    USD         USD 1,500.00
+   Food Pantry                                                        0
+>  Expenses                                    MXN         MXN 1,500.00
+   (Unmapped)                                                         0
+   Part VIII — Statement of revenue
+   1e — Government grants (contributions)      USD         USD 7,815.94
+   1f — All other contributions and gifts      USD        USD 52,750.00
+   2 — Program service revenue                 USD         USD 1,200.00
+   (Unmapped)                                  USD         USD 3,000.00
+=  Total revenue                               USD        USD 64,765.94
+   Part IX — Statement of functional expenses
+   7 — Other salaries and wages                USD        USD 16,500.00
+   11g — Fees for services -- other            USD            USD 25.00
+   16 — Occupancy                              USD         USD 3,050.00
+   24e — All other expenses                    USD         USD 4,175.14
+   (Unmapped)                                  USD             USD 0.00
+=  Total functional expenses                   USD        USD 23,750.14
+   Part X — Balance sheet
+   Checking US                                 USD        USD 35,935.00
+   Checking MX                                 USD        USD 21,823.20
+   Savings                                     USD        USD 20,000.00
+   Cash MXN                                    USD           USD 353.59
+   Building                                    USD       USD 160,000.00
+   FX Clearing                                 USD        USD 10,016.24
+>  Total assets                                USD       USD 248,128.04
+   Credit Card                                 USD         USD 3,000.00
+>  Total liabilities                           USD         USD 3,000.00
+   (Unmapped)                                  USD             USD 0.00
+   Net assets without donor restrictions       USD       USD 189,268.92
+   Net assets with donor restrictions          USD        USD 55,859.12
+>  Total net assets                            USD       USD 245,128.04
+=  Total liabilities and net assets            USD       USD 248,128.04

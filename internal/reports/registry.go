@@ -38,6 +38,7 @@ func Default() *Registry {
 	registerFundActivity(reg)
 	registerActivitiesByRestriction(reg)
 	registerProgramStatement(reg)
+	registerForm990(reg)
 	return reg
 }
 

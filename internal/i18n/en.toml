@@ -1179,3 +1179,50 @@ other = "Total revenue"
 other = "Total expenses"
 [reports.program_statement.net]
 other = "Net (revenue − expenses)"
+
+# p15.11 the 990 PACKAGE — the year-end IRS Form 990 filing package, one labeled
+# section per Part in a single Table, each composed from a sibling report's toolkit
+# path so the numbers reconcile (Part III program service summary from p15.10, Part
+# VIII revenue from p15.5, Part IX functional-expense totals from p15.7, Part X
+# balance sheet from p15.4). The 990 LINE labels themselves are STORED reference text
+# (form990_lines, D25) rendered verbatim, NOT catalog keys — only the framework
+# section/subtotal/column labels below are catalog entries. Every section renders an
+# explicit "(Unmapped)" bucket (reports.form_990.unmapped) rather than dropping rows.
+[reports.form_990.title]
+other = "Form 990 package"
+[reports.form_990.col.line]
+other = "Line"
+[reports.form_990.col.currency]
+other = "Currency"
+[reports.form_990.col.amount]
+other = "Amount"
+[reports.form_990.unmapped]
+other = "(Unmapped)"
+[reports.form_990.part.iii]
+other = "Part III — Program service accomplishments"
+[reports.form_990.part.viii]
+other = "Part VIII — Statement of revenue"
+[reports.form_990.part.ix]
+other = "Part IX — Statement of functional expenses"
+[reports.form_990.part.x]
+other = "Part X — Balance sheet"
+[reports.form_990.iii.revenue]
+other = "Revenue"
+[reports.form_990.iii.expenses]
+other = "Expenses"
+[reports.form_990.viii.total]
+other = "Total revenue"
+[reports.form_990.ix.total]
+other = "Total functional expenses"
+[reports.form_990.x.total_assets]
+other = "Total assets"
+[reports.form_990.x.total_liabilities]
+other = "Total liabilities"
+[reports.form_990.x.na_without]
+other = "Net assets without donor restrictions"
+[reports.form_990.x.na_with]
+other = "Net assets with donor restrictions"
+[reports.form_990.x.total_net_assets]
+other = "Total net assets"
+[reports.form_990.x.total_liabilities_net_assets]
+other = "Total liabilities and net assets"
