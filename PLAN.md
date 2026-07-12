@@ -176,7 +176,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 
 ## Phase 9 — Fixtures & historical ledger import
 
-- [ ] **p09.1 testutil: canonical synthetic fixture.**
+- [x] **p09.1 testutil: canonical synthetic fixture.**
   Tests: `TestFixtureIntegrity` (`ledger.Check` clean, warnings included), `TestFixtureKnownAggregates` (exported constants: trial-balance zero per sub, specific account balances, fund balances, functional-matrix cells, per-program activity, 990 line rollups at specific dates).
   Build: `testutil.Fixture(t)` constructing Appendix D exactly — deterministic dates, amounts, edit history, one finalized reconciliation, FX pair, intercompany pair, restricted grant lifecycle. This is what CI and goldens use; the real export never is.
 - [ ] **p09.2 docs: inspect the real export.** *(needs the CSV in `fixtures/source/`)*
