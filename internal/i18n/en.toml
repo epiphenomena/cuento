@@ -1074,3 +1074,19 @@ other = "Closing balance"
 other = "Unrestricted"
 [reports.account.choose]
 other = "Choose an account…"
+
+# p15.7 functional expenses — IRS Form 990 Part IX (Statement of Functional
+# Expenses): expense accounts grouped and subtotaled under their effective Part IX
+# line (Unmapped bucket last), columns = the three functional classes + Total. The
+# per-line labels are the IRS-seeded form990_lines reference text (stored data), and
+# the three class column headers reuse the functional.<class> catalog labels.
+[reports.functional_expenses.title]
+other = "Functional expenses (990 Part IX)"
+[reports.functional_expenses.col.line]
+other = "Line"
+[reports.functional_expenses.col.total]
+other = "Total"
+[reports.functional_expenses.unmapped]
+other = "(Unmapped)"
+[reports.functional_expenses.total]
+other = "Total functional expenses"

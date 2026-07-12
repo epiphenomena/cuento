@@ -34,6 +34,7 @@ func Default() *Registry {
 	registerBalanceSheet(reg)
 	registerIncomeStatement(reg)
 	registerAccountLedger(reg)
+	registerFunctionalExpenses(reg)
 	return reg
 }
 

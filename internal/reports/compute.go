@@ -394,6 +394,48 @@ func (tk *Toolkit) Group990(ctx context.Context, part, currency string, leaf map
 	return rows, nil
 }
 
+// PartLine is one 990 line of a part: its code, the line number, and the IRS-seeded
+// label (form990_lines reference data, D25). The functional-expenses report (p15.7)
+// renders one grouping row per PartLine (code + label) with the contributing expense
+// accounts indented beneath it, in the part's report order. The label is STORED
+// reference data (like a currency name or an account name), not a catalog key, so a
+// report renders it as a TEXT cell verbatim (rule 9's stored-data carve-out).
+type PartLine struct {
+	Code  string
+	Line  string
+	Label string
+}
+
+// Part990Lines returns the 990 lines of a part (e.g. "IX" — Statement of Functional
+// Expenses) in report order (form990_lines sort), each with its line number and
+// IRS-seeded label. It reuses Form990LinesForType (the same reference read Group990's
+// ordering uses) filtered to the part's account type: Part IX lines are all
+// "expense" lines, so the accountType argument selects the part. The result lets the
+// p15.7 report render a grouping/subtotal row per effective line with the seeded
+// label, WITHOUT the report re-reading the reference table or naming a store type.
+func (tk *Toolkit) Part990Lines(ctx context.Context, part, accountType string) ([]PartLine, error) {
+	opts, err := tk.store.Form990LinesForType(ctx, accountType)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PartLine, 0, len(opts))
+	for _, o := range opts {
+		if o.Part != part {
+			continue
+		}
+		out = append(out, PartLine{Code: o.Code, Line: o.Line, Label: o.Label})
+	}
+	return out, nil
+}
+
+// EffectiveCodes returns the accountID -> effective 990 code map (D25 inheritance:
+// own code, else nearest ancestor's; absent => unmapped). A thin pass-through to the
+// store so a report (p15.7) groups its accounts by effective line without importing
+// the store, mirroring how Group990 resolves the same map internally.
+func (tk *Toolkit) EffectiveCodes(ctx context.Context) (map[AccountID]string, error) {
+	return tk.store.Effective990Codes(ctx)
+}
+
 // IntercompanyNet computes the residual of the intercompany-flagged accounts (D19)
 // per currency across the consolidated scope as of d. On a balanced ledger a
 // consolidated scope that covers both sides nets to zero per currency; a NONZERO

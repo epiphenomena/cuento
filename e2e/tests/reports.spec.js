@@ -27,6 +27,7 @@ const TB = '/reports/trial_balance';
 const BS = '/reports/balance_sheet';
 const IS = '/reports/income_statement';
 const AL = '/reports/account_ledger';
+const FE = '/reports/functional_expenses';
 
 async function login(page, server) {
   await page.goto('/login');
@@ -297,6 +298,94 @@ test('reports: open the account ledger, pick an account + range, see opening/lin
   await expect(page.locator('a.report-csv-link')).toBeVisible();
   const csvHref = await page.locator('a.report-csv-link').getAttribute('href');
   const resp = await page.request.get(csvHref);
+  expect(resp.status()).toBe(200);
+  expect(resp.headers()['content-type']).toContain('text/csv');
+  const body = await resp.text();
+  expect(body.split('\n')[0]).toContain(',');
+});
+
+// p15.7 FUNCTIONAL EXPENSES (IRS Form 990 Part IX): create an expense account with an
+// effective Part IX 990 line (IX.16 Occupancy) and a functional class, post an expense
+// transaction to it, then open the report and see the 990-LINE grouping row + the three
+// functional-CLASS columns (Program / Management & general / Fundraising) + a Total
+// column + the grand-total row, and confirm the CSV returns. This test MUTATES (creates
+// two accounts + one txn); names are unique so it never collides with sibling specs
+// sharing the worker db, and it only ADDS rows (never asserts a global count).
+//
+// Strict CSP (script-src 'self', no unsafe-eval) => NO page.waitForFunction; only
+// locator/URL/response waits. Selectors are the report table marker classes, the class
+// column header text (localized en), and the params-form control names — language-
+// independent where structural.
+test('reports: open the functional expenses (990 Part IX), see the 990-line rows + 3 class columns + total, CSV returns', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  // An asset account to fund the expense, and an EXPENSE account carrying an effective
+  // Part IX line (IX.16 Occupancy) and a default functional class (management).
+  await createAsset(page, 'FE Bank');
+  await page.goto('/accounts');
+  await page.getByRole('button', { name: /new account/i }).click();
+  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+  // Choosing the expense type swaps in the expense form (the #af-func class field and the
+  // type-filtered #af-990 line select), preserving the typed name/sub (overlayFormValues).
+  await page.locator('#af-type').selectOption('expense');
+  await expect(page.locator('#af-func')).toBeVisible();
+  await page.locator('#af-name-en').fill('FE Rent');
+  const rootSub = page.locator('input[name="sub_1"]');
+  if (!(await rootSub.isChecked())) await rootSub.check();
+  await page.locator('#af-func').selectOption('management');
+  // The 990 line select (#af-990) offers the expense (Part IX) lines; pick IX.16 Occupancy
+  // so the account has an effective Part IX code and lands on its own 990 line.
+  await page.locator('#af-990').selectOption('IX.16');
+  await saveAndReload(page, { reloadPath: '/accounts' });
+  await expect(page.locator('tr.acct-row', { hasText: 'FE Rent' })).toBeVisible();
+
+  // Post an expense transaction: debit FE Rent (an expense, class prefilled management),
+  // credit FE Bank. The expense split carries a functional class (rule 7), so it appears
+  // in the 990 Part IX matrix.
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await page.locator('#txn-account-0').selectOption({ label: 'FE Rent' });
+  await expect(page.locator('#txn-class-0')).toBeVisible();
+  await expect(page.locator('#txn-class-0')).toHaveValue('management');
+  await page.locator('#txn-amount-0').fill('75.00');
+  await page.locator('#txn-account-1').selectOption({ label: 'FE Bank' });
+  await page.locator('#txn-amount-1').fill('-75.00');
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL('**/register**');
+
+  // --- open the functional-expenses report at the root scope over a wide period ---
+  await page.goto(`${FE}?scope=1&from=2025-01-01&to=2030-12-31&currency=USD`);
+
+  // The shared params form + the always-present subsidiary SCOPE selector (D18).
+  await expect(page.locator('form.report-params')).toBeVisible();
+  await expect(page.locator('select.report-scope-select[name="scope"]')).toBeVisible();
+  // The period FROM/TO controls are present -- plain text inputs (never input[type=date]).
+  await expect(page.locator('form.report-params [name="from"]')).toBeVisible();
+  await expect(page.locator('form.report-params [name="to"]')).toBeVisible();
+
+  // The report table renders the 990 Part IX matrix: the three functional-CLASS column
+  // headers (localized en) plus a Total column, and the IX.16 Occupancy 990-line row.
+  const table = page.locator('table.report-table');
+  await expect(table).toBeVisible();
+  const headers = page.locator('table.report-table thead th');
+  await expect(headers).toContainText(['Line', 'Program', 'Management & general', 'Fundraising', 'Total']);
+  // The 990-LINE grouping row for IX.16 Occupancy (the effective line of FE Rent) is a
+  // subtotal row; the account row (FE Rent) sits under it. The Occupancy line label is the
+  // IRS-seeded stored text.
+  await expect(table).toContainText('Occupancy');
+  await expect(table).toContainText('FE Rent');
+  // The grand-total row (Total functional expenses) is present, marked report-total.
+  await expect(table).toContainText('Total functional expenses');
+  await expect(page.locator('table.report-table tr.report-total')).not.toHaveCount(0);
+  // At least one 990-line SUBTOTAL row (the grouping row) is present.
+  await expect(page.locator('table.report-table tr.report-subtotal')).not.toHaveCount(0);
+
+  // --- the CSV export link is present and the endpoint returns text/csv ---
+  await expect(page.locator('a.report-csv-link')).toBeVisible();
+  const resp = await page.request.get(`${FE}.csv?scope=1&from=2025-01-01&to=2030-12-31&currency=USD`);
   expect(resp.status()).toBe(200);
   expect(resp.headers()['content-type']).toContain('text/csv');
   const body = await resp.text();

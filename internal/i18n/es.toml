@@ -1071,3 +1071,19 @@ other = "Saldo de cierre"
 other = "Sin restriccion"
 [reports.account.choose]
 other = "Elija una cuenta…"
+
+# p15.7 gastos funcionales — Formulario 990 Parte IX (Estado de Gastos Funcionales):
+# cuentas de gasto agrupadas y subtotalizadas bajo su linea efectiva de la Parte IX
+# (grupo No asignado al final), columnas = las tres clases funcionales + Total. Las
+# etiquetas por linea son el texto de referencia sembrado de form990_lines (datos
+# almacenados); los encabezados de clase reutilizan las etiquetas functional.<clase>.
+[reports.functional_expenses.title]
+other = "Gastos funcionales (990 Parte IX)"
+[reports.functional_expenses.col.line]
+other = "Linea"
+[reports.functional_expenses.col.total]
+other = "Total"
+[reports.functional_expenses.unmapped]
+other = "(No asignado)"
+[reports.functional_expenses.total]
+other = "Total de gastos funcionales"
