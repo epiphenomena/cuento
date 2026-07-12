@@ -28,11 +28,16 @@ lint:
 		if [ -n "$$out" ]; then echo "gofumpt: files need formatting:"; echo "$$out"; exit 1; fi; \
 	else echo "lint: gofumpt not installed"; exit 1; fi
 
-## test — Go tests plus JS unit tests (node --test) when present.
+## test — Go tests plus JS unit tests (node --test) when present. The JS units are
+## hand-written ES modules for the boring frontend (AGENTS rule 12). node --test is
+## passed the *.test.js files explicitly (a glob, not the directory): recent Node
+## treats a bare directory arg as a module to run, so the files are globbed so the
+## suite is discovered on every Node version.
 test:
 	$(GO) test $(PKG)
-	@if ls internal/web/static/*.test.js internal/web/static/**/*.test.js >/dev/null 2>&1; then \
-		node --test internal/web/static; else echo "test: no JS tests yet, skipping node --test"; fi
+	@if ls internal/web/static/*.test.js >/dev/null 2>&1; then \
+		node --test 'internal/web/static/*.test.js' 'internal/web/static/**/*.test.js'; \
+		else echo "test: no JS tests yet, skipping node --test"; fi
 
 ## check — build, then run the ledger integrity suite (`cuento check`) against a
 ## FRESH temp migrated db, which MUST be clean (an empty migrated db has only the

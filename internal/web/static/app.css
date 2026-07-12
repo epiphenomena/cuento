@@ -33,6 +33,8 @@
   --color-primary-text: light-dark(#ffffff, #0d1017);
   --color-danger:      light-dark(#b3261e, #ff6b61);
   --color-danger-bg:   light-dark(#fde8e6, #3a1c1a);
+  --color-success:     light-dark(#1f7a3d, #6fdd8b);
+  --color-success-bg:  light-dark(#e6f5ec, #12301d);
   --color-focus:       light-dark(#2457c5, #9cc0ff);
 
   /* Spacing scale (rem). */
@@ -195,6 +197,24 @@ input[type="password"] {
   border-radius: var(--radius);
   background: var(--color-danger-bg);
   color: var(--color-danger);
+}
+/* Success variant (p10.3: valid form submit). */
+.alert-ok {
+  border-color: var(--color-success);
+  background: var(--color-success-bg);
+  color: var(--color-success);
+}
+/* Per-field validation error (p10.3 form-error convention): a small danger-toned
+   message under the field, plus a danger border on the invalid input. Styles live
+   here, never inline (strict CSP, rule 12). */
+.field-error {
+  margin: var(--space-1) 0 0;
+  color: var(--color-danger);
+  font-size: 0.875rem;
+}
+.field input[aria-invalid="true"],
+input[aria-invalid="true"] {
+  border-color: var(--color-danger);
 }
 .flash:empty { display: none; }
 .flash {

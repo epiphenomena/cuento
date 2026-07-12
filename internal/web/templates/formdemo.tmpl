@@ -1,0 +1,41 @@
+{{/*
+  p10.3 form-error demonstrator partial. This is the SINGLE SOURCE of the form
+  region markup: the full -dev /styleguide page renders it via {{template
+  "demo-form" .Page}}, and a failed/succeeded POST re-renders JUST this template
+  (render "demo-form" model) so htmx swaps it into itself. Because both paths use
+  the same template, input ids (demo-name / demo-email) stay stable across every
+  swap (anti-jank, Appendix C) with no duplicated markup.
+
+  The dot (.) is always a demoFormModel (shell page passes .Page; the swap passes
+  the model directly). Field errors come from .Errors (formErrors): .Errors.ErrorKey
+  "field" is the i18n KEY (or "") and is rendered via {{t}} (rule 9); autofocus is
+  stamped on .Errors.FirstInvalid ONLY — the first invalid field — so focus lands
+  there after the swap. No inline script/style (strict CSP, rule 12); the htmx
+  attributes on the <form> drive the targeted swap.
+
+  hx-post: submit to the demonstrator endpoint. hx-target="#demo-form" +
+  hx-swap="outerHTML": replace THIS form with the response (the same partial), so
+  the 422 error render and the 200 success render both land in place. htmx 2.x is
+  configured (base.tmpl meta) to swap the 422 response too.
+*/ -}}
+{{define "demo-form" -}}
+<form id="demo-form" class="demo-form"
+      hx-post="/styleguide" hx-target="#demo-form" hx-swap="outerHTML">
+  {{if .OK}}<p class="alert alert-ok" role="status">{{t "form.demo.ok"}}</p>{{end}}
+  <div class="field">
+    <label for="demo-name">{{t "form.demo.name"}}</label>
+    <input id="demo-name" name="name" type="text" value="{{.Name}}"
+      {{- if .Errors.ErrorKey "name"}} aria-invalid="true" aria-describedby="demo-name-err"{{end}}
+      {{- if eq .Errors.FirstInvalid "name"}} autofocus{{end}}>
+    {{with .Errors.ErrorKey "name"}}<p id="demo-name-err" class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+  <div class="field">
+    <label for="demo-email">{{t "form.demo.email"}}</label>
+    <input id="demo-email" name="email" type="text" value="{{.Email}}"
+      {{- if .Errors.ErrorKey "email"}} aria-invalid="true" aria-describedby="demo-email-err"{{end}}
+      {{- if eq .Errors.FirstInvalid "email"}} autofocus{{end}}>
+    {{with .Errors.ErrorKey "email"}}<p id="demo-email-err" class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+  <button type="submit" class="btn btn-primary">{{t "form.demo.submit"}}</button>
+</form>
+{{- end}}

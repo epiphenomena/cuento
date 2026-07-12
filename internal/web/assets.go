@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
+	"strings"
 )
 
 // p10.1 content-addresses the embedded static assets. At construction we hash
@@ -46,6 +47,14 @@ func buildAssetManifest() *assetManifest {
 		if d.IsDir() {
 			return nil
 		}
+		// JS unit tests (*.test.js) live beside the modules they cover (node --test
+		// reads them from disk) but are NOT web assets: //go:embed static grabs the
+		// whole tree, so skip them here so they are never hashed, manifested, or
+		// served — test code has no business on a Public /static URL (staticHandler
+		// 404s them too).
+		if isTestAsset(p) {
+			return nil
+		}
 		b, err := fs.ReadFile(staticFS, p)
 		if err != nil {
 			return err
@@ -67,6 +76,12 @@ func buildAssetManifest() *assetManifest {
 	}
 	return m
 }
+
+// isTestAsset reports whether an embedded static path is a JS unit test (*.test.js)
+// rather than a shippable asset. Such files ride along in the embed (go:embed can't
+// exclude by suffix) but must never be hashed, manifested, or served — they are test
+// code, not part of the boring frontend's runtime surface (rule 12).
+func isTestAsset(p string) bool { return strings.HasSuffix(p, ".test.js") }
 
 // insertHash puts the content hash before the file's last extension:
 // "app.css" -> "app.<hash>.css". Files without an extension get the hash
@@ -104,6 +119,13 @@ func (s *server) assetURL(name string) string {
 func (s *server) staticHandler() http.Handler {
 	fileServer := http.FileServer(http.FS(staticFS))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// JS unit tests are embedded (go:embed static) but are not assets: never
+		// serve them, even by their plain unhashed path (they are absent from the
+		// manifest, so this guards the -dev / direct-path route too).
+		if isTestAsset(r.URL.Path) {
+			http.NotFound(w, r)
+			return
+		}
 		if unhashed, ok := s.assets.byHashedPath[r.URL.Path]; ok {
 			// One year, immutable: the URL is content-addressed, so a changed
 			// file ships under a new URL and this cached copy is never wrong.

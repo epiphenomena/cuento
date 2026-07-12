@@ -55,6 +55,21 @@ styleguide.buttons = "Buttons"
 styleguide.forms = "Forms"
 styleguide.alerts = "Alerts"
 
+# Dev-only form-error demonstrator (p10.3): a tiny validated POST that exercises
+# the reusable form-error convention (422 + form-region partial swap, localized
+# field errors, autofocus on the first invalid field). The heavy forms (accounts
+# p11, transactions p12) REUSE this convention.
+styleguide.form_demo = "Form errors"
+form.demo.name = "Name"
+form.demo.email = "Email"
+form.demo.submit = "Submit"
+form.demo.ok = "Looks good."
+
+# Reusable field-validation error KEYS (rule 9: Go returns keys, the template
+# renders them via {{t}}). Later forms reuse these generic messages.
+error.required = "This field is required."
+error.email = "Enter a valid email address."
+
 # My settings stub (p10.2); the full settings page is p13.1.
 settings.title = "Settings"
 settings.coming_soon = "Settings arrive in a later step."

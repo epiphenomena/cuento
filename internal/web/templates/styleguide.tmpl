@@ -38,5 +38,13 @@
     <h2 id="sg-alerts">{{t "styleguide.alerts"}}</h2>
     <p class="alert" role="alert">{{t "auth.invalid"}}</p>
   </section>
+
+  <section aria-labelledby="sg-form-demo">
+    <h2 id="sg-form-demo">{{t "styleguide.form_demo"}}</h2>
+    {{/* The form region is single-sourced: this same "demo-form" partial is what a
+         failed POST re-renders at 422 (and a valid POST at 200), so htmx swaps it
+         in place with stable ids. .Page is the demoFormModel. */}}
+    {{template "demo-form" .Page}}
+  </section>
 {{template "shell-close" .}}
 {{- end}}

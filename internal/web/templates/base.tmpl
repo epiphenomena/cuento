@@ -26,7 +26,12 @@
 {{define "shell-nav" -}}
 <header class="app-header">
   <a class="app-brand" href="/">{{t "app.name"}}</a>
-  <nav class="app-nav" aria-label="{{t "nav.label"}}">
+  {{/* p10.3: hx-boost on the TOP-LEVEL nav ONLY (progressive enhancement) — the
+       <a href> links still work as full-page navigations without JS; with htmx
+       loaded, boosting turns them into targeted body swaps for a snappier feel.
+       Scoped to this <nav> alone: forms (logout, theme) and page content are NOT
+       boosted (task: nav only). */}}
+  <nav class="app-nav" aria-label="{{t "nav.label"}}" hx-boost="true">
     <ul>
       {{range .Shell.Nav}}<li><a href="{{.Href}}">{{.Label}}</a></li>
       {{end}}
@@ -62,6 +67,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}} — {{t "app.name"}}</title>
   <link rel="stylesheet" href="{{asset "app.css"}}">
+  {{/* p10.3 htmx config, set BEFORE htmx loads (CSP-safe: a meta, never inline
+       script — rule 12). Two things the form-error convention needs:
+       - responseHandling: by default htmx 2.x does NOT swap 4xx/5xx (it fires
+         htmx:responseError). The form-error convention returns 422 and MUST swap
+         the form-region partial, so 422 is added as swap:true (first match wins,
+         so it precedes the [45].. error rule). 2xx/3xx keep the default swap.
+       - includeIndicatorStyles:false: htmx otherwise injects an inline <style> for
+         .htmx-indicator on load, which the strict style-src 'self' CSP would block
+         (a console error on every page). Any indicator CSS lives in app.css. */}}
+  <meta name="htmx-config" content='{"includeIndicatorStyles":false,"responseHandling":[{"code":"204","swap":false},{"code":"422","swap":true},{"code":"[23]..","swap":true},{"code":"[45]..","swap":false,"error":true}]}'>
+  {{/* Vendored, pinned htmx (2.0.4) served locally under script-src 'self' via the
+       p10.1 asset pipeline — never a CDN at runtime (rule 12; see VENDOR.md).
+       `defer` so it runs after the DOM parses; htmx processes hx-* on load. */}}
+  <script src="{{asset "htmx.min.js"}}" defer></script>
+  {{/* p10.3 form-focus glue: after an htmx swap, move focus to the first
+       [autofocus] field of the swapped region (browsers don't fire autofocus on
+       inserted nodes). A small hand-written ES module (rule 12), external so it
+       loads under script-src 'self' — no inline handler; unit-tested via node
+       --test (formfocus.test.js). */}}
+  <script type="module" src="{{asset "formfocus.js"}}"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">{{t "common.skip_to_content"}}</a>

@@ -237,9 +237,82 @@ func (s *server) adminStub(w http.ResponseWriter, r *http.Request) {
 
 // styleguide is the -dev-only GET /styleguide component gallery. It is registered
 // ONLY when cfg.Dev (routes()), so it 404s in production. Public so a designer can
-// view it without logging in; it renders through the shell for real chrome.
+// view it without logging in; it renders through the shell for real chrome. It
+// hosts the p10.3 form-error demonstrator so the reusable convention is exercised
+// by a real endpoint (see styleguideSubmit / the "demo-form" partial).
 func (s *server) styleguide(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, "styleguide.tmpl", s.newShellPage(r, nil))
+	s.render(w, r, http.StatusOK, "styleguide.tmpl", s.newShellPage(r, demoFormModel{}))
+}
+
+// demoFormModel is the p10.3 form-error demonstrator's template model: the current
+// field values (echoed back so the swap keeps what the user typed) plus the ordered
+// field errors the "demo-form" partial renders and uses for autofocus placement.
+// This is the SHAPE every later form model follows — its own value fields plus an
+// embedded formErrors named Errors.
+type demoFormModel struct {
+	Name   string
+	Email  string
+	OK     bool // set on a valid submit so the partial shows the success message
+	Errors formErrors
+}
+
+// styleguideSubmit handles POST /styleguide (-dev only, Public): the form-error
+// demonstrator. It validates two fields — Name (required) and Email (required +
+// must look like an email) — collecting i18n error KEYS in field order. On any
+// error it re-renders ONLY the "demo-form" partial at 422 via renderFormError (the
+// reusable convention: htmx swaps it in, autofocus lands on the first invalid
+// field, ids stay stable). On success it re-renders the same partial at 200 with a
+// success flag. This is the pattern accounts (p11) and transactions (p12) reuse.
+func (s *server) styleguideSubmit(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	m := demoFormModel{
+		Name:  strings.TrimSpace(r.PostFormValue("name")),
+		Email: strings.TrimSpace(r.PostFormValue("email")),
+	}
+
+	// Validate in FIELD ORDER so Errors.FirstInvalid (and thus autofocus) is
+	// deterministic: name before email.
+	m.Errors.add("name", requiredKey(m.Name))
+	m.Errors.add("email", emailKey(m.Email))
+
+	if m.Errors.any() {
+		// Invalid: 422 + the form-region partial only (the reusable convention).
+		s.renderFormError(w, r, "demo-form", m)
+		return
+	}
+
+	// Valid: re-render the same single-sourced partial at 200 with the success
+	// message. A real form would redirect (PRG) or swap in the created row; the
+	// demonstrator keeps it to the partial so success and error share one target.
+	m.OK = true
+	s.render(w, r, http.StatusOK, "demo-form", m)
+}
+
+// requiredKey returns the i18n error key for a missing required value, or "" when
+// present. A generic, reusable field validator (rule 9: it returns a KEY).
+func requiredKey(v string) string {
+	if v == "" {
+		return "error.required"
+	}
+	return ""
+}
+
+// emailKey returns the i18n error key when v is absent or not a plausible email,
+// else "". Deliberately minimal (a single '@' with text on each side) — email
+// validation is a UX hint, not an RFC parser; the real check is delivery. Returns a
+// KEY (rule 9).
+func emailKey(v string) string {
+	if v == "" {
+		return "error.required"
+	}
+	at := strings.IndexByte(v, '@')
+	if at <= 0 || at >= len(v)-1 || strings.ContainsAny(v, " \t") {
+		return "error.email"
+	}
+	return ""
 }
 
 // setTheme handles POST /theme (AnyUser): it validates the requested theme, sets

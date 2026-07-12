@@ -48,6 +48,23 @@ styleguide.buttons = "Botones"
 styleguide.forms = "Formularios"
 styleguide.alerts = "Alertas"
 
+# Demostrador de errores de formulario solo en dev (p10.3): un POST validado que
+# ejercita la convencion reutilizable de errores de formulario (422 + swap parcial
+# de la region del formulario, errores de campo localizados, autofocus en el primer
+# campo invalido). Los formularios grandes (cuentas p11, transacciones p12) la
+# REUTILIZAN.
+styleguide.form_demo = "Errores de formulario"
+form.demo.name = "Nombre"
+form.demo.email = "Correo"
+form.demo.submit = "Enviar"
+form.demo.ok = "Todo correcto."
+
+# Claves reutilizables de error de validacion de campo (regla 9: Go devuelve
+# claves, la plantilla las muestra con {{t}}). Formularios posteriores reutilizan
+# estos mensajes genericos.
+error.required = "Este campo es obligatorio."
+error.email = "Introduzca un correo electronico valido."
+
 # Ajustes (stub, p10.2); la pagina completa es p13.1.
 settings.title = "Ajustes"
 settings.coming_soon = "Los ajustes llegan en un paso posterior."

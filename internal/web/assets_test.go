@@ -81,6 +81,46 @@ func TestAssetImmutableCacheHeaders(t *testing.T) {
 	}
 }
 
+// TestVendoredHtmxServed: the p10.3 vendored htmx is a real asset — hashed into
+// the manifest and served (so authenticated pages can load it under script-src
+// 'self', never a CDN, rule 12).
+func TestVendoredHtmxServed(t *testing.T) {
+	app := newTestApp(t, Config{})
+	// insertHash puts the hash before the LAST extension: htmx.min.<hash>.js.
+	want := "/static/htmx.min." + embeddedHash(t, "htmx.min.js") + ".js"
+	if got := app.srv.assetURL("htmx.min.js"); got != want {
+		t.Fatalf("assetURL(htmx.min.js) = %q, want %q", got, want)
+	}
+
+	h := newTestHandler(t, Config{})
+	req := httptest.NewRequest(http.MethodGet, want, nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.Len() == 0 {
+		t.Fatalf("vendored htmx GET %s = %d (len %d), want 200 with body", want, rec.Code, rec.Body.Len())
+	}
+}
+
+// TestJSUnitTestNotServed: a *.test.js file rides along in //go:embed static but is
+// test code, not a web asset — it must be ABSENT from the manifest and 404 at its
+// plain /static URL (never exposed on a Public route, rule 12).
+func TestJSUnitTestNotServed(t *testing.T) {
+	app := newTestApp(t, Config{})
+	if _, ok := app.srv.assets.byName["formfocus.test.js"]; ok {
+		t.Error("formfocus.test.js is in the asset manifest; test code must not be a served asset")
+	}
+
+	h := newTestHandler(t, Config{})
+	for _, url := range []string{"/static/formfocus.test.js"} {
+		req := httptest.NewRequest(http.MethodGet, url, nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s = %d, want 404 (test code is never served)", url, rec.Code)
+		}
+	}
+}
+
 // TestHTMLNoStore: an HTML response (the login page) is served no-store. HTML
 // must never be cached; content-hashing is only for static assets. (Guards a
 // pre-existing render.go invariant.)

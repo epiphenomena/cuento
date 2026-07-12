@@ -148,6 +148,11 @@ func (s *server) routes() []Route {
 	// can view it without a login.
 	if s.cfg.Dev {
 		routes = append(routes, Route{http.MethodGet, "/styleguide", Public, http.HandlerFunc(s.styleguide)})
+		// p10.3: the form-error demonstrator's POST target. -dev only (like the GET),
+		// so it never exists in production and never appears in the permission matrix;
+		// it lets the reusable 422/partial/autofocus/i18n convention be tested through
+		// the real registry + middleware now.
+		routes = append(routes, Route{http.MethodPost, "/styleguide", Public, http.HandlerFunc(s.styleguideSubmit)})
 	}
 	return routes
 }

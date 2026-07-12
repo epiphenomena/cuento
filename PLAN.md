@@ -196,7 +196,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p10.2 web: base layout + theme + i18n wiring + CSS foundation.**
   Tests: `TestThemeCookieSSR` (request with theme cookie → `<html data-theme=...>`, no flash), `TestNavLocalized` (same page, en vs es user → catalog strings differ, keys resolve), nav renders only permitted sections per persona, `<html lang>` matches the resolved locale.
   Build: `base.tmpl` (landmarks, perm-gated nav, flash region, `{{t}}` used for every string), `t` template func bound to the request lang, theme toggle endpoint persisting cookie + user setting, lang switcher on the login page (post-login it's a user setting), CSS token/reset/component layers using `color-scheme` + `light-dark()`, `-dev`-only `/styleguide` page for visual review.
-- [ ] **p10.3 web: htmx wiring + form-error convention.**
+- [x] **p10.3 web: htmx wiring + form-error convention.**
   Tests: `TestFormErrorPartial` (invalid POST → 422 re-render of the form region with localized field errors and `autofocus` on the first invalid field).
   Build: vendored pinned htmx, response conventions (targeted swaps, error partials keyed by i18n error keys), `hx-boost` for top-level nav only.
 
