@@ -377,6 +377,111 @@ func (s *Store) FundLedger(ctx context.Context, fundID int64, asof string) ([]Fu
 	return out, nil
 }
 
+// ---------------------------------------------------------------------------
+// DrillSplits: the report drill-down (p15.3d) -- the individual splits behind ONE
+// report figure, so their signed sum reconciles to that figure.
+// ---------------------------------------------------------------------------
+
+// DrillFilter selects the splits contributing to one report figure. It MIRRORS the
+// toolkit's balance/activity queries (scope descendant closure D18, per-currency,
+// date bound) so the drill list reconciles to the cell it drills. A leaf-account
+// trial-balance cell sets AccountID + Currency + AsOf; a period report sets From/To
+// instead; Fund/Program/Class narrow further (nil = no filter on that dimension).
+type DrillFilter struct {
+	Scope     int64  // subsidiary; consolidated with ALL descendants (D18)
+	AccountID int64  // the leaf account the figure sums (0 = none => empty result)
+	Currency  string // native currency of the cell (per-currency reconciliation)
+
+	// Date bound. When AsOf != "" the figure is cumulative (t.date <= AsOf); else
+	// From/To bound a period (From <= t.date <= To, either side optional).
+	AsOf string
+	From string
+	To   string
+
+	FundID    *int64  // nil = any fund
+	ProgramID *int64  // nil = any program
+	Class     *string // nil = any functional class
+}
+
+// DrillRow is one split behind a report figure: its raw signed amount (net-debit,
+// D2 -- summed by the caller to reconcile) plus the txn/display fields the drill
+// list renders (reusing the register row rendering) and the txn id each row links to
+// (the p12.4 editor/history).
+type DrillRow struct {
+	SplitID         int64
+	TxnID           int64
+	Date            string
+	SubsidiaryID    int64
+	Currency        string
+	Amount          int64 // signed minor units (net-debit, D2)
+	FundID          *int64
+	ProgramID       *int64
+	FunctionalClass *string
+	SplitMemo       string
+	TxnMemo         string
+	PayeeID         *int64
+}
+
+// DrillSplits returns every non-deleted split matching f, ordered by (date,
+// split_id). The signed sum of the returned amounts EQUALS the report figure f
+// drills (the RECONCILIATION invariant, p15.3d): the query uses the SAME scope
+// descendant closure and per-currency/date filtering the toolkit's BalancesAsOf /
+// Activity used to produce the cell, so the two agree by construction. A zero
+// AccountID (an empty/degenerate filter, e.g. the permission matrix's bare drill
+// hit) returns no rows without erroring.
+func (s *Store) DrillSplits(ctx context.Context, f DrillFilter) ([]DrillRow, error) {
+	if f.AccountID == 0 {
+		return nil, nil
+	}
+
+	asofActive := b2i(f.AsOf != "")
+	fromActive := b2i(f.From != "")
+	toActive := b2i(f.To != "")
+	fundActive := b2i(f.FundID != nil)
+	progActive := b2i(f.ProgramID != nil)
+	classActive := b2i(f.Class != nil)
+
+	rows, err := s.q.DrillSplits(ctx, sqlc.DrillSplitsParams{
+		ID:              f.Scope,
+		AccountID:       f.AccountID,
+		Currency:        f.Currency,
+		Column4:         asofActive,
+		Date:            f.AsOf,
+		Column6:         fromActive,
+		Date_2:          f.From,
+		Column8:         toActive,
+		Date_3:          f.To,
+		Column10:        fundActive,
+		FundID:          nullInt64Ptr(f.FundID),
+		Column12:        progActive,
+		ProgramID:       nullInt64Ptr(f.ProgramID),
+		Column14:        classActive,
+		FunctionalClass: nullStringPtr(f.Class),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store: drill splits (account %d, ccy %s, scope %d): %w",
+			f.AccountID, f.Currency, f.Scope, err)
+	}
+	out := make([]DrillRow, len(rows))
+	for i, r := range rows {
+		out[i] = DrillRow{
+			SplitID:         r.SplitID,
+			TxnID:           r.TxnID,
+			Date:            r.Date,
+			SubsidiaryID:    r.SubsidiaryID,
+			Currency:        r.Currency,
+			Amount:          r.Amount,
+			FundID:          nullInt64ToPtr(r.FundID),
+			ProgramID:       nullInt64ToPtr(r.ProgramID),
+			FunctionalClass: nullStringToPtr(r.FunctionalClass),
+			SplitMemo:       r.SplitMemo,
+			TxnMemo:         r.TxnMemo,
+			PayeeID:         nullInt64ToPtr(r.PayeeID),
+		}
+	}
+	return out, nil
+}
+
 // b2i maps a bool to the 1/0 SQL active-flag.
 func b2i(b bool) int64 {
 	if b {

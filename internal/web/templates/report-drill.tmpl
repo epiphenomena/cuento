@@ -1,0 +1,68 @@
+{{/*
+  p15.3d report DRILL-DOWN page (/reports/{id}/drill?{filter}, ReportGroup(group)).
+  Lists the transactions behind ONE report figure -- the splits store.DrillSplits
+  returned for the drilled cell -- whose signed native sum EQUALS that figure (the
+  reconciliation invariant). A self-contained shell page; .Page is a drillPageModel.
+
+  Header: the report title (with a back-link to the report), the drilled account +
+  currency, and the reconciled FIGURE (the signed sum of the listed splits). When the
+  report cell was shown CONVERTED (D12), a note says the figure below is the NATIVE
+  underlying total (the drill always lists native splits).
+
+  Rows reuse the register's column shape (date, subsidiary, payee, memo, counter-
+  account or "Split", fund chip, amount) and each links to the txn editor + history
+  (p12.4). Every label via {{t}} (rule 9); amounts/dates pre-formatted (rule 10);
+  names are stored proper nouns rendered verbatim; no inline script (rule 12).
+*/ -}}
+{{define "report-drill.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "reports.drill.title"))}}
+  {{- with .Page}}
+  <h1>{{t "reports.drill.title"}}</h1>
+  <p class="report-drill-head">
+    <a href="/reports/{{.ReportID}}">{{.ReportTitle}}</a>
+    {{if .AccountName}}· <span class="report-drill-account">{{.AccountName}}</span>{{end}}
+    {{if .Currency}}· <span class="report-drill-ccy">{{.Currency}}</span>{{end}}
+  </p>
+  {{if .FigureFmt}}
+  <p class="report-drill-figure">
+    {{t "reports.drill.figure"}}: <span class="amount">{{.FigureFmt}}</span>
+    {{if .Converted}}<span class="muted">({{t "reports.drill.native_note"}})</span>{{end}}
+  </p>
+  {{end}}
+
+  <table class="report-drill-table">
+    <thead>
+      <tr>
+        <th>{{t "register.col.date"}}</th>
+        <th>{{t "register.col.subsidiary"}}</th>
+        <th>{{t "register.col.payee"}}</th>
+        <th>{{t "register.col.memo"}}</th>
+        <th>{{t "register.col.counter"}}</th>
+        <th>{{t "register.col.fund"}}</th>
+        <th class="amount">{{t "register.col.amount"}}</th>
+        <th>{{t "register.col.actions"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{- range .Rows}}
+      <tr id="drill-row-{{.SplitID}}" class="drill-row">
+        <td class="reg-date">{{.Date}}</td>
+        <td class="reg-sub">{{if .SubName}}<span class="badge">{{.SubName}}</span>{{end}}</td>
+        <td class="reg-payee">{{if .PayeeName}}{{.PayeeName}}{{else}}<span class="muted">—</span>{{end}}</td>
+        <td class="reg-memo">{{if .Memo}}{{.Memo}}{{else}}<span class="muted">—</span>{{end}}</td>
+        <td class="reg-counter">{{if .IsSplit}}{{t "register.split"}}{{else}}{{.CounterAccount}}{{end}}</td>
+        <td class="reg-fund">{{if .FundName}}<span class="chip">{{.FundName}}</span>{{end}}</td>
+        <td class="reg-amount amount">{{.AmountFmt}}</td>
+        <td class="reg-actions">
+          <a href="/transactions/{{.TxnID}}/edit">{{t "register.action.edit"}}</a>
+          <a href="/transactions/{{.TxnID}}/history">{{t "register.action.history"}}</a>
+        </td>
+      </tr>
+      {{- else}}
+      <tr class="report-empty"><td colspan="8">{{t "reports.drill.empty"}}</td></tr>
+      {{- end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

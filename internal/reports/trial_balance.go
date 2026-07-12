@@ -101,11 +101,26 @@ func runTrialBalance(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 			if convCcy == "" {
 				convCcy = a.Currency
 			}
+			// p15.3d: the NATIVE cell drills to the transactions behind this
+			// (account, currency) as-of balance. The Drill mirrors the toolkit filter
+			// that produced the cell -- the scope (descendant closure), this account,
+			// this native currency, cumulative to AsOf -- so the drilled splits'
+			// signed native sum reconciles to a.Minor by construction. The converted
+			// cell is left non-drillable in the retrofit (the native drill already
+			// covers the underlying transactions); p15.4+ may drill converted columns
+			// via the same Drill (which still lists native splits).
+			nativeDrill := &Drill{
+				Scope:      p.Scope,
+				AccountIDs: []int64{node.ID},
+				Currency:   a.Currency,
+				Mode:       DrillAsOf,
+				AsOf:       p.AsOf,
+			}
 			t.Rows = append(t.Rows, Row{
 				Cells: []Cell{
 					TextCell(node.Name),
 					TextCell(a.Currency),
-					MoneyCell(a.Minor, a.Currency),
+					MoneyCell(a.Minor, a.Currency).WithDrill(nativeDrill),
 					MoneyCell(conv, convCcy),
 				},
 				Kind: RowData,

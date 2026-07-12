@@ -274,6 +274,11 @@ type renderedRow struct {
 type renderedCell struct {
 	Text  string
 	Right bool // right-align (money)
+	// Href, when non-empty, makes the cell a DRILL link (p15.3d): the HTML template
+	// renders <a href="{Href}">{Text}</a> (a plain link, strict CSP -- no inline
+	// handler). It is set for a drillable cell (Cell.Drill != nil), pointing at the
+	// report's /reports/{id}/drill route with the encoded filter.
+	Href string
 }
 
 // renderTable turns a reports.Table into the display-ready renderedTable for lang,
@@ -284,7 +289,7 @@ type renderedCell struct {
 // or wrongly translate a stored name. Money cells use the per-user opts with the
 // currency code prefixed (e.g. "USD 1,234.56") so mixed-currency tables stay
 // unambiguous.
-func renderTable(t reports.Table, lang string, opts money.FormatOpts, df money.DateFormat, exps map[string]int) renderedTable {
+func renderTable(t reports.Table, reportID, lang string, opts money.FormatOpts, df money.DateFormat, exps map[string]int) renderedTable {
 	var rt renderedTable
 	for _, c := range t.Columns {
 		rt.Columns = append(rt.Columns, renderedColumn{
@@ -300,15 +305,21 @@ func renderTable(t reports.Table, lang string, opts money.FormatOpts, df money.D
 			Warning:  row.Kind == reports.RowWarning,
 		}
 		for _, cell := range row.Cells {
-			rr.Cells = append(rr.Cells, renderCell(cell, lang, opts, df, exps))
+			rr.Cells = append(rr.Cells, renderCell(cell, reportID, lang, opts, df, exps))
 		}
 		rt.Rows = append(rt.Rows, rr)
 	}
 	return rt
 }
 
-// renderCell formats one typed cell to a display string.
-func renderCell(c reports.Cell, lang string, opts money.FormatOpts, df money.DateFormat, exps map[string]int) renderedCell {
+// renderCell formats one typed cell to a display string. A cell carrying a Drill
+// (p15.3d) also gets an Href to the report's /reports/{id}/drill route with the
+// encoded filter, so the HTML renders the value as a plain link (strict CSP).
+func renderCell(c reports.Cell, reportID, lang string, opts money.FormatOpts, df money.DateFormat, exps map[string]int) renderedCell {
+	href := ""
+	if c.Drill != nil {
+		href = "/reports/" + reportID + "/drill?" + c.Drill.Encode()
+	}
 	switch c.Kind {
 	case reports.CellMoney:
 		if c.Blank {
@@ -317,6 +328,7 @@ func renderCell(c reports.Cell, lang string, opts money.FormatOpts, df money.Dat
 		return renderedCell{
 			Text:  c.Currency + " " + money.Format(c.Minor, exps[c.Currency], opts),
 			Right: true,
+			Href:  href,
 		}
 	case reports.CellDate:
 		if c.Text == "" {
@@ -372,7 +384,7 @@ func (s *server) reportPage(w http.ResponseWriter, r *http.Request) {
 	model := reportPageModel{
 		Title:   i18n.T(lang, rep.TitleKey),
 		Params:  form,
-		Table:   renderTable(table, lang, formatOptsFor(u), dateFormatFor(u), exps),
+		Table:   renderTable(table, rep.ID, lang, formatOptsFor(u), dateFormatFor(u), exps),
 		CSVHref: "/reports/" + rep.ID + ".csv?" + r.Form.Encode(),
 	}
 	s.render(w, r, http.StatusOK, "report.tmpl", s.newShellPage(r, model))

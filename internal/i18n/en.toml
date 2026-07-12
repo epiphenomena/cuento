@@ -976,3 +976,13 @@ other = "Converted"
 other = "Total (native)"
 [reports.trial_balance.total_converted]
 other = "Total (converted)"
+
+# p15.3d drill-down: the transaction list behind one report figure.
+[reports.drill.title]
+other = "Transactions behind this figure"
+[reports.drill.figure]
+other = "Figure"
+[reports.drill.native_note]
+other = "native underlying total; the report figure was shown converted"
+[reports.drill.empty]
+other = "No transactions contribute to this figure."

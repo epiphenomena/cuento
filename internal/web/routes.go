@@ -302,6 +302,15 @@ func (s *server) routes() []Route {
 			routes,
 			Route{http.MethodGet, "/reports/" + rep.ID, perm, http.HandlerFunc(s.reportPage)},
 			Route{http.MethodGet, "/reports/" + rep.ID + ".csv", perm, http.HandlerFunc(s.reportCSV)},
+			// p15.3d drill-down: a per-report /reports/{id}/drill route gated by the
+			// SAME ReportGroup as the report -- so drill visibility EQUALS report
+			// visibility (a viewer who can see the number can drill it) and, being a
+			// concrete registry route, it is permission-matrix-checked with zero test
+			// edits (the matrix hits it bare, decoding to an empty drill => a 200 empty
+			// list for an authorized persona, 403 for an ungranted one). The Drill
+			// FILTER arrives as query params (reports.Drill.Encode -> DecodeDrill); a
+			// per-report route keeps the Perm STATIC (not a dynamic-perm endpoint).
+			Route{http.MethodGet, "/reports/" + rep.ID + "/drill", perm, http.HandlerFunc(s.reportDrill)},
 		)
 	}
 	// The -dev-only styleguide (Appendix F): a component gallery for visual review.

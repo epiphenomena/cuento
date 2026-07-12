@@ -113,6 +113,23 @@ type Cell struct {
 	// Blank, on a CellMoney cell, renders an empty cell instead of a formatted
 	// zero — distinguishing "no amount here" from "amount is zero".
 	Blank bool
+
+	// Drill, when non-nil, makes this cell "click through" (p15.3d): the web layer
+	// renders the cell's value as a link to /reports/{id}/drill?{Drill.Encode()},
+	// which lists exactly the transactions whose signed NATIVE sum equals this
+	// figure. A nil Drill = not drillable (label cells, totals a report chooses not
+	// to drill). It is data-only and pure, so the CSV/text renderers ignore it (the
+	// golden is unchanged) and the reconciliation invariant is unit-testable.
+	Drill *Drill
+}
+
+// WithDrill returns a copy of c carrying the drill descriptor d, so a report builds
+// a drillable money cell fluently: MoneyCell(m, ccy).WithDrill(&Drill{...}). Keeping
+// it a method (not a MoneyCell parameter) means the many non-drillable call sites
+// (labels, totals) stay unchanged and only drillable cells opt in (p15.4+ pattern).
+func (c Cell) WithDrill(d *Drill) Cell {
+	c.Drill = d
+	return c
 }
 
 // TextCell builds a LITERAL text cell (a stored proper noun rendered verbatim,

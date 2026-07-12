@@ -86,7 +86,7 @@
       {{- range .Table.Rows}}
       <tr class="report-row report-indent-{{.Indent}}{{if .Subtotal}} report-subtotal{{end}}{{if .Total}} report-total{{end}}{{if .Warning}} report-warning{{end}}"{{if .Warning}} role="alert"{{end}}>
         {{- range .Cells}}
-        <td{{if .Right}} class="amount"{{end}}>{{.Text}}</td>
+        <td{{if .Right}} class="amount"{{end}}>{{if .Href}}<a class="report-drill-link" href="{{.Href}}">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>
         {{- end}}
       </tr>
       {{- else}}

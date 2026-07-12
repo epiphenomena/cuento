@@ -972,3 +972,13 @@ other = "Convertido"
 other = "Total (nativo)"
 [reports.trial_balance.total_converted]
 other = "Total (convertido)"
+
+# p15.3d drill-down: la lista de transacciones detras de una cifra del informe.
+[reports.drill.title]
+other = "Transacciones detras de esta cifra"
+[reports.drill.figure]
+other = "Cifra"
+[reports.drill.native_note]
+other = "total subyacente nativo; la cifra del informe se mostro convertida"
+[reports.drill.empty]
+other = "Ninguna transaccion contribuye a esta cifra."

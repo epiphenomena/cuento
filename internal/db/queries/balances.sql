@@ -187,3 +187,53 @@ SELECT split_id, txn_id, date, subsidiary_id, currency, amount, fund_id,
        running_balance
 FROM filtered
 ORDER BY date, split_id;
+
+-- name: DrillSplits :many
+-- The report DRILL-DOWN (p15.3d): every non-deleted split contributing to ONE
+-- report figure, so the caller's signed sum reconciles to that figure. This
+-- MIRRORS SubtreeBalancesAsOf / PeriodActivity (the recursive scope descendant
+-- closure over subsidiaries, D18; t.deleted = 0) rather than the register (which
+-- filters ONE subsidiary by equality) -- a root-scope trial-balance cell sums an
+-- account across every descendant sub, so the drill must too. The rows are the raw
+-- ungrouped splits (NOT summed) ordered by (date, split_id) so the drill shows the
+-- individual transactions; the store sums their signed amounts to prove the
+-- reconciliation invariant.
+--
+-- Filters (each optional, paired-? active-flag trick like RegisterPage -- a reused
+-- "? IS NULL OR ..." param is mangled by sqlc's sqlite parser, p04.2, so each value
+-- is bound to TWO consecutive ?):
+--   account_id (required equality; the drill targets one leaf account per cell),
+--   currency (required equality; each toolkit cell is per-currency, so FX Clearing's
+--     MXN cell reconciles only when currency is filtered),
+--   asofActive/asof (t.date <= asof, for an as-of cumulative figure),
+--   fromActive/from + toActive/to (from <= t.date <= to, for a period figure),
+--   fundActive/fund, programActive/program, classActive/class (optional narrowing).
+--
+-- Param order (positional):
+--   scopeSub (CTE base),
+--   account_id,
+--   currency,
+--   asofActive, asof,
+--   fromActive, from, toActive, to,
+--   fundActive, fund, programActive, program, classActive, class.
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT sp.id AS split_id, t.id AS txn_id, t.date, t.subsidiary_id, t.currency,
+       sp.amount, sp.fund_id, sp.program_id, sp.functional_class,
+       sp.memo AS split_memo, t.memo AS txn_memo, t.payee_id
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+WHERE t.deleted = 0
+  AND sp.account_id = ?
+  AND t.currency = ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+  AND (? = 0 OR t.date <= ?)
+  AND (? = 0 OR t.date >= ?)
+  AND (? = 0 OR t.date <= ?)
+  AND (? = 0 OR sp.fund_id = ?)
+  AND (? = 0 OR sp.program_id = ?)
+  AND (? = 0 OR sp.functional_class = ?)
+ORDER BY t.date, sp.id;

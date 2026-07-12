@@ -10,6 +10,144 @@ import (
 	"database/sql"
 )
 
+const drillSplits = `-- name: DrillSplits :many
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT sp.id AS split_id, t.id AS txn_id, t.date, t.subsidiary_id, t.currency,
+       sp.amount, sp.fund_id, sp.program_id, sp.functional_class,
+       sp.memo AS split_memo, t.memo AS txn_memo, t.payee_id
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+WHERE t.deleted = 0
+  AND sp.account_id = ?
+  AND t.currency = ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+  AND (? = 0 OR t.date <= ?)
+  AND (? = 0 OR t.date >= ?)
+  AND (? = 0 OR t.date <= ?)
+  AND (? = 0 OR sp.fund_id = ?)
+  AND (? = 0 OR sp.program_id = ?)
+  AND (? = 0 OR sp.functional_class = ?)
+ORDER BY t.date, sp.id
+`
+
+type DrillSplitsParams struct {
+	ID              int64
+	AccountID       int64
+	Currency        string
+	Column4         interface{}
+	Date            string
+	Column6         interface{}
+	Date_2          string
+	Column8         interface{}
+	Date_3          string
+	Column10        interface{}
+	FundID          sql.NullInt64
+	Column12        interface{}
+	ProgramID       sql.NullInt64
+	Column14        interface{}
+	FunctionalClass sql.NullString
+}
+
+type DrillSplitsRow struct {
+	SplitID         int64
+	TxnID           int64
+	Date            string
+	SubsidiaryID    int64
+	Currency        string
+	Amount          int64
+	FundID          sql.NullInt64
+	ProgramID       sql.NullInt64
+	FunctionalClass sql.NullString
+	SplitMemo       string
+	TxnMemo         string
+	PayeeID         sql.NullInt64
+}
+
+// The report DRILL-DOWN (p15.3d): every non-deleted split contributing to ONE
+// report figure, so the caller's signed sum reconciles to that figure. This
+// MIRRORS SubtreeBalancesAsOf / PeriodActivity (the recursive scope descendant
+// closure over subsidiaries, D18; t.deleted = 0) rather than the register (which
+// filters ONE subsidiary by equality) -- a root-scope trial-balance cell sums an
+// account across every descendant sub, so the drill must too. The rows are the raw
+// ungrouped splits (NOT summed) ordered by (date, split_id) so the drill shows the
+// individual transactions; the store sums their signed amounts to prove the
+// reconciliation invariant.
+//
+// Filters (each optional, paired-? active-flag trick like RegisterPage -- a reused
+// "? IS NULL OR ..." param is mangled by sqlc's sqlite parser, p04.2, so each value
+// is bound to TWO consecutive ?):
+//
+//	account_id (required equality; the drill targets one leaf account per cell),
+//	currency (required equality; each toolkit cell is per-currency, so FX Clearing's
+//	  MXN cell reconciles only when currency is filtered),
+//	asofActive/asof (t.date <= asof, for an as-of cumulative figure),
+//	fromActive/from + toActive/to (from <= t.date <= to, for a period figure),
+//	fundActive/fund, programActive/program, classActive/class (optional narrowing).
+//
+// Param order (positional):
+//
+//	scopeSub (CTE base),
+//	account_id,
+//	currency,
+//	asofActive, asof,
+//	fromActive, from, toActive, to,
+//	fundActive, fund, programActive, program, classActive, class.
+func (q *Queries) DrillSplits(ctx context.Context, arg DrillSplitsParams) ([]DrillSplitsRow, error) {
+	rows, err := q.db.QueryContext(ctx, drillSplits,
+		arg.ID,
+		arg.AccountID,
+		arg.Currency,
+		arg.Column4,
+		arg.Date,
+		arg.Column6,
+		arg.Date_2,
+		arg.Column8,
+		arg.Date_3,
+		arg.Column10,
+		arg.FundID,
+		arg.Column12,
+		arg.ProgramID,
+		arg.Column14,
+		arg.FunctionalClass,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DrillSplitsRow
+	for rows.Next() {
+		var i DrillSplitsRow
+		if err := rows.Scan(
+			&i.SplitID,
+			&i.TxnID,
+			&i.Date,
+			&i.SubsidiaryID,
+			&i.Currency,
+			&i.Amount,
+			&i.FundID,
+			&i.ProgramID,
+			&i.FunctionalClass,
+			&i.SplitMemo,
+			&i.TxnMemo,
+			&i.PayeeID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const functionalActivity = `-- name: FunctionalActivity :many
 WITH RECURSIVE scope(id) AS (
   SELECT s.id FROM subsidiaries s WHERE s.id = ?
