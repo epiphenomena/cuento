@@ -301,6 +301,70 @@ func (s *Store) RegisterPage(
 	return page, next, hasMore, nil
 }
 
+// ---------------------------------------------------------------------------
+// FundLedger: one fund's statement -- all its splits across all accounts with a
+// per-currency running (asset-side/unexpended) balance (p12.5).
+// ---------------------------------------------------------------------------
+
+// FundLedgerRow is one line of a fund statement: a split tagged the fund (on any
+// account), its raw values (for tests + display), and the per-currency running
+// balance that tracks the fund's ASSET-side (unexpended) position -- the same
+// quantity FundBalancesAsOf reports. IsAsset marks the rows that MOVE the balance.
+type FundLedgerRow struct {
+	SplitID         int64
+	TxnID           int64
+	Date            string
+	SubsidiaryID    int64
+	Currency        string
+	Amount          int64 // signed minor units (net-debit, D2)
+	AccountID       int64
+	IsAsset         bool
+	ProgramID       *int64
+	FunctionalClass *string
+	SplitMemo       string
+	TxnMemo         string
+	PayeeID         *int64
+	RunningBalance  int64 // cumulative asset-side amount to this row, per currency
+}
+
+// FundLedger returns fundID's statement to asof: every non-deleted split tagged the
+// fund whose txn date <= asof, across ALL accounts, ordered by (date, split_id),
+// with a per-currency running balance that tracks the fund's ASSET-side unexpended
+// position. The CLOSING running balance per currency EQUALS FundBalancesAsOf(asof)
+// for that fund/currency by construction (both sum the asset splits to the SAME
+// as-of), so the fund page and the fund list agree even under future-dated splits.
+// There is no paging (a single fund's split set is bounded) and no scope filter (a
+// fund's splits already live only in its subsidiaries).
+func (s *Store) FundLedger(ctx context.Context, fundID int64, asof string) ([]FundLedgerRow, error) {
+	rows, err := s.q.FundLedger(ctx, sqlc.FundLedgerParams{
+		FundID: sql.NullInt64{Int64: fundID, Valid: true},
+		Date:   asof,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store: fund ledger (fund %d) as of %s: %w", fundID, asof, err)
+	}
+	out := make([]FundLedgerRow, len(rows))
+	for i, r := range rows {
+		out[i] = FundLedgerRow{
+			SplitID:         r.SplitID,
+			TxnID:           r.TxnID,
+			Date:            r.Date,
+			SubsidiaryID:    r.SubsidiaryID,
+			Currency:        r.Currency,
+			Amount:          r.Amount,
+			AccountID:       r.AccountID,
+			IsAsset:         r.IsAsset != 0,
+			ProgramID:       nullInt64ToPtr(r.ProgramID),
+			FunctionalClass: nullStringToPtr(r.FunctionalClass),
+			SplitMemo:       r.SplitMemo,
+			TxnMemo:         r.TxnMemo,
+			PayeeID:         nullInt64ToPtr(r.PayeeID),
+			RunningBalance:  r.RunningBalance,
+		}
+	}
+	return out, nil
+}
+
 // b2i maps a bool to the 1/0 SQL active-flag.
 func b2i(b bool) int64 {
 	if b {

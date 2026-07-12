@@ -452,6 +452,98 @@ other = "The root program cannot be given a parent."
 other = "A program cannot be moved under itself or its descendants."
 [error.program.has_active_children]
 other = "This program still has active children and cannot be deactivated."
+[funds.title]
+other = "Funds"
+[funds.intro]
+other = "Restricted funds — the donor-restriction dimension on splits. Each fund scopes to one or more subsidiaries and optionally a program; managing grants is bookkeeping."
+[funds.new]
+other = "New fund"
+[funds.close]
+other = "Close"
+[funds.reopen]
+other = "Reopen"
+[funds.closed]
+other = "closed"
+[funds.show_closed]
+other = "Show closed funds"
+[funds.show_active]
+other = "Show active funds"
+[funds.viewing_closed]
+other = "Viewing closed funds"
+[funds.negative_badge]
+other = "Overspent"
+[funds.empty]
+other = "No funds yet."
+[funds.col.name]
+other = "Fund"
+[funds.col.funder]
+other = "Funder"
+[funds.col.scope]
+other = "Scope"
+[funds.col.balance]
+other = "Balance"
+[funds.col.actions]
+other = "Actions"
+[funds.statement.title]
+other = "Fund statement"
+[funds.statement.back]
+other = "Back to funds"
+[funds.statement.currency]
+other = "Currency"
+[funds.statement.opening]
+other = "Opening balance"
+[funds.statement.closing]
+other = "Closing balance"
+[funds.statement.empty]
+other = "No activity for this fund yet."
+[funds.statement.col.date]
+other = "Date"
+[funds.statement.col.subsidiary]
+other = "Subsidiary"
+[funds.statement.col.account]
+other = "Account"
+[funds.statement.col.memo]
+other = "Memo"
+[funds.statement.col.amount]
+other = "Amount"
+[funds.statement.col.running]
+other = "Unexpended balance"
+[funds.form.new_title]
+other = "New fund"
+[funds.form.edit_title]
+other = "Edit fund"
+[funds.form.name]
+other = "Name"
+[funds.form.funder]
+other = "Funder"
+[funds.form.purpose]
+other = "Purpose"
+[funds.form.restriction]
+other = "Restriction"
+[funds.form.program]
+other = "Program scope (optional)"
+[funds.form.no_program]
+other = "No program scope"
+[funds.form.notes]
+other = "Notes"
+[funds.form.subsidiaries]
+other = "Subsidiaries"
+[funds.form.subs_hint]
+other = "A fund scopes to one or more subsidiaries."
+[funds.restriction.purpose]
+other = "Purpose-restricted"
+[funds.restriction.time]
+other = "Time-restricted"
+[funds.restriction.perpetual]
+other = "Perpetual (endowment)"
+[error.fund.no_subsidiary]
+other = "A fund must scope to at least one subsidiary."
+[error.fund.program_missing]
+other = "The selected program scope does not exist."
+[error.fund.sub_in_use]
+other = "A subsidiary cannot be removed while a transaction still tags this fund there."
+[error.fund.not_found]
+other = "That fund no longer exists."
 [txn.new_title]
 other = "New transaction"
 [txn.edit_title]

@@ -74,6 +74,105 @@ func (q *Queries) DeleteFundSubsidiary(ctx context.Context, arg DeleteFundSubsid
 	return err
 }
 
+const fundLedger = `-- name: FundLedger :many
+SELECT sp.id AS split_id, t.id AS txn_id, t.date, t.subsidiary_id, t.currency,
+       sp.amount, sp.account_id,
+       CASE WHEN a.type = 'asset' THEN 1 ELSE 0 END AS is_asset,
+       sp.program_id, sp.functional_class,
+       sp.memo AS split_memo, t.memo AS txn_memo, t.payee_id,
+       CAST(SUM(CASE WHEN a.type = 'asset' THEN sp.amount ELSE 0 END) OVER (
+         PARTITION BY t.currency
+         ORDER BY t.date, sp.id
+         ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+       ) AS INTEGER) AS running_balance
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+JOIN accounts a ON a.id = sp.account_id
+WHERE sp.fund_id = ?
+  AND t.deleted = 0
+  AND t.date <= ?
+ORDER BY t.date, sp.id
+`
+
+type FundLedgerParams struct {
+	FundID sql.NullInt64
+	Date   string
+}
+
+type FundLedgerRow struct {
+	SplitID         int64
+	TxnID           int64
+	Date            string
+	SubsidiaryID    int64
+	Currency        string
+	Amount          int64
+	AccountID       int64
+	IsAsset         int64
+	ProgramID       sql.NullInt64
+	FunctionalClass sql.NullString
+	SplitMemo       string
+	TxnMemo         string
+	PayeeID         sql.NullInt64
+	RunningBalance  int64
+}
+
+// The fund STATEMENT (p12.5): every non-deleted split tagged fund_id, across ALL
+// accounts, ordered by the total order (date, split_id), with a per-currency
+// RUNNING BALANCE that tracks the fund's ASSET-side (unexpended) position -- the
+// SAME quantity FundBalancesAsOf returns and Z18 warns on. A running sum over ALL
+// of a fund's splits is identically zero (every txn nets to zero WITHIN the fund
+// group, D20/Z10), so the window sums ONLY the asset splits' amounts (a CASE gates
+// non-asset rows to 0) -- the closing running balance thus equals the fund's
+// FundBalancesAsOf balance per currency BY CONSTRUCTION. Every row is still shown
+// (across all accounts); only asset rows MOVE the balance.
+//
+// The window runs over the WHOLE ordered set in SQL so the running balance is exact
+// (no Go recompute); there is no paging (a single fund's split set is bounded).
+// opening balance is 0 (the whole set is shown from the fund's first split).
+//
+// IsAsset lets the caller render which rows moved the balance. The as-of bound
+// (t.date <= asof) MATCHES the list's FundBalancesAsOf as-of, so the closing running
+// balance equals the list balance even when a fund carries FUTURE-dated splits (a
+// post-dated payment): both pages agree on the same fund's closing balance BY
+// CONSTRUCTION. Params: fund_id, asof.
+func (q *Queries) FundLedger(ctx context.Context, arg FundLedgerParams) ([]FundLedgerRow, error) {
+	rows, err := q.db.QueryContext(ctx, fundLedger, arg.FundID, arg.Date)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FundLedgerRow
+	for rows.Next() {
+		var i FundLedgerRow
+		if err := rows.Scan(
+			&i.SplitID,
+			&i.TxnID,
+			&i.Date,
+			&i.SubsidiaryID,
+			&i.Currency,
+			&i.Amount,
+			&i.AccountID,
+			&i.IsAsset,
+			&i.ProgramID,
+			&i.FunctionalClass,
+			&i.SplitMemo,
+			&i.TxnMemo,
+			&i.PayeeID,
+			&i.RunningBalance,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const fundSubsidiaries = `-- name: FundSubsidiaries :many
 SELECT subsidiary_id FROM fund_subsidiaries
 WHERE fund_id = ?

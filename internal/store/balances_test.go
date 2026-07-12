@@ -321,6 +321,109 @@ func TestFundBalancesAsOf(t *testing.T) {
 	}
 }
 
+// ============================ FundLedger =================================
+
+func TestFundLedger(t *testing.T) {
+	e := newBalEnv(t)
+
+	rows, err := e.s.FundLedger(e.ctx, e.grant, "2025-12-31")
+	if err != nil {
+		t.Fatalf("FundLedger: %v", err)
+	}
+	// grant splits (non-deleted): T1 (checking +20000 / contrib -20000) and
+	// T3 (salaries +6000 / checking -6000). T7 is soft-deleted -> excluded. So 4
+	// rows, ordered by (date, split_id): T1 checking, T1 contrib, T3 salaries,
+	// T3 checking.
+	if len(rows) != 4 {
+		t.Fatalf("fund ledger = %d rows, want 4 (T7 excluded): %+v", len(rows), rows)
+	}
+	// Running balance tracks the ASSET-side unexpended position per currency:
+	//   T1 checking +20000 (asset)        -> 20000
+	//   T1 contrib  -20000 (revenue, 0)   -> 20000
+	//   T3 salaries +6000  (expense, 0)   -> 20000
+	//   T3 checking -6000  (asset)        -> 14000  (closing)
+	wantRun := []int64{20000, 20000, 20000, 14000}
+	wantAsset := []bool{true, false, false, true}
+	for i, r := range rows {
+		if r.RunningBalance != wantRun[i] {
+			t.Errorf("row %d running = %d, want %d", i, r.RunningBalance, wantRun[i])
+		}
+		if r.IsAsset != wantAsset[i] {
+			t.Errorf("row %d IsAsset = %v, want %v", i, r.IsAsset, wantAsset[i])
+		}
+	}
+
+	// RECONCILIATION (the coherence invariant): the ledger's CLOSING running
+	// balance per currency EQUALS FundBalancesAsOf for the same fund/currency.
+	closing := make(map[string]int64)
+	for _, r := range rows {
+		closing[r.Currency] = r.RunningBalance // last row per currency wins (ordered)
+	}
+	fb := e.fundBalances("2025-12-31", rootID)
+	for _, c := range fb {
+		if c.FundID != e.grant {
+			continue
+		}
+		if closing[c.Currency] != c.Amount {
+			t.Errorf("closing[%s] = %d, FundBalancesAsOf = %d (must reconcile)",
+				c.Currency, closing[c.Currency], c.Amount)
+		}
+	}
+	if closing["USD"] != 14000 {
+		t.Errorf("grant closing USD = %d, want 14000", closing["USD"])
+	}
+}
+
+func TestFundLedgerExcludesOtherFunds(t *testing.T) {
+	e := newBalEnv(t)
+	// The unrestricted group (NULL fund) is fund 0; FundLedger(0) must return NO
+	// rows (the query matches sp.fund_id = 0, and no split carries literal 0).
+	rows, err := e.s.FundLedger(e.ctx, 0, "2025-12-31")
+	if err != nil {
+		t.Fatalf("FundLedger(0): %v", err)
+	}
+	if len(rows) != 0 {
+		t.Errorf("FundLedger(0) = %d rows, want 0 (unrestricted is NULL, not 0)", len(rows))
+	}
+}
+
+// TestFundLedgerAsOfMatchesFundBalances proves the as-of BOUND keeps the statement
+// and the list balance in agreement even with a FUTURE-dated split (a post-dated
+// payment): FundLedger(asof) and FundBalancesAsOf(asof) must reconcile for EVERY
+// as-of, not just one past today.
+func TestFundLedgerAsOfMatchesFundBalances(t *testing.T) {
+	e := newBalEnv(t)
+
+	// A FUTURE-dated grant asset spend (2099): checking -1000 (grant), salaries
+	// +1000 (grant, management class, educ program). Fund-balanced, so no invariant
+	// fires; it sits past a mid as-of.
+	mgmt := "management"
+	e.postN(t, "2099-01-01", e.subUS, "USD", "future spend",
+		split{e.salaries, 1000, &e.grant, &e.educ, &mgmt},
+		split{e.checking, -1000, &e.grant, nil, nil})
+
+	for _, asof := range []string{"2025-01-01", "2025-12-31", "2099-12-31"} {
+		ledger, err := e.s.FundLedger(e.ctx, e.grant, asof)
+		if err != nil {
+			t.Fatalf("FundLedger as of %s: %v", asof, err)
+		}
+		closing := map[string]int64{}
+		for _, r := range ledger {
+			closing[r.Currency] = r.RunningBalance
+		}
+		fb := e.fundBalances(asof, rootID)
+		for _, c := range fb {
+			if c.FundID != e.grant {
+				continue
+			}
+			if closing[c.Currency] != c.Amount {
+				t.Errorf("as of %s: closing[%s]=%d != FundBalancesAsOf %d",
+					asof, c.Currency, closing[c.Currency], c.Amount)
+			}
+		}
+	}
+}
+
 // ============================ FunctionalActivity =========================
 
 func TestFunctionalActivity(t *testing.T) {

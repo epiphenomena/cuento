@@ -70,6 +70,16 @@ func newMatrixApp(t *testing.T) (http.Handler, []Route, *store.Store, *sql.DB, *
 		t.Fatalf("seed transaction: %v", err)
 	}
 
+	// Seed one fund so p12.5's /funds/{id} and /funds/{id}/edit resolve to a real
+	// resource when the reachability check substitutes {id} -> 1. Its id is not
+	// asserted; the routes only need SOME fund to exist so an authorized persona
+	// reaches the handler rather than a legitimate 404.
+	if _, err := st.CreateFund(seedCtx, store.CreateFundInput{
+		Name: "Seed Fund", Restriction: "purpose", Subsidiaries: []int64{1},
+	}); err != nil {
+		t.Fatalf("seed fund: %v", err)
+	}
+
 	app := NewApp(Config{Version: "test"}, db, st)
 	return app.handler, app.srv.routes(), st, db, app.sessions
 }

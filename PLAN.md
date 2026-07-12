@@ -231,7 +231,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p12.4 web: edit / void / duplicate + history panel.**
   Tests: history timeline renders actor, timestamp, per-field diffs and split-set diffs (including fund and functional-class changes) for create/update/delete; TxnRead may view history; void requires confirm and TxnWrite.
   Build: edit loads the same editor; delete = void with confirm; `/transactions/{id}/history` from versions.
-- [ ] **p12.5 web: funds workspace.**
+- [x] **p12.5 web: funds workspace.**
   Tests: fund list shows per-currency balance, funder/scope columns, and warning badge on negative (Z18); fund detail = a filtered ledger of the fund's splits across all accounts with opening/closing balance; create/edit/close forms incl. subsidiary checklist and program scope; perms (view TxnRead, manage TxnWrite).
   Build: `/funds` (active + closed toggle, balances from p08.4), `/funds/{id}` statement view, `/funds/new` + edit — grants are bookkeeping data, so TxnWrite manages them; subsidiaries/users stay Admin.
 - [ ] **p12.6 ux: entry-flow hardening.**

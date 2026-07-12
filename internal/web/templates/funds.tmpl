@@ -1,0 +1,89 @@
+{{/*
+  p12.5 funds workspace list (/funds, TxnRead view / TxnWrite manage). A
+  self-contained shell page (shell-open / <main> / shell-close, like the other
+  pages). .Page is a fundsPageModel.
+
+  Funds are the restricted-fund dimension (D20). The table shows each fund: its
+  per-currency ASSET-side balance (store.FundBalancesAsOf -- the same quantity Z18
+  warns on, formatted through the money formatters, rule 10), a WARNING BADGE when
+  any currency is negative (Z18: overspent restricted resources), the funder, and
+  the scope (subsidiaries + optional program). An active/closed TOGGLE (?closed=1)
+  splits active from closed funds. The inline create/edit form is fetched into
+  #fund-form via htmx (GET .../new or .../{id}/edit). Close/reopen are inline POST
+  actions (close is an ACTION, not a form). Fund/subsidiary/program names are stored
+  proper nouns rendered verbatim; every other string via {{t}} (rule 9); no inline
+  script (rule 12).
+*/ -}}
+{{define "funds.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "funds.title"))}}
+  {{- with .Page}}
+  <h1>{{t "funds.title"}}</h1>
+  <p class="hint">{{t "funds.intro"}}</p>
+
+  <div id="fund-form" class="fund-form-region">
+    {{/* The inline form fetches here. GET /funds/new htmx-swaps its form in. */}}
+    <button type="button" class="btn btn-primary"
+            hx-get="/funds/new" hx-target="#fund-form" hx-swap="outerHTML">
+      {{t "funds.new"}}
+    </button>
+  </div>
+
+  <p class="funds-toggle">
+    {{if .ShowClosed}}
+    <a href="/funds" class="btn btn-ghost">{{t "funds.show_active"}}</a>
+    <span class="badge">{{t "funds.viewing_closed"}}</span>
+    {{else}}
+    <a href="/funds?closed=1" class="btn btn-ghost">{{t "funds.show_closed"}}</a>
+    {{end}}
+  </p>
+
+  <table class="funds-table">
+    <thead>
+      <tr>
+        <th>{{t "funds.col.name"}}</th>
+        <th>{{t "funds.col.funder"}}</th>
+        <th>{{t "funds.col.scope"}}</th>
+        <th>{{t "funds.col.balance"}}</th>
+        <th>{{t "funds.col.actions"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="fund-row" id="fund-row-{{.ID}}">
+        <td class="fund-name">
+          <a href="/funds/{{.ID}}">{{.Name}}</a>
+          {{if .Negative}} <span class="badge badge-warning" role="status">{{t "funds.negative_badge"}}</span>{{end}}
+        </td>
+        <td class="fund-funder">{{if .Funder}}{{.Funder}}{{else}}<span class="muted">—</span>{{end}}</td>
+        <td class="fund-scope">
+          {{range .Subs}}<span class="chip">{{.}}</span> {{end}}
+          {{if .Program}}<span class="chip chip-program">{{.Program}}</span>{{end}}
+        </td>
+        <td class="fund-balance amount">
+          {{range .Balances}}<span class="amount">{{.}}</span> {{else}}<span class="muted">—</span>{{end}}
+        </td>
+        <td class="fund-actions">
+          <a class="btn btn-ghost" href="/funds/{{.ID}}">{{t "funds.view_statement"}}</a>
+          <button type="button" class="btn btn-ghost"
+                  hx-get="/funds/{{.ID}}/edit" hx-target="#fund-form" hx-swap="outerHTML">
+            {{t "common.edit"}}
+          </button>
+          {{if $.Page.ShowClosed}}
+          <form method="post" action="/funds/{{.ID}}/reopen" class="inline">
+            <button type="submit" class="btn btn-ghost">{{t "funds.reopen"}}</button>
+          </form>
+          {{else}}
+          <form method="post" action="/funds/{{.ID}}/close" class="inline">
+            <button type="submit" class="btn btn-ghost">{{t "funds.close"}}</button>
+          </form>
+          {{end}}
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="5">{{t "funds.empty"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

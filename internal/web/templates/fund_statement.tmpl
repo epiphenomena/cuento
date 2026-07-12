@@ -1,0 +1,74 @@
+{{/*
+  p12.5 fund statement (/funds/{id}, TxnRead). A self-contained shell page. .Page is
+  a fundStatementModel.
+
+  The statement is the fund's filtered ledger: every split tagged the fund, ACROSS
+  ALL accounts (store.FundLedger), ordered by (date, split_id), with a per-currency
+  OPENING (0) / running / CLOSING asset-side balance. The running balance tracks the
+  fund's unexpended (asset-side) position -- the SAME quantity the list shows and
+  Z18 warns on -- so the closing reconciles to the list balance by construction. An
+  asset row MOVES the balance (marked); a non-asset row (revenue/expense/etc.) is
+  shown but leaves the running balance unchanged (D20/Z10: the whole fund nets to
+  zero, so only the asset side is the meaningful position).
+
+  Amounts/dates are formatted through the money formatters (rule 10); account/
+  subsidiary names are stored proper nouns rendered verbatim; every other string via
+  {{t}} (rule 9); no inline script (rule 12).
+*/ -}}
+{{define "fund_statement.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "funds.statement.title"))}}
+  {{- with .Page}}
+  <h1>{{t "funds.statement.title"}}: {{.FundName}}{{if not .Active}} <span class="badge">{{t "funds.closed"}}</span>{{end}}</h1>
+  <p><a href="/funds">{{t "funds.statement.back"}}</a>
+     {{if .Funder}}· {{t "funds.col.funder"}}: {{.Funder}}{{end}}</p>
+
+  <table class="fund-openclose">
+    <thead>
+      <tr>
+        <th>{{t "funds.statement.currency"}}</th>
+        <th>{{t "funds.statement.opening"}}</th>
+        <th>{{t "funds.statement.closing"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .OpenClose}}
+      <tr>
+        <td>{{.Currency}}</td>
+        <td class="amount fund-opening">{{.OpeningFmt}}</td>
+        <td class="amount fund-closing">{{.ClosingFmt}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="3"><span class="muted">—</span></td></tr>
+      {{end}}
+    </tbody>
+  </table>
+
+  <table class="fund-statement-table">
+    <thead>
+      <tr>
+        <th>{{t "funds.statement.col.date"}}</th>
+        <th>{{t "funds.statement.col.subsidiary"}}</th>
+        <th>{{t "funds.statement.col.account"}}</th>
+        <th>{{t "funds.statement.col.memo"}}</th>
+        <th>{{t "funds.statement.col.amount"}}</th>
+        <th>{{t "funds.statement.col.running"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="fund-stmt-row{{if .IsAsset}} fund-stmt-asset{{end}}">
+        <td class="fs-date">{{.Date}}</td>
+        <td class="fs-sub"><span class="badge">{{.SubName}}</span></td>
+        <td class="fs-account">{{.AccountName}}</td>
+        <td class="fs-memo">{{if .Memo}}{{.Memo}}{{else}}<span class="muted">—</span>{{end}}</td>
+        <td class="fs-amount amount">{{.AmountFmt}}</td>
+        <td class="fs-running amount">{{if .IsAsset}}{{.RunningBalanceFmt}}{{else}}<span class="muted">—</span>{{end}}</td>
+      </tr>
+      {{else}}
+      <tr class="fund-stmt-empty"><td colspan="6">{{t "funds.statement.empty"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

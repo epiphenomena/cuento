@@ -236,6 +236,24 @@ func (s *server) routes() []Route {
 		// permission-matrix test picks these up automatically (rule 8).
 		{http.MethodGet, "/payees/suggest", TxnWrite, http.HandlerFunc(s.payeeSuggest)},
 		{http.MethodGet, "/payees/{id}/template", TxnWrite, http.HandlerFunc(s.payeeTemplate)},
+		// p12.5 funds workspace (Appendix B/F). Fund GRANTS are BOOKKEEPING data
+		// (D20, managed like programs), so GET (list + statement) is TxnRead and the
+		// create/edit/close/reopen mutations are TxnWrite -- subsidiaries/users stay
+		// Admin (unchanged). The list (/funds) shows per-currency balances + funder +
+		// scope + a Z18 negative badge, with an active/closed toggle; /funds/{id} is
+		// the fund statement (its splits across all accounts, opening/closing). The
+		// literal ".../new" segment is more specific than ".../{id}", so the Go 1.22+
+		// mux routes them precisely; close/reopen literals likewise. The nav.funds
+		// entry (shell.go) lights up now that GET /funds is registered. The
+		// permission-matrix test picks these up automatically (rule 8).
+		{http.MethodGet, "/funds", TxnRead, http.HandlerFunc(s.fundsPage)},
+		{http.MethodGet, "/funds/new", TxnWrite, http.HandlerFunc(s.fundNewForm)},
+		{http.MethodGet, "/funds/{id}/edit", TxnWrite, http.HandlerFunc(s.fundEditForm)},
+		{http.MethodGet, "/funds/{id}", TxnRead, http.HandlerFunc(s.fundStatement)},
+		{http.MethodPost, "/funds", TxnWrite, http.HandlerFunc(s.fundCreate)},
+		{http.MethodPost, "/funds/{id}", TxnWrite, http.HandlerFunc(s.fundUpdate)},
+		{http.MethodPost, "/funds/{id}/close", TxnWrite, http.HandlerFunc(s.fundClose)},
+		{http.MethodPost, "/funds/{id}/reopen", TxnWrite, http.HandlerFunc(s.fundReopen)},
 	}
 	// The -dev-only styleguide (Appendix F): a component gallery for visual review.
 	// Registered ONLY in -dev so it 404s in production (it is not in the registry

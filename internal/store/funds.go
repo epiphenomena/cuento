@@ -319,6 +319,18 @@ func (s *Store) GetFund(ctx context.Context, id int64) (sqlc.Fund, error) {
 	return row, nil
 }
 
+// FundSubsidiaryIDs returns the subsidiary id set a fund currently scopes to (D20),
+// subsidiary-id ordered. It is the read the funds workspace (p12.5) uses for the
+// list's scope column and to pre-check the edit form's subsidiary checklist --
+// mirroring AccountSubsidiaryIDs. Read; sqlc.
+func (s *Store) FundSubsidiaryIDs(ctx context.Context, id int64) ([]int64, error) {
+	ids, err := s.q.FundSubsidiaries(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("store: fund %d subsidiaries: %w", id, err)
+	}
+	return ids, nil
+}
+
 // ActiveFunds returns the ACTIVE funds whose subsidiary scope contains
 // subsidiaryID (D20/Q1) -- the transaction editor's fund-option source. Ordered
 // by id for a deterministic option list. Read; sqlc.

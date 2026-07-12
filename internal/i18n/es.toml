@@ -446,6 +446,98 @@ other = "Al programa raiz no se le puede asignar un padre."
 other = "Un programa no puede moverse bajo si mismo ni sus descendientes."
 [error.program.has_active_children]
 other = "Este programa aun tiene hijos activos y no se puede desactivar."
+[funds.title]
+other = "Fondos"
+[funds.intro]
+other = "Fondos restringidos — la dimension de restriccion del donante en los asientos. Cada fondo se asocia a una o mas subsidiarias y opcionalmente a un programa; gestionar subvenciones es contabilidad."
+[funds.new]
+other = "Nuevo fondo"
+[funds.close]
+other = "Cerrar"
+[funds.reopen]
+other = "Reabrir"
+[funds.closed]
+other = "cerrado"
+[funds.show_closed]
+other = "Mostrar fondos cerrados"
+[funds.show_active]
+other = "Mostrar fondos activos"
+[funds.viewing_closed]
+other = "Viendo fondos cerrados"
+[funds.negative_badge]
+other = "Sobregirado"
+[funds.empty]
+other = "Aun no hay fondos."
+[funds.col.name]
+other = "Fondo"
+[funds.col.funder]
+other = "Financiador"
+[funds.col.scope]
+other = "Alcance"
+[funds.col.balance]
+other = "Saldo"
+[funds.col.actions]
+other = "Acciones"
+[funds.statement.title]
+other = "Estado del fondo"
+[funds.statement.back]
+other = "Volver a fondos"
+[funds.statement.currency]
+other = "Moneda"
+[funds.statement.opening]
+other = "Saldo inicial"
+[funds.statement.closing]
+other = "Saldo final"
+[funds.statement.empty]
+other = "Aun no hay actividad para este fondo."
+[funds.statement.col.date]
+other = "Fecha"
+[funds.statement.col.subsidiary]
+other = "Subsidiaria"
+[funds.statement.col.account]
+other = "Cuenta"
+[funds.statement.col.memo]
+other = "Nota"
+[funds.statement.col.amount]
+other = "Importe"
+[funds.statement.col.running]
+other = "Saldo no gastado"
+[funds.form.new_title]
+other = "Nuevo fondo"
+[funds.form.edit_title]
+other = "Editar fondo"
+[funds.form.name]
+other = "Nombre"
+[funds.form.funder]
+other = "Financiador"
+[funds.form.purpose]
+other = "Proposito"
+[funds.form.restriction]
+other = "Restriccion"
+[funds.form.program]
+other = "Alcance de programa (opcional)"
+[funds.form.no_program]
+other = "Sin alcance de programa"
+[funds.form.notes]
+other = "Notas"
+[funds.form.subsidiaries]
+other = "Subsidiarias"
+[funds.form.subs_hint]
+other = "Un fondo se asocia a una o mas subsidiarias."
+[funds.restriction.purpose]
+other = "Restringido por proposito"
+[funds.restriction.time]
+other = "Restringido por tiempo"
+[funds.restriction.perpetual]
+other = "Perpetuo (dotacion)"
+[error.fund.no_subsidiary]
+other = "Un fondo debe asociarse al menos a una subsidiaria."
+[error.fund.program_missing]
+other = "El alcance de programa seleccionado no existe."
+[error.fund.sub_in_use]
+other = "No se puede quitar una subsidiaria mientras una transaccion aun etiqueta este fondo alli."
+[error.fund.not_found]
+other = "Ese fondo ya no existe."
 [txn.new_title]
 other = "Nueva transaccion"
 [txn.edit_title]
