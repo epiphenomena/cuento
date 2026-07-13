@@ -326,6 +326,7 @@ func (s *server) expenseReviewPost(w http.ResponseWriter, r *http.Request) {
 	model.ExpenseReportID = id
 	model.Currency = currency
 	model.Memo = r.FormValue("memo")
+	model.Notes = r.FormValue("notes")
 	model.FirstErrorRow = -1
 
 	dateISO, dateOK := parseEditorDate(r.FormValue("date"), dateFormatFor(u), s.now())
@@ -344,6 +345,7 @@ func (s *server) expenseReviewPost(w http.ResponseWriter, r *http.Request) {
 		Date:         dateISO,
 		SubsidiaryID: subID,
 		Memo:         model.Memo,
+		Notes:        model.Notes,
 		Currency:     currency,
 		Splits:       splits,
 	}

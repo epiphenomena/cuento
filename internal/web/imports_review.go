@@ -314,6 +314,7 @@ func (s *server) importRowPost(w http.ResponseWriter, r *http.Request) {
 	model.Payee = parseID(r.FormValue("payee"))
 	model.PayeeName = trimSpace(r.FormValue("payee_name"))
 	model.Memo = r.FormValue("memo")
+	model.Notes = r.FormValue("notes")
 	model.FirstErrorRow = -1
 
 	// Create-on-save payee (p12.3): a picked id wins; else find-or-create by typed name
@@ -344,6 +345,7 @@ func (s *server) importRowPost(w http.ResponseWriter, r *http.Request) {
 		Date:         dateISO,
 		SubsidiaryID: subID,
 		Memo:         model.Memo,
+		Notes:        model.Notes,
 		Currency:     currency,
 		Splits:       splits,
 	}
