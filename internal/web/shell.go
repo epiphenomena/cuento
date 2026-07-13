@@ -323,6 +323,16 @@ func (s *server) newShellPage(r *http.Request, page any) shellPage {
 	}
 }
 
+// newShellPageControls is newShellPage with a page-controls partial named for the
+// section bar (p23.10/p23.11) — the page's filters/New button moved out of its body
+// into the second-level menu. controls must match a guarded {{template}} in the
+// section bar (base.tmpl).
+func (s *server) newShellPageControls(r *http.Request, page any, controls string) shellPage {
+	p := s.newShellPage(r, page)
+	p.Shell.SubNavControls = controls
+	return p
+}
+
 // newWideShellPage is newShellPage with the full-width <main> opt-out set (Wide),
 // for data-dense pages that need the horizontal space (the transaction editor,
 // p23.2). Everything else is identical to newShellPage.

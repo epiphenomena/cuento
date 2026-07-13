@@ -12,6 +12,16 @@
   data), so names render verbatim; every OTHER string via {{t}} (rule 9); no inline
   script (rule 12).
 */ -}}
+{{/* subsidiaries-controls: the section-bar New trigger (p23.11). */ -}}
+{{define "subsidiaries-controls" -}}
+<div class="subnav-actions">
+  <button type="button" class="btn btn-primary"
+          hx-get="/admin/subsidiaries/new" hx-target="#subsidiary-form" hx-swap="outerHTML">
+    {{t "subsidiaries.new"}}
+  </button>
+</div>
+{{- end}}
+
 {{define "subsidiaries.tmpl" -}}
 {{template "shell-open" (shellTitle . (t "subsidiaries.title"))}}
   {{- with .Page}}
@@ -22,13 +32,9 @@
   <p class="field-error" role="alert">{{t .ErrorKey}}</p>
   {{end}}
 
-  <div id="subsidiary-form" class="subsidiary-form-region">
-    {{/* The inline form fetches here. GET .../new htmx-swaps its form in. */}}
-    <button type="button" class="btn btn-primary"
-            hx-get="/admin/subsidiaries/new" hx-target="#subsidiary-form" hx-swap="outerHTML">
-      {{t "subsidiaries.new"}}
-    </button>
-  </div>
+  {{/* The inline create/edit form (New trigger lives in the section bar, p23.11)
+       swaps in here; empty until opened. */}}
+  <div id="subsidiary-form" class="subsidiary-form-region"></div>
 
   <table class="tree-table">
     <thead>

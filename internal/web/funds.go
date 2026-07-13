@@ -69,7 +69,7 @@ func (s *server) fundsPage(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	s.render(w, r, http.StatusOK, "funds.tmpl", s.newShellPage(r, model))
+	s.render(w, r, http.StatusOK, "funds.tmpl", s.newShellPageControls(r, model, "funds"))
 }
 
 // buildFundsPage assembles the list rows for the toggle state. Balances come from

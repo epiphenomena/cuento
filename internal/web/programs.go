@@ -100,7 +100,7 @@ func (s *server) programsPage(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	s.render(w, r, http.StatusOK, "programs.tmpl", s.newShellPage(r, model))
+	s.render(w, r, http.StatusOK, "programs.tmpl", s.newShellPageControls(r, model, "programs"))
 }
 
 // programPeriod resolves the activity period: a from/to query param (ISO
@@ -329,7 +329,7 @@ func (s *server) programDeactivate(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			model.ErrorKey = key
-			s.render(w, r, http.StatusUnprocessableEntity, "programs.tmpl", s.newShellPage(r, model))
+			s.render(w, r, http.StatusUnprocessableEntity, "programs.tmpl", s.newShellPageControls(r, model, "programs"))
 			return
 		}
 		s.serverError(w)

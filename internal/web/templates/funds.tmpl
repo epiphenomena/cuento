@@ -14,28 +14,36 @@
   proper nouns rendered verbatim; every other string via {{t}} (rule 9); no inline
   script (rule 12).
 */ -}}
+{{/* funds-controls: the section-bar New trigger + the closed/active toggle (p23.11).
+     Dot is the funds page model. */ -}}
+{{define "funds-controls" -}}
+{{- with .}}
+<div class="subnav-filters">
+  {{if .ShowClosed}}
+  <a href="/funds" class="btn btn-ghost">{{t "funds.show_active"}}</a>
+  <span class="badge">{{t "funds.viewing_closed"}}</span>
+  {{else}}
+  <a href="/funds?closed=1" class="btn btn-ghost">{{t "funds.show_closed"}}</a>
+  {{end}}
+</div>
+<div class="subnav-actions">
+  <button type="button" class="btn btn-primary"
+          hx-get="/funds/new" hx-target="#fund-form" hx-swap="outerHTML">
+    {{t "funds.new"}}
+  </button>
+</div>
+{{- end}}
+{{- end}}
+
 {{define "funds.tmpl" -}}
 {{template "shell-open" (shellTitle . (t "funds.title"))}}
   {{- with .Page}}
   <h1>{{t "funds.title"}}</h1>
   <p class="hint">{{t "funds.intro"}}</p>
 
-  <div id="fund-form" class="fund-form-region">
-    {{/* The inline form fetches here. GET /funds/new htmx-swaps its form in. */}}
-    <button type="button" class="btn btn-primary"
-            hx-get="/funds/new" hx-target="#fund-form" hx-swap="outerHTML">
-      {{t "funds.new"}}
-    </button>
-  </div>
-
-  <p class="funds-toggle">
-    {{if .ShowClosed}}
-    <a href="/funds" class="btn btn-ghost">{{t "funds.show_active"}}</a>
-    <span class="badge">{{t "funds.viewing_closed"}}</span>
-    {{else}}
-    <a href="/funds?closed=1" class="btn btn-ghost">{{t "funds.show_closed"}}</a>
-    {{end}}
-  </p>
+  {{/* The inline create/edit form (New trigger + closed toggle live in the section
+       bar, p23.11) swaps in here; empty until opened. */}}
+  <div id="fund-form" class="fund-form-region"></div>
 
   <table class="funds-table">
     <thead>

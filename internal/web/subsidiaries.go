@@ -55,7 +55,7 @@ func (s *server) subsidiariesPage(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	s.render(w, r, http.StatusOK, "subsidiaries.tmpl", s.newShellPage(r, model))
+	s.render(w, r, http.StatusOK, "subsidiaries.tmpl", s.newShellPageControls(r, model, "subsidiaries"))
 }
 
 // buildSubsidiariesPage assembles the tree rows (depth-indented, pre-order) for
@@ -257,7 +257,7 @@ func (s *server) subsidiaryDeactivate(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			model.ErrorKey = key
-			s.render(w, r, http.StatusUnprocessableEntity, "subsidiaries.tmpl", s.newShellPage(r, model))
+			s.render(w, r, http.StatusUnprocessableEntity, "subsidiaries.tmpl", s.newShellPageControls(r, model, "subsidiaries"))
 			return
 		}
 		s.serverError(w)

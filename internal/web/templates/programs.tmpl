@@ -14,6 +14,16 @@
   names render verbatim; every OTHER string via {{t}} (rule 9); no inline script
   (rule 12).
 */ -}}
+{{/* programs-controls: the section-bar New trigger (p23.11). */ -}}
+{{define "programs-controls" -}}
+<div class="subnav-actions">
+  <button type="button" class="btn btn-primary"
+          hx-get="/programs/new" hx-target="#program-form" hx-swap="outerHTML">
+    {{t "programs.new"}}
+  </button>
+</div>
+{{- end}}
+
 {{define "programs.tmpl" -}}
 {{template "shell-open" (shellTitle . (t "programs.title"))}}
   {{- with .Page}}
@@ -25,13 +35,9 @@
   <p class="field-error" role="alert">{{t .ErrorKey}}</p>
   {{end}}
 
-  <div id="program-form" class="program-form-region">
-    {{/* The inline form fetches here. GET /programs/new htmx-swaps its form in. */}}
-    <button type="button" class="btn btn-primary"
-            hx-get="/programs/new" hx-target="#program-form" hx-swap="outerHTML">
-      {{t "programs.new"}}
-    </button>
-  </div>
+  {{/* The inline create/edit form (New trigger lives in the section bar, p23.11)
+       swaps in here; empty until opened. */}}
+  <div id="program-form" class="program-form-region"></div>
 
   <table class="tree-table">
     <thead>
