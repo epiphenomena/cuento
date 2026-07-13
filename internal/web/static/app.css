@@ -173,6 +173,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
   margin: 0 auto;
   padding: var(--space-8) var(--space-6);
 }
+/* Full-width opt-out (p23.2): data-dense pages (the transaction editor) drop the
+   60rem reading cap and use the horizontal space, keeping a small viewport gutter. */
+.app-main-wide {
+  max-width: min(100rem, 100% - 2 * var(--space-6));
+}
 
 .app-footer {
   padding: var(--space-4) var(--space-6);
@@ -471,3 +476,144 @@ input[aria-invalid="true"] {
 .recon-diff.is-zero dd { color: var(--color-success, green); }
 .recon-diff-hint { margin-top: var(--space-2); }
 .recon-finalize-form { margin-top: var(--space-3); }
+
+/* ------------------------------------------------------------------ *
+ * p23.2 transaction editor — the high-traffic data-entry screen.
+ *
+ * Goals (user, 2026-07-13): use the horizontal space (the page is app-main-wide),
+ * lay the header fields in a row instead of a cramped vertical stack, present the
+ * splits as a bordered spreadsheet-style table with column rules, keep the header
+ * row and the totals/actions bar in view (sticky) so a typical entry needs no
+ * scroll, and keep keyboard navigation obvious. Strict-CSP-safe: all styles here,
+ * none inline (rule 12).
+ * ------------------------------------------------------------------ */
+
+.txn-editor { margin-top: var(--space-4); }
+
+/* Header: subsidiary / date / payee / memo / apply-fund laid out in a wrapping
+   row of labelled fields, each taking a sensible share of the width. */
+.txn-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+  background: var(--color-surface);
+  border: var(--border);
+  border-radius: var(--radius);
+}
+.txn-header .txn-field { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; }
+.txn-header .txn-field > label { font-weight: 600; font-size: 0.85rem; color: var(--color-text-muted); }
+.txn-header .txn-field input,
+.txn-header .txn-field select { min-width: 10rem; }
+.txn-header .txn-date { min-width: 8rem; }
+.txn-header .txn-payee-field { flex: 1 1 16rem; }
+.txn-header .txn-payee-field select,
+.txn-header .txn-payee-field .txn-payee-input { width: 100%; }
+.txn-header .txn-memo-header { min-width: 14rem; }
+/* Apply-fund helper sits at the end of the header row as an inline cluster. */
+.txn-apply-fund { flex-direction: row !important; align-items: end; gap: var(--space-2); }
+.txn-apply-fund .txn-apply-fund-select { min-width: 9rem; }
+
+/* The split grid: a real table with collapsed borders so every column is ruled. */
+.txn-grid {
+  width: 100%;
+  border-collapse: collapse;
+  border: var(--border);
+  table-layout: fixed;
+  font-variant-numeric: tabular-nums;
+}
+.txn-grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-primary);
+  background: var(--color-surface-alt);
+  border: var(--border);
+  border-bottom: 2px solid var(--color-primary);
+  font-size: 0.85rem;
+}
+.txn-grid td.txn-cell {
+  padding: 0;
+  border: var(--border);
+  vertical-align: middle;
+}
+/* Inputs and selects fill their cell edge-to-edge — the CELL border is the visual
+   boundary, so the controls themselves lose their own border/radius/background for
+   a clean spreadsheet feel. Focus still shows the accessible outline (below). */
+.txn-grid td.txn-cell input,
+.txn-grid td.txn-cell select {
+  width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--color-surface);
+  padding: var(--space-2) var(--space-3);
+}
+.txn-grid td.txn-cell input:focus-visible,
+.txn-grid td.txn-cell select:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+.txn-grid td.txn-cell input:focus,
+.txn-grid td.txn-cell select:focus { background: var(--color-surface-alt); }
+/* Amount columns right-align their figures. */
+.txn-grid .txn-amount-cell input { text-align: right; }
+.txn-grid thead th:nth-child(2) { text-align: right; }
+
+/* Sensible column widths (table-layout: fixed): the account, memo and error
+   columns get the slack; the fixed selects stay compact. */
+.txn-grid col,
+.txn-account-cell { width: auto; }
+.txn-amount-cell { width: 8rem; }
+.txn-fund-cell, .txn-program-cell, .txn-class-cell { width: 10rem; }
+.txn-row-error { width: 12rem; }
+
+/* Row states. A server-flagged row and a client-detected out-of-subsidiary row
+   both tint danger so the eye lands on the problem. */
+.txn-row[data-row-error] td.txn-cell { background: var(--color-danger-bg); }
+.txn-row.sub-conflict td.txn-cell { background: var(--color-danger-bg); }
+.txn-row-error .field-error { padding: 0 var(--space-3); display: inline-block; }
+
+.txn-actions { margin: var(--space-3) 0; }
+
+/* Totals bar: sticks to the bottom of the viewport so the running imbalance is
+   always visible while editing long split lists — no scroll to check the balance. */
+.txn-totals {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  margin-top: var(--space-3);
+  /* Tinted status strip, deliberately NOT the white input surface, so an empty
+     (balanced) bar never reads as a stray text field. */
+  background: var(--color-surface-alt);
+  border: var(--border);
+  border-radius: var(--radius);
+  min-height: 2.25rem;
+}
+.txn-fund-chips { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
+.txn-total-chip, .txn-fund-chip {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+/* A live imbalance is the alarm state; a balanced total shows nothing (empty chip). */
+.txn-total-chip.imbalanced, .txn-fund-chip.imbalanced {
+  background: var(--color-danger-bg);
+  color: var(--color-danger);
+}
+.txn-total-chip:empty { display: none; }
+.txn-totals-error:not(:empty) { color: var(--color-danger); font-weight: 600; }
+
+.txn-submit { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
+
+/* A subsidiary that is locked (import / expense-review post) reads as a hint. */
+.txn-subsidiary-locked { font-size: 0.85rem; color: var(--color-text-muted); }

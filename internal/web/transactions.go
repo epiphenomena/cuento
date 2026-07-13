@@ -305,7 +305,7 @@ func (s *server) renderEditor(w http.ResponseWriter, r *http.Request, model txnE
 		s.render(w, r, http.StatusOK, "transaction-form", s.newShellPage(r, model))
 		return
 	}
-	s.render(w, r, http.StatusOK, "transaction_form.tmpl", s.newShellPage(r, model))
+	s.render(w, r, http.StatusOK, "transaction_form.tmpl", s.newWideShellPage(r, model))
 }
 
 // txnCreate handles POST /transactions.

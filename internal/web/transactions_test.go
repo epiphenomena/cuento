@@ -392,6 +392,29 @@ func TestTxnStableInputIDsAcrossRerender(t *testing.T) {
 	}
 }
 
+// TestTxnEditorFullWidth: the full-page editor opts <main> out of the centered
+// reading column (app-main-wide, p23.2) so the split grid can use the horizontal
+// space. The htmx form-region swap is just the form partial, so it does NOT carry
+// the main class.
+func TestTxnEditorFullWidth(t *testing.T) {
+	e := newTxnWebEnv(t)
+
+	full := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/new", nil)
+	if full.Code != http.StatusOK {
+		t.Fatalf("GET new: %d", full.Code)
+	}
+	if !strings.Contains(full.Body.String(), "app-main-wide") {
+		t.Fatalf("full editor page missing app-main-wide (full-width opt-out); body:\n%s", full.Body.String())
+	}
+
+	// The subsidiary re-filter (an htmx GET) returns only the #txn-form partial —
+	// no <main>, so no app-main-wide.
+	partial := asHTMXUser(t, e, http.MethodGet, "/transactions/new", nil)
+	if strings.Contains(partial.Body.String(), "app-main-wide") {
+		t.Errorf("htmx form-region swap should not include the main class app-main-wide")
+	}
+}
+
 // asHTMXUser is asUser plus the HX-Request header the real htmx client sends on an
 // in-flow action (the subsidiary re-filter's hx-get, the editor's hx-post). It exists
 // so the p12.6 tests can assert the in-flow swap behavior (partial, not full page).

@@ -171,6 +171,10 @@ type baseData struct {
 	Theme   string
 	Nav     []navItem
 	Version string
+	// Wide opts <main> out of the centered 60rem column so a data-dense page (the
+	// transaction editor, p23.2) can use the full horizontal width. Set via
+	// newWideShellPage; default false keeps the comfortable reading column.
+	Wide bool
 }
 
 // shellPage bundles the shell chrome (Shell) with a page's own model (Page) so a
@@ -215,6 +219,15 @@ func (s *server) newShellPage(r *http.Request, page any) shellPage {
 		},
 		Page: page,
 	}
+}
+
+// newWideShellPage is newShellPage with the full-width <main> opt-out set (Wide),
+// for data-dense pages that need the horizontal space (the transaction editor,
+// p23.2). Everything else is identical to newShellPage.
+func (s *server) newWideShellPage(r *http.Request, page any) shellPage {
+	p := s.newShellPage(r, page)
+	p.Shell.Wide = true
+	return p
 }
 
 // resolveTheme picks the data-theme to render SERVER-SIDE (no flash): the theme
