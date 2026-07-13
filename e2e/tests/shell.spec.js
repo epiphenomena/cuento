@@ -41,6 +41,12 @@ test.describe('authenticated shell', () => {
     await expect(nav.getByRole('link', { name: 'Settings' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Admin' })).toBeVisible();
 
+    // p18.1: the footer surfaces the build version (the release binary bakes it
+    // via -X main.version; the e2e binary is a plain `make build`, so it shows
+    // "Version dev"). Assert the localized label + a non-empty version token by
+    // pattern, never a hard-coded value, so the spec holds across build paths.
+    await expect(page.locator('footer.app-footer')).toContainText(/Version\s+\S+/);
+
     // The Settings nav target is live (renders through the shell, AnyUser).
     await nav.getByRole('link', { name: 'Settings' }).click();
     await page.waitForURL('**/settings');

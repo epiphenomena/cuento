@@ -294,6 +294,43 @@ func TestStyleguideDevOnly(t *testing.T) {
 	}
 }
 
+// TestFooterVersion (p18.1): the shell footer surfaces the configured build
+// version -- the release-time `-X main.version` value flows main.version ->
+// Config.Version -> baseData.Version -> the footer partial. A distinctive
+// version is fed via Config so the assertion has discriminating power (it would
+// not appear if the wiring were dead); the version string itself is not
+// translated, only the surrounding "Version %s" label is a catalog key.
+func TestFooterVersion(t *testing.T) {
+	const version = "v9.9.9-footer-test"
+
+	db := testutil.NewDB(t)
+	st := store.New(db)
+	if err := SyncReportGroups(context.Background(), st); err != nil {
+		t.Fatalf("sync report groups: %v", err)
+	}
+	app := NewApp(Config{Version: version}, db, st)
+
+	user := makeUser(t, st, store.CreateUserInput{Username: "footer_user", TxnPerm: "read"})
+	rec := getHomeAs(t, app.handler, app.sessions, user)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET / status = %d, want 200", rec.Code)
+	}
+
+	body := rec.Body.String()
+	want := i18n.T("en", "footer.version", version)
+	if !strings.Contains(body, want) {
+		t.Errorf("footer missing version label %q:\n%s", want, body)
+	}
+	// The raw version string is present verbatim (not swallowed by escaping).
+	if !strings.Contains(body, version) {
+		t.Errorf("footer missing version string %q", version)
+	}
+	// Confirm it renders inside the footer landmark, not incidentally elsewhere.
+	if _, after, ok := strings.Cut(body, `<footer class="app-footer">`); !ok || !strings.Contains(after, version) {
+		t.Errorf("version %q not rendered within the app footer", version)
+	}
+}
+
 // newDevApp builds a real dev-mode app over a migrated temp db and returns the
 // handler, store, and session manager.
 func newDevApp(t *testing.T) (http.Handler, *store.Store, *scs.SessionManager) {

@@ -314,7 +314,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 
 ## Phase 18 — Ops, deploy, hardening
 
-- [ ] **p18.1 build: release binary.**
+- [x] **p18.1 build: release binary.**
   Tests: version string surfaces on `/healthz` and the footer.
   Build: `make release` — CGO-free linux/amd64, `-trimpath`, version from `git describe` via ldflags.
 - [ ] **p18.2 ops: config, TLS, deploy docs.**

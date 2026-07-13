@@ -26,7 +26,9 @@ import (
 const defaultDBPath = "cuento.db"
 
 // version is the build version, overridden at release via
-// -ldflags "-X main.version=...". It is not wired to ldflags yet (p18.1).
+// -ldflags "-X main.version=..." (the Makefile `release` target sets it from
+// `git describe`). It flows into web.Config.Version, which surfaces it on
+// /healthz and in the app footer (p18.1). Defaults to "dev" for plain builds.
 var version = "dev"
 
 // stdout is the writer command output goes to (indirected so tests can capture
