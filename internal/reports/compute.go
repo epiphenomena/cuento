@@ -797,15 +797,24 @@ func (tk *Toolkit) Rollup(ctx context.Context, currency string, leaf map[Account
 
 // ByPeriod invokes f once per sub-period of [from,to] at granularity g, passing the
 // sub-period's inclusive [pFrom,pTo] bounds. GranNone calls f once with the whole
-// range; GranMonth/GranQuarter split it into calendar months/quarters. It drives
-// the comparative report columns (p15.5) and the TxnDate month decomposition.
+// range; GranMonth/GranQuarter/GranYear split it into calendar months/quarters/
+// years; GranWeek splits it into ISO (Monday-start) weeks. It drives the comparative
+// report columns (p15.5) and the TxnDate month decomposition.
 func (tk *Toolkit) ByPeriod(from, to string, g Granularity, f func(pFrom, pTo string) error) error {
 	if g == GranNone {
 		return f(from, to)
 	}
+	if g == GranWeek {
+		return tk.byWeek(from, to, f)
+	}
+	// Month-anchored granularities: the step is the number of calendar months per
+	// sub-period (month 1, quarter 3, year 12).
 	step := 1
-	if g == GranQuarter {
+	switch g {
+	case GranQuarter:
 		step = 3
+	case GranYear:
+		step = 12
 	}
 	y, m, err := yearMonth(from)
 	if err != nil {
@@ -836,6 +845,39 @@ func (tk *Toolkit) ByPeriod(from, to string, g Granularity, f func(pFrom, pTo st
 			m -= 12
 			y++
 		}
+	}
+	return nil
+}
+
+// byWeek splits [from,to] into ISO (Monday-start) weeks, invoking f once per week
+// with the week's inclusive bounds clamped to [from,to]. The first week starts at
+// the Monday on-or-before `from` (clamped up to `from`); the last week ends at `to`.
+// The Monday-start definition matches the budget toolkit's GranWeek bucket key.
+func (tk *Toolkit) byWeek(from, to string, f func(pFrom, pTo string) error) error {
+	fromT, err := time.Parse("2006-01-02", from)
+	if err != nil {
+		return fmt.Errorf("reports: byWeek parse from %q: %w", from, err)
+	}
+	toT, err := time.Parse("2006-01-02", to)
+	if err != nil {
+		return fmt.Errorf("reports: byWeek parse to %q: %w", to, err)
+	}
+	// Start of the week containing `from`: roll back to Monday.
+	back := (int(fromT.Weekday()) + 6) % 7
+	weekStart := fromT.AddDate(0, 0, -back)
+	for !weekStart.After(toT) {
+		pFrom := weekStart
+		if pFrom.Before(fromT) {
+			pFrom = fromT
+		}
+		pTo := weekStart.AddDate(0, 0, 6) // Sunday end of this week
+		if pTo.After(toT) {
+			pTo = toT
+		}
+		if err := f(pFrom.Format("2006-01-02"), pTo.Format("2006-01-02")); err != nil {
+			return err
+		}
+		weekStart = weekStart.AddDate(0, 0, 7)
 	}
 	return nil
 }

@@ -175,6 +175,53 @@ func (s *Store) ProgramActivity(ctx context.Context, from, to string, scopeSub i
 	return out, nil
 }
 
+// BudgetKeyCell is one (subsidiary, account, fund, program, currency, date)
+// net-debit activity cell -- the ACTUALS grain the p19.2 budget toolkit compares
+// against a budget line's (sub, account, fund, program) key. FundID 0 is the
+// unrestricted group (D20). Date is preserved so the caller buckets each cell by
+// its own date (discrete, no pro-rata) exactly as it buckets budget occurrences.
+type BudgetKeyCell struct {
+	SubsidiaryID int64
+	AccountID    int64
+	FundID       int64 // 0 = unrestricted
+	ProgramID    int64
+	Currency     string
+	Date         string
+	Amount       int64 // signed minor units (net-debit, D2)
+}
+
+// BudgetKeyActivity returns, per (subsidiary, account, fund, program, currency,
+// date), the signed net-debit activity of the revenue/expense splits over the
+// closed interval from <= date <= to in scopeSub's descendant closure (D18). It is
+// the actuals read the budget toolkit's ActualsVsBudget uses: the SAME per-key
+// grain a budget line carries (unrestricted = fund 0, COALESCE), with the date kept
+// so the caller buckets by occurrence date. Only R/E splits (those carrying a
+// program, D24) are returned.
+func (s *Store) BudgetKeyActivity(ctx context.Context, from, to string, scopeSub int64) ([]BudgetKeyCell, error) {
+	rows, err := s.q.BudgetKeyActivity(ctx, sqlc.BudgetKeyActivityParams{
+		ID:     scopeSub,
+		Date:   from,
+		Date_2: to,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store: budget key activity %s..%s (scope %d): %w", from, to, scopeSub, err)
+	}
+	out := make([]BudgetKeyCell, len(rows))
+	for i, r := range rows {
+		// program_id is NOT NULL-filtered in SQL, so Valid is always true.
+		out[i] = BudgetKeyCell{
+			SubsidiaryID: r.SubsidiaryID,
+			AccountID:    r.AccountID,
+			FundID:       r.FundID,
+			ProgramID:    r.ProgramID.Int64,
+			Currency:     r.Currency,
+			Date:         r.Date,
+			Amount:       r.Activity,
+		}
+	}
+	return out, nil
+}
+
 // ---------------------------------------------------------------------------
 // RegisterPage: the account register with a per-currency running balance and
 // keyset (seek) pagination.

@@ -130,6 +130,35 @@ WHERE t.deleted = 0
 GROUP BY sp.program_id, sp.account_id, t.currency
 ORDER BY sp.program_id, sp.account_id, t.currency;
 
+-- name: BudgetKeyActivity :many
+-- Per (subsidiary, account, fund, program, currency, date): signed net-debit
+-- activity of the revenue/expense splits over from <= date <= to in scope. This is
+-- the ACTUALS grain the budget toolkit (p19.2) compares against a budget, keyed by
+-- the SAME (sub, account, fund, program) tuple a budget line carries -- with the
+-- unrestricted group as fund id 0 (COALESCE, matching FundBalancesAsOf / D20) and
+-- the DATE preserved so the caller can bucket each split by its own date (the same
+-- discrete no-pro-rata bucketing occurrences use). Only R/E splits carry a program
+-- (D24), so the NOT NULL program filter restricts to exactly the budgetable flows.
+-- Params: scopeSub, from, to.
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT t.subsidiary_id, sp.account_id, COALESCE(sp.fund_id, 0) AS fund_id,
+       sp.program_id, t.currency, t.date,
+       CAST(SUM(sp.amount) AS INTEGER) AS activity
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+WHERE t.deleted = 0
+  AND sp.program_id IS NOT NULL
+  AND t.date >= ?
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY t.subsidiary_id, sp.account_id, COALESCE(sp.fund_id, 0),
+         sp.program_id, t.currency, t.date
+ORDER BY t.subsidiary_id, sp.account_id, fund_id, sp.program_id, t.currency, t.date;
+
 -- name: RegisterPage :many
 -- The account register: every non-deleted split on account_id (after filters),
 -- with a RUNNING BALANCE per currency computed by a window function over the WHOLE

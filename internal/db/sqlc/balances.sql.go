@@ -10,6 +10,83 @@ import (
 	"database/sql"
 )
 
+const budgetKeyActivity = `-- name: BudgetKeyActivity :many
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT t.subsidiary_id, sp.account_id, COALESCE(sp.fund_id, 0) AS fund_id,
+       sp.program_id, t.currency, t.date,
+       CAST(SUM(sp.amount) AS INTEGER) AS activity
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+WHERE t.deleted = 0
+  AND sp.program_id IS NOT NULL
+  AND t.date >= ?
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY t.subsidiary_id, sp.account_id, COALESCE(sp.fund_id, 0),
+         sp.program_id, t.currency, t.date
+ORDER BY t.subsidiary_id, sp.account_id, fund_id, sp.program_id, t.currency, t.date
+`
+
+type BudgetKeyActivityParams struct {
+	ID     int64
+	Date   string
+	Date_2 string
+}
+
+type BudgetKeyActivityRow struct {
+	SubsidiaryID int64
+	AccountID    int64
+	FundID       int64
+	ProgramID    sql.NullInt64
+	Currency     string
+	Date         string
+	Activity     int64
+}
+
+// Per (subsidiary, account, fund, program, currency, date): signed net-debit
+// activity of the revenue/expense splits over from <= date <= to in scope. This is
+// the ACTUALS grain the budget toolkit (p19.2) compares against a budget, keyed by
+// the SAME (sub, account, fund, program) tuple a budget line carries -- with the
+// unrestricted group as fund id 0 (COALESCE, matching FundBalancesAsOf / D20) and
+// the DATE preserved so the caller can bucket each split by its own date (the same
+// discrete no-pro-rata bucketing occurrences use). Only R/E splits carry a program
+// (D24), so the NOT NULL program filter restricts to exactly the budgetable flows.
+// Params: scopeSub, from, to.
+func (q *Queries) BudgetKeyActivity(ctx context.Context, arg BudgetKeyActivityParams) ([]BudgetKeyActivityRow, error) {
+	rows, err := q.db.QueryContext(ctx, budgetKeyActivity, arg.ID, arg.Date, arg.Date_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []BudgetKeyActivityRow
+	for rows.Next() {
+		var i BudgetKeyActivityRow
+		if err := rows.Scan(
+			&i.SubsidiaryID,
+			&i.AccountID,
+			&i.FundID,
+			&i.ProgramID,
+			&i.Currency,
+			&i.Date,
+			&i.Activity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const drillSplits = `-- name: DrillSplits :many
 WITH RECURSIVE scope(id) AS (
   SELECT s.id FROM subsidiaries s WHERE s.id = ?

@@ -116,6 +116,13 @@ const (
 	GranMonth
 	// GranQuarter breaks the period into quarterly columns.
 	GranQuarter
+	// GranWeek breaks the period into ISO weeks (Monday-start). Used by the budget
+	// toolkit's occurrence bucketing (p19.2); a week's bucket key is the date of the
+	// Monday that starts it.
+	GranWeek
+	// GranYear breaks the period into calendar years. Used by the budget toolkit's
+	// occurrence bucketing (p19.2); a year's bucket key is YYYY-01-01.
+	GranYear
 )
 
 // String renders a Granularity as its stable query-param token (round-trips
@@ -126,6 +133,10 @@ func (g Granularity) String() string {
 		return "month"
 	case GranQuarter:
 		return "quarter"
+	case GranWeek:
+		return "week"
+	case GranYear:
+		return "year"
 	default:
 		return "none"
 	}
@@ -139,6 +150,10 @@ func ParseGranularity(s string) Granularity {
 		return GranMonth
 	case "quarter":
 		return GranQuarter
+	case "week":
+		return GranWeek
+	case "year":
+		return GranYear
 	default:
 		return GranNone
 	}
