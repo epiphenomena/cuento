@@ -998,6 +998,8 @@ other = "Fund"
 other = "Program"
 [reports.params.reconciliation]
 other = "Reconciliation"
+[reports.params.budget]
+other = "Budget"
 [reports.params.run]
 other = "Run report"
 [reports.detail.converted]
@@ -1006,10 +1008,14 @@ other = "Converted totals"
 other = "Per currency"
 [reports.gran.none]
 other = "Total"
+[reports.gran.week]
+other = "Weekly"
 [reports.gran.month]
 other = "Monthly"
 [reports.gran.quarter]
 other = "Quarterly"
+[reports.gran.year]
+other = "Annual"
 [reports.export.csv]
 other = "Download CSV"
 [reports.empty]
@@ -1034,6 +1040,8 @@ other = "Programs"
 other = "Tax (IRS 990)"
 [reports.group.reconciliation]
 other = "Reconciliation"
+[reports.group.budget]
+other = "Budget"
 [reports.trial_balance.title]
 other = "Trial balance"
 [reports.trial_balance.col.account]
@@ -1322,6 +1330,45 @@ other = "Cleared total"
 other = "Closing balance"
 [reports.reconciliation_statement.unrestricted]
 other = "Unrestricted"
+
+# p19.4 budget reports (group "budget"): actuals-vs-budget (per-fund forecast/variance)
+# and cashflow projection (net-asset fund balances start->end). The BUDGET selector
+# label + placeholder, the shared "Unrestricted" fund label (fund 0, D20), and each
+# report's title + column headers + total label.
+[reports.budget.choose]
+other = "— choose a budget —"
+[reports.budget.unrestricted]
+other = "Unrestricted"
+[reports.actuals_vs_budget.title]
+other = "Actuals vs budget"
+[reports.actuals_vs_budget.col.bucket]
+other = "Period"
+[reports.actuals_vs_budget.col.account]
+other = "Account"
+[reports.actuals_vs_budget.col.fund]
+other = "Fund"
+[reports.actuals_vs_budget.col.program]
+other = "Program"
+[reports.actuals_vs_budget.col.currency]
+other = "Currency"
+[reports.actuals_vs_budget.col.budgeted]
+other = "Budgeted"
+[reports.actuals_vs_budget.col.actual]
+other = "Actual"
+[reports.actuals_vs_budget.col.variance]
+other = "Variance"
+[reports.actuals_vs_budget.total]
+other = "Total"
+[reports.cashflow_projection.title]
+other = "Cashflow projection"
+[reports.cashflow_projection.col.fund]
+other = "Fund"
+[reports.cashflow_projection.col.currency]
+other = "Currency"
+[reports.cashflow_projection.col.start]
+other = "Start"
+[reports.cashflow_projection.col.end]
+other = "End"
 
 # p16.3 reconciliation workspace
 [recon.title]

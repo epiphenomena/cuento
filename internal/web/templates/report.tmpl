@@ -52,8 +52,10 @@
       <label for="rp-gran">{{t "reports.params.granularity"}}</label>
       <select id="rp-gran" name="granularity">
         <option value="none"{{if eq .Params.Granularity "none"}} selected{{end}}>{{t "reports.gran.none"}}</option>
+        <option value="week"{{if eq .Params.Granularity "week"}} selected{{end}}>{{t "reports.gran.week"}}</option>
         <option value="month"{{if eq .Params.Granularity "month"}} selected{{end}}>{{t "reports.gran.month"}}</option>
         <option value="quarter"{{if eq .Params.Granularity "quarter"}} selected{{end}}>{{t "reports.gran.quarter"}}</option>
+        <option value="year"{{if eq .Params.Granularity "year"}} selected{{end}}>{{t "reports.gran.year"}}</option>
       </select>
       {{end}}
 
@@ -110,6 +112,16 @@
         <option value="0"{{if eq .Params.Recon 0}} selected{{end}}>{{t "reports.reconciliation_statement.choose"}}</option>
         {{- range .Params.Recons}}
         <option value="{{.ID}}"{{if eq .ID $.Page.Params.Recon}} selected{{end}}>{{.Label}}</option>
+        {{- end}}
+      </select>
+      {{end}}
+
+      {{if .Params.ShowBudget}}
+      <label for="rp-budget">{{t "reports.params.budget"}}</label>
+      <select id="rp-budget" name="budget" class="report-budget-select">
+        <option value="0"{{if eq .Params.Budget 0}} selected{{end}}>{{t "reports.budget.choose"}}</option>
+        {{- range .Params.Budgets}}
+        <option value="{{.ID}}"{{if eq .ID $.Page.Params.Budget}} selected{{end}}>{{.Label}}</option>
         {{- end}}
       </select>
       {{end}}

@@ -1,0 +1,8 @@
+   Period      Account            Fund            Program    Currency      Budgeted           Actual         Variance
+-  ----------  -----------------  --------------  ---------  --------  ------------  ---------------  ---------------
+   2025-03-01  Food Purchases     Unrestricted    General    MXN           MXN 0.00     MXN 1,200.00     MXN 1,200.00
+   2025-04-01  Government Grants  Beca Agua 2025  Educacion  MXN           MXN 0.00  MXN -100,000.00  MXN -100,000.00
+   2025-04-01  Food Purchases     Unrestricted    General    MXN           MXN 0.00       MXN 900.00       MXN 900.00
+   2025-05-01  Program Supplies   Unrestricted    Educacion  MXN           MXN 0.00     MXN 2,000.00     MXN 2,000.00
+   2025-05-01  Program Supplies   Beca Agua 2025  Educacion  MXN       MXN 2,500.00     MXN 3,000.00       MXN 500.00
+=  Total                                                     MXN       MXN 2,500.00   MXN -92,900.00   MXN -95,400.00

@@ -87,6 +87,17 @@ type Params struct {
 	// a report-specific param the web layer parses only for a report whose spec declares
 	// it, validated against the real program set.
 	Program int64
+
+	// Budget is the single budget a report-specific "which budget" control names
+	// (p19.4 actuals-vs-budget + cashflow projection): the budget whose lines drive the
+	// forecast/variance and the projected fund balances. Meaningful only when
+	// ParamsSpec.Budget is set; the empty value (0) means "no budget chosen" and the
+	// budget reports return an empty Table (the framework's nothing-to-show rule), so a
+	// bare hit still renders 200. Mirrors Account/Fund/Program/Reconciliation: a
+	// report-specific param the web layer parses only for a report whose spec declares
+	// it, validated against the real budget set. When a budget IS chosen the web layer
+	// also defaults From/To to the budget's own period (p19.4).
+	Budget int64
 }
 
 // DetailCurrency reports whether the per-currency detail toggle is on (Detail ==
@@ -200,4 +211,9 @@ type ParamsSpec struct {
 	// report is scoped) but is INERT here -- a reconciliation spans all funds AND
 	// subsidiaries (D13/D20), so the statement's included set never narrows by scope.
 	Reconciliation bool
+	// Budget: the report takes a single BUDGET (p19.4 actuals-vs-budget + cashflow
+	// projection); the form offers a budget select bound to Params.Budget. Report-
+	// SPECIFIC, like Account/Fund/Program/Reconciliation. When set the web layer also
+	// defaults the period (From/To) to the selected budget's own period.
+	Budget bool
 }

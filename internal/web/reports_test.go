@@ -301,17 +301,22 @@ func TestReportsIndexGrantFiltersGroups(t *testing.T) {
 		t.Errorf("financial-only index missing the financial group label")
 	}
 
-	// Reports in the OTHER groups (funds/programs/tax/reconciliation) must NOT appear:
-	// fund_activity (funds), program_statement (programs), functional_expenses + form_990
-	// (tax), reconciliation_statement (reconciliation).
-	for _, id := range []string{"fund_activity", "program_statement", "functional_expenses", "form_990", reports.ReconciliationStatementReportID} {
+	// Reports in the OTHER groups (funds/programs/tax/reconciliation/budget) must NOT
+	// appear: fund_activity (funds), program_statement (programs), functional_expenses +
+	// form_990 (tax), reconciliation_statement (reconciliation), actuals_vs_budget +
+	// cashflow_projection (budget).
+	for _, id := range []string{
+		"fund_activity", "program_statement", "functional_expenses", "form_990",
+		reports.ReconciliationStatementReportID,
+		reports.ActualsVsBudgetReportID, reports.CashflowProjectionReportID,
+	} {
 		if strings.Contains(body, reportHref(id)) {
 			t.Errorf("financial-only index wrongly lists non-financial report %q", id)
 		}
 	}
 	// And the other group section labels are absent (a section renders only when it
 	// has >=1 permitted report).
-	for _, g := range []string{"funds", "programs", "tax", "reconciliation"} {
+	for _, g := range []string{"funds", "programs", "tax", "reconciliation", "budget"} {
 		if strings.Contains(body, i18n.T("en", "reports.group."+g)) {
 			t.Errorf("financial-only index wrongly shows the %q group section", g)
 		}
@@ -343,6 +348,36 @@ func TestReportsIndexReconciliationGrant(t *testing.T) {
 	// A financial report must NOT appear (grant is reconciliation-only).
 	if strings.Contains(body, reportHref(reports.TrialBalanceReportID)) {
 		t.Errorf("reconciliation-only index wrongly lists trial_balance (financial)")
+	}
+}
+
+// TestReportsIndexBudgetGrant: a user granted ONLY "budget" sees the two budget
+// reports (and their group section) and NOT the financial reports -- the p19.4 new
+// group flows through the SAME index/grant mechanism as the earlier groups.
+func TestReportsIndexBudgetGrant(t *testing.T) {
+	h, st, db, sm := reportsApp(t)
+
+	u := mkUser(t, st, "budgeter", "none", false)
+	grantGroup(t, db, u, "budget")
+
+	rec := asUser(t, h, sm, u, http.MethodGet, "/reports", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("budget-only index status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, reportHref(reports.ActualsVsBudgetReportID)) {
+		t.Errorf("budget-only index missing actuals_vs_budget link")
+	}
+	if !strings.Contains(body, reportHref(reports.CashflowProjectionReportID)) {
+		t.Errorf("budget-only index missing cashflow_projection link")
+	}
+	if !strings.Contains(body, i18n.T("en", "reports.group.budget")) {
+		t.Errorf("budget-only index missing the budget group label")
+	}
+	// A financial report must NOT appear (grant is budget-only).
+	if strings.Contains(body, reportHref(reports.TrialBalanceReportID)) {
+		t.Errorf("budget-only index wrongly lists trial_balance (financial)")
 	}
 }
 

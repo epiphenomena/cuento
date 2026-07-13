@@ -65,6 +65,10 @@ type Report struct {
 //     statement detail (statement info + included splits + opening/closing chain) and
 //     the finalized-recon audit trail. Gated separately so an org can grant the
 //     reconciler the statement reports without exposing the financial statements.
+//   - "budget"    — the budgeting reports (p19.4): actuals-vs-budget (per-fund
+//     variance over week/month/year buckets) and the cashflow projection (net-asset
+//     fund balances start→end). Gated separately so an org can grant a budget owner
+//     the forecast/variance view without exposing the ledger statements.
 //
 // Grouping is by AUDIENCE/permission need, not by data source, so an org can grant
 // a bookkeeper the financial statements without exposing the 990 package, and a
@@ -72,7 +76,7 @@ type Report struct {
 // grant UI shows. A group may exist before any report references it (the smoke
 // report below lands under "financial").
 func Groups() []string {
-	return []string{"financial", "funds", "programs", "tax", "reconciliation"}
+	return []string{"financial", "funds", "programs", "tax", "reconciliation", "budget"}
 }
 
 // validGroup reports whether g is a declared report group.

@@ -25,7 +25,7 @@ func okReport(id string) Report {
 // groups" requirement has a concrete, asserted set.
 func TestRegistrySyncGroups(t *testing.T) {
 	groups := Groups()
-	want := []string{"financial", "funds", "programs", "tax", "reconciliation"}
+	want := []string{"financial", "funds", "programs", "tax", "reconciliation", "budget"}
 	if len(groups) != len(want) {
 		t.Fatalf("Groups() = %v, want %v", groups, want)
 	}

@@ -994,6 +994,8 @@ other = "Fondo"
 other = "Programa"
 [reports.params.reconciliation]
 other = "Conciliación"
+[reports.params.budget]
+other = "Presupuesto"
 [reports.params.run]
 other = "Generar informe"
 [reports.detail.converted]
@@ -1002,10 +1004,14 @@ other = "Totales convertidos"
 other = "Por moneda"
 [reports.gran.none]
 other = "Total"
+[reports.gran.week]
+other = "Semanal"
 [reports.gran.month]
 other = "Mensual"
 [reports.gran.quarter]
 other = "Trimestral"
+[reports.gran.year]
+other = "Anual"
 [reports.export.csv]
 other = "Descargar CSV"
 [reports.empty]
@@ -1031,6 +1037,8 @@ other = "Programas"
 other = "Impuestos (IRS 990)"
 [reports.group.reconciliation]
 other = "Conciliación"
+[reports.group.budget]
+other = "Presupuesto"
 [reports.trial_balance.title]
 other = "Balance de comprobación"
 [reports.trial_balance.col.account]
@@ -1322,6 +1330,46 @@ other = "Total conciliado"
 other = "Saldo final"
 [reports.reconciliation_statement.unrestricted]
 other = "Sin restricción"
+
+# p19.4 informes de presupuesto (grupo "budget"): reales vs presupuesto (previsión/
+# variación por fondo) y proyección de flujo de caja (saldos de fondos de activos netos
+# inicio->fin). La etiqueta y el marcador del selector de PRESUPUESTO, la etiqueta de
+# fondo "Sin restricción" (fondo 0, D20) y el título + encabezados de columna +
+# etiqueta de total de cada informe.
+[reports.budget.choose]
+other = "— elija un presupuesto —"
+[reports.budget.unrestricted]
+other = "Sin restricción"
+[reports.actuals_vs_budget.title]
+other = "Reales vs presupuesto"
+[reports.actuals_vs_budget.col.bucket]
+other = "Período"
+[reports.actuals_vs_budget.col.account]
+other = "Cuenta"
+[reports.actuals_vs_budget.col.fund]
+other = "Fondo"
+[reports.actuals_vs_budget.col.program]
+other = "Programa"
+[reports.actuals_vs_budget.col.currency]
+other = "Moneda"
+[reports.actuals_vs_budget.col.budgeted]
+other = "Presupuestado"
+[reports.actuals_vs_budget.col.actual]
+other = "Real"
+[reports.actuals_vs_budget.col.variance]
+other = "Variación"
+[reports.actuals_vs_budget.total]
+other = "Total"
+[reports.cashflow_projection.title]
+other = "Proyección de flujo de caja"
+[reports.cashflow_projection.col.fund]
+other = "Fondo"
+[reports.cashflow_projection.col.currency]
+other = "Moneda"
+[reports.cashflow_projection.col.start]
+other = "Inicio"
+[reports.cashflow_projection.col.end]
+other = "Fin"
 
 # p16.3 reconciliation workspace
 [recon.title]

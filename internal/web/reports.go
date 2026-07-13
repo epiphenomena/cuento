@@ -180,6 +180,35 @@ func (s *server) resolveParams(
 			}
 		}
 	}
+	if rep.ParamsSpec.Budget {
+		// The report-specific BUDGET param (p19.4): parse ?budget= and validate against the
+		// real budget set (an arbitrary id is dropped -> no budget, empty table). When a
+		// budget IS chosen and the user has NOT overridden the period, default From/To to the
+		// budget's own period (the natural window for its forecast/variance). Only fetched
+		// for a report whose spec declares it.
+		budgets, err := s.budgetReportOptions(ctx)
+		if err != nil {
+			return reports.Params{}, paramsForm{}, err
+		}
+		if v := first(q, "budget"); v != "" {
+			if id := parseID(v); id != 0 && budgetExists(budgets, id) {
+				p.Budget = id
+			}
+		}
+		if p.Budget != 0 && rep.ParamsSpec.Period {
+			bg, err := s.store.GetBudget(ctx, p.Budget)
+			if err != nil {
+				return reports.Params{}, paramsForm{}, err
+			}
+			// Only when the user did not supply from/to (else respect the override).
+			if first(q, "from") == "" {
+				p.From = bg.PeriodStart
+			}
+			if first(q, "to") == "" {
+				p.To = bg.PeriodEnd
+			}
+		}
+	}
 
 	form, err := s.buildParamsForm(ctx, u, rep, p, subs)
 	if err != nil {
@@ -350,6 +379,43 @@ func reconExists(recons []reconOption, id int64) bool {
 	return false
 }
 
+// budgetOption is one selectable budget in the budget reports' BUDGET selector
+// (p19.4): a budget with a display label (its name + period). Picking one drives the
+// actuals-vs-budget / cashflow-projection report. The report-specific analogue of
+// reconOption.
+type budgetOption struct {
+	ID    int64
+	Label string
+}
+
+// budgetReportOptions returns every budget (id-ordered) with a display label (name +
+// period bounds), for the budget reports' budget selector.
+func (s *server) budgetReportOptions(ctx context.Context) ([]budgetOption, error) {
+	bs, err := s.store.ListBudgets(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]budgetOption, 0, len(bs))
+	for _, b := range bs {
+		out = append(out, budgetOption{
+			ID:    b.ID,
+			Label: b.Name + " (" + b.PeriodStart + " – " + b.PeriodEnd + ")",
+		})
+	}
+	return out, nil
+}
+
+// budgetExists reports whether id is one of the offered budgets (a query budget override
+// must name a real budget, else no budget is selected -> empty table).
+func budgetExists(budgets []budgetOption, id int64) bool {
+	for _, b := range budgets {
+		if b.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveDate parses a query date value per the user's date format (ISO always
 // accepted), falling back to fallback (a time.Time) rendered ISO when the value is
 // empty or unparseable. The stored/param form is always ISO (YYYY-MM-DD), the
@@ -386,6 +452,7 @@ type paramsForm struct {
 	ShowFund        bool
 	ShowProgram     bool
 	ShowRecon       bool
+	ShowBudget      bool
 
 	// Resolved control values (formatted for display where dated).
 	AsOf        string // user-formatted date
@@ -398,6 +465,7 @@ type paramsForm struct {
 	Fund        int64  // selected fund id (0 = all funds / list view)
 	Program     int64  // selected program id (0 = all programs / comparative view)
 	Recon       int64  // selected finalized recon id (0 = none chosen / empty)
+	Budget      int64  // selected budget id (0 = none chosen / empty)
 
 	// Options for the selects.
 	Currencies []ccyChoice
@@ -405,6 +473,7 @@ type paramsForm struct {
 	Funds      []fundOption    // the fund options (fund-activity report only)
 	Programs   []programOption // the program options (program-statement report only)
 	Recons     []reconOption   // the finalized-recon options (statement report only)
+	Budgets    []budgetOption  // the budget options (budget reports only)
 }
 
 // scopeOption is one subsidiary choice in the scope selector.
@@ -445,6 +514,7 @@ func (s *server) buildParamsForm(
 		ShowFund:        rep.ParamsSpec.Fund,
 		ShowProgram:     rep.ParamsSpec.Program,
 		ShowRecon:       rep.ParamsSpec.Reconciliation,
+		ShowBudget:      rep.ParamsSpec.Budget,
 		Granularity:     p.Granularity.String(),
 		Currency:        p.TargetCurrency,
 		Detail:          p.Detail,
@@ -452,6 +522,7 @@ func (s *server) buildParamsForm(
 		Fund:            p.Fund,
 		Program:         p.Program,
 		Recon:           p.Reconciliation,
+		Budget:          p.Budget,
 	}
 	for _, sub := range subs {
 		f.Scopes = append(f.Scopes, scopeOption{
@@ -508,6 +579,13 @@ func (s *server) buildParamsForm(
 			return paramsForm{}, err
 		}
 		f.Recons = recons
+	}
+	if rep.ParamsSpec.Budget {
+		budgets, err := s.budgetReportOptions(ctx)
+		if err != nil {
+			return paramsForm{}, err
+		}
+		f.Budgets = budgets
 	}
 	return f, nil
 }

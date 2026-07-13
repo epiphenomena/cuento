@@ -379,6 +379,53 @@ func bucketKey(date string, g Granularity) (string, error) {
 	}
 }
 
+// bucketEnd maps a bucket START key (as produced by bucketKey) to that bucket's
+// inclusive END date at granularity g, as a "YYYY-MM-DD" string:
+//   - GranWeek: start + 6 days (the Sunday closing a Monday-start week).
+//   - GranMonth: the last day of the start's month.
+//   - GranQuarter: the last day of the quarter (start month + 2, its last day).
+//   - GranYear / GranNone: December 31 of the start's year.
+//
+// A report drilling an actuals cell clamps [bucketStart, bucketEnd] to the report
+// window [from,to] so the drilled split set matches the cell (a Monday-start week
+// bucket can begin before `from`; the clamp restores the reconciliation invariant).
+func bucketEnd(bucketStart string, g Granularity) (string, error) {
+	t, err := time.ParseInLocation("2006-01-02", bucketStart, time.UTC)
+	if err != nil {
+		return "", fmt.Errorf("bucket end: parse date %q: %w", bucketStart, err)
+	}
+	switch g {
+	case GranWeek:
+		return t.AddDate(0, 0, 6).Format("2006-01-02"), nil
+	case GranQuarter:
+		// Start is the first of the quarter's first month; end = last day of +2 months.
+		return endOfMonth(t.AddDate(0, 2, 0)), nil
+	case GranYear, GranNone:
+		return fmt.Sprintf("%04d-12-31", t.Year()), nil
+	default: // GranMonth
+		return endOfMonth(t), nil
+	}
+}
+
+// endOfMonth returns the last calendar day of t's month as a "YYYY-MM-DD" string
+// (the day before the first of the next month), handling month/short-month lengths.
+func endOfMonth(t time.Time) string {
+	first := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+	last := first.AddDate(0, 1, 0).AddDate(0, 0, -1)
+	return last.Format("2006-01-02")
+}
+
+// nextDay returns the calendar day after d ("YYYY-MM-DD"). Used to step from one
+// bucket's inclusive end to the next bucket's first day when enumerating projection
+// buckets over a period.
+func nextDay(d string) (string, error) {
+	t, err := time.ParseInLocation("2006-01-02", d, time.UTC)
+	if err != nil {
+		return "", fmt.Errorf("next day: parse date %q: %w", d, err)
+	}
+	return t.AddDate(0, 0, 1).Format("2006-01-02"), nil
+}
+
 // sortCells orders AVB cells deterministically: by bucket, then the key's fields.
 func sortCells(cells []BudgetVsActualCell) {
 	sort.Slice(cells, func(i, j int) bool {

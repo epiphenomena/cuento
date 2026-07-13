@@ -1,0 +1,7 @@
+Period,Account,Fund,Program,Currency,Budgeted,Actual,Variance
+2025-03-01,Food Purchases,Unrestricted,General,MXN,0.00,1200.00,1200.00
+2025-04-01,Government Grants,Beca Agua 2025,Educacion,MXN,0.00,-100000.00,-100000.00
+2025-04-01,Food Purchases,Unrestricted,General,MXN,0.00,900.00,900.00
+2025-05-01,Program Supplies,Unrestricted,Educacion,MXN,0.00,2000.00,2000.00
+2025-05-01,Program Supplies,Beca Agua 2025,Educacion,MXN,2500.00,3000.00,500.00
+Total,,,,MXN,2500.00,-92900.00,-95400.00

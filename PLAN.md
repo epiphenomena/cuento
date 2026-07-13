@@ -342,7 +342,7 @@ Budget lines keyed by **(subsidiary, account [revenue/expense], fund, program)**
 - [x] **p19.3 web: schedules + budget management.**
   Tests: create/edit/delete named schedules (incl. import a custom date list) and budget lines (sub/account/fund/program/amount/schedule); perms (manage = TxnWrite or Admin — decide; view feeds reports).
   Build: schedule library (kind-specific pickers: day-of-month, ordinal-weekday, semimonthly, biweekly/weekly anchor, custom import; weekend policy) + budget list + line editor; fund/program selectors scoped to the sub.
-- [ ] **p19.4 [P] reports: forecast + actuals-vs-budget + cashflow projection** (weekly/monthly/annual buckets = summed occurrences, no pro-rata; per-fund; actuals vs budgeted variance; cashflow projection of net-asset fund balances start→end; drill-down on the actuals columns) + goldens.
+- [x] **p19.4 [P] reports: forecast + actuals-vs-budget + cashflow projection** (weekly/monthly/annual buckets = summed occurrences, no pro-rata; per-fund; actuals vs budgeted variance; cashflow projection of net-asset fund balances start→end; drill-down on the actuals columns) + goldens.
 
 ## Phase 20 — Expense reports (added 2026-07-12 per user)
 

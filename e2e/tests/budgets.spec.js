@@ -136,4 +136,51 @@ test('budgets: create schedule + revenue account + fund + budget + line', async 
   await expect(row).toBeVisible();
   await expect(row).toContainText('Program Fund E2E');
   await expect(row).toContainText('Monthly 15th E2E');
+
+  // The created budget's id (from the detail URL) drives the p19.4 budget reports.
+  const budgetId = budgetPath.split('/').pop();
+
+  // --- p19.4 ACTUALS-VS-BUDGET report: pick the budget + granularity, see the
+  //     Budgeted / Actual / Variance columns; CSV returns. ---
+  await page.goto('/reports/actuals_vs_budget');
+  await expect(page.locator('form.report-params')).toBeVisible();
+  // The report-specific BUDGET selector is present (mirrors Account/Fund/Program/Recon).
+  const budgetSel = page.locator('select.report-budget-select[name="budget"]');
+  await expect(budgetSel).toBeVisible();
+  await expect(budgetSel.locator('option')).not.toHaveCount(0);
+  // The granularity control offers the budget buckets (week/month/year added p19.4).
+  await expect(page.locator('#rp-gran option[value="week"]')).toHaveCount(1);
+  await expect(page.locator('#rp-gran option[value="year"]')).toHaveCount(1);
+  // Run with the created budget at monthly granularity (period defaults to the
+  // budget's own period). Navigating with params is the same GET the Run button makes.
+  await page.goto(`/reports/actuals_vs_budget?budget=${budgetId}&granularity=month`);
+  await expect(page.locator('table.report-table')).toBeVisible();
+  // The three budget columns render (localized headers Budgeted / Actual / Variance).
+  const headers = page.locator('table.report-table thead th');
+  await expect(headers.filter({ hasText: /budgeted/i })).toHaveCount(1);
+  await expect(headers.filter({ hasText: /actual/i })).toHaveCount(1);
+  await expect(headers.filter({ hasText: /variance/i })).toHaveCount(1);
+  // The selected budget is reflected back in the form.
+  await expect(
+    page.locator('select.report-budget-select[name="budget"]'),
+  ).toHaveValue(budgetId);
+  // CSV returns text/csv.
+  const avbCsv = await page.request.get(
+    `/reports/actuals_vs_budget.csv?budget=${budgetId}&granularity=month`,
+  );
+  expect(avbCsv.status()).toBe(200);
+  expect(avbCsv.headers()['content-type']).toContain('text/csv');
+
+  // --- p19.4 CASHFLOW-PROJECTION report: pick the budget, see the Start/End
+  //     projected-balance columns; CSV returns. ---
+  await page.goto(`/reports/cashflow_projection?budget=${budgetId}&granularity=month`);
+  await expect(page.locator('table.report-table')).toBeVisible();
+  const cfHeaders = page.locator('table.report-table thead th');
+  await expect(cfHeaders.filter({ hasText: /start/i })).toHaveCount(1);
+  await expect(cfHeaders.filter({ hasText: /end/i })).toHaveCount(1);
+  const cfCsv = await page.request.get(
+    `/reports/cashflow_projection.csv?budget=${budgetId}&granularity=month`,
+  );
+  expect(cfCsv.status()).toBe(200);
+  expect(cfCsv.headers()['content-type']).toContain('text/csv');
 });
