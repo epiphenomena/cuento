@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"cuento/internal/bankimport"
 	"cuento/internal/db/sqlc"
@@ -29,6 +30,16 @@ var (
 	ErrBatchSubsidiaryMismatch = errors.New("store: account does not map to that subsidiary")
 	// ErrMappingProfileNotFound: the requested mapping profile does not exist.
 	ErrMappingProfileNotFound = errors.New("store: mapping profile not found")
+	// ErrImportRowNotFound: the requested import row does not exist.
+	ErrImportRowNotFound = errors.New("store: import row not found")
+	// ErrImportRowNotPending: post/discard was asked of a row that is no longer
+	// pending (already posted or discarded). Re-read on the tx-bound q inside the
+	// funnel, so a double-submit cannot double-post/re-discard.
+	ErrImportRowNotPending = errors.New("store: import row is not pending")
+	// ErrDiscardReasonRequired: DiscardImportRow was called with an empty reason.
+	// The reason IS the discard's audit (the changes.note), so it is mandatory
+	// (TestDiscardRequiresReason). Checked before the funnel opens: nothing written.
+	ErrDiscardReasonRequired = errors.New("store: discard requires a reason")
 )
 
 // CreateMappingProfile saves a reusable CSV column-mapping and returns its id. The
@@ -291,4 +302,200 @@ func (s *Store) ImportRowsForBatch(ctx context.Context, batchID int64) ([]Import
 		}
 	}
 	return out, nil
+}
+
+// ImportBatch is one upload batch, read for the review queue header (p17.3).
+type ImportBatch struct {
+	ID           int64
+	Filename     string
+	AccountID    int64
+	SubsidiaryID int64
+}
+
+// GetImportBatch returns one batch. ErrImportRowNotFound is reused for a missing
+// batch (the review queue 404s either way).
+func (s *Store) GetImportBatch(ctx context.Context, batchID int64) (ImportBatch, error) {
+	b, err := s.q.GetImportBatch(ctx, batchID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ImportBatch{}, ErrImportRowNotFound
+		}
+		return ImportBatch{}, fmt.Errorf("store: get import batch %d: %w", batchID, err)
+	}
+	return ImportBatch{ID: b.ID, Filename: b.Filename, AccountID: b.AccountID, SubsidiaryID: b.SubsidiaryID}, nil
+}
+
+// ImportRowsForBatchFlagged is ImportRowsForBatch with the advisory Duplicate flag
+// recomputed for PENDING rows against the account's existing-dedupe set (the SAME
+// two-source set the staging pass used: pending/posted import rows across batches +
+// posted ledger splits). A pending row is flagged when its hash appears MORE THAN
+// ONCE in that set-with-counts (i.e. besides its own staged occurrence) OR matches a
+// posted ledger split -- so a re-uploaded duplicate keeps showing flagged in the
+// queue even though the flag was not persisted at stage time. Posted/discarded rows
+// are never flagged (their status is decided).
+func (s *Store) ImportRowsForBatchFlagged(ctx context.Context, batchID int64) ([]ImportBatchRow, error) {
+	rows, err := s.ImportRowsForBatch(ctx, batchID)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return rows, nil
+	}
+
+	batch, err := s.GetImportBatch(ctx, batchID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Count occurrences of each hash among pending/posted import rows on the account,
+	// plus the posted-ledger-split keys (each counts as one). A pending row is a
+	// duplicate if its hash appears more than once here (another staged/posted row) or
+	// at least once from a ledger split.
+	counts := make(map[string]int)
+	hashes, err := s.q.PendingOrPostedDedupeHashes(ctx, batch.AccountID)
+	if err != nil {
+		return nil, fmt.Errorf("store: pending/posted dedupe hashes: %w", err)
+	}
+	for _, h := range hashes {
+		counts[h]++
+	}
+	ledger := make(map[string]bool)
+	splits, err := s.q.LedgerSplitDedupeKeys(ctx, batch.AccountID)
+	if err != nil {
+		return nil, fmt.Errorf("store: ledger split dedupe keys: %w", err)
+	}
+	for _, sp := range splits {
+		memo := sp.SplitMemo
+		if memo == "" {
+			memo = sp.TxnMemo
+		}
+		ledger[bankimport.DedupeHash(batch.AccountID, sp.Date, sp.Amount, sp.Payee, memo)] = true
+	}
+
+	for i := range rows {
+		if rows[i].Status != "pending" {
+			continue
+		}
+		h := rows[i].DedupeHash
+		if counts[h] > 1 || ledger[h] {
+			rows[i].Duplicate = true
+		}
+	}
+	return rows, nil
+}
+
+// ImportRow is one staged row read for the review queue (p17.3): the review needs the
+// batch's subsidiary (the sub the edit&post editor LOCKS) alongside the row's own
+// fields. RAW values; the web layer formats them.
+type ImportRow struct {
+	ID           int64
+	BatchID      int64
+	AccountID    int64
+	SubsidiaryID int64 // the batch's subsidiary (locked in the editor)
+	AmountMinor  int64
+	Date         string
+	Payee        string
+	Memo         string
+	Status       string
+	PostedTxnID  *int64
+}
+
+// GetImportRow returns one staged row joined to its batch (for the batch subsidiary +
+// account). ErrImportRowNotFound when the row does not exist.
+func (s *Store) GetImportRow(ctx context.Context, rowID int64) (ImportRow, error) {
+	r, err := s.q.GetImportRow(ctx, rowID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ImportRow{}, ErrImportRowNotFound
+		}
+		return ImportRow{}, fmt.Errorf("store: get import row %d: %w", rowID, err)
+	}
+	row := ImportRow{
+		ID:           r.ID,
+		BatchID:      r.BatchID,
+		AccountID:    r.AccountID,
+		SubsidiaryID: r.SubsidiaryID,
+		Date:         r.ParsedDate.String,
+		Payee:        r.ParsedPayee.String,
+		Memo:         r.ParsedMemo.String,
+		Status:       r.Status,
+		PostedTxnID:  nullInt64ToPtr(r.PostedTransactionID),
+	}
+	if r.ParsedAmount.Valid {
+		row.AmountMinor = r.ParsedAmount.Int64
+	}
+	return row, nil
+}
+
+// PostImportRow posts a balanced ledger transaction from a staged row and LINKS the
+// row to it, IN ONE change (atomic). in carries the user-adjusted splits from the
+// phase-12 editor -- one side the batch account, the counter-splits prefilled via the
+// payee template (fund + functional class included); the store's normal
+// validateAndResolve enforces the double-entry + per-fund zero-sum (the server is the
+// sole validator). The row is re-read on the tx-bound q and must still be 'pending'
+// (ErrImportRowNotPending) -- this, not atomicity alone, is what stops a double-submit
+// double-posting. Returns the created transaction id.
+func (s *Store) PostImportRow(ctx context.Context, rowID int64, in PostTransactionInput) (int64, error) {
+	var txnID int64
+	_, err := s.write(ctx, "import.row.post", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			row, err := q.GetImportRow(ctx, rowID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return ErrImportRowNotFound
+				}
+				return fmt.Errorf("load import row %d: %w", rowID, err)
+			}
+			if row.Status != "pending" {
+				return ErrImportRowNotPending
+			}
+			id, err := s.postTransactionTx(ctx, q, changeID, in)
+			if err != nil {
+				return err
+			}
+			txnID = id
+			if err := q.MarkImportRowPosted(ctx, sqlc.MarkImportRowPostedParams{
+				PostedTransactionID: sql.NullInt64{Int64: id, Valid: true},
+				ID:                  rowID,
+			}); err != nil {
+				return fmt.Errorf("link import row %d: %w", rowID, err)
+			}
+			return nil
+		})
+	if err != nil {
+		return 0, fmt.Errorf("post import row %d: %w", rowID, err)
+	}
+	return txnID, nil
+}
+
+// DiscardImportRow marks a staged row discarded, recording the REASON as the change's
+// note (DECISIONS p17.1: a discarded row's audit is that changes row -- there is no
+// discard_reason column). An empty reason is rejected before the funnel opens
+// (ErrDiscardReasonRequired: nothing written). The row is re-read on the tx-bound q
+// and must still be 'pending' (ErrImportRowNotPending).
+func (s *Store) DiscardImportRow(ctx context.Context, rowID int64, reason string) error {
+	if strings.TrimSpace(reason) == "" {
+		return ErrDiscardReasonRequired
+	}
+	_, err := s.write(ctx, "import.row.discard", reason,
+		func(ctx context.Context, q *sqlc.Queries, _ int64) error {
+			row, err := q.GetImportRow(ctx, rowID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return ErrImportRowNotFound
+				}
+				return fmt.Errorf("load import row %d: %w", rowID, err)
+			}
+			if row.Status != "pending" {
+				return ErrImportRowNotPending
+			}
+			if err := q.MarkImportRowDiscarded(ctx, rowID); err != nil {
+				return fmt.Errorf("discard import row %d: %w", rowID, err)
+			}
+			return nil
+		})
+	if err != nil {
+		return fmt.Errorf("discard import row %d: %w", rowID, err)
+	}
+	return nil
 }

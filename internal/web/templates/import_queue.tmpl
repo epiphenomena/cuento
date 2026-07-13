@@ -1,0 +1,92 @@
+{{/*
+  p17.3 bank-CSV review queue (GET /import/batches/{id}, TxnWrite). A self-contained
+  shell page. .Page is an importQueueModel.
+
+  The queue lists the batch's staged rows with a PROGRESS indicator ("N of T posted,
+  D discarded, P pending"). Each PENDING row offers "edit & post" (opens the phase-12
+  editor prefilled, subsidiary locked) and an inline DISCARD form that REQUIRES a
+  reason (the reason becomes the discard's audit -- the changes.note). A DUPLICATE
+  pending row is flagged advisory (it matches an already-staged/posted line). Posted
+  rows link to the created transaction's account register; discarded rows show their
+  status.
+
+  A missing discard reason re-renders THIS page at 422 with the discard-reason error
+  (the p10.3 form-error convention -- a page-level notice, since the reason input is
+  per-row). Account/subsidiary/payee names are stored proper nouns rendered verbatim;
+  every other string via {{t}} (rule 9); money/dates via the formatters (rule 10); no
+  inline script (rule 12).
+*/ -}}
+{{define "import_queue.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "import.queue.title"))}}
+  {{- with .Page}}
+  <h1>{{t "import.queue.title"}}</h1>
+  <p class="hint import-queue-target">
+    <strong>{{.Filename}}</strong> &middot; {{t "import.queue.target"}}
+    <strong>{{.Account}}</strong> / <strong>{{.Sub}}</strong></p>
+
+  {{- if .ErrorKey}}
+  <p class="field-error import-error" role="alert">{{if .ErrorArg}}{{t .ErrorKey .ErrorArg}}{{else}}{{t .ErrorKey}}{{end}}</p>
+  {{- end}}
+
+  {{/* Batch progress indicator (Build: "12 of 40 posted, 3 discarded, 25 pending"). */}}
+  <p class="import-progress" role="status">
+    {{t "import.progress_posted" .Progress.Posted .Progress.Total}}
+    &middot; {{t "import.progress_discarded" .Progress.Discarded}}
+    &middot; {{t "import.progress_pending" .Progress.Pending}}
+  </p>
+
+  <table class="import-queue-table">
+    <thead>
+      <tr>
+        <th>{{t "import.col.date"}}</th>
+        <th>{{t "import.col.amount"}}</th>
+        <th>{{t "import.col.payee"}}</th>
+        <th>{{t "import.col.memo"}}</th>
+        <th>{{t "import.col.status"}}</th>
+        <th>{{t "import.col.actions"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{- range .Rows}}
+      <tr class="import-queue-row import-row-{{.Status}}{{if .Duplicate}} import-row-duplicate{{end}}"
+          data-row-id="{{.ID}}">
+        <td class="import-cell-date">{{.Date}}</td>
+        <td class="import-cell-amount"><span class="amount">{{.AmountFmt}}</span></td>
+        <td class="import-cell-payee">{{.Payee}}</td>
+        <td class="import-cell-memo">{{.Memo}}</td>
+        <td class="import-cell-status">
+          {{- if eq .Status "posted"}}
+          <span class="import-status-posted">{{t "import.status.posted"}}</span>
+          {{- else if eq .Status "discarded"}}
+          <span class="import-status-discarded">{{t "import.status.discarded"}}</span>
+          {{- else}}
+          <span class="import-status-pending">{{t "import.status.pending"}}</span>
+          {{- if .Duplicate}} <span class="import-dupe-flag" role="note">{{t "import.duplicate"}}</span>{{end}}
+          {{- end}}
+        </td>
+        <td class="import-cell-actions">
+          {{- if eq .Status "posted"}}
+          {{- if .PostedTxnID}}<a href="/transactions/{{.PostedTxnID}}/history" class="btn btn-ghost import-view-txn">{{t "import.view_txn"}}</a>{{end}}
+          {{- else if eq .Status "pending"}}
+          <a href="/import/rows/{{.ID}}/edit" class="btn btn-primary import-edit-post">{{t "import.edit_post"}}</a>
+          {{/* Plain form (no htmx): a missing reason re-renders the WHOLE queue page at
+               422 (like the p17.2 upload-error convention -- a full-page notice, since
+               the reason input is per-row), and a successful discard 303-redirects back
+               to this queue. An htmx body-swap of a full shell page would nest. */}}
+          <form class="import-discard-form" method="post" action="/import/rows/{{.ID}}/discard">
+            <input type="text" name="reason" class="import-discard-reason"
+                   placeholder="{{t "import.discard_reason_placeholder"}}"
+                   aria-label="{{t "import.discard_reason_label"}}">
+            <button type="submit" class="btn btn-ghost import-discard-btn">{{t "import.discard"}}</button>
+          </form>
+          {{- end}}
+        </td>
+      </tr>
+      {{- end}}
+    </tbody>
+  </table>
+
+  <p class="import-queue-back"><a href="/import" class="btn btn-ghost">{{t "import.queue.new_upload"}}</a></p>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

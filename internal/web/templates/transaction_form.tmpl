@@ -133,8 +133,8 @@
 {{define "transaction-form" -}}
 {{- with .Page -}}
 <form id="txn-form" class="txn-editor" method="post"
-      action="{{if .IsEdit}}/transactions/{{.TxnID}}{{else}}/transactions{{end}}"
-      hx-post="{{if .IsEdit}}/transactions/{{.TxnID}}{{else}}/transactions{{end}}"
+      action="{{if .ImportRowID}}/import/rows/{{.ImportRowID}}/post{{else if .IsEdit}}/transactions/{{.TxnID}}{{else}}/transactions{{end}}"
+      hx-post="{{if .ImportRowID}}/import/rows/{{.ImportRowID}}/post{{else if .IsEdit}}/transactions/{{.TxnID}}{{else}}/transactions{{end}}"
       hx-target="#txn-form" hx-swap="outerHTML"
       data-date-format="{{.DateFormat}}"
       data-root-program="{{.RootProgram}}"
@@ -143,6 +143,18 @@
   <div class="txn-header">
     <div class="txn-field">
       <label for="txn-subsidiary">{{t "txn.subsidiary"}}</label>
+      {{if .ImportRowID}}
+      {{/* p17.3 edit&post: the batch binds ONE subsidiary, so it is LOCKED. A disabled
+           select does not POST, so a hidden input carries the id; the sub-change
+           re-filter hx-get is suppressed (the sub cannot change here). */}}
+      <select name="subsidiary_locked" id="txn-subsidiary" class="txn-subsidiary" disabled
+              aria-describedby="txn-subsidiary-locked">
+        {{range .Subsidiaries}}<option value="{{.ID}}"{{if eq .ID $.Page.Subsidiary}} selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+      <input type="hidden" name="subsidiary" value="{{.Subsidiary}}">
+      <span id="txn-subsidiary-locked" class="hint txn-subsidiary-locked">{{t "import.posthdr_sub_locked"}}</span>
+      {{else}}
       <select name="subsidiary" id="txn-subsidiary" class="txn-subsidiary"
               hx-get="{{if .IsEdit}}/transactions/{{.TxnID}}/edit{{else}}/transactions/new{{end}}"
               hx-trigger="change" hx-target="#txn-form" hx-swap="outerHTML"
@@ -150,6 +162,7 @@
         {{range .Subsidiaries}}<option value="{{.ID}}"{{if eq .ID $.Page.Subsidiary}} selected{{end}}>{{.Name}}</option>
         {{end}}
       </select>
+      {{end}}
     </div>
     <div class="txn-field">
       <label for="txn-date">{{t "txn.date"}}</label>
@@ -240,17 +253,24 @@
   </div>
 
   <div class="txn-submit">
-    <button type="submit" class="btn btn-primary">{{t "common.save"}}</button>
-    <a href="/accounts" class="btn btn-ghost">{{t "common.cancel"}}</a>
+    <button type="submit" class="btn btn-primary">{{if .ImportRowID}}{{t "import.posthdr_btn"}}{{else}}{{t "common.save"}}{{end}}</button>
+    <a href="{{if .ImportRowID}}/import/batches/{{.ImportBatchID}}{{else}}/accounts{{end}}" class="btn btn-ghost">{{t "common.cancel"}}</a>
   </div>
 </form>
 {{- end}}
 {{- end}}
 
 {{define "transaction_form.tmpl" -}}
+{{if .Page.ImportRowID}}
+{{template "shell-open" (shellTitle . (t "import.posthdr_title"))}}
+  <h1>{{t "import.posthdr_title"}}</h1>
+  <p class="hint">{{t "import.posthdr_intro"}}</p>
+  {{template "transaction-form" .}}
+{{else}}
 {{template "shell-open" (shellTitle . (t (txnTitleKey .Page.IsEdit)))}}
   <h1>{{t (txnTitleKey .Page.IsEdit)}}</h1>
   {{template "transaction-form" .}}
+{{end}}
   {{/* The editor's behavior modules (rule 12: external ES modules, no inline script;
        loaded under script-src 'self'). The pure logic (amount/drcr/imbalance/grid)
        lives in txnamount.js/txnfund.js/txngrid.js and is node-tested; txneditor.js is

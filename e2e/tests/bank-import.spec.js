@@ -58,6 +58,32 @@ async function createAssetAccount(page) {
   return name;
 }
 
+// createExpenseAccount makes a leaf expense account (with a default functional class)
+// mapped to the root subsidiary and returns its display name. The expense type change
+// triggers an htmx form-swap that server-renders #af-func; see txn-editor.spec.js.
+async function createExpenseAccount(page) {
+  const name = uniqueName() + ' Exp';
+  await page.goto('/accounts');
+  await page.getByRole('button', { name: /new account/i }).click();
+  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+  await page.locator('#af-type').selectOption('expense');
+  await expect(page.locator('#af-func')).toBeVisible();
+  await page.locator('#af-name-en').fill(name);
+  await page.locator('#af-name-es').fill(name);
+  const rootSub = page.locator('input[name="sub_1"]');
+  if (!(await rootSub.isChecked())) await rootSub.check();
+  await page.locator('#af-func').selectOption('program');
+
+  const reloaded = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/accounts' && r.request().method() === 'GET',
+  );
+  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await reloaded;
+  await expect(page.getByText(name)).toBeVisible();
+  return name;
+}
+
 test('bank import: upload, map, preview, stage; a duplicate row is flagged', async ({ page, server }) => {
   await login(page, server);
   const acctName = await createAssetAccount(page);
@@ -98,4 +124,83 @@ test('bank import: upload, map, preview, stage; a duplicate row is flagged', asy
   // Exactly one row is flagged a duplicate (the repeated Acme line).
   await expect(page.locator('tr.import-row-duplicate')).toHaveCount(1);
   await expect(page.locator('span.import-dupe-flag').first()).toBeVisible();
+});
+
+// p17.3 review queue -> post: upload+stage two rows, open the review queue, "edit &
+// post" the first pending row (the editor opens prefilled with the subsidiary LOCKED;
+// a counter-split is added to balance, then posted), and discard the second with a
+// reason. The posted row shows posted (and the txn is in the account register); the
+// discarded row shows discarded.
+test('bank import: review queue -> edit&post one row and discard another', async ({ page, server }) => {
+  await login(page, server);
+  const bankName = await createAssetAccount(page);
+  // A counter account (expense) to balance the posted transaction against.
+  const expenseName = await createExpenseAccount(page);
+
+  // Stage a 2-row statement.
+  await page.goto('/import');
+  await page.locator('#import-subsidiary').selectOption('1');
+  await page.locator('#import-account').selectOption({ label: bankName });
+  const csv =
+    'date,amount,payee,memo\n' +
+    '2025-02-10,-30.00,Landlord,Rent\n' +
+    '2025-02-11,-15.00,Cafe,Coffee\n';
+  await page.locator('#import-file').setInputFiles({
+    name: 'feb.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(csv, 'utf8'),
+  });
+  await page.locator('form.import-upload-form button[type="submit"]').click();
+  await expect(page.locator('#import-workspace.e2e-settled')).toBeVisible();
+  await page.locator('form.import-confirm-form button[type="submit"]').click();
+  await expect(page.locator('p.import-result-summary[role="status"]')).toBeVisible();
+
+  // Go to the review queue via the result's review link.
+  await page.locator('a.import-review-link').click();
+  await page.waitForURL('**/import/batches/**');
+  await expect(page.getByRole('heading', { name: /review import/i })).toBeVisible();
+  await expect(page.locator('tr.import-queue-row')).toHaveCount(2);
+  // Progress starts at 0 posted, 0 discarded, 2 pending.
+  await expect(page.locator('p.import-progress')).toContainText('pending');
+
+  // "Edit & post" the first pending row.
+  await page.locator('tr.import-queue-row').first().locator('a.import-edit-post').click();
+  await page.waitForURL('**/import/rows/**/edit');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+
+  // The subsidiary is LOCKED (disabled) and the bank line is prefilled in row 0.
+  await expect(page.locator('#txn-subsidiary')).toBeDisabled();
+  await expect(page.locator('#txn-account-0')).toHaveValue(/\d+/);
+
+  // Add the counter split (the expense account, +30.00, class program) so it balances.
+  await page.locator('#txn-account-1').selectOption({ label: expenseName });
+  await page.locator('#txn-amount-1').fill('30.00');
+  await page.locator('#txn-class-1').selectOption('program');
+
+  // Post: the editor submits via hx-post and gets an HX-Redirect back to the batch
+  // queue (a client navigation). Wait for the queue GET reload response so the posted
+  // row is in the SSR DOM before asserting (deterministic, not URL-timing luck).
+  const postReloaded = page.waitForResponse(
+    (r) => /^\/import\/batches\/\d+$/.test(new URL(r.url()).pathname) && r.request().method() === 'GET',
+  );
+  await page.locator('form#txn-form button[type="submit"]').click();
+  await postReloaded;
+  await expect(page.locator('tr.import-row-posted')).toHaveCount(1);
+
+  // The remaining pending row: discard with a reason. The page is ALREADY at
+  // /import/batches/{id} (post redirected here), so waitForURL would be a no-op and
+  // race the POST->303->GET reload; wait for the reload RESPONSE instead (the
+  // helpers.js flake class), set up BEFORE the click and matched by pathname.
+  const pending = page.locator('tr.import-queue-row').filter({ has: page.locator('a.import-edit-post') });
+  await expect(pending).toHaveCount(1);
+  await pending.locator('input.import-discard-reason').fill('personal, not the org');
+  const discardReloaded = page.waitForResponse(
+    (r) => /^\/import\/batches\/\d+$/.test(new URL(r.url()).pathname) && r.request().method() === 'GET',
+  );
+  await pending.locator('button.import-discard-btn').click();
+  await discardReloaded;
+  await expect(page.locator('tr.import-row-discarded')).toHaveCount(1);
+
+  // Progress now reflects 1 posted, 1 discarded, 0 pending.
+  await expect(page.locator('tr.import-queue-row').filter({ has: page.locator('a.import-edit-post') })).toHaveCount(0);
 });

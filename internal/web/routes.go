@@ -309,6 +309,20 @@ func (s *server) routes() []Route {
 		{http.MethodGet, "/import", TxnWrite, http.HandlerFunc(s.importPage)},
 		{http.MethodPost, "/import/preview", TxnWrite, http.HandlerFunc(s.importPreview)},
 		{http.MethodPost, "/import", TxnWrite, http.HandlerFunc(s.importConfirm)},
+		// p17.3 review queue -> post. The batch queue (pending list + progress
+		// indicator), "edit & post" (the phase-12 editor prefilled with the batch's
+		// subsidiary LOCKED), post (create the balanced txn + link the row), and
+		// discard-with-reason. ALL FOUR are TxnWrite: this is an import-INTO-LEDGER
+		// workflow -- even viewing the staging queue is write-adjacent and the actions
+		// mutate the ledger, so the view perm is TxnWrite too (a TxnRead user has no
+		// reason to work an import queue). Documented in DECISIONS p17.3. The literal
+		// "/import/preview" and "/import/batches/{id}" / "/import/rows/{id}/..." don't
+		// collide (Go 1.22+ mux). The permission-matrix test picks these up
+		// automatically (rule 8); the import-result page links the batch queue.
+		{http.MethodGet, "/import/batches/{id}", TxnWrite, http.HandlerFunc(s.importBatchQueue)},
+		{http.MethodGet, "/import/rows/{id}/edit", TxnWrite, http.HandlerFunc(s.importRowEditForm)},
+		{http.MethodPost, "/import/rows/{id}/post", TxnWrite, http.HandlerFunc(s.importRowPost)},
+		{http.MethodPost, "/import/rows/{id}/discard", TxnWrite, http.HandlerFunc(s.importRowDiscard)},
 	}
 	// p15.12 reports index: GET /reports lists the reports the current user may
 	// access, grouped by report group, each a link to a concrete /reports/{id}. The

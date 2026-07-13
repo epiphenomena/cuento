@@ -30,6 +30,53 @@ func (q *Queries) GetImportBatch(ctx context.Context, id int64) (ImportBatch, er
 	return i, err
 }
 
+const getImportRow = `-- name: GetImportRow :one
+SELECT r.id, r.batch_id, r.account_id, r.raw_json, r.parsed_date, r.parsed_amount,
+       r.parsed_payee, r.parsed_memo, r.status, r.dedupe_hash, r.posted_transaction_id,
+       b.subsidiary_id AS subsidiary_id
+FROM import_rows r
+JOIN import_batches b ON b.id = r.batch_id
+WHERE r.id = ?
+`
+
+type GetImportRowRow struct {
+	ID                  int64
+	BatchID             int64
+	AccountID           int64
+	RawJson             string
+	ParsedDate          sql.NullString
+	ParsedAmount        sql.NullInt64
+	ParsedPayee         sql.NullString
+	ParsedMemo          sql.NullString
+	Status              string
+	DedupeHash          string
+	PostedTransactionID sql.NullInt64
+	SubsidiaryID        int64
+}
+
+// One staged row joined to its batch, for the p17.3 review queue (edit&post /
+// discard). It carries the batch's subsidiary_id (the SUB the edit&post editor LOCKS)
+// and the row's own account_id (denormalized from the batch = the bank side).
+func (q *Queries) GetImportRow(ctx context.Context, id int64) (GetImportRowRow, error) {
+	row := q.db.QueryRowContext(ctx, getImportRow, id)
+	var i GetImportRowRow
+	err := row.Scan(
+		&i.ID,
+		&i.BatchID,
+		&i.AccountID,
+		&i.RawJson,
+		&i.ParsedDate,
+		&i.ParsedAmount,
+		&i.ParsedPayee,
+		&i.ParsedMemo,
+		&i.Status,
+		&i.DedupeHash,
+		&i.PostedTransactionID,
+		&i.SubsidiaryID,
+	)
+	return i, err
+}
+
 const getMappingProfile = `-- name: GetMappingProfile :one
 SELECT id, name, config FROM mapping_profiles WHERE id = ?
 `
@@ -269,6 +316,39 @@ func (q *Queries) ListMappingProfiles(ctx context.Context) ([]MappingProfile, er
 		return nil, err
 	}
 	return items, nil
+}
+
+const markImportRowDiscarded = `-- name: MarkImportRowDiscarded :exec
+UPDATE import_rows
+SET status = 'discarded'
+WHERE id = ? AND status = 'pending'
+`
+
+// p17.3: mark a staged row discarded (status=discarded). The DISCARD REASON is the
+// `changes` row's note (DECISIONS p17.1: a discarded row's audit is that change);
+// there is no discard_reason column by design. Guarded to status='pending'.
+func (q *Queries) MarkImportRowDiscarded(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, markImportRowDiscarded, id)
+	return err
+}
+
+const markImportRowPosted = `-- name: MarkImportRowPosted :exec
+UPDATE import_rows
+SET status = 'posted', posted_transaction_id = ?
+WHERE id = ? AND status = 'pending'
+`
+
+type MarkImportRowPostedParams struct {
+	PostedTransactionID sql.NullInt64
+	ID                  int64
+}
+
+// p17.3: LINK a staged row to the ledger transaction that posted it (status=posted,
+// posted_transaction_id set). Guarded to status='pending' so a double-submit does not
+// re-link an already-posted/discarded row (the store also re-reads status first).
+func (q *Queries) MarkImportRowPosted(ctx context.Context, arg MarkImportRowPostedParams) error {
+	_, err := q.db.ExecContext(ctx, markImportRowPosted, arg.PostedTransactionID, arg.ID)
+	return err
 }
 
 const pendingOrPostedDedupeHashes = `-- name: PendingOrPostedDedupeHashes :many

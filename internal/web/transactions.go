@@ -92,6 +92,13 @@ type txnEditorModel struct {
 	DisplayDRCR bool // the user's display_mode == dr_cr -> render twin columns
 	DateFormat  string
 
+	// ImportRowID != 0 puts the editor in p17.3 "edit & post" mode: the form posts to
+	// /import/rows/{id}/post (LINK the staged row to the created txn), the subsidiary is
+	// LOCKED to the batch's subsidiary (disabled select + a hidden carrier, since a
+	// disabled control does not POST; the sub-change re-filter hx-get is suppressed).
+	ImportRowID   int64
+	ImportBatchID int64 // the batch to return to on cancel / after post (import mode)
+
 	Rows []txnRowModel
 
 	// Options.

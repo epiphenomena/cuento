@@ -1492,3 +1492,45 @@ other = "Reutilizar una asignacion guardada"
 other = "Introducir una nueva asignacion abajo"
 [import.load_profile_hint]
 other = "Al elegir una asignacion guardada se usan sus columnas y opciones; los campos de abajo se ignoran."
+[import.col.actions]
+other = "Acciones"
+[import.queue.title]
+other = "Revisar importacion"
+[import.queue.target]
+other = "Destino:"
+[import.queue.new_upload]
+other = "Subir otro estado de cuenta"
+[import.progress_posted]
+other = "%d de %d contabilizados"
+[import.progress_discarded]
+other = "%d descartados"
+[import.progress_pending]
+other = "%d pendientes"
+[import.status.posted]
+other = "Contabilizado"
+[import.status.discarded]
+other = "Descartado"
+[import.status.pending]
+other = "Pendiente"
+[import.edit_post]
+other = "Editar y contabilizar"
+[import.discard]
+other = "Descartar"
+[import.discard_reason_placeholder]
+other = "Motivo (obligatorio)"
+[import.discard_reason_label]
+other = "Motivo del descarte"
+[import.discard_reason_required]
+other = "Se requiere un motivo para descartar una fila."
+[import.view_txn]
+other = "Ver transaccion"
+[import.result.review]
+other = "Revisar y contabilizar filas preparadas"
+[import.posthdr_title]
+other = "Contabilizar fila importada"
+[import.posthdr_intro]
+other = "La linea del banco esta precargada. Ajuste las contrapartidas hasta que la transaccion cuadre, luego contabilice."
+[import.posthdr_btn]
+other = "Contabilizar"
+[import.posthdr_sub_locked]
+other = "Bloqueado a la subsidiaria del lote."

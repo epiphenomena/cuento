@@ -121,37 +121,52 @@ func (s *Store) PostTransaction(ctx context.Context, in PostTransactionInput) (i
 	var newID int64
 	_, err := s.write(ctx, "transaction.post", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
-			resolved, err := s.validateAndResolve(ctx, q, in)
+			id, err := s.postTransactionTx(ctx, q, changeID, in)
 			if err != nil {
 				return err
 			}
-
-			txnID, err := q.InsertTransaction(ctx, sqlc.InsertTransactionParams{
-				Date:         in.Date,
-				SubsidiaryID: in.SubsidiaryID,
-				PayeeID:      nullInt64Ptr(in.PayeeID),
-				Memo:         in.Memo,
-				Currency:     in.Currency,
-			})
-			if err != nil {
-				return fmt.Errorf("insert transaction: %w", err)
-			}
-			newID = txnID
-			if err := insertTransactionVersion(ctx, q, changeID, "create", txnID); err != nil {
-				return err
-			}
-
-			for _, r := range resolved {
-				if err := insertSplit(ctx, q, changeID, txnID, r); err != nil {
-					return err
-				}
-			}
+			newID = id
 			return nil
 		})
 	if err != nil {
 		return 0, fmt.Errorf("post transaction: %w", err)
 	}
 	return newID, nil
+}
+
+// postTransactionTx validates and inserts a transaction + its splits on an
+// ALREADY-OPEN tx-bound q under changeID, returning the new transaction id. It is
+// the body of PostTransaction, extracted so a caller inside the SAME funnel change
+// (p17.3 PostImportRow, which then LINKS the staged row to the created txn) can
+// create the balanced ledger transaction and link the row atomically -- one change,
+// no window in which a posted txn exists with a still-pending import row (which would
+// double-post on retry). All validation runs on q, so a rejection rolls the caller's
+// change back.
+func (s *Store) postTransactionTx(ctx context.Context, q *sqlc.Queries, changeID int64, in PostTransactionInput) (int64, error) {
+	resolved, err := s.validateAndResolve(ctx, q, in)
+	if err != nil {
+		return 0, err
+	}
+
+	txnID, err := q.InsertTransaction(ctx, sqlc.InsertTransactionParams{
+		Date:         in.Date,
+		SubsidiaryID: in.SubsidiaryID,
+		PayeeID:      nullInt64Ptr(in.PayeeID),
+		Memo:         in.Memo,
+		Currency:     in.Currency,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("insert transaction: %w", err)
+	}
+	if err := insertTransactionVersion(ctx, q, changeID, "create", txnID); err != nil {
+		return 0, err
+	}
+	for _, r := range resolved {
+		if err := insertSplit(ctx, q, changeID, txnID, r); err != nil {
+			return 0, err
+		}
+	}
+	return txnID, nil
 }
 
 // UpdateTransaction re-validates the whole input and applies a REPLACE-SET diff by

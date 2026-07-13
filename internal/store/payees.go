@@ -66,6 +66,26 @@ func likePrefix(q string) string {
 	return b.String()
 }
 
+// LookupPayeeByName returns the id of the payee whose name matches (case-insensitive
+// -- payees.name is UNIQUE COLLATE NOCASE), or 0 with no error when the name is new
+// or blank. READ-ONLY (never creates): the p17.3 edit&post prefill matches a parsed
+// payee to a known payee at GET without minting a payee (creation happens on save via
+// EnsurePayee).
+func (s *Store) LookupPayeeByName(ctx context.Context, name string) (int64, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return 0, nil
+	}
+	p, err := s.q.GetPayeeByName(ctx, name)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("store: lookup payee %q: %w", name, err)
+	}
+	return p.ID, nil
+}
+
 // EnsurePayee find-or-creates a payee by name (p12.3 create-on-save): it returns the
 // id of the existing payee whose name matches (case-insensitively -- payees.name is
 // UNIQUE COLLATE NOCASE), or creates one and returns the new id. Creation is its OWN

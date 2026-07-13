@@ -1492,3 +1492,45 @@ other = "Reuse a saved mapping"
 other = "Enter a new mapping below"
 [import.load_profile_hint]
 other = "Choosing a saved mapping uses its columns and options; the fields below are ignored."
+[import.col.actions]
+other = "Actions"
+[import.queue.title]
+other = "Review import"
+[import.queue.target]
+other = "Target:"
+[import.queue.new_upload]
+other = "Upload another statement"
+[import.progress_posted]
+other = "%d of %d posted"
+[import.progress_discarded]
+other = "%d discarded"
+[import.progress_pending]
+other = "%d pending"
+[import.status.posted]
+other = "Posted"
+[import.status.discarded]
+other = "Discarded"
+[import.status.pending]
+other = "Pending"
+[import.edit_post]
+other = "Edit & post"
+[import.discard]
+other = "Discard"
+[import.discard_reason_placeholder]
+other = "Reason (required)"
+[import.discard_reason_label]
+other = "Discard reason"
+[import.discard_reason_required]
+other = "A reason is required to discard a row."
+[import.view_txn]
+other = "View transaction"
+[import.result.review]
+other = "Review & post staged rows"
+[import.posthdr_title]
+other = "Post imported row"
+[import.posthdr_intro]
+other = "The bank line is prefilled. Adjust the counter-splits until the transaction balances, then post."
+[import.posthdr_btn]
+other = "Post"
+[import.posthdr_sub_locked]
+other = "Locked to the batch's subsidiary."

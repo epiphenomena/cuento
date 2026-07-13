@@ -10,6 +10,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
+	"cuento/internal/bankimport"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
 )
@@ -92,6 +93,22 @@ func newMatrixApp(t *testing.T) (http.Handler, []Route, *store.Store, *sql.DB, *
 	// on an open recon returns 409 (not a 404) -- both count as "reachable".
 	if _, err := st.StartReconciliation(seedCtx, a1, "USD", "2025-01-31", 1000); err != nil {
 		t.Fatalf("seed reconciliation: %v", err)
+	}
+
+	// Seed one import batch + a pending row (row id 1) on the reconcilable seed account
+	// so p17.3's /import/batches/{id}, /import/rows/{id}/edit, /import/rows/{id}/post,
+	// /import/rows/{id}/discard resolve to a real resource when the reachability check
+	// substitutes {id} -> 1. The batch's account maps to sub 1. The routes only need
+	// SOME batch/row to exist so an authorized persona reaches the handler (post/discard
+	// then 422 on the empty/invalid body -- non-404, so "reachable").
+	if pid, err := st.CreateMappingProfile(seedCtx, "seed", bankimport.Config{}); err != nil {
+		t.Fatalf("seed mapping profile: %v", err)
+	} else if bid, err := st.CreateImportBatch(seedCtx, "seed.csv", a1, 1, pid, "2025-01-01T00:00:00Z"); err != nil {
+		t.Fatalf("seed import batch: %v", err)
+	} else if _, err := st.StageImportRows(seedCtx, bid, a1, []bankimport.ParsedRow{
+		{Date: "2025-01-01", AmountMinor: 100, Payee: "Seed", Memo: "Seed", Raw: []string{"2025-01-01", "1.00", "Seed", "Seed"}},
+	}); err != nil {
+		t.Fatalf("seed import row: %v", err)
 	}
 
 	app := NewApp(Config{Version: "test"}, db, st)

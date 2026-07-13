@@ -308,7 +308,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p17.2 web: upload + mapping + staging.**
   Tests: parser table tests (delimiter sniffing, header detection, single signed amount vs debit/credit column pairs, sign flip, date formats); `TestDedupeFlagsExistingSplitsAndPendingRows`; `TestBatchSubValidated`.
   Build: upload → mapping UI (assign columns; pick account + subsidiary) → 20-row preview → save profile → stage rows with `dedupe_hash = sha256(account|date|amount|normalized payee+memo)`.
-- [ ] **p17.3 web: review queue → post.**
+- [x] **p17.3 web: review queue → post.**
   Tests: posting links the row and creates a balanced txn (one side = batch account, other side prefilled via payee template — including fund and functional class); discard requires a reason and writes a change; `TestReimportFlagsDuplicates` (idempotent re-upload).
   Build: pending queue; "edit & post" opens the phase-12 editor prefilled with the batch's subsidiary locked; batch progress indicator.
 

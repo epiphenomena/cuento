@@ -80,6 +80,9 @@
     {{tn "import.result.staged" .Staged}}
     {{- if gt .Duplicates 0}} &middot; <span class="import-result-dupes">{{tn "import.result.duplicates" .Duplicates}}</span>{{end}}
   </p>
+  <p class="import-result-review">
+    <a href="/import/batches/{{.BatchID}}" class="btn btn-primary import-review-link">{{t "import.result.review"}}</a>
+  </p>
 
   <table class="import-result-table">
     <thead>

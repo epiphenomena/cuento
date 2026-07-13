@@ -54,6 +54,33 @@ FROM import_rows
 WHERE batch_id = ?
 ORDER BY id;
 
+-- name: GetImportRow :one
+-- One staged row joined to its batch, for the p17.3 review queue (edit&post /
+-- discard). It carries the batch's subsidiary_id (the SUB the edit&post editor LOCKS)
+-- and the row's own account_id (denormalized from the batch = the bank side).
+SELECT r.id, r.batch_id, r.account_id, r.raw_json, r.parsed_date, r.parsed_amount,
+       r.parsed_payee, r.parsed_memo, r.status, r.dedupe_hash, r.posted_transaction_id,
+       b.subsidiary_id AS subsidiary_id
+FROM import_rows r
+JOIN import_batches b ON b.id = r.batch_id
+WHERE r.id = ?;
+
+-- name: MarkImportRowPosted :exec
+-- p17.3: LINK a staged row to the ledger transaction that posted it (status=posted,
+-- posted_transaction_id set). Guarded to status='pending' so a double-submit does not
+-- re-link an already-posted/discarded row (the store also re-reads status first).
+UPDATE import_rows
+SET status = 'posted', posted_transaction_id = ?
+WHERE id = ? AND status = 'pending';
+
+-- name: MarkImportRowDiscarded :exec
+-- p17.3: mark a staged row discarded (status=discarded). The DISCARD REASON is the
+-- `changes` row's note (DECISIONS p17.1: a discarded row's audit is that change);
+-- there is no discard_reason column by design. Guarded to status='pending'.
+UPDATE import_rows
+SET status = 'discarded'
+WHERE id = ? AND status = 'pending';
+
 -- name: PendingOrPostedDedupeHashes :many
 -- Dedupe LOOKUP source (1): the dedupe_hashes of import rows ALREADY staged
 -- (pending) or posted on this account -- across ALL batches (a re-upload is a new
