@@ -358,6 +358,16 @@ A submission→review workflow decoupled from book-editing: a low-privilege user
   Tests: an editing (TxnWrite) user sees the queue, opens a report in the phase-12 editor prefilled with the submitted splits, balances + posts it (a real versioned transaction, linked via `posted_transaction_id`), OR rejects with a reason routing it back to the submitter; the converted report is immutable and shows the resulting txn.
   Build: review queue; "review & post" = the phase-12 editor prefilled with the report's splits and its subsidiary locked; reject-with-reason; batch/status indicators.
 
+## Phase 22 — v1 release wrap-up (added 2026-07-12 per user; run when feature-complete, i.e. after Phases 18–20)
+
+Release-readiness pass to run once the build is feature-complete. NOT optional — the user asked for all of it explicitly.
+
+- [ ] **p22.1 docs: CLI reference.** Document EVERY `cuento` subcommand (serve, migrate, user, check, ratesync, + any flags/env) — a `docs/cli.md` (or a README section) covering usage, flags, env vars, examples. Cross-check against `cmd/cuento/main.go`'s dispatch so none is missed.
+- [ ] **p22.2 docs: deploy completeness.** Ensure `docs/deploy.md` explains ALL deploy steps end to end (VM, disk, firewall, binary, systemd units incl. ratesync timer, env, TLS/autocert, first-run migrate + admin, Litestream replicate + restore drill, backups, upgrades). Fill any gaps from p18.2.
+- [ ] **p22.3 record: commit the build session.** Copy this Claude build session transcript into the repo as a historical record and commit it (e.g. `docs/build-log/` — the session `.jsonl` at `~/.claude/projects/-home-unveiled-gh-cuento/<session>.jsonl`, or a rendered/redacted form). RULE 11: scrub any real values before committing (the session references structural facts only, but verify no `fixtures/source/` values leaked into it).
+- [ ] **p22.4 docs: deferred/pending/incomplete register.** A single `docs/deferred.md` listing EVERY deferred / pending / incomplete item: the Phase 21 backlog, the tracked follow-ups (p09.4 go-live mapping human review; the reopen-while-later-OPEN recon edge; the EU-decimal-amount import limitation; the account-ledger currency-in-range-only edge; any TODO(pNN) in code; report-group placeholder now resolved; etc.). Grep the codebase for `TODO`/`FIXME`/`deferred`/`backlog` and reconcile.
+- [ ] **p22.5 low-hanging fruit sweep.** Review the p22.4 register and IMPLEMENT the items that are genuinely low-effort/low-risk (each its own small verified change); leave the rest documented as backlog with a one-line rationale for why it's deferred.
+
 ## Phase 21 — Backlog (explicit non-goals for v1)
 
 Per-subsidiary permissions · per-subsidiary program scoping (Q5) · holiday calendar for budget-schedule weekend/holiday adjustment (v1 does weekends only) · intercompany elimination entries beyond the D19 collapse · receipt attachments · global audit browser and "books as edited at time T" reports (data already supports both, per D4/D5) · recurring/scheduled *ledger* transactions (distinct from budget recurrence, p19) · board-designated (quasi-restricted) funds · additional UI languages beyond en/es (catalogs make it a file-drop) · API tokens · dashboard/home page · multi-org.
