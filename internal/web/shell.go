@@ -12,8 +12,9 @@ import (
 // p10.2: the authenticated shell. base.tmpl is the layout every authenticated
 // page extends -- semantic landmarks, <html lang> from the resolved locale,
 // data-theme applied SERVER-SIDE from the theme cookie (no flash), a flash region,
-// and a perm-gated, data-driven nav. This file holds the shell's Go side: the nav
-// table, the theme control, and the /settings + /styleguide handlers.
+// and a perm-gated, data-driven nav. This file holds the shell's Go side: the
+// top-nav + section-bar tables (p23.5/p23.9), the "More" hub, and the home /
+// settings / styleguide handlers. (Theme is set via /settings, p23.1.)
 
 // themeCookieName is the cookie carrying the chosen theme. It is read server-side
 // in baseData so the correct data-theme is present on first paint (no flash / no
@@ -37,13 +38,13 @@ type navEntry struct {
 	Perm     Perm
 }
 
-// navSections is the ordered top-level nav (Appendix F: accounts, funds, programs,
-// reconciliations, reports, settings, admin). Home and Settings + the admin gate
-// exist now; the accounts/funds/programs/reconciliations/reports entries are
-// listed with their eventual perm but are filtered out until their route is
-// registered (visibleNav drops any entry whose Href has no route yet), so p11-p18
-// need only register the route -- no nav edit. This keeps the nav honest (no dead
-// links) while being trivially appendable.
+// navSections is the ordered top-level nav (p23.9): a lean top bar of accounts
+// (the landing), reports, my-expenses, expense-review, and a single AnyUser "More"
+// hub. Everything else (funds, programs, reconciliations, budgets, import,
+// settings, admin) hangs off More as perm-gated cards + section-bar links, so the
+// top nav stays short. Entries are filtered to registered+permitted at render
+// (visibleNav drops any entry whose Href has no route yet, or that the user's perm
+// fails), keeping the nav honest (no dead links) while being trivially appendable.
 func navSections() []navEntry {
 	return []navEntry{
 		// p23.8: the brand logo is "home" (-> the chart of accounts); no separate
