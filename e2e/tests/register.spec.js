@@ -44,9 +44,10 @@ test.describe('account register', () => {
     await row.getByRole('link', { name: /^register$/i }).click();
     await page.waitForURL('**/register');
 
-    // The register page renders its heading, the filter form, and the columns.
+    // The register page renders its heading, the filter form (now in the section
+    // bar, p23.12), and the columns.
     await expect(page.getByRole('heading', { name: /register/i })).toBeVisible();
-    await expect(page.locator('form.filters')).toBeVisible();
+    await expect(page.locator('.app-subnav-controls form.subnav-filters')).toBeVisible();
     await expect(page.locator('table.register-table')).toBeVisible();
     await expect(page.locator('table.register-table thead')).toContainText(/amount/i);
 

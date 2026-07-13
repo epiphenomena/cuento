@@ -347,19 +347,30 @@ func (s *server) registerPage(w http.ResponseWriter, r *http.Request) {
 
 	// A cursor-carrying request is the sentinel's page fetch: render ONLY the rows
 	// fragment (the next rows + a fresh sentinel), so nothing above shifts. Detect it
-	// by the presence of the cursor param (a normal page-1 GET has no cursor).
+	// by the presence of the cursor param (a normal page-1 GET has no cursor). Checked
+	// FIRST so a paging fetch never falls into the filter-swap branch below.
 	if isRegisterFragment(r) {
 		model.Fragment = true
 		s.render(w, r, http.StatusOK, "register-rows", model)
 		return
 	}
 
-	// The full page needs the filter option lists.
+	// p23.12: a filter change is the section-bar form's hx-get targeting
+	// #register-results (HX-Target header), so swap ONLY the results table (page 1 for
+	// the new filters); the form lives in the section bar and is not re-rendered, so
+	// its option lists are not needed here. A full load or a boosted nav (HX-Target
+	// absent / "body") renders the whole page.
+	if r.Header.Get("HX-Target") == "register-results" {
+		s.render(w, r, http.StatusOK, "register-results", model)
+		return
+	}
+
+	// The full page needs the filter option lists (the section-bar selects).
 	if err := s.attachRegisterFilterOptions(ctx, &model); err != nil {
 		s.serverError(w)
 		return
 	}
-	s.render(w, r, http.StatusOK, "register.tmpl", s.newShellPage(r, model))
+	s.render(w, r, http.StatusOK, "register.tmpl", s.newShellPageControls(r, model, "register"))
 }
 
 // registerFilterEcho carries the filter dates AS THE USER TYPED THEM (their date

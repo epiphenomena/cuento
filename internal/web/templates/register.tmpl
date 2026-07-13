@@ -9,18 +9,64 @@
   balance per currency, and -- only for a reconcilable account -- a recon column
   (the mark itself is wired in p16; here it is a gated placeholder).
 
+  p23.12: the filter form (date range + text + fund/sub/program) lives in the
+  SECOND-LEVEL menu (the "register-controls" partial the shell renders in the
+  section bar), not the page body. It auto-applies on change (htmx GET swapping
+  #register-results) — no Apply button — and degrades to a plain GET form (Enter
+  submits, full reload) with no JS. The results (the register table) live in the
+  "register-results" partial so a filter change swaps only them.
+
   Anti-jank paging (Appendix C): all rows live in ONE <tbody>. The "load more"
   control is the LAST <tr> (the sentinel); its hx-get points at THIS route with the
   next cursor + the active filters, hx-target is itself, hx-swap outerHTML -- so the
   next page's response (the register-rows fragment: more rows + a fresh sentinel)
   APPENDS at the end and nothing above shifts (scroll preserved). Row ids
-  (reg-row-<split_id>) are stable across swaps; the filter form lives OUTSIDE the
-  tbody so it is never re-rendered on a page fetch, keeping its input ids stable.
+  (reg-row-<split_id>) are stable across swaps; the filter form lives in the section
+  bar OUTSIDE the swapped results so it is never re-rendered on a page/filter fetch,
+  keeping its input ids stable.
 
   Every string via {{t}} (rule 9); amounts/dates already formatted through the money
   formatters (rule 10); account/subsidiary/fund/payee names are stored proper nouns
   rendered verbatim; no inline script (rule 12).
 */ -}}
+
+{{/* register-controls: the section-bar filter form (p23.12). Dot is the
+     registerPageModel. Auto-applies on change (hx-get swapping #register-results);
+     degrades to a plain GET form with no JS (the noscript Apply). */ -}}
+{{define "register-controls" -}}
+{{- with .}}
+<form class="subnav-filters" method="get" action="/accounts/{{.AccountID}}/register"
+      hx-get="/accounts/{{.AccountID}}/register" hx-trigger="change"
+      hx-target="#register-results" hx-swap="outerHTML">
+  <label for="reg-from">{{t "register.filter.from"}}</label>
+  <input type="text" id="reg-from" name="from" class="js-datefield" value="{{.FilterFrom}}" placeholder="{{t "register.filter.date_hint"}}">
+  <label for="reg-to">{{t "register.filter.to"}}</label>
+  <input type="text" id="reg-to" name="to" class="js-datefield" value="{{.FilterTo}}" placeholder="{{t "register.filter.date_hint"}}">
+  <label for="reg-text">{{t "register.filter.text"}}</label>
+  <input type="text" id="reg-text" name="text" value="{{.FilterText}}">
+  <label for="reg-fund">{{t "register.filter.fund"}}</label>
+  <select id="reg-fund" name="fund">
+    <option value="0">{{t "register.filter.any_fund"}}</option>
+    {{range .Funds}}<option value="{{.ID}}"{{if eq .ID $.FilterFund}} selected{{end}}>{{.Name}}</option>
+    {{end}}
+  </select>
+  <label for="reg-sub">{{t "register.filter.subsidiary"}}</label>
+  <select id="reg-sub" name="sub">
+    <option value="0">{{t "register.filter.any_subsidiary"}}</option>
+    {{range .Subs}}<option value="{{.ID}}"{{if eq .ID $.FilterSub}} selected{{end}}>{{.Name}}</option>
+    {{end}}
+  </select>
+  <label for="reg-prog">{{t "register.filter.program"}}</label>
+  <select id="reg-prog" name="prog">
+    <option value="0">{{t "register.filter.any_program"}}</option>
+    {{range .Programs}}<option value="{{.ID}}"{{if eq .ID $.FilterProg}} selected{{end}}>{{.Name}}</option>
+    {{end}}
+  </select>
+  {{/* No-JS fallback: without htmx the change-trigger can't fire, so keep a submit. */}}
+  <noscript><button type="submit" class="btn">{{t "register.filter.apply"}}</button></noscript>
+</form>
+{{- end}}
+{{- end}}
 
 {{/* register-row: one <tr>. Shared by the full page and the paging fragment so the
      two never drift. The data is a regRowCtx: .Row is the regRow, .ShowSubBadge /
@@ -78,43 +124,12 @@
 {{end}}
 {{- end}}
 
-{{define "register.tmpl" -}}
-{{template "shell-open" (shellTitle . (t "register.title"))}}
-  {{- with .Page}}
-  <h1>{{t "register.title"}}: {{.AccountName}}</h1>
-  <p><a href="/accounts">{{t "register.back_to_accounts"}}</a>
-     {{/* p12.2: open the transaction editor for a new entry (the register is the
-          everyday landing for data entry, W3). Edit links live per-row in p12.4. */}}
-     · <a href="/transactions/new" class="btn btn-primary">{{t "register.new_txn"}}</a></p>
-
-  <form class="filters" method="get" action="/accounts/{{.AccountID}}/register">
-    <label for="reg-from">{{t "register.filter.from"}}</label>
-    <input type="text" id="reg-from" name="from" class="js-datefield" value="{{.FilterFrom}}" placeholder="{{t "register.filter.date_hint"}}">
-    <label for="reg-to">{{t "register.filter.to"}}</label>
-    <input type="text" id="reg-to" name="to" class="js-datefield" value="{{.FilterTo}}" placeholder="{{t "register.filter.date_hint"}}">
-    <label for="reg-text">{{t "register.filter.text"}}</label>
-    <input type="text" id="reg-text" name="text" value="{{.FilterText}}">
-    <label for="reg-fund">{{t "register.filter.fund"}}</label>
-    <select id="reg-fund" name="fund">
-      <option value="0">{{t "register.filter.any_fund"}}</option>
-      {{range .Funds}}<option value="{{.ID}}"{{if eq .ID $.Page.FilterFund}} selected{{end}}>{{.Name}}</option>
-      {{end}}
-    </select>
-    <label for="reg-sub">{{t "register.filter.subsidiary"}}</label>
-    <select id="reg-sub" name="sub">
-      <option value="0">{{t "register.filter.any_subsidiary"}}</option>
-      {{range .Subs}}<option value="{{.ID}}"{{if eq .ID $.Page.FilterSub}} selected{{end}}>{{.Name}}</option>
-      {{end}}
-    </select>
-    <label for="reg-prog">{{t "register.filter.program"}}</label>
-    <select id="reg-prog" name="prog">
-      <option value="0">{{t "register.filter.any_program"}}</option>
-      {{range .Programs}}<option value="{{.ID}}"{{if eq .ID $.Page.FilterProg}} selected{{end}}>{{.Name}}</option>
-      {{end}}
-    </select>
-    <button type="submit" class="btn">{{t "register.filter.apply"}}</button>
-  </form>
-
+{{/* register-results: the register table (header + rows + sentinel). Swapped alone
+     on a filter change (hx-target #register-results). Dot is the registerPageModel;
+     inside, $ is that same model, so regRowCtx/regColspan/register-sentinel get it. */ -}}
+{{define "register-results" -}}
+{{- with .}}
+<div id="register-results">
   <table class="register-table">
     <thead>
       <tr>
@@ -131,13 +146,29 @@
       </tr>
     </thead>
     <tbody id="reg-rows">
-      {{range .Rows}}{{template "register-row" (regRowCtx $.Page .)}}
+      {{range .Rows}}{{template "register-row" (regRowCtx $ .)}}
       {{else}}
-      <tr class="reg-empty"><td colspan="{{regColspan .}}">{{t "register.empty"}}</td></tr>
+      <tr class="reg-empty"><td colspan="{{regColspan $}}">{{t "register.empty"}}</td></tr>
       {{end}}
-      {{template "register-sentinel" .}}
+      {{template "register-sentinel" $}}
     </tbody>
   </table>
+</div>
+{{- end}}
+{{- end}}
+
+{{define "register.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "register.title"))}}
+  {{- with .Page}}
+  <h1>{{t "register.title"}}: {{.AccountName}}</h1>
+  <p><a href="/accounts">{{t "register.back_to_accounts"}}</a>
+     {{/* p12.2: open the transaction editor for a new entry (the register is the
+          everyday landing for data entry, W3). Edit links live per-row in p12.4. */}}
+     · <a href="/transactions/new" class="btn btn-primary">{{t "register.new_txn"}}</a></p>
+
+  {{/* The filter form lives in the section bar (register-controls, p23.12); the
+       results swap in here on a filter change. */}}
+  {{template "register-results" .}}
   {{- end}}
 {{template "shell-close" .}}
 {{- end}}
