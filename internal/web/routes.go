@@ -282,6 +282,20 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/funds/{id}", TxnWrite, http.HandlerFunc(s.fundUpdate)},
 		{http.MethodPost, "/funds/{id}/close", TxnWrite, http.HandlerFunc(s.fundClose)},
 		{http.MethodPost, "/funds/{id}/reopen", TxnWrite, http.HandlerFunc(s.fundReopen)},
+
+		// p16.3 reconciliation workspace (D13). The LIST + WORKSPACE VIEW are TxnRead
+		// (viewing a bank reconciliation is a read); the start/toggle/finalize/reopen
+		// ACTIONS are TxnWrite (they clear splits / finalize the statement chain). The
+		// exact "/reconciliations" literal + the "/reconciliations/{id}" wildcard don't
+		// collide (Go 1.22+ mux); registering GET /reconciliations lights up the
+		// nav.reconciliations entry (shell.go). The permission-matrix test picks all six
+		// up automatically (rule 8).
+		{http.MethodGet, "/reconciliations", TxnRead, http.HandlerFunc(s.reconList)},
+		{http.MethodPost, "/reconciliations", TxnWrite, http.HandlerFunc(s.reconStart)},
+		{http.MethodGet, "/reconciliations/{id}", TxnRead, http.HandlerFunc(s.reconWorkspace)},
+		{http.MethodPost, "/reconciliations/{id}/splits/{sid}/toggle", TxnWrite, http.HandlerFunc(s.reconToggle)},
+		{http.MethodPost, "/reconciliations/{id}/finalize", TxnWrite, http.HandlerFunc(s.reconFinalize)},
+		{http.MethodPost, "/reconciliations/{id}/reopen", TxnWrite, http.HandlerFunc(s.reconReopen)},
 	}
 	// p15.12 reports index: GET /reports lists the reports the current user may
 	// access, grouped by report group, each a link to a concrete /reports/{id}. The

@@ -1244,3 +1244,81 @@ other = "Activos netos con restricciones de donantes"
 other = "Total de activos netos"
 [reports.form_990.x.total_liabilities_net_assets]
 other = "Total de pasivos y activos netos"
+
+# p16.3 reconciliation workspace
+[recon.title]
+other = "Conciliaciones"
+[recon.intro]
+other = "Concilia una cuenta bancaria o de activos contra un estado de cuenta. Un estado cubre el saldo de una cuenta en todos los fondos."
+[recon.col.account]
+other = "Cuenta"
+[recon.col.currency]
+other = "Moneda"
+[recon.col.last_statement]
+other = "Ultimo estado finalizado"
+[recon.col.action]
+other = "Accion"
+[recon.no_prior]
+other = "Sin estado previo"
+[recon.continue]
+other = "Continuar conciliacion"
+[recon.empty]
+other = "No hay cuentas conciliables. Marca una cuenta como conciliable en el catalogo de cuentas."
+[recon.start.statement_date]
+other = "Fecha del estado"
+[recon.start.date_hint]
+other = "ej. 2026-02-28"
+[recon.start.ending_balance]
+other = "Saldo final del estado"
+[recon.start.begin]
+other = "Iniciar conciliacion"
+[recon.workspace.title]
+other = "Conciliar"
+[recon.workspace.empty]
+other = "No hay partidas para marcar en esta cuenta y moneda."
+[recon.back_to_list]
+other = "Volver a conciliaciones"
+[recon.finalized_note]
+other = "Esta conciliacion esta finalizada. Sus partidas marcadas estan bloqueadas."
+[recon.reopen]
+other = "Reabrir"
+[recon.col.cleared]
+other = "Marcada"
+[recon.col.date]
+other = "Fecha"
+[recon.col.payee]
+other = "Beneficiario"
+[recon.col.memo]
+other = "Nota"
+[recon.col.fund]
+other = "Fondo"
+[recon.col.amount]
+other = "Importe"
+[recon.cleared]
+other = "Marcada"
+[recon.toggle.clear_on]
+other = "Marcar"
+[recon.toggle.clear_off]
+other = "Sin marcar"
+[recon.summary.statement]
+other = "Saldo del estado"
+[recon.summary.opening]
+other = "Saldo inicial"
+[recon.summary.cleared]
+other = "Total marcado"
+[recon.summary.difference]
+other = "Diferencia"
+[recon.finalize]
+other = "Finalizar"
+[recon.finalize_blocked]
+other = "Finalizar esta disponible cuando la diferencia es cero."
+[error.recon.bad_date]
+other = "Ingresa una fecha de estado valida."
+[error.recon.bad_balance]
+other = "Ingresa un saldo de estado valido."
+[error.recon.not_reconcilable]
+other = "Esta cuenta no se puede conciliar."
+[error.recon.currency]
+other = "Esa moneda no esta disponible para conciliacion."
+[error.recon.open_exists]
+other = "Ya existe una conciliacion abierta para esta cuenta y moneda."

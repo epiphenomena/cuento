@@ -290,7 +290,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p16.2 store: reconciliation lifecycle.**
   Tests: full lifecycle with AssertVersioned; `TestFinalizeRequiresZeroDifference` (opening = prior finalized statement balance; opening + Σ this recon's splits must equal the new statement balance); `TestReconSpansFunds` (**the D13/D20 payoff**: restricted and unrestricted splits reconcile against one statement); `TestToggleValidatesAccountAndCurrency`; `TestReopenAudited`; `TestEditReconciledTxnBlocked` (store refuses date/amount/account/fund edits touching finalized-reconciled splits; memo/payee allowed).
   Build: `StartReconciliation`, `SetSplitReconciled(on/off)`, `Finalize`, `Reopen`; recon is per account **and** currency, across all funds and regardless of subsidiary badge.
-- [ ] **p16.3 web: reconciliation workspace.**
+- [x] **p16.3 web: reconciliation workspace.**
   Tests: handler toggles persist without scroll loss (targeted swap of the row + the diff chip); finalize disabled until difference is zero; perms (view TxnRead, act TxnWrite).
   Build: recon list (reconcilable accounts only, prior statement prefill) → workspace: uncleared splits, Space toggles the focused row, sticky cleared/difference summary.
 - [ ] **p16.4 web+reports: recon history + statement report.**

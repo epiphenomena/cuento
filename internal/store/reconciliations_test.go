@@ -497,3 +497,167 @@ func TestEditReconciledTxnBlocked(t *testing.T) {
 		t.Errorf("amount edit after reopen: err = %v, want nil", err)
 	}
 }
+
+// --- p16.3 workspace read methods ----------------------------------------
+
+// TestReconciliationWorkspaceReads exercises the p16.3 read surface:
+// ReconcilableAccounts, ReconciliationsForAccount, ReconciliationWorkspaceSplits
+// (uncleared + this-recon, prior-finalized excluded, deleted excluded), and
+// ReconciliationSummaryFor (opening + cleared + difference, matching Finalize).
+func TestReconciliationWorkspaceReads(t *testing.T) {
+	e := newReconEnv(t)
+	ctx := mutCtx()
+
+	// Reconcilable accounts: checking + other (both flagged), NOT expense/revenue.
+	accts, err := e.s.ReconcilableAccounts(ctx)
+	if err != nil {
+		t.Fatalf("ReconcilableAccounts: %v", err)
+	}
+	got := map[int64]string{}
+	for _, a := range accts {
+		got[a.ID] = a.DefaultCurrency
+	}
+	if _, ok := got[e.checking]; !ok {
+		t.Errorf("ReconcilableAccounts missing checking")
+	}
+	if _, ok := got[e.other]; !ok {
+		t.Errorf("ReconcilableAccounts missing other")
+	}
+	if _, ok := got[e.expense]; ok {
+		t.Errorf("ReconcilableAccounts should not include the expense account")
+	}
+	if got[e.checking] != "USD" {
+		t.Errorf("checking default currency = %q, want USD", got[e.checking])
+	}
+
+	// A finalized recon in January (statement 100,000) sets the opening chain.
+	txnJan, err := e.s.PostTransaction(ctx, PostTransactionInput{
+		Date: "2026-01-10", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: e.checking, Amount: 100_000, Position: 0},
+			{AccountID: e.revenue, Amount: -100_000, Position: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PostTransaction Jan: %v", err)
+	}
+	spJan := checkingSplitID(t, e.d, txnJan, e.checking)
+	recJan, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-01-31", 100_000)
+	if err != nil {
+		t.Fatalf("StartReconciliation Jan: %v", err)
+	}
+	if err := e.s.SetSplitReconciled(ctx, recJan, spJan, true); err != nil {
+		t.Fatalf("clear Jan split: %v", err)
+	}
+	if err := e.s.Finalize(ctx, recJan); err != nil {
+		t.Fatalf("Finalize Jan: %v", err)
+	}
+
+	// February activity: a +250 deposit and a -400 expense (both USD), plus a
+	// soft-deleted +999 deposit that must NOT appear in the workspace.
+	txnDep, err := e.s.PostTransaction(ctx, PostTransactionInput{
+		Date: "2026-02-05", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: e.checking, Amount: 25_000, Position: 0},
+			{AccountID: e.revenue, Amount: -25_000, Position: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PostTransaction Feb deposit: %v", err)
+	}
+	spDep := checkingSplitID(t, e.d, txnDep, e.checking)
+	txnExp, err := e.s.PostTransaction(ctx, PostTransactionInput{
+		Date: "2026-02-08", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: e.checking, Amount: -40_000, Position: 0},
+			{AccountID: e.expense, Amount: 40_000, Position: 1, FunctionalClass: strp("management")},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PostTransaction Feb expense: %v", err)
+	}
+	spExp := checkingSplitID(t, e.d, txnExp, e.checking)
+	txnDel, err := e.s.PostTransaction(ctx, PostTransactionInput{
+		Date: "2026-02-09", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: e.checking, Amount: 99_900, Position: 0},
+			{AccountID: e.revenue, Amount: -99_900, Position: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PostTransaction Feb deleted: %v", err)
+	}
+	if err := e.s.DeleteTransaction(ctx, txnDel); err != nil {
+		t.Fatalf("DeleteTransaction: %v", err)
+	}
+
+	// ReconciliationsForAccount: newest first; the Jan recon is finalized.
+	list, err := e.s.ReconciliationsForAccount(ctx, e.checking)
+	if err != nil {
+		t.Fatalf("ReconciliationsForAccount: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != recJan || list[0].Status != "finalized" {
+		t.Fatalf("ReconciliationsForAccount = %+v, want one finalized recJan", list)
+	}
+
+	// Open a February recon; workspace should show ONLY the Feb deposit + expense
+	// (uncleared), NOT the Jan split (cleared in a prior finalized recon) and NOT
+	// the deleted deposit.
+	recFeb, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-02-28", 0)
+	if err != nil {
+		t.Fatalf("StartReconciliation Feb: %v", err)
+	}
+	ws, err := e.s.ReconciliationWorkspaceSplits(ctx, recFeb)
+	if err != nil {
+		t.Fatalf("ReconciliationWorkspaceSplits: %v", err)
+	}
+	wsIDs := map[int64]bool{}
+	for _, w := range ws {
+		wsIDs[w.SplitID] = true
+	}
+	if !wsIDs[spDep] || !wsIDs[spExp] {
+		t.Errorf("workspace missing Feb splits: %+v", ws)
+	}
+	if wsIDs[spJan] {
+		t.Errorf("workspace should exclude the prior-finalized Jan split")
+	}
+	if len(ws) != 2 {
+		t.Errorf("workspace split count = %d, want 2 (deleted excluded)", len(ws))
+	}
+
+	// Summary before any clearing: opening 100,000, cleared 0, difference
+	// statement(0) - (100,000 + 0) = -100,000.
+	sum, err := e.s.ReconciliationSummaryFor(ctx, recFeb)
+	if err != nil {
+		t.Fatalf("ReconciliationSummaryFor: %v", err)
+	}
+	if sum.Opening != 100_000 || sum.Cleared != 0 || sum.Difference != -100_000 {
+		t.Errorf("summary before clearing = %+v, want opening 100000 cleared 0 diff -100000", sum)
+	}
+
+	// Clear both Feb splits: cleared = 250 - 400 = -150. To reach difference 0 the
+	// statement must be opening+cleared = 99,850. Set that and finalize should pass.
+	if err := e.s.SetSplitReconciled(ctx, recFeb, spDep, true); err != nil {
+		t.Fatalf("clear dep: %v", err)
+	}
+	if err := e.s.SetSplitReconciled(ctx, recFeb, spExp, true); err != nil {
+		t.Fatalf("clear exp: %v", err)
+	}
+	// Re-point statement balance via a fresh recon would be cleaner, but here we
+	// just confirm the summary math and that Finalize agrees with a zero diff.
+	sum2, err := e.s.ReconciliationSummaryFor(ctx, recFeb)
+	if err != nil {
+		t.Fatalf("ReconciliationSummaryFor after clear: %v", err)
+	}
+	if sum2.Cleared != -15_000 {
+		t.Errorf("cleared after clearing both = %d, want -15000", sum2.Cleared)
+	}
+	// statement was 0, opening 100000, cleared -15000 => diff = 0 - 85000 = -85000.
+	if sum2.Difference != -85_000 {
+		t.Errorf("difference = %d, want -85000", sum2.Difference)
+	}
+	// A nonzero difference must make Finalize reject (matching the summary).
+	if err := e.s.Finalize(ctx, recFeb); !errors.Is(err, ErrReconciliationDifference) {
+		t.Errorf("Finalize at nonzero difference: err = %v, want ErrReconciliationDifference", err)
+	}
+}

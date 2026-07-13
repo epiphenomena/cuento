@@ -201,6 +201,89 @@ func (q *Queries) InsertReconciliationVersion(ctx context.Context, arg InsertRec
 	return err
 }
 
+const listReconcilableAccounts = `-- name: ListReconcilableAccounts :many
+SELECT id, default_currency
+FROM accounts
+WHERE reconcilable = 1 AND active = 1
+ORDER BY sort_order, id
+`
+
+type ListReconcilableAccountsRow struct {
+	ID              int64
+	DefaultCurrency string
+}
+
+// The p16.3 recon LIST source: every ACTIVE account flagged reconcilable (D13). A
+// reconciliation may only start on such an account (StartReconciliation rejects the
+// rest). default_currency is the statement-currency prefill (a bank account is
+// single-currency); the account's resolved name comes from the store's name
+// lookup, so only id + default_currency are needed here. Ordered for a stable list.
+func (q *Queries) ListReconcilableAccounts(ctx context.Context) ([]ListReconcilableAccountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listReconcilableAccounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReconcilableAccountsRow
+	for rows.Next() {
+		var i ListReconcilableAccountsRow
+		if err := rows.Scan(&i.ID, &i.DefaultCurrency); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReconciliationsForAccount = `-- name: ListReconciliationsForAccount :many
+SELECT id, account_id, statement_date, statement_balance, currency, status, notes
+FROM reconciliations
+WHERE account_id = ?
+ORDER BY statement_date DESC, id DESC
+`
+
+// Every reconciliation on an account (both currencies, open + finalized), newest
+// statement first. The recon LIST uses this to show, per reconcilable account, the
+// last finalized statement (date + balance) for the opening prefill and any OPEN
+// recon to link straight to its workspace. Ordered so the caller can pick the
+// latest finalized / open per currency without a second query.
+func (q *Queries) ListReconciliationsForAccount(ctx context.Context, accountID int64) ([]Reconciliation, error) {
+	rows, err := q.db.QueryContext(ctx, listReconciliationsForAccount, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Reconciliation
+	for rows.Next() {
+		var i Reconciliation
+		if err := rows.Scan(
+			&i.ID,
+			&i.AccountID,
+			&i.StatementDate,
+			&i.StatementBalance,
+			&i.Currency,
+			&i.Status,
+			&i.Notes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const priorFinalizedStatementBalance = `-- name: PriorFinalizedStatementBalance :one
 SELECT CAST(COALESCE((
   SELECT p.statement_balance FROM reconciliations p
@@ -292,4 +375,76 @@ type SetSplitReconciliationParams struct {
 func (q *Queries) SetSplitReconciliation(ctx context.Context, arg SetSplitReconciliationParams) error {
 	_, err := q.db.ExecContext(ctx, setSplitReconciliation, arg.ReconciliationID, arg.ID)
 	return err
+}
+
+const workspaceSplits = `-- name: WorkspaceSplits :many
+SELECT s.id, s.transaction_id, s.amount, s.fund_id, s.memo,
+       s.reconciliation_id, t.date, t.subsidiary_id, t.payee_id, t.memo AS txn_memo
+FROM splits s
+JOIN transactions t ON t.id = s.transaction_id
+WHERE s.account_id = ?
+  AND t.currency = ?
+  AND t.deleted = 0
+  AND (s.reconciliation_id IS NULL OR s.reconciliation_id = ?)
+ORDER BY t.date, s.id
+`
+
+type WorkspaceSplitsParams struct {
+	AccountID        int64
+	Currency         string
+	ReconciliationID sql.NullInt64
+}
+
+type WorkspaceSplitsRow struct {
+	ID               int64
+	TransactionID    int64
+	Amount           int64
+	FundID           sql.NullInt64
+	Memo             string
+	ReconciliationID sql.NullInt64
+	Date             string
+	SubsidiaryID     int64
+	PayeeID          sql.NullInt64
+	TxnMemo          string
+}
+
+// The p16.3 WORKSPACE split set for an OPEN reconciliation on (account, currency):
+// every split on account_id whose txn is in this currency (D3) and NOT soft-deleted,
+// that is either UNCLEARED (reconciliation_id IS NULL) or cleared against THIS recon
+// (reconciliation_id = ?). Splits cleared in a PRIOR finalized recon are excluded --
+// they are baked into the opening balance (PriorFinalizedStatementBalance), so
+// showing them would double-count. Ordered ascending by (date, split id) so the
+// workspace reads chronologically. Params: account_id, currency, reconciliation_id.
+func (q *Queries) WorkspaceSplits(ctx context.Context, arg WorkspaceSplitsParams) ([]WorkspaceSplitsRow, error) {
+	rows, err := q.db.QueryContext(ctx, workspaceSplits, arg.AccountID, arg.Currency, arg.ReconciliationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkspaceSplitsRow
+	for rows.Next() {
+		var i WorkspaceSplitsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TransactionID,
+			&i.Amount,
+			&i.FundID,
+			&i.Memo,
+			&i.ReconciliationID,
+			&i.Date,
+			&i.SubsidiaryID,
+			&i.PayeeID,
+			&i.TxnMemo,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

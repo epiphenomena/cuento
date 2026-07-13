@@ -435,3 +435,39 @@ input[aria-invalid="true"] {
 .report-subtotal { font-weight: 600; }
 .report-total { font-weight: 700; border-top: 2px solid var(--color-border); }
 .report-warning { background: var(--color-danger-bg); color: var(--color-danger); font-weight: 600; }
+
+/* p16.3 reconciliation workspace. The sticky summary keeps the difference chip in
+   view while scrolling long split lists; the difference goes green at zero (the
+   finalize gate). The cleared toggle is a plain focusable button (Space activates it
+   natively -- CSP-safe, no JS); a cleared row is de-emphasized. No inline style
+   anywhere (strict CSP, rule 12). */
+.recon-list-table, .recon-table { width: 100%; border-collapse: collapse; margin-top: var(--space-4); }
+.recon-list-table th, .recon-list-table td,
+.recon-table th, .recon-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border);
+  text-align: left;
+}
+.recon-table td.amount, .recon-table th.amount { text-align: right; font-variant-numeric: tabular-nums; }
+.recon-row.is-cleared { color: var(--color-text-muted); }
+.recon-toggle { cursor: pointer; }
+.recon-toggle[aria-pressed="true"] { font-weight: 600; }
+.recon-check { color: var(--color-success, green); font-weight: 700; }
+.recon-summary {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface);
+  border: var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  margin: var(--space-4) 0;
+}
+.recon-figures { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0; }
+.recon-figures div { display: flex; flex-direction: column; }
+.recon-figures dt { font-weight: 600; }
+.recon-figures dd { margin: 0; font-variant-numeric: tabular-nums; }
+.recon-diff dd { font-weight: 700; }
+.recon-diff.is-zero dd { color: var(--color-success, green); }
+.recon-diff-hint { margin-top: var(--space-2); }
+.recon-finalize-form { margin-top: var(--space-3); }

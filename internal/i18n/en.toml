@@ -1244,3 +1244,81 @@ other = "Net assets with donor restrictions"
 other = "Total net assets"
 [reports.form_990.x.total_liabilities_net_assets]
 other = "Total liabilities and net assets"
+
+# p16.3 reconciliation workspace
+[recon.title]
+other = "Reconciliations"
+[recon.intro]
+other = "Reconcile a bank or asset account against a statement. One statement covers one account balance across all funds."
+[recon.col.account]
+other = "Account"
+[recon.col.currency]
+other = "Currency"
+[recon.col.last_statement]
+other = "Last finalized statement"
+[recon.col.action]
+other = "Action"
+[recon.no_prior]
+other = "No prior statement"
+[recon.continue]
+other = "Continue reconciliation"
+[recon.empty]
+other = "No reconcilable accounts. Mark an account reconcilable in the chart of accounts."
+[recon.start.statement_date]
+other = "Statement date"
+[recon.start.date_hint]
+other = "e.g. 2026-02-28"
+[recon.start.ending_balance]
+other = "Statement ending balance"
+[recon.start.begin]
+other = "Start reconciliation"
+[recon.workspace.title]
+other = "Reconcile"
+[recon.workspace.empty]
+other = "No splits to clear on this account and currency."
+[recon.back_to_list]
+other = "Back to reconciliations"
+[recon.finalized_note]
+other = "This reconciliation is finalized. Its cleared splits are locked."
+[recon.reopen]
+other = "Reopen"
+[recon.col.cleared]
+other = "Cleared"
+[recon.col.date]
+other = "Date"
+[recon.col.payee]
+other = "Payee"
+[recon.col.memo]
+other = "Memo"
+[recon.col.fund]
+other = "Fund"
+[recon.col.amount]
+other = "Amount"
+[recon.cleared]
+other = "Cleared"
+[recon.toggle.clear_on]
+other = "Clear"
+[recon.toggle.clear_off]
+other = "Uncleared"
+[recon.summary.statement]
+other = "Statement balance"
+[recon.summary.opening]
+other = "Opening balance"
+[recon.summary.cleared]
+other = "Cleared total"
+[recon.summary.difference]
+other = "Difference"
+[recon.finalize]
+other = "Finalize"
+[recon.finalize_blocked]
+other = "Finalize is available when the difference is zero."
+[error.recon.bad_date]
+other = "Enter a valid statement date."
+[error.recon.bad_balance]
+other = "Enter a valid statement balance."
+[error.recon.not_reconcilable]
+other = "This account cannot be reconciled."
+[error.recon.currency]
+other = "That currency is not available for reconciliation."
+[error.recon.open_exists]
+other = "An open reconciliation already exists for this account and currency."

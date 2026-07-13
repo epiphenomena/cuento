@@ -1,0 +1,84 @@
+{{/*
+  p16.3 reconciliation LIST (/reconciliations, TxnRead view / TxnWrite start). A
+  self-contained shell page. .Page is a reconListModel.
+
+  One row per RECONCILABLE account (D13). Each shows the account's statement
+  currency and the LAST FINALIZED statement (date + balance -- the opening prefill
+  for the next reconciliation). The action depends on state:
+    - if an OPEN reconciliation already exists, a "continue" link to its workspace
+      (there is only one open recon per account+currency, so starting again is a
+      non-event -- we link instead);
+    - otherwise a small START form (statement date + ending balance) that POSTs to
+      /reconciliations, prefilling opening from the prior finalized balance and
+      creating the new recon on the account's default currency.
+
+  The start form uses the p10.3 form-error convention (the recon-start-form partial
+  is re-rendered at 422 on a bad date/balance/rejected start). Account names are
+  stored proper nouns rendered verbatim; every other string via {{t}} (rule 9);
+  money/dates via the formatters (rule 10); no inline script (rule 12).
+*/ -}}
+
+{{/* recon-start-form: the per-account START form partial (single-sourced so a 422
+     re-render keeps stable input ids). Data is a reconStartForm. */ -}}
+{{define "recon-start-form" -}}
+<form class="recon-start-form" method="post" action="/reconciliations"
+      hx-post="/reconciliations" hx-target="this" hx-swap="outerHTML" id="recon-start-form-{{.AccountID}}">
+  <input type="hidden" name="account_id" value="{{.AccountID}}">
+  <input type="hidden" name="currency" value="{{.Currency}}">
+  <label for="recon-date-{{.AccountID}}">{{t "recon.start.statement_date"}}</label>
+  <input type="text" id="recon-date-{{.AccountID}}" name="statement_date" value="{{.StatementDay}}"
+         placeholder="{{t "recon.start.date_hint"}}"
+         {{if eq .Errors.FirstInvalid "statement_date"}}autofocus{{end}}>
+  {{if .Errors.ErrorKey "statement_date"}}<span class="field-error" role="alert">{{t (.Errors.ErrorKey "statement_date")}}</span>{{end}}
+
+  <label for="recon-balance-{{.AccountID}}">{{t "recon.start.ending_balance"}}</label>
+  <input type="text" id="recon-balance-{{.AccountID}}" name="balance" value="{{.Balance}}"
+         {{if eq .Errors.FirstInvalid "balance"}}autofocus{{end}}>
+  {{if .Errors.ErrorKey "balance"}}<span class="field-error" role="alert">{{t (.Errors.ErrorKey "balance")}}</span>{{end}}
+  {{if .Errors.ErrorKey "account_id"}}<span class="field-error" role="alert">{{t (.Errors.ErrorKey "account_id")}}</span>{{end}}
+  {{if .Errors.ErrorKey "currency"}}<span class="field-error" role="alert">{{t (.Errors.ErrorKey "currency")}}</span>{{end}}
+
+  <button type="submit" class="btn btn-primary">{{t "recon.start.begin"}}</button>
+</form>
+{{- end}}
+
+{{define "reconciliations.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "recon.title"))}}
+  {{- with .Page}}
+  <h1>{{t "recon.title"}}</h1>
+  <p class="hint">{{t "recon.intro"}}</p>
+
+  <table class="recon-list-table">
+    <thead>
+      <tr>
+        <th>{{t "recon.col.account"}}</th>
+        <th>{{t "recon.col.currency"}}</th>
+        <th>{{t "recon.col.last_statement"}}</th>
+        <th>{{t "recon.col.action"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="recon-list-row" id="recon-acct-{{.AccountID}}">
+        <td class="recon-acct-name">{{.AccountName}}</td>
+        <td class="recon-acct-currency">{{.Currency}}</td>
+        <td class="recon-last-statement">
+          {{if .LastDate}}{{.LastDate}} · <span class="amount">{{.LastBalanceFmt}}</span>
+          {{else}}<span class="muted">{{t "recon.no_prior"}}</span>{{end}}
+        </td>
+        <td class="recon-acct-action">
+          {{if .OpenReconID}}
+          <a class="btn btn-primary" href="/reconciliations/{{.OpenReconID}}">{{t "recon.continue"}}</a>
+          {{else}}
+          {{template "recon-start-form" .StartForm}}
+          {{end}}
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="4">{{t "recon.empty"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

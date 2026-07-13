@@ -43,18 +43,21 @@ func newMatrixApp(t *testing.T) (http.Handler, []Route, *store.Store, *sql.DB, *
 	// Its id is not asserted; the routes only need SOME account to exist so an
 	// authorized persona reaches the handler rather than a legitimate 404.
 	seedCtx := store.WithActor(context.Background(), store.Actor{ID: 1})
-	seedAcct := func(name string) int64 {
+	seedAcct := func(name string, reconcilable bool) int64 {
 		id, err := st.CreateAccount(seedCtx, store.CreateAccountInput{
 			Type: "asset", DefaultCurrency: "USD",
 			Names: map[string]string{"en": name}, Subsidiaries: []int64{1},
+			Reconcilable: reconcilable,
 		})
 		if err != nil {
 			t.Fatalf("seed account %s: %v", name, err)
 		}
 		return id
 	}
-	a1 := seedAcct("Seed")
-	a2 := seedAcct("Seed 2")
+	// a1 is RECONCILABLE so p16.3's /reconciliations/{id}... routes resolve to a real
+	// open reconciliation when the reachability check substitutes {id} -> 1.
+	a1 := seedAcct("Seed", true)
+	a2 := seedAcct("Seed 2", false)
 
 	// Seed one transaction so p12.2's /transactions/{id}/edit resolves to a real
 	// resource when the reachability check substitutes {id} -> 1 (a balanced 2-split
@@ -78,6 +81,17 @@ func newMatrixApp(t *testing.T) (http.Handler, []Route, *store.Store, *sql.DB, *
 		Name: "Seed Fund", Restriction: "purpose", Subsidiaries: []int64{1},
 	}); err != nil {
 		t.Fatalf("seed fund: %v", err)
+	}
+
+	// Seed one OPEN reconciliation (id 1) on the reconcilable seed account so p16.3's
+	// /reconciliations/{id}, /reconciliations/{id}/splits/{sid}/toggle,
+	// /reconciliations/{id}/finalize, /reconciliations/{id}/reopen resolve to a real
+	// resource when the reachability check substitutes {id} -> 1 and {sid} -> 1 (split
+	// id 1 is the a1 leg of the seed transaction, so the toggle finds it). The statement
+	// balance is nonzero so finalize returns a clean 422 guard (not a 404), and reopen
+	// on an open recon returns 409 (not a 404) -- both count as "reachable".
+	if _, err := st.StartReconciliation(seedCtx, a1, "USD", "2025-01-31", 1000); err != nil {
+		t.Fatalf("seed reconciliation: %v", err)
 	}
 
 	app := NewApp(Config{Version: "test"}, db, st)

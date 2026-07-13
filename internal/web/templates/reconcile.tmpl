@@ -1,0 +1,134 @@
+{{/*
+  p16.3 reconciliation WORKSPACE (/reconciliations/{id}, TxnRead view / TxnWrite
+  act). A self-contained shell page. .Page is a reconWorkspaceModel.
+
+  The workspace for ONE open reconciliation on (account, currency): the account's
+  UNCLEARED + this-recon splits (uncleared first), each with a cleared TOGGLE, and a
+  STICKY summary (statement balance, opening, cleared total, difference). Finalize is
+  DISABLED until the difference is zero (.Summary.Finalizable, computed server-side
+  from the same queries Finalize itself uses -- server-authoritative).
+
+  The TOGGLE (the p16.3 anti-jank requirement) is a NATIVE <button> with a stable id
+  (recon-toggle-<splitID>): Space activates a focused button natively (the "Space
+  toggles the focused row" affordance, CSP-safe, no ES module). It hx-posts to the
+  toggle action and swaps ONLY its row (hx-target the <tr>, hx-swap outerHTML) while
+  the summary rides along as an OUT-OF-BAND swap (#recon-summary) -- so nothing above
+  moves and scroll/focus survive. htmx restores focus to the same-id button after the
+  swap, so repeated Space keeps working.
+
+  A FINALIZED recon renders read-only (no toggles) with a Reopen action -- this is
+  also the post-finalize view ("the finalized recon shows"). Account/payee/fund names
+  are stored proper nouns rendered verbatim; every other string via {{t}} (rule 9);
+  money/dates via the formatters (rule 10); no inline script (rule 12).
+*/ -}}
+
+{{/* recon-row: one workspace split <tr>. Shared by the full page and the toggle
+     partial so the two never drift. Data is a reconRowCtx: .Row is the reconSplitRow,
+     .Base is the toggle path base, .Finalized gates the toggle (read-only when
+     finalized). */ -}}
+{{define "recon-row" -}}
+{{- with .Row -}}
+<tr id="{{.RowID}}" class="recon-row{{if .Cleared}} is-cleared{{end}}">
+  <td class="recon-cleared">
+    {{if $.Finalized}}
+      {{if .Cleared}}<span class="recon-check" aria-label="{{t "recon.cleared"}}">&#10003;</span>{{else}}<span class="muted">&mdash;</span>{{end}}
+    {{else}}
+      {{/* Native focusable button: Space toggles it (CSP-safe, no JS). It swaps its
+           own row and OOB-swaps the summary. aria-pressed reflects the cleared state. */}}
+      <button type="button" id="{{.ToggleID}}" class="recon-toggle"
+              aria-pressed="{{if .Cleared}}true{{else}}false{{end}}"
+              hx-post="{{$.Base}}/{{.SplitID}}/toggle"
+              hx-target="#{{.RowID}}" hx-swap="outerHTML">
+        {{if .Cleared}}{{t "recon.toggle.clear_off"}}{{else}}{{t "recon.toggle.clear_on"}}{{end}}
+      </button>
+    {{end}}
+  </td>
+  <td class="recon-date">{{.Date}}</td>
+  <td class="recon-payee">{{if .PayeeName}}{{.PayeeName}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
+  <td class="recon-memo">{{if .Memo}}{{.Memo}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
+  <td class="recon-fund">{{if .FundName}}<span class="chip">{{.FundName}}</span>{{end}}</td>
+  <td class="recon-amount amount">{{.AmountFmt}}</td>
+</tr>
+{{- end}}
+{{- end}}
+
+{{/* recon-summary: the sticky cleared/difference summary. Its id is the OOB swap
+     target the toggle response replaces. The Finalize button's disabled state is
+     .Finalizable (difference == 0) -- server-authoritative. `oob` toggles the
+     hx-swap-oob attribute (set only in the toggle response, not the full page). */ -}}
+{{define "recon-summary" -}}
+<div id="recon-summary" class="recon-summary"{{if .OOB}} hx-swap-oob="true"{{end}}>
+  {{- with .Model}}
+  <dl class="recon-figures">
+    <div><dt>{{t "recon.summary.statement"}}</dt><dd class="amount">{{.Summary.StatementFmt}}</dd></div>
+    <div><dt>{{t "recon.summary.opening"}}</dt><dd class="amount">{{.Summary.OpeningFmt}}</dd></div>
+    <div><dt>{{t "recon.summary.cleared"}}</dt><dd class="amount">{{.Summary.ClearedFmt}}</dd></div>
+    <div class="recon-diff{{if .Summary.Finalizable}} is-zero{{end}}">
+      <dt>{{t "recon.summary.difference"}}</dt>
+      <dd class="amount" id="recon-diff-chip">{{.Summary.DifferenceFmt}}</dd>
+    </div>
+  </dl>
+  {{if not .Finalized}}
+  {{/* htmx-driven on the BUTTON itself (hx-post on the button, not a form submit): a
+       native form submit on an OOB-swapped node does not fire, but htmx binds the
+       button's click trigger when it processes the OOB content, so it works even after
+       the summary is OOB-swapped by a toggle. The wrapping <form> is the no-JS fallback
+       (a plain submit for a JS-off client). On success redirectAfterForm emits
+       HX-Redirect to the workspace (the finalized read-only view). */}}
+  <form method="post" action="{{.FinalizePath}}" class="inline recon-finalize-form">
+    <button type="submit" id="recon-finalize" class="btn btn-primary"
+            hx-post="{{.FinalizePath}}" hx-target="body"
+            {{if not .Summary.Finalizable}}disabled{{end}}>
+      {{t "recon.finalize"}}
+    </button>
+  </form>
+  {{if not .Summary.Finalizable}}<p class="hint recon-diff-hint">{{t "recon.finalize_blocked"}}</p>{{end}}
+  {{end}}
+  {{- end}}
+</div>
+{{- end}}
+
+{{/* recon-toggle-response: the toggle PARTIAL. NOT a full document -- htmx swaps the
+     row in place (hx-target) and the summary OOB. Data is a reconToggleResponse. */ -}}
+{{define "recon-toggle-response" -}}
+{{template "recon-row" (reconRowCtx .Row .Base false)}}
+{{template "recon-summary" (reconSummaryCtx .Summary true false .FinalizePath)}}
+{{- end}}
+
+{{define "reconcile.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "recon.workspace.title"))}}
+  {{- with .Page}}
+  <p><a href="/reconciliations">{{t "recon.back_to_list"}}</a></p>
+  <h1>{{t "recon.workspace.title"}}: {{.AccountName}} <span class="badge">{{.Currency}}</span></h1>
+  {{if .Finalized}}
+  <p class="recon-finalized-note" role="status">
+    {{t "recon.finalized_note"}}
+    <form method="post" action="{{.ReopenPath}}" class="inline">
+      <button type="submit" class="btn btn-ghost">{{t "recon.reopen"}}</button>
+    </form>
+  </p>
+  {{end}}
+
+  {{template "recon-summary" (reconSummaryCtx .Summary false .Finalized .FinalizePath)}}
+
+  <table class="recon-table">
+    <thead>
+      <tr>
+        <th>{{t "recon.col.cleared"}}</th>
+        <th>{{t "recon.col.date"}}</th>
+        <th>{{t "recon.col.payee"}}</th>
+        <th>{{t "recon.col.memo"}}</th>
+        <th>{{t "recon.col.fund"}}</th>
+        <th>{{t "recon.col.amount"}}</th>
+      </tr>
+    </thead>
+    <tbody id="recon-rows">
+      {{range .Rows}}{{template "recon-row" (reconRowCtx . $.Page.TogglePathBase $.Page.Finalized)}}
+      {{else}}
+      <tr><td colspan="6">{{t "recon.workspace.empty"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

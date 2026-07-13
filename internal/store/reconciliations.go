@@ -287,6 +287,145 @@ func (s *Store) Reopen(ctx context.Context, reconID int64) error {
 	return nil
 }
 
+// ReconciliationSummary is the workspace's sticky summary (p16.3): the recon's
+// statement balance, the opening balance (prior finalized statement, the chain),
+// the cleared total (net-debit sum of this recon's cleared splits), and the
+// resulting difference = statement - (opening + cleared). Difference == 0 is the
+// finalize gate. All net-debit signed minor units (D2).
+type ReconciliationSummary struct {
+	StatementBalance int64
+	Opening          int64
+	Cleared          int64
+	Difference       int64
+}
+
+// ReconciliationWorkspaceSplit is one split in the workspace list: the split's
+// financial fields plus its txn context (date/subsidiary/payee/memo) and whether it
+// is currently cleared against this recon. It carries RAW values; the web layer
+// formats them (rule 10) and resolves names.
+type ReconciliationWorkspaceSplit struct {
+	SplitID      int64
+	TxnID        int64
+	Amount       int64 // net-debit signed minor units (D2)
+	FundID       *int64
+	SubsidiaryID int64
+	PayeeID      *int64
+	SplitMemo    string
+	TxnMemo      string
+	Date         string // raw YYYY-MM-DD
+	Cleared      bool   // reconciliation_id == this recon
+}
+
+// ReconciliationSummaryFor computes the workspace summary for reconID. It REUSES the
+// EXACT two queries Finalize uses -- PriorFinalizedStatementBalance (opening) and
+// ReconciliationClearedSum (cleared) -- so the workspace's difference (and thus the
+// finalize-disabled-until-zero gate) is byte-identical to Finalize's own zero-check:
+// a difference of 0 here means Finalize will accept, a nonzero means it will reject
+// with ErrReconciliationDifference. This is what makes the disabled button
+// server-authoritative rather than a divergent client guess.
+func (s *Store) ReconciliationSummaryFor(ctx context.Context, reconID int64) (ReconciliationSummary, error) {
+	recon, err := s.q.GetReconciliation(ctx, reconID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ReconciliationSummary{}, ErrReconciliationNotFound
+		}
+		return ReconciliationSummary{}, fmt.Errorf("store: reconciliation summary %d: %w", reconID, err)
+	}
+	opening, err := s.q.PriorFinalizedStatementBalance(ctx, sqlc.PriorFinalizedStatementBalanceParams{
+		AccountID:       recon.AccountID,
+		Currency:        recon.Currency,
+		StatementDate:   recon.StatementDate,
+		StatementDate_2: recon.StatementDate,
+		ID:              recon.ID,
+	})
+	if err != nil {
+		return ReconciliationSummary{}, fmt.Errorf("store: reconciliation summary opening %d: %w", reconID, err)
+	}
+	cleared, err := s.q.ReconciliationClearedSum(ctx, reconID)
+	if err != nil {
+		return ReconciliationSummary{}, fmt.Errorf("store: reconciliation summary cleared %d: %w", reconID, err)
+	}
+	return ReconciliationSummary{
+		StatementBalance: recon.StatementBalance,
+		Opening:          opening,
+		Cleared:          cleared,
+		Difference:       recon.StatementBalance - (opening + cleared),
+	}, nil
+}
+
+// ReconciliationWorkspaceSplits returns the splits shown in an OPEN recon's
+// workspace: every non-deleted split on the recon's account in the recon's currency
+// that is UNCLEARED or cleared against THIS recon (splits cleared in a prior
+// finalized recon are excluded -- they are folded into the opening balance). Ordered
+// chronologically. The account + currency come from the recon row, so the caller
+// only needs the recon id.
+func (s *Store) ReconciliationWorkspaceSplits(ctx context.Context, reconID int64) ([]ReconciliationWorkspaceSplit, error) {
+	recon, err := s.q.GetReconciliation(ctx, reconID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrReconciliationNotFound
+		}
+		return nil, fmt.Errorf("store: reconciliation workspace splits %d: %w", reconID, err)
+	}
+	rows, err := s.q.WorkspaceSplits(ctx, sqlc.WorkspaceSplitsParams{
+		AccountID:        recon.AccountID,
+		Currency:         recon.Currency,
+		ReconciliationID: sql.NullInt64{Int64: reconID, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store: reconciliation workspace splits %d: %w", reconID, err)
+	}
+	out := make([]ReconciliationWorkspaceSplit, len(rows))
+	for i, r := range rows {
+		out[i] = ReconciliationWorkspaceSplit{
+			SplitID:      r.ID,
+			TxnID:        r.TransactionID,
+			Amount:       r.Amount,
+			FundID:       nullInt64ToPtr(r.FundID),
+			SubsidiaryID: r.SubsidiaryID,
+			PayeeID:      nullInt64ToPtr(r.PayeeID),
+			SplitMemo:    r.Memo,
+			TxnMemo:      r.TxnMemo,
+			Date:         r.Date,
+			Cleared:      r.ReconciliationID.Valid && r.ReconciliationID.Int64 == reconID,
+		}
+	}
+	return out, nil
+}
+
+// ReconcilableAccount is one row of the recon LIST source: an active reconcilable
+// account's id and its default (statement) currency.
+type ReconcilableAccount struct {
+	ID              int64
+	DefaultCurrency string
+}
+
+// ReconcilableAccounts lists every active account flagged reconcilable (D13) -- the
+// recon LIST source. A reconciliation may only start on one of these.
+func (s *Store) ReconcilableAccounts(ctx context.Context) ([]ReconcilableAccount, error) {
+	rows, err := s.q.ListReconcilableAccounts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("store: list reconcilable accounts: %w", err)
+	}
+	out := make([]ReconcilableAccount, len(rows))
+	for i, r := range rows {
+		out[i] = ReconcilableAccount{ID: r.ID, DefaultCurrency: r.DefaultCurrency}
+	}
+	return out, nil
+}
+
+// ReconciliationsForAccount returns every reconciliation on an account (both
+// currencies, open + finalized), newest statement first -- the recon LIST uses this
+// to find the last finalized statement (opening prefill) and any open recon (a
+// "continue" link) per currency.
+func (s *Store) ReconciliationsForAccount(ctx context.Context, accountID int64) ([]sqlc.Reconciliation, error) {
+	rows, err := s.q.ListReconciliationsForAccount(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("store: reconciliations for account %d: %w", accountID, err)
+	}
+	return rows, nil
+}
+
 // GetReconciliation returns the current live row for one reconciliation (read; sqlc).
 func (s *Store) GetReconciliation(ctx context.Context, id int64) (sqlc.Reconciliation, error) {
 	row, err := s.q.GetReconciliation(ctx, id)
