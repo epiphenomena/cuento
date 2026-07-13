@@ -153,7 +153,8 @@ func TestMergeConfirmRequired(t *testing.T) {
 }
 
 // TestMergeConsequencesSummarized: the preview reports the split count that will
-// repoint and the 0-reconciliations note.
+// repoint and, for a source with NO reconciled splits, shows NO blocking note (p22.5:
+// the recon block-guard note appears only when the source has reconciled splits).
 func TestMergeConsequencesSummarized(t *testing.T) {
 	e := seedMergeEnv(t)
 
@@ -166,16 +167,16 @@ func TestMergeConsequencesSummarized(t *testing.T) {
 		t.Fatalf("preview status = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	// The split count (1) and the 0-reconciliations note must appear, anchored to
-	// the rendered en phrases (the book user resolves to en) so the assertion is
-	// about the CONSEQUENCES text, not an incidental id in a hidden input. These
-	// are now CLDR-pluralized (D15): count 1 selects the singular "1 transaction
-	// line", count 0 selects the plural "0 reconciliations".
+	// The split count (1) must appear, anchored to the rendered en phrase (the book
+	// user resolves to en) so the assertion is about the CONSEQUENCES text, not an
+	// incidental id in a hidden input. CLDR-pluralized (D15): count 1 selects the
+	// singular "1 transaction line".
 	if !strings.Contains(body, "1 transaction line will move") {
 		t.Errorf("preview does not surface the split count; body: %s", body)
 	}
-	if !strings.Contains(body, "0 reconciliations will move") {
-		t.Errorf("preview does not surface the 0-reconciliations note; body: %s", body)
+	// This source has no reconciled splits, so the p22.5 blocking note is absent.
+	if strings.Contains(body, "blocks this merge") || strings.Contains(body, "block this merge") {
+		t.Errorf("preview should not surface the recon-blocked note for an unreconciled source; body: %s", body)
 	}
 }
 
@@ -222,6 +223,78 @@ func TestMergeSubCoverageSurfaced(t *testing.T) {
 	acct, _ := st.GetAccount(context.Background(), src)
 	if acct.Active == 0 {
 		t.Errorf("sub-coverage merge executed (src deactivated), want no execution")
+	}
+}
+
+// TestMergeReconciledSourceSurfaced: a confirmed merge whose SOURCE has a reconciled
+// split returns the localized ErrMergeSourceReconciled message at 422 (NOT a 500),
+// and does NOT execute (p22.5 block-guard). Also proves the confirm returns a clean
+// typed rejection rather than the raw SQLite trigger abort / Z8 hole.
+func TestMergeReconciledSourceSurfaced(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	book := mkUser(t, st, "book", "write", false)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// A reconcilable asset source + an asset destination on root sub 1.
+	src, err := st.CreateAccount(ctx, store.CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Bank Src"},
+		Subsidiaries: []int64{1}, Reconcilable: true,
+	})
+	if err != nil {
+		t.Fatalf("create src: %v", err)
+	}
+	dst, err := st.CreateAccount(ctx, store.CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Bank Dst"}, Subsidiaries: []int64{1},
+	})
+	if err != nil {
+		t.Fatalf("create dst: %v", err)
+	}
+	cash, err := st.CreateAccount(ctx, store.CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{1},
+	})
+	if err != nil {
+		t.Fatalf("create cash: %v", err)
+	}
+	if _, err := st.PostTransaction(ctx, store.PostTransactionInput{
+		Date: "2026-01-10", SubsidiaryID: 1, Currency: "USD",
+		Splits: []store.SplitInput{
+			{AccountID: src, Amount: 5000, Position: 0},
+			{AccountID: cash, Amount: -5000, Position: 1},
+		},
+	}); err != nil {
+		t.Fatalf("post txn: %v", err)
+	}
+	// Clear the src split against an open recon on src (src has exactly one split).
+	srcSplits, err := st.SplitIDsForAccount(context.Background(), src)
+	if err != nil || len(srcSplits) != 1 {
+		t.Fatalf("SplitIDsForAccount src: ids=%v err=%v", srcSplits, err)
+	}
+	srcSplit := srcSplits[0]
+	reconID, err := st.StartReconciliation(ctx, src, "USD", "2026-01-31", 5000)
+	if err != nil {
+		t.Fatalf("StartReconciliation: %v", err)
+	}
+	if err := st.SetSplitReconciled(ctx, reconID, srcSplit, true); err != nil {
+		t.Fatalf("SetSplitReconciled: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("src", itoa(src))
+	form.Set("dst", itoa(dst))
+	form.Set("confirm", "1")
+
+	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/merge", form)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("reconciled-source merge status = %d, want 422; body: %s", rec.Code, rec.Body.String())
+	}
+	// The localized ErrMergeSourceReconciled message (en) must be present.
+	if !strings.Contains(rec.Body.String(), "reconciled") {
+		t.Errorf("422 body missing the localized reconciled-source message; body: %s", rec.Body.String())
+	}
+	// No execution: src still active.
+	acct, _ := st.GetAccount(context.Background(), src)
+	if acct.Active == 0 {
+		t.Errorf("reconciled-source merge executed (src deactivated), want no execution")
 	}
 }
 

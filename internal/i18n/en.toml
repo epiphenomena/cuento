@@ -500,9 +500,9 @@ other = "Merge %s into %s. This cannot be undone from here."
 [merge.consequence.splits]
 one = "%d transaction line will move to the destination."
 other = "%d transaction lines will move to the destination."
-[merge.consequence.recons]
-one = "%d reconciliation will move."
-other = "%d reconciliations will move."
+[merge.consequence.reconciled_blocked]
+one = "%d split on the source is reconciled and blocks this merge. Unreconcile or reopen it first."
+other = "%d splits on the source are reconciled and block this merge. Unreconcile or reopen them first."
 [merge.consequence.deactivate]
 other = "%s will be deactivated (its history is kept)."
 [merge.confirm]
@@ -613,6 +613,8 @@ other = "The destination's subsidiaries must cover all of the source's."
 other = "The destination cannot be a placeholder (it has child accounts)."
 [error.merge.into_inactive]
 other = "The destination account is inactive."
+[error.merge.source_reconciled]
+other = "The source account has reconciled splits. Unreconcile or reopen them before merging."
 [subsidiaries.title]
 other = "Subsidiaries"
 [subsidiaries.intro]

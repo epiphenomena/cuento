@@ -10,8 +10,9 @@
     - "merge-preview": the consequences summary + Confirm control. It re-POSTs to
       /accounts/merge with the same src/dst PLUS confirm=1 (a hidden input), so the
       SECOND submit executes the merge. The preview reports the split count that will
-      repoint and the reconciliation count (0 until p16), and restates the coverage
-      rule as an informational note.
+      repoint; when the source has reconciled splits it shows a BLOCKING note (the
+      p22.5 block-guard refuses such a merge -- the confirm returns a 422 field error),
+      and it restates the coverage rule as an informational note.
 
   Both target #account-form / outerHTML. Every string via {{t}} (rule 9); no inline
   script (rule 12).
@@ -62,9 +63,9 @@
   <p class="merge-summary">{{t "merge.summary" .SrcName .DstName}}</p>
   <ul class="merge-consequences">
     <li>{{tn "merge.consequence.splits" .SplitCount}}</li>
-    <li>{{tn "merge.consequence.recons" .ReconCount}}</li>
     <li>{{t "merge.consequence.deactivate" .SrcName}}</li>
   </ul>
+  {{if gt .ReconciledCount 0}}<p class="field-error" role="alert">{{tn "merge.consequence.reconciled_blocked" .ReconciledCount}}</p>{{end}}
   <p class="hint">{{t "merge.coverage_note"}}</p>
 
   <input type="hidden" name="src" value="{{.Src}}">

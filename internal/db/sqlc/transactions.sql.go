@@ -27,6 +27,23 @@ func (q *Queries) AccountIsLeaf(ctx context.Context, parentID sql.NullInt64) (bo
 	return is_leaf, err
 }
 
+const countReconciledSplitsForAccount = `-- name: CountReconciledSplitsForAccount :one
+SELECT COUNT(*) FROM splits WHERE account_id = ? AND reconciliation_id IS NOT NULL
+`
+
+// How many splits on an account carry a non-NULL reconciliation_id (p22.5). The
+// merge block-guard uses this: repointing a reconciled split to the destination
+// would leave it linked to a reconciliation on the SOURCE account (Z8 fires for an
+// open recon; the 00014 finalized-lock trigger ABORTs for a finalized one), so the
+// store refuses the merge when this count is > 0 (ErrMergeSourceReconciled). Full
+// recon repointing stays backlog; this closes the integrity hole cleanly.
+func (q *Queries) CountReconciledSplitsForAccount(ctx context.Context, accountID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countReconciledSplitsForAccount, accountID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteSplit = `-- name: DeleteSplit :exec
 DELETE FROM splits WHERE id = ?
 `

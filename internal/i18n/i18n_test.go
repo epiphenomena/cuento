@@ -159,9 +159,9 @@ func TestPluralization(t *testing.T) {
 		one, other string
 	}{
 		{"en", "merge.consequence.splits", "1 transaction line will move to the destination.", "2 transaction lines will move to the destination."},
-		{"en", "merge.consequence.recons", "1 reconciliation will move.", "2 reconciliations will move."},
+		{"en", "merge.consequence.reconciled_blocked", "1 split on the source is reconciled and blocks this merge. Unreconcile or reopen it first.", "2 splits on the source are reconciled and block this merge. Unreconcile or reopen them first."},
 		{"es", "merge.consequence.splits", "1 línea de transacción se moverá al destino.", "2 líneas de transacción se moverán al destino."},
-		{"es", "merge.consequence.recons", "1 conciliación se moverá.", "2 conciliaciones se moverán."},
+		{"es", "merge.consequence.reconciled_blocked", "1 línea del origen está conciliada y bloquea esta combinación. Anule la conciliación o reábrala primero.", "2 líneas del origen están conciliadas y bloquean esta combinación. Anule la conciliación o reábralas primero."},
 	}
 	for _, c := range cases {
 		if got := TN(c.lang, c.key, 1); got != c.one {
@@ -176,7 +176,7 @@ func TestPluralization(t *testing.T) {
 	}
 
 	// Zero uses the plural (other) form in both en and es.
-	if got := TN("en", "merge.consequence.recons", 0); got != "0 reconciliations will move." {
-		t.Errorf("TN(en, recons, 0) = %q, want the plural (other) form", got)
+	if got := TN("en", "merge.consequence.reconciled_blocked", 0); got != "0 splits on the source are reconciled and block this merge. Unreconcile or reopen them first." {
+		t.Errorf("TN(en, reconciled_blocked, 0) = %q, want the plural (other) form", got)
 	}
 }

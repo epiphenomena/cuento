@@ -95,8 +95,15 @@ func runAccountLedger(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 	openByCcy := amtsByCurrency(openBal[p.Account])
 	closeByCcy := amtsByCurrency(closeBal[p.Account])
 
-	// The currency set: every currency the account holds at opening OR close (an account
-	// whose whole balance moved into a currency mid-range still needs that section).
+	// The currency set: every currency the account holds at opening OR close. This is
+	// SUFFICIENT even for a currency that nets to zero at both endpoints but moves
+	// mid-range: SubtreeBalancesAsOf has no HAVING SUM<>0, so it emits a zero-balance
+	// row for every (account, currency) with ANY split on-or-before the as-of date. A
+	// currency with in-range activity therefore always appears at the CLOSING endpoint
+	// (as-of To) with balance 0, so its section renders. See docs/deferred.md 2.4
+	// (reclassified in p22.5: the drop the note feared cannot occur -- the in-range
+	// currency set is always a subset of the closing set) and TestAccountLedger-
+	// MidRangeOnlyCurrency (a regression guard pinning this behavior).
 	ccys := unionCurrencies(openByCcy, closeByCcy)
 
 	// Name maps (payee, fund) resolved once (bounded reference data).

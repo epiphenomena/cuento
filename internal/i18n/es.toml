@@ -495,9 +495,9 @@ other = "Combinar %s en %s. Esto no se puede deshacer desde aqui."
 [merge.consequence.splits]
 one = "%d línea de transacción se moverá al destino."
 other = "%d líneas de transacción se moverán al destino."
-[merge.consequence.recons]
-one = "%d conciliación se moverá."
-other = "%d conciliaciones se moverán."
+[merge.consequence.reconciled_blocked]
+one = "%d línea del origen está conciliada y bloquea esta combinación. Anule la conciliación o reábrala primero."
+other = "%d líneas del origen están conciliadas y bloquean esta combinación. Anule la conciliación o reábralas primero."
 [merge.consequence.deactivate]
 other = "%s se desactivara (se conserva su historial)."
 [merge.confirm]
@@ -607,6 +607,8 @@ other = "Las subsidiarias del destino deben cubrir todas las del origen."
 other = "El destino no puede ser un marcador (tiene cuentas hijas)."
 [error.merge.into_inactive]
 other = "La cuenta de destino esta inactiva."
+[error.merge.source_reconciled]
+other = "La cuenta de origen tiene líneas conciliadas. Anule la conciliación o reábralas antes de combinar."
 [subsidiaries.title]
 other = "Subsidiarias"
 [subsidiaries.intro]

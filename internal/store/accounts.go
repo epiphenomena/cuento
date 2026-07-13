@@ -513,6 +513,19 @@ func (s *Store) SplitIDsForAccount(ctx context.Context, accountID int64) ([]int6
 	return ids, nil
 }
 
+// ReconciledSplitCount returns how many splits on an account are cleared against a
+// reconciliation (non-NULL reconciliation_id). The merge UI uses it to show, in the
+// consequences preview, how many reconciled splits would BLOCK the merge (the p22.5
+// block-guard rejects the merge when this is > 0); the store enforces the same guard
+// on write (ErrMergeSourceReconciled). Read; sqlc.
+func (s *Store) ReconciledSplitCount(ctx context.Context, accountID int64) (int, error) {
+	n, err := s.q.CountReconciledSplitsForAccount(ctx, accountID)
+	if err != nil {
+		return 0, fmt.Errorf("store: reconciled split count for account %d: %w", accountID, err)
+	}
+	return int(n), nil
+}
+
 // TreeRow is one account in tree order with its name resolved for the requested
 // lang (empty when that lang has no name -- the en->any fallback is p05.3).
 type TreeRow struct {

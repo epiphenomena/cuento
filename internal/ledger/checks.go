@@ -279,7 +279,20 @@ LEFT JOIN expense_report_lines_versions v
 WHERE v.id IS NULL OR v.op = 'delete'
    OR v.report_id IS NOT c.report_id OR v.account_id IS NOT c.account_id
    OR v.amount IS NOT c.amount OR v.fund_id IS NOT c.fund_id
-   OR v.program_id IS NOT c.program_id OR v.memo IS NOT c.memo`
+   OR v.program_id IS NOT c.program_id OR v.memo IS NOT c.memo
+UNION ALL
+-- reconciliations (p16.1 single-id twin; status flips open<->finalized, op='update'
+-- on finalize/reopen -- never hard-deleted, so a missing/'delete' latest version is
+-- the violation, mirroring the expense_reports block).
+SELECT 'reconciliations:' || CAST(c.id AS TEXT)
+FROM reconciliations c
+LEFT JOIN reconciliations_versions v
+  ON v.id = (SELECT id FROM reconciliations_versions x WHERE x.entity_id = c.id
+             ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
+WHERE v.id IS NULL OR v.op = 'delete'
+   OR v.account_id IS NOT c.account_id OR v.statement_date IS NOT c.statement_date
+   OR v.statement_balance IS NOT c.statement_balance OR v.currency IS NOT c.currency
+   OR v.status IS NOT c.status OR v.notes IS NOT c.notes`
 
 // --- Z4: PRAGMA foreign_key_check returns nothing ----------------------------
 // The pragma table-valued function yields one row per FK violation with the
@@ -313,6 +326,7 @@ FROM (
   UNION ALL SELECT 'user_report_grants_versions', id, change_id FROM user_report_grants_versions
   UNION ALL SELECT 'expense_reports_versions', id, change_id FROM expense_reports_versions
   UNION ALL SELECT 'expense_report_lines_versions', id, change_id FROM expense_report_lines_versions
+  UNION ALL SELECT 'reconciliations_versions', id, change_id FROM reconciliations_versions
 ) vr
 WHERE NOT EXISTS (SELECT 1 FROM changes ch WHERE ch.id = vr.change_id)`
 

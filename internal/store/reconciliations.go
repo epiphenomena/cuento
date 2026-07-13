@@ -300,6 +300,23 @@ func (s *Store) Reopen(ctx context.Context, reconID int64) error {
 			if later {
 				return ErrReconciliationNotLatest
 			}
+			// One OPEN recon per (account, currency) at a time (D13, p22.5). Reopening
+			// this finalized recon while ANOTHER open recon stands on the same
+			// (account, currency) would yield two open recons -- a state
+			// StartReconciliation refuses to create, with no cuento-check backstop. The
+			// recon being reopened is still 'finalized' here (SetReconciliationStatus
+			// runs below), so it is not counted; a positive count means a DIFFERENT open
+			// recon exists. Refuse with ErrOpenReconciliationExists (same sentinel
+			// StartReconciliation uses -- identical semantics).
+			open, err := q.CountOpenReconciliations(ctx, sqlc.CountOpenReconciliationsParams{
+				AccountID: recon.AccountID, Currency: recon.Currency,
+			})
+			if err != nil {
+				return fmt.Errorf("count open reconciliations for %d: %w", reconID, err)
+			}
+			if open > 0 {
+				return ErrOpenReconciliationExists
+			}
 			if err := q.SetReconciliationStatus(ctx, sqlc.SetReconciliationStatusParams{Status: "open", ID: reconID}); err != nil {
 				return fmt.Errorf("reopen reconciliation %d: %w", reconID, err)
 			}

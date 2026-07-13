@@ -25,10 +25,15 @@ import (
 // at a time BEFORE the merge still reconstructs the split on the SOURCE account;
 // after the merge it reconstructs it on dst.
 //
-// RECONCILIATIONS: repointing reconciliations from src to dst is DEFERRED to
-// p16.1 -- the reconciliations table and splits.reconciliation_id do not exist
-// yet (they arrive with p16.1). The // TODO(p16.1) below marks exactly where that
-// repoint belongs; see DECISIONS p08.5.
+// RECONCILIATIONS (p22.5 block-guard): full recon repointing from src to dst stays
+// backlog (a real design problem -- recons are per (account, currency); dst may hold
+// overlapping recons; the finalized opening chain). But the naive "repoint the split,
+// leave its reconciliation_id pointing at a src-account recon" is an INTEGRITY HOLE:
+// for an OPEN recon it leaves account_id=dst on a split whose recon has account_id=src
+// (Z8 fires); for a FINALIZED recon the 00014 split-lock trigger ABORTs the repoint
+// with a raw SQLite error. So MergeAccount REFUSES the merge (ErrMergeSourceReconciled,
+// a clean typed rejection) when src has ANY split with a non-NULL reconciliation_id --
+// unreconcile/reopen them first. See DECISIONS p22.5 and docs/deferred.md.
 
 // Merge sentinel errors handlers and tests branch on (errors.Is), wrapped with %w
 // at the call site so errors.Is sees them through the funnel.
@@ -52,6 +57,12 @@ var (
 	ErrMergeSubsetSubs = errors.New("store: merge destination's subsidiary set does not cover the source's")
 	// ErrMergeSelf: src and dst are the same account.
 	ErrMergeSelf = errors.New("store: cannot merge an account into itself")
+	// ErrMergeSourceReconciled: the SOURCE account has at least one split cleared
+	// against a reconciliation (non-NULL reconciliation_id, p22.5). Merging would
+	// repoint that split to dst while its recon stays on src -- Z8 for an open recon,
+	// a raw trigger ABORT for a finalized one. Refuse cleanly; unreconcile/reopen the
+	// affected reconciliation(s) first. Full recon repointing is backlog.
+	ErrMergeSourceReconciled = errors.New("store: the source account has reconciled splits; unreconcile or reopen them first")
 )
 
 // MergeAccount folds src into dst under ONE change (see the package-level doc
@@ -121,6 +132,20 @@ func (s *Store) MergeAccount(ctx context.Context, src, dst int64) error {
 				}
 			}
 
+			// Recon block-guard (p22.5): refuse the merge when src has ANY split
+			// cleared against a reconciliation. Repointing such a split to dst leaves
+			// it linked to a recon on the OLD src account -- Z8 fires (open recon) or
+			// the 00014 split-lock trigger ABORTs (finalized recon). Full recon
+			// repointing stays backlog; this closes the integrity hole cleanly. Checked
+			// inside fn on the tx-bound q (TOCTOU), before any write.
+			reconciled, err := q.CountReconciledSplitsForAccount(ctx, src)
+			if err != nil {
+				return fmt.Errorf("count reconciled splits on source %d: %w", src, err)
+			}
+			if reconciled > 0 {
+				return ErrMergeSourceReconciled
+			}
+
 			// Repoint every split on src to dst, versioning each op='update'.
 			// Capture the ids FIRST -- after the first repoint, a WHERE account_id
 			// lookup would confuse moved splits with dst's pre-existing ones.
@@ -141,10 +166,10 @@ func (s *Store) MergeAccount(ctx context.Context, src, dst int64) error {
 				}
 			}
 
-			// TODO(p16.1): repoint reconciliations from src to dst here. The
-			// reconciliations table and splits.reconciliation_id do not exist yet
-			// (they arrive with p16.1); recon-repointing lands with p16. See the
-			// package doc comment and DECISIONS p08.5.
+			// Reconciliations: full repointing from src to dst stays backlog (see the
+			// package doc comment). The block-guard above guarantees no split reaching
+			// this point carries a reconciliation_id, so the repoint is always safe
+			// (no Z8 violation, no split-lock-trigger abort). See DECISIONS p22.5.
 
 			// Deactivate src (active=0, op='update'). Inlined rather than calling
 			// the public DeactivateAccount so it rides the SAME change as the

@@ -3,9 +3,15 @@
 This is the single, authoritative list of everything in `cuento` that is **not
 done**, and why. It is compiled from the Phase 21 backlog, the tracked
 follow-ups, and a full-codebase grep for deferral markers, each verified against
-the current code (file/line refs given). It is a *register*, not a work order:
-p22.5 implements the genuinely low-effort items (see the last section); the rest
-stays documented backlog.
+the current code. It is a *register*, not a work order.
+
+**p22.5 update:** the genuinely low-effort integrity items are now landed —
+§2.1 (reopen-while-later-OPEN guard), §2.2 (account-merge reconciled-source
+block-guard; full recon repoint stays backlog), and the `reconciliations`
+Z3/Z5 integrity-coverage gap (§5 item 1) are RESOLVED; §2.4 (account-ledger
+currency-in-range) was investigated and reclassified as a non-issue (the drop
+cannot occur). Everything else remains documented backlog. Section/marker refs
+below are descriptive (not line-pinned), since the code has since shifted.
 
 Structure-only per DATA RULE 11 — no `fixtures/source/` values appear here.
 
@@ -42,27 +48,38 @@ deliberate scope boundary, not an oversight.
 Small, deliberately-scoped behaviors. Each was recorded as a design choice at
 its step; each is verified against the current code below.
 
-### 2.1 Reconciliation reopen while a later OPEN recon exists — **OPEN**
-`internal/store/reconciliations.go` — `Reopen` (~L272) and `StartReconciliation`
-(~L84).
+### 2.1 Reconciliation reopen while a later OPEN recon exists — **RESOLVED (p22.5)**
+`internal/store/reconciliations.go` — `Reopen`.
 
-`StartReconciliation` enforces at most one OPEN recon per `(account, currency)`
-(`CountOpenReconciliations`, L119). `Reopen` (p16.5) refuses to reopen a
-finalized recon when a **later FINALIZED** recon exists
-(`HasLaterFinalizedReconciliation`, L290 → `ErrReconciliationNotLatest`), to
-protect the opening chain. But `Reopen` does **not** check for a later **OPEN**
-recon on the same `(account, currency)`. So: with recon A finalized and a later
-recon B currently OPEN, reopening A yields **two OPEN recons** on the same
-`(account, currency)` — a state `StartReconciliation` would have refused to
-create. No `cuento check` Z-rule flags "two open recons" (the D13 single-open
-invariant is store-guard-only), so there is no integrity backstop; the fix must
-live in `Reopen`. See §5 (low-hanging).
+`Reopen` now ALSO refuses to reopen a finalized recon when ANOTHER OPEN recon
+stands on the same `(account, currency)` (a `CountOpenReconciliations` check
+reusing the existing `ErrOpenReconciliationExists` sentinel; the recon being
+reopened is still 'finalized' at the check so it is not self-counted). This
+closes the two-OPEN-recons state that `StartReconciliation`'s one-open guard
+would refuse to create and that no `cuento check` Z-rule catches (the D13
+single-open invariant is store-guard-only). The web `reconReopen` handler maps
+the sentinel to a 409. Covered by `TestReopenBlockedWhenOtherOpenExists` and the
+updated `TestReopenBlockedWhenLaterFinalizedExists` (whose p16.5 success
+assertion — reopening the earlier recon after reopening the later — was the
+two-opens bug and now asserts `ErrOpenReconciliationExists`). See DECISIONS p22.5.
 
-### 2.2 Account merge does not repoint reconciliations — **OPEN (stale-blocker)**
-`internal/store/merge.go` L28–31 (doc), L144 (`// TODO(p16.1): repoint
-reconciliations from src to dst`); `internal/web/merge.go` L17 (the preview says
-"0 reconciliations move"); `internal/store/merge_test.go` L137 (pending
-assertion). One logical item, four sites.
+### 2.2 Account merge does not repoint reconciliations — **GUARDED (p22.5); full repoint is backlog**
+`internal/store/merge.go` (doc + `MergeAccount` guard); `internal/web/merge.go`
+(422 mapping + preview text); `internal/store/merge_test.go`
+(`TestMergeBlockedSourceReconciled`).
+
+**Update (p22.5):** the integrity hole is CLOSED with a block-guard.
+`MergeAccount` now REFUSES the merge (`ErrMergeSourceReconciled`, via
+`CountReconciledSplitsForAccount`) when the source account has ANY split with a
+non-NULL `reconciliation_id` — checked inside the write funnel before any
+mutation, so a rejected merge writes nothing and `ledger.Check` stays clean. The
+web merge handler maps it to a clean 422 field error (not a 500 / not a raw
+SQLite abort), and the preview shows the count of reconciled splits blocking the
+merge instead of the old misleading "0 reconciliations move". **Full recon
+repointing (the correct merge-the-chains behavior) remains BACKLOG** — see the
+"real design problem" note below and the §5 "Real backlog" list.
+
+The ORIGINAL analysis (why the guard is needed), preserved:
 
 `MergeAccount` repoints every split from src to dst
 (`RepointSplitAccount` + op='update' version) but leaves each split's
@@ -98,18 +115,23 @@ result to `money.Parse(..., money.NumberPlain)`, which expects a dot decimal. So
 use dot-decimal, so this is deferred, not fixed. A locale-aware amount parser is
 the real fix. Real backlog (a genuine parser branch + config, with its own tests).
 
-### 2.4 Account-ledger report: currency-in-range-only section dropped — **OPEN**
-`internal/reports/account_ledger.go` L98–100.
+### 2.4 Account-ledger report: currency-in-range-only section dropped — **RESOLVED / non-issue (p22.5: the drop cannot occur)**
+`internal/reports/account_ledger.go` (`unionCurrencies(openByCcy, closeByCcy)`).
 
-The per-currency section set is `unionCurrencies(openByCcy, closeByCcy)` — the
-currencies the account holds at **opening OR closing**. An account that had
-in-range activity in a currency but nets to **zero at both** the opening (day
-before `From`) and the closing (`To`) — e.g. a currency fully received and fully
-spent inside the range — would have **no section**, so those in-range lines drop
-from the report. Edge case (requires a currency to open and close at exactly
-zero while moving mid-range); deferred. The fix is to union in the currencies
-appearing in the in-range `DrillSplits` set. Low-risk but not trivially free (a
-third currency source + a golden refresh) → see §5.
+Investigated in p22.5 and found to be a NON-ISSUE — the feared drop cannot
+happen. The section set is `union(opening, closing)`, and both maps come from
+`SubtreeBalancesAsOf`, which has **no `HAVING SUM<>0`**: it emits a zero-balance
+row for every `(account, currency)` with ANY split on-or-before the as-of date.
+A currency with in-range activity therefore **always** appears at the CLOSING
+endpoint (as-of `To`) with balance 0 — the in-range currency set is provably a
+**subset** of the closing set, so `union(opening, closing)` already contains it
+and its section renders. The p22.4 note assumed a net-zero currency is *absent*
+from the closing map; it is actually *present as a zero row*. Any "union in the
+range currencies" code would be a no-op (cannot bite on revert → violates the
+TDD rule), so **no code change was made**. A labeled regression guard
+(`TestAccountLedgerMidRangeOnlyCurrency`) pins the correct current behavior and
+would catch a future `SubtreeBalancesAsOf` change that dropped zero rows.
+`make golden` unchanged. See DECISIONS p22.5.
 
 ### 2.5 Expense-report reviewer: restricted-fund counter-side prefill — **OPEN (by design)**
 `internal/web/expenses_review.go` — `prefillExpenseRows` (~L229); recorded in
@@ -144,10 +166,10 @@ Full grep of the codebase for `TODO`/`FIXME`/`XXX`/`HACK`/`deferred`/`stub`/
 
 | Marker | Location | Status / note |
 | --- | --- | --- |
-| `TODO(p16.1): repoint reconciliations from src to dst` | `internal/store/merge.go:144` | **OPEN** — see §2.2. Blocker (reconciliations table) has landed; the repoint was never implemented. |
-| "reconciliations from src to dst is DEFERRED to p16.1" (doc) | `internal/store/merge.go:28` | **OPEN** — same item, doc-comment form. |
-| pending recon-repoint assertion | `internal/store/merge_test.go:137` | **OPEN** — same item; the test asserts split-repointing now, recon-repoint tagged for p16. |
-| "0 reconciliations move (deferred to p16)" (preview text) | `internal/web/merge.go:17` | **OPEN** — same item; the merge preview states 0 recons move. |
+| `TODO(p16.1): repoint reconciliations from src to dst` | `internal/store/merge.go` | **RESOLVED (p22.5): guarded.** TODO removed; the merge now refuses a reconciled source (`ErrMergeSourceReconciled`) rather than repointing. Full repoint stays BACKLOG (§2.2, §6). |
+| merge doc comment (recon repoint) | `internal/store/merge.go` | **RESOLVED (p22.5):** rewritten to describe the block-guard; full repoint noted as backlog. |
+| pending recon-repoint assertion | `internal/store/merge_test.go` | **RESOLVED (p22.5):** replaced by `TestMergeBlockedSourceReconciled` (the guard is now the tested behavior). |
+| "0 reconciliations move (deferred to p16)" (preview text) | `internal/web/merge.go` | **RESOLVED (p22.5):** preview now shows the reconciled-split count that BLOCKS the merge, not "0 recons move". |
 
 ### Reconciled markers found but **NOT** open (resolved or non-issues)
 
@@ -212,11 +234,17 @@ before cutover. This is a deliberate known-warning, not a bug.
 
 Honest triage. "Low-hanging" = small, localized, low-risk, self-contained test.
 Ranked by recommended order (effort estimate in parentheses). The recommendation
-is p22.5's input; the human reviews before implementing.
+was p22.5's input.
+
+**p22.5 OUTCOME:** items 1–3 IMPLEMENTED (see §2.1, §2.2, and the resolved
+markers in §3); item 4 INVESTIGATED and reclassified as a non-issue (§2.4 — the
+drop cannot occur), no code change, a regression guard added. Items 5–6 remain
+optional/by-design. The originally-drafted recommendations are kept below for the
+record.
 
 ### Recommended for p22.5 (genuinely low-effort / low-risk)
 
-1. **`reconciliations_versions` into Z3 and Z5** — *(S, ~30 min)*
+1. **`reconciliations_versions` into Z3 and Z5** — *(S, ~30 min)* — **DONE (p22.5).**
    **VERIFIED GAP.** `reconciliations_versions` exists (00014) and is written by
    the store (`InsertReconciliationVersion`), but is **absent** from both integrity
    checks: `checks.go` Z3 enumerates subsidiaries/programs/accounts/account_names/
@@ -231,7 +259,7 @@ is p22.5's input; the human reviews before implementing.
    reconciliations_versions` to Z5, plus a negative test. Pure integrity-coverage
    fix, no behavior change.
 
-2. **Reopen-while-later-OPEN guard** — *(S, ~30–45 min)*
+2. **Reopen-while-later-OPEN guard** — *(S, ~30–45 min)* — **DONE (p22.5), reusing `ErrOpenReconciliationExists`.**
    Add an "another OPEN recon exists on this `(account, currency)`" check to
    `Reopen` (§2.1), mirroring `StartReconciliation`'s `CountOpenReconciliations`
    (a new sentinel, e.g. reuse/extend `ErrOpenReconciliationExists`), plus a
@@ -239,7 +267,7 @@ is p22.5's input; the human reviews before implementing.
    so this is a store-guard-only fix — worth doing precisely because nothing else
    catches it.
 
-3. **Merge with recon'd splits — block-guard slice only** — *(S–M, ~1 hr)*
+3. **Merge with recon'd splits — block-guard slice only** — *(S–M, ~1 hr)* — **DONE (p22.5); full repoint stays backlog (§5 "Real backlog").**
    NOT full repointing. Add a clean pre-write guard to `MergeAccount`: refuse the
    merge (typed sentinel, e.g. `ErrMergeReconciledSplits`) when src has any split
    with a non-NULL `reconciliation_id`. This converts today's two bad outcomes
@@ -249,11 +277,12 @@ is p22.5's input; the human reviews before implementing.
    only if the human agrees blocking is acceptable v1 behavior; the full repoint
    stays backlog.
 
-4. **Account-ledger currency-in-range section** — *(S–M, ~1 hr incl. golden)*
-   Union the in-range `DrillSplits` currencies into the section set (§2.4) so a
-   zero-at-both-ends currency with mid-range activity still renders. Localized to
-   `account_ledger.go`; needs a golden refresh + a targeted test. Low-risk but not
-   free.
+4. **Account-ledger currency-in-range section** — *(S–M, ~1 hr incl. golden)* — **RECLASSIFIED (p22.5): non-issue, no code (§2.4).**
+   The drafted fix (union the in-range `DrillSplits` currencies into the section
+   set) is provably a NO-OP: `SubtreeBalancesAsOf` emits a zero-balance row for
+   every in-range currency, so the closing set already contains it — the feared
+   drop cannot occur. Shipped as a regression guard only, no code change, golden
+   unchanged.
 
 ### Optional (cosmetic / by-design; defer unless the human wants them)
 

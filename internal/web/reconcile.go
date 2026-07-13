@@ -546,9 +546,12 @@ func (s *server) reconReopen(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.Reopen(s.actorCtx(ctx), id); err != nil {
 		switch {
 		case errors.Is(err, store.ErrReconciliationNotFinalized),
-			errors.Is(err, store.ErrReconciliationNotLatest):
-			// A later finalized recon must be reopened first (p16.5, in-order): a plain
-			// 409, matching the existing not-finalized conflict -- never a 500.
+			errors.Is(err, store.ErrReconciliationNotLatest),
+			errors.Is(err, store.ErrOpenReconciliationExists):
+			// A later finalized recon must be reopened first (p16.5, in-order), or a
+			// later OPEN recon already stands on this (account, currency) (p22.5, one
+			// open at a time): a plain 409 conflict, matching the not-finalized case --
+			// never a 500.
 			http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
 			return
 		case errors.Is(err, store.ErrReconciliationNotFound):

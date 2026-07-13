@@ -14,9 +14,11 @@ import (
 //
 //   1. GET  /accounts/merge  -> the merge form (pick a source leaf + a dest leaf).
 //   2. POST /accounts/merge WITHOUT confirm -> a CONSEQUENCES PREVIEW: how many
-//      splits will repoint, that 0 reconciliations move (deferred to p16), and the
-//      destination-must-cover-source-subs rule -- plus a Confirm button. This
-//      branch performs ZERO writes (it only reads the split count).
+//      splits will repoint, how many reconciled splits (if any) BLOCK the merge
+//      (p22.5 block-guard: a source with reconciled splits is refused until they are
+//      unreconciled/reopened -- full recon repointing is backlog), and the
+//      destination-must-cover-source-subs rule -- plus a Confirm button. This branch
+//      performs ZERO writes (it only reads the split counts).
 //   3. POST /accounts/merge WITH confirm=1 -> store.MergeAccount. On a typed store
 //      error the handler maps the sentinel to an i18n KEY and re-renders the form
 //      region at 422 (the p10.3 convention); the store validates-then-writes
@@ -48,16 +50,18 @@ type mergeForm struct {
 }
 
 // mergePreview is the consequences model rendered before the confirm step: the
-// resolved src/dst names, the number of splits that will repoint, and the count of
-// reconciliations that will move (0 until p16). The template turns these into the
-// human-readable summary + a Confirm control that re-POSTs with confirm=1.
+// resolved src/dst names, the number of splits that will repoint, and the number of
+// reconciled splits on the source that would BLOCK the merge (p22.5 block-guard). The
+// template turns these into the human-readable summary + a Confirm control that
+// re-POSTs with confirm=1; when ReconciledCount > 0 it shows the blocking note (the
+// store rejects the confirm with ErrMergeSourceReconciled -> 422).
 type mergePreview struct {
-	Src        int64
-	Dst        int64
-	SrcName    string
-	DstName    string
-	SplitCount int
-	ReconCount int // 0 for now (p16.1 repoints reconciliations)
+	Src             int64
+	Dst             int64
+	SrcName         string
+	DstName         string
+	SplitCount      int
+	ReconciledCount int // reconciled splits on src that block the merge (p22.5)
 }
 
 // mergeFormPartial handles GET /accounts/merge (TxnWrite): the merge form, swapped
@@ -134,13 +138,18 @@ func (s *server) merge(w http.ResponseWriter, r *http.Request) {
 			s.serverError(w)
 			return
 		}
+		reconciled, err := s.store.ReconciledSplitCount(ctx, src)
+		if err != nil {
+			s.serverError(w)
+			return
+		}
 		preview := mergePreview{
-			Src:        src,
-			Dst:        dst,
-			SrcName:    s.accountName(ctx, src, langOf(ctx)),
-			DstName:    s.accountName(ctx, dst, langOf(ctx)),
-			SplitCount: len(ids),
-			ReconCount: 0, // p16.1 will repoint reconciliations; today none move.
+			Src:             src,
+			Dst:             dst,
+			SrcName:         s.accountName(ctx, src, langOf(ctx)),
+			DstName:         s.accountName(ctx, dst, langOf(ctx)),
+			SplitCount:      len(ids),
+			ReconciledCount: reconciled, // > 0 blocks the merge (p22.5 block-guard).
 		}
 		s.render(w, r, http.StatusOK, "merge-preview", preview)
 		return
@@ -175,10 +184,11 @@ func (s *server) renderMergeFormError(w http.ResponseWriter, r *http.Request, er
 }
 
 // mergeErrorField maps each store merge sentinel to a (form field, i18n key) pair.
-// ALL six sentinels are mapped so no legitimate validation failure falls through to
-// the 500 path (mirrors accountErrorField). The field drives autofocus: coverage /
-// type / self / leaf problems point at the source select; placeholder / inactive
-// point at the destination.
+// ALL merge sentinels are mapped so no legitimate validation failure falls through to
+// the 500 path (mirrors accountErrorField) -- the p22.5 reconciled-source guard maps
+// to a clean 422 here rather than a 500. The field drives autofocus: coverage / type /
+// self / leaf / reconciled-source problems point at the source select; placeholder /
+// inactive point at the destination.
 func mergeErrorField(err error) (field, key string) {
 	switch {
 	case errors.Is(err, store.ErrMergeSelf):
@@ -189,6 +199,8 @@ func mergeErrorField(err error) (field, key string) {
 		return "src", "error.merge.cross_type_class"
 	case errors.Is(err, store.ErrMergeSubsetSubs):
 		return "src", "error.merge.subset_subs"
+	case errors.Is(err, store.ErrMergeSourceReconciled):
+		return "src", "error.merge.source_reconciled"
 	case errors.Is(err, store.ErrMergeIntoPlaceholder):
 		return "dst", "error.merge.into_placeholder"
 	case errors.Is(err, store.ErrMergeIntoInactive):

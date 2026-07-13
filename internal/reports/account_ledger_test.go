@@ -28,6 +28,7 @@ import (
 
 	"cuento/internal/reports"
 	"cuento/internal/store"
+	"cuento/internal/testutil"
 	"cuento/internal/testutil/fixture"
 )
 
@@ -388,6 +389,79 @@ func TestAccountLedgerCSVParses(t *testing.T) {
 	}
 	if sum != -500_000 {
 		t.Errorf("csv amount re-sum = %d, want -500,000", sum)
+	}
+}
+
+// TestAccountLedgerMidRangeOnlyCurrency is a REGRESSION GUARD (p22.5). deferred.md 2.4
+// feared that a currency netting to ZERO at BOTH the opening (day before From) and the
+// closing (To) but with MID-RANGE activity would drop its section (the section set is
+// union(opening, closing)). Investigation showed this cannot happen: SubtreeBalancesAsOf
+// has no HAVING SUM<>0, so it emits a zero-balance row for every (account, currency)
+// with ANY split on-or-before the as-of date. A currency with in-range activity thus
+// always appears at the CLOSING endpoint (as-of To) with balance 0, so its section
+// renders. This test PINS that correct current behavior (no code change was needed --
+// the in-range currency set is always a subset of the closing set); it would catch a
+// future change that drops zero-balance rows. Built on a bespoke store inline: a Cash
+// account receives EUR mid-range then fully spends it inside the range, so Cash opens
+// and closes at 0 EUR yet moves +/-1,000 EUR mid-range.
+func TestAccountLedgerMidRangeOnlyCurrency(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := store.New(d)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// Root subsidiary is seeded id 1 (migration 00004); EUR is a seeded currency.
+	const rootSub = int64(1)
+	mkAcct := func(name, typ string) int64 {
+		t.Helper()
+		id, err := s.CreateAccount(ctx, store.CreateAccountInput{
+			Type: typ, DefaultCurrency: "EUR", Names: map[string]string{"en": name},
+			Subsidiaries: []int64{rootSub},
+		})
+		if err != nil {
+			t.Fatalf("CreateAccount(%s): %v", name, err)
+		}
+		return id
+	}
+	cash := mkAcct("Cash EUR", "asset")
+	equity := mkAcct("Opening Equity", "equity")
+
+	// Receive 1,000 EUR into Cash (Cash +, equity -), then spend it all back out, both
+	// INSIDE [2025-02-01, 2025-11-30]. Cash nets to 0 EUR at both endpoints of that range.
+	post := func(date string, cashAmt int64) {
+		t.Helper()
+		if _, err := s.PostTransaction(ctx, store.PostTransactionInput{
+			Date: date, SubsidiaryID: rootSub, Currency: "EUR",
+			Splits: []store.SplitInput{
+				{AccountID: cash, Amount: cashAmt, Position: 0},
+				{AccountID: equity, Amount: -cashAmt, Position: 1},
+			},
+		}); err != nil {
+			t.Fatalf("post %s: %v", date, err)
+		}
+	}
+	post("2025-03-01", 100_000)  // receive 1,000 EUR
+	post("2025-09-01", -100_000) // spend 1,000 EUR back out
+
+	rep := accountLedgerReport(t)
+	p := reports.Params{Scope: rootSub, Account: cash, From: "2025-02-01", To: "2025-11-30", Lang: "en"}
+	table, err := rep.Run(ctx, reports.NewToolkit(s, p), p)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	// The EUR section renders: opening 0, two data lines, closing 0, identity holds.
+	if open := ledgerOpening(t, table, "EUR"); open != 0 {
+		t.Errorf("EUR opening = %d, want 0", open)
+	}
+	if close := ledgerClosing(t, table, "EUR"); close != 0 {
+		t.Errorf("EUR closing = %d, want 0", close)
+	}
+	lines := ledgerDataRows(table)
+	if len(lines) != 2 {
+		t.Fatalf("in-range EUR lines = %d, want 2 (the mid-range receive + spend)", len(lines))
+	}
+	if sum := ledgerLineAmountSum(table, "EUR"); sum != 0 {
+		t.Errorf("EUR Σlines = %d, want 0", sum)
 	}
 }
 

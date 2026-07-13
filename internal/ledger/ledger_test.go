@@ -434,12 +434,35 @@ func TestZ8Z9CleanRecon(t *testing.T) {
 	// A CORRECT finalized recon must trip neither Z8 nor Z9. Recon on checkingUS in
 	// USD; clear the checkingUS split of txPlain (amount -10000); statement_balance
 	// = -10000 (opening 0 + cleared -10000). Account/currency match (Z8 clean) and
-	// the chain balances (Z9 clean). Build it OPEN, clear, then finalize.
-	exec(t, w.d, `INSERT INTO reconciliations (account_id, statement_date, statement_balance, currency, status)
-		VALUES (?, '2025-03-31', -10000, 'USD', 'open')`, w.checkingUS)
-	exec(t, w.d, `UPDATE splits SET reconciliation_id = (SELECT MAX(id) FROM reconciliations)
-		WHERE account_id = ? AND transaction_id = ?`, w.checkingUS, w.txPlain)
-	exec(t, w.d, `UPDATE reconciliations SET status = 'finalized' WHERE id = (SELECT MAX(id) FROM reconciliations)`)
+	// the chain balances (Z9 clean). Built THROUGH THE STORE (Start -> clear ->
+	// Finalize) so the reconciliations version twin exists -- now that Z3 covers
+	// reconciliations (p22.5), a raw-inserted recon with no version row would trip Z3.
+	// checkingUS must be reconcilable for StartReconciliation; the world builds it as a
+	// plain asset, so flip the flag + append a matching account version (keep Z3 clean).
+	exec(t, w.d, `UPDATE accounts SET reconcilable = 1 WHERE id = ?`, w.checkingUS)
+	exec(t, w.d, `INSERT INTO accounts_versions
+		(entity_id, change_id, valid_from, op, parent_id, type, default_currency,
+		 functional_class, default_program_id, form990_code, intercompany, reconcilable,
+		 active, sort_order, created_at)
+		SELECT id, (SELECT MAX(id) FROM changes), (SELECT MAX(at) FROM changes), 'update',
+		 parent_id, type, default_currency, functional_class, default_program_id,
+		 form990_code, intercompany, reconcilable, active, sort_order, created_at
+		FROM accounts WHERE id = ?`, w.checkingUS)
+	chkSplit := int64(0)
+	if err := w.d.QueryRow(`SELECT id FROM splits WHERE account_id = ? AND transaction_id = ?`,
+		w.checkingUS, w.txPlain).Scan(&chkSplit); err != nil {
+		t.Fatalf("find checking split: %v", err)
+	}
+	reconID, err := w.s.StartReconciliation(mutCtx(), w.checkingUS, "USD", "2025-03-31", -10000)
+	if err != nil {
+		t.Fatalf("StartReconciliation: %v", err)
+	}
+	if err := w.s.SetSplitReconciled(mutCtx(), reconID, chkSplit, true); err != nil {
+		t.Fatalf("SetSplitReconciled: %v", err)
+	}
+	if err := w.s.Finalize(mutCtx(), reconID); err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
 	got := rulesOf(checkAll(t, w.d))
 	if got["Z8"] {
 		t.Errorf("Z8 fired on a valid cleared split; got %v", keys(got))
@@ -735,5 +758,61 @@ func TestBudgetZ5Bites(t *testing.T) {
 	budget, _, _ := mkBudgetData(t, w)
 	exec(t, w.d, `PRAGMA foreign_keys=OFF`)
 	exec(t, w.d, `UPDATE budgets_versions SET change_id = 987654 WHERE entity_id = ?`, budget)
+	assertFlags(t, w.d, "Z5")
+}
+
+// --- p16.1 (wired p22.5): the reconciliations versioned twin enters Z3/Z5 --------
+
+// mkReconData starts an OPEN reconciliation on a fresh reconcilable account through
+// the store, so reconciliations + reconciliations_versions hold a real
+// snapshot-from-live row (op='create'). An open recon is enough to exercise the new
+// Z3/Z5 blocks -- no finalize is needed (nothing is finalized, so the 00014
+// split-lock trigger never fires on the Z3 tamper). Returns the reconciliation id.
+func mkReconData(t *testing.T, w *world) int64 {
+	t.Helper()
+	acctID, err := w.s.CreateAccount(mutCtx(), store.CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD",
+		Names: map[string]string{"en": "Bank Reconcilable"}, Subsidiaries: []int64{w.subUS},
+		Reconcilable: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount reconcilable: %v", err)
+	}
+	reconID, err := w.s.StartReconciliation(mutCtx(), acctID, "USD", "2025-01-31", 0)
+	if err != nil {
+		t.Fatalf("StartReconciliation: %v", err)
+	}
+	return reconID
+}
+
+// TestReconciliationTablesCheckClean: an open reconciliation created through the
+// store keeps the full suite clean -- the new Z3 reconciliations block and the new
+// Z5 reconciliations_versions entry pass on valid, versioned data (a silent gap
+// before p22.5 left this twin unchecked entirely).
+func TestReconciliationTablesCheckClean(t *testing.T) {
+	w := newWorld(t)
+	mkReconData(t, w)
+	assertClean(t, w.d)
+}
+
+// TestReconciliationZ3Bites: tampering the live reconciliations row so it diverges
+// from its latest version snapshot must trip Z3 -- proving the new single-id block
+// is wired (before p22.5 this corruption went undetected).
+func TestReconciliationZ3Bites(t *testing.T) {
+	w := newWorld(t)
+	reconID := mkReconData(t, w)
+	// Raw UPDATE the live balance without appending a version -> live != snapshot.
+	exec(t, w.d, `UPDATE reconciliations SET statement_balance = statement_balance + 1 WHERE id = ?`, reconID)
+	assertFlags(t, w.d, "Z3")
+}
+
+// TestReconciliationZ5Bites: a reconciliations version row pointing at a
+// non-existent change is audit corruption Z5 must catch -- proving
+// reconciliations_versions is in the Z5 set.
+func TestReconciliationZ5Bites(t *testing.T) {
+	w := newWorld(t)
+	reconID := mkReconData(t, w)
+	exec(t, w.d, `PRAGMA foreign_keys=OFF`)
+	exec(t, w.d, `UPDATE reconciliations_versions SET change_id = 987654 WHERE entity_id = ?`, reconID)
 	assertFlags(t, w.d, "Z5")
 }

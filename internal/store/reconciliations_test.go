@@ -600,12 +600,14 @@ func TestVoidOpenReconciledTransactionAllowed(t *testing.T) {
 
 // --- p16.5 reopen in-order guard -----------------------------------------
 
-// TestReopenBlockedWhenLaterFinalizedExists proves Reopen refuses to reopen a
-// finalized recon when a LATER finalized recon exists on the same (account,
-// currency) -- reopening out of order corrupts the opening chain (Gap 2). Two
-// finalized recons E (earlier) and L (later): Reopen(E) -> ErrReconciliationNotLatest;
-// Reopen(L) succeeds; then Reopen(E) succeeds (L no longer finalized). A single
-// finalized recon reopens fine.
+// TestReopenBlockedWhenLaterFinalizedExists proves BOTH reopen guards on the same
+// (account, currency). Two finalized recons E (earlier) and L (later):
+//   - Reopen(E) while L is finalized -> ErrReconciliationNotLatest (Gap 2, in-order:
+//     reopening out of order corrupts the opening chain).
+//   - Reopen(L) succeeds (L is the latest); L is now OPEN.
+//   - Reopen(E) is now blocked by the p22.5 later-OPEN guard ->
+//     ErrOpenReconciliationExists (reopening E would yield TWO open recons, a state
+//     StartReconciliation refuses; before p22.5 this silently produced two opens).
 func TestReopenBlockedWhenLaterFinalizedExists(t *testing.T) {
 	e := newReconEnv(t)
 	ctx := mutCtx()
@@ -662,13 +664,87 @@ func TestReopenBlockedWhenLaterFinalizedExists(t *testing.T) {
 		t.Errorf("recon E status after blocked reopen = %q, want finalized", got.Status)
 	}
 
-	// Reopening the LATEST finalized recon succeeds.
+	// Reopening the LATEST finalized recon succeeds. L is now OPEN.
 	if err := e.s.Reopen(ctx, reconL); err != nil {
 		t.Fatalf("reopen latest: %v", err)
 	}
-	// Now E is the latest finalized -> reopen succeeds.
-	if err := e.s.Reopen(ctx, reconE); err != nil {
-		t.Fatalf("reopen E after L reopened: %v", err)
+	// E is now the latest FINALIZED, so the in-order guard clears -- but L is now the
+	// one OPEN recon on this (account, currency), so reopening E is blocked by the
+	// later-OPEN guard (p22.5): reopening it would leave two open recons. (Before
+	// p22.5 this reopen SUCCEEDED, silently producing two open recons.)
+	if err := e.s.Reopen(ctx, reconE); !errors.Is(err, ErrOpenReconciliationExists) {
+		t.Fatalf("reopen E while L open: err = %v, want ErrOpenReconciliationExists", err)
+	}
+	// E stays finalized (the rejected reopen rolled back).
+	if got, _ := e.s.GetReconciliation(ctx, reconE); got.Status != "finalized" {
+		t.Errorf("recon E status after blocked reopen = %q, want finalized", got.Status)
+	}
+}
+
+// TestReopenBlockedWhenOtherOpenExists proves the p22.5 later-OPEN guard directly and
+// in isolation from the in-order chain guard. A finalized recon E plus a LATER recon
+// left OPEN on the same (account, currency): Reopen(E) is rejected with
+// ErrOpenReconciliationExists (nothing LATER is finalized, so the in-order guard does
+// not fire -- only the new later-OPEN guard). With NO other open recon, Reopen(E)
+// succeeds.
+func TestReopenBlockedWhenOtherOpenExists(t *testing.T) {
+	e := newReconEnv(t)
+	ctx := mutCtx()
+
+	txn, err := e.s.PostTransaction(ctx, PostTransactionInput{
+		Date: "2026-01-10", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: e.expense, Amount: 100_000, Position: 0},
+			{AccountID: e.checking, Amount: -100_000, Position: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	chkID := checkingSplitID(t, e.d, txn, e.checking)
+
+	// E (earlier): opening 0 + cleared -100,000 == statement -100,000; finalize it.
+	reconE, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-01-31", -100_000)
+	if err != nil {
+		t.Fatalf("start E: %v", err)
+	}
+	if err := e.s.SetSplitReconciled(ctx, reconE, chkID, true); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if err := e.s.Finalize(ctx, reconE); err != nil {
+		t.Fatalf("finalize E: %v", err)
+	}
+
+	// A LATER recon on the same (account, currency), left OPEN (never finalized), so
+	// the in-order guard cannot fire when we reopen E -- only the later-OPEN guard.
+	reconLater, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-02-28", -100_000)
+	if err != nil {
+		t.Fatalf("start later open: %v", err)
+	}
+
+	// Reopen(E) is blocked: a later OPEN recon stands, so reopening E would yield two
+	// open recons on the same (account, currency).
+	if err := e.s.Reopen(ctx, reconE); !errors.Is(err, ErrOpenReconciliationExists) {
+		t.Fatalf("reopen E while later open exists: err = %v, want ErrOpenReconciliationExists", err)
+	}
+	// E stays finalized (the rejected reopen rolled back); the books stay clean.
+	if got, _ := e.s.GetReconciliation(ctx, reconE); got.Status != "finalized" {
+		t.Errorf("recon E status after blocked reopen = %q, want finalized", got.Status)
+	}
+	assertLedgerClean(t, e.d)
+
+	// Finalize the later recon (opening -100,000 + cleared 0 == statement -100,000) so
+	// NO open recon stands. It is now the latest finalized, so reopen IT first (chain
+	// guard), which leaves E the only finalized recon and no open recon standing.
+	if err := e.s.Finalize(ctx, reconLater); err != nil {
+		t.Fatalf("finalize later: %v", err)
+	}
+	if err := e.s.Reopen(ctx, reconLater); err != nil {
+		t.Fatalf("reopen later (now latest): %v", err)
+	}
+	// Now reconLater is OPEN again -- so E is STILL blocked by the later-OPEN guard.
+	if err := e.s.Reopen(ctx, reconE); !errors.Is(err, ErrOpenReconciliationExists) {
+		t.Fatalf("reopen E while later reopened: err = %v, want ErrOpenReconciliationExists", err)
 	}
 }
 

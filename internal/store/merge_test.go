@@ -134,9 +134,90 @@ func TestMergeRepointsSplitsAndRecons(t *testing.T) {
 		}
 	}
 
-	// TODO(p16.1): once reconciliations exist, assert every reconciliation on src
-	// is repointed to dst here. The recon table / splits.reconciliation_id do not
-	// exist yet (p16.1); the split repointing is what this test asserts now.
+	// Recon repointing itself stays backlog (p22.5): a merge is REFUSED when src has
+	// reconciled splits (TestMergeBlockedSourceReconciled). This happy-path merge has
+	// no reconciled splits, so the block-guard never fires and the repoint runs.
+}
+
+// TestMergeBlockedSourceReconciled proves the p22.5 recon block-guard: merging a
+// source account that has a split cleared against a reconciliation is REFUSED with
+// ErrMergeSourceReconciled, writes nothing (no new change), and leaves the ledger
+// clean (the merge did not happen). A source with NO reconciled splits still merges.
+func TestMergeBlockedSourceReconciled(t *testing.T) {
+	e := newTxnEnv(t)
+	ctx := mutCtx()
+
+	// A reconcilable ASSET source + an asset destination (same type, US sub). Merge
+	// asset->asset so the checking counter-side is not what we reconcile.
+	srcBank, err := e.s.CreateAccount(ctx, CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Bank Src"),
+		Subsidiaries: []int64{e.subUS}, Reconcilable: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount srcBank: %v", err)
+	}
+	dstBank := mkAcct(t, e.s, "asset", "Bank Dst", []int64{e.subUS}, nil, nil)
+
+	// A balanced txn touching srcBank: srcBank +10,000 / checking -10,000.
+	txnID, err := e.s.PostTransaction(ctx, PostTransactionInput{
+		Date: "2026-01-10", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: srcBank, Amount: 10_000, Position: 0},
+			{AccountID: e.checking, Amount: -10_000, Position: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+	// Clear the srcBank split against an OPEN reconciliation on srcBank.
+	var bankSplit int64
+	if err := e.d.QueryRow(`SELECT id FROM splits WHERE transaction_id = ? AND account_id = ?`, txnID, srcBank).Scan(&bankSplit); err != nil {
+		t.Fatalf("find bank split: %v", err)
+	}
+	reconID, err := e.s.StartReconciliation(ctx, srcBank, "USD", "2026-01-31", 10_000)
+	if err != nil {
+		t.Fatalf("StartReconciliation: %v", err)
+	}
+	if err := e.s.SetSplitReconciled(ctx, reconID, bankSplit, true); err != nil {
+		t.Fatalf("SetSplitReconciled: %v", err)
+	}
+
+	// Merge srcBank -> dstBank is REFUSED (src has a reconciled split).
+	before := countChanges(t, e.d)
+	if err := e.s.MergeAccount(ctx, srcBank, dstBank); !errors.Is(err, ErrMergeSourceReconciled) {
+		t.Fatalf("MergeAccount: err = %v, want ErrMergeSourceReconciled", err)
+	}
+	// No partial mutation: no new change, the split stays on srcBank, src stays active.
+	if n := countChanges(t, e.d); n != before {
+		t.Errorf("changes = %d, want %d (rejected merge leaves no trace)", n, before)
+	}
+	if got := liveSplitAccount(t, e.d, bankSplit); got != srcBank {
+		t.Errorf("split account = %d, want srcBank %d (merge did not run)", got, srcBank)
+	}
+	if a := accountActive(t, e.d, srcBank); a != 1 {
+		t.Errorf("srcBank active = %d, want 1 (not deactivated)", a)
+	}
+	// The books stay integrity-clean -- the merge did not create a Z8 hole.
+	vs, err := ledger.Check(context.Background(), e.d)
+	if err != nil {
+		t.Fatalf("ledger.Check: %v", err)
+	}
+	for _, v := range vs {
+		if v.Severity == ledger.Error {
+			t.Errorf("post-reject integrity error: %s: %s", v.Rule, v.Detail)
+		}
+	}
+
+	// Unreconcile the split; now the same merge SUCCEEDS (no reconciled splits left).
+	if err := e.s.SetSplitReconciled(ctx, reconID, bankSplit, false); err != nil {
+		t.Fatalf("unreconcile: %v", err)
+	}
+	if err := e.s.MergeAccount(ctx, srcBank, dstBank); err != nil {
+		t.Fatalf("MergeAccount after unreconcile: %v", err)
+	}
+	if got := liveSplitAccount(t, e.d, bankSplit); got != dstBank {
+		t.Errorf("split account = %d, want dstBank %d (merge ran)", got, dstBank)
+	}
 }
 
 // --- validations (each Blocked test satisfies EVERY other constraint so only
