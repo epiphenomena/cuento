@@ -46,7 +46,8 @@ type navEntry struct {
 // links) while being trivially appendable.
 func navSections() []navEntry {
 	return []navEntry{
-		{"nav.home", "/", AnyUser},
+		// p23.8: the brand logo is "home" (-> the chart of accounts); no separate
+		// Home entry. Accounts leads the nav and is the landing.
 		{"nav.accounts", "/accounts", TxnRead},
 		{"nav.funds", "/funds", TxnRead},
 		{"nav.programs", "/programs", TxnRead},
@@ -97,9 +98,10 @@ func (s *server) visibleNav(ctx context.Context, u *store.CurrentUser, currentPa
 			continue
 		}
 		out = append(out, navItem{
-			Label:   i18n.T(lang, e.LabelKey),
-			Href:    e.Href,
-			Current: isCurrentNav(e.Href, currentPath),
+			Label: i18n.T(lang, e.LabelKey),
+			Href:  e.Href,
+			// Accounts is also the landing (p23.8), so highlight it on the bare "/".
+			Current: isCurrentNav(e.Href, currentPath) || (e.Href == "/accounts" && currentPath == "/"),
 		})
 	}
 	return out
@@ -341,10 +343,18 @@ func (s *server) renderShell(w http.ResponseWriter, r *http.Request, status int,
 	s.render(w, r, status, "base.tmpl", s.newShellPage(r, page))
 }
 
-// home is the authenticated landing (GET /{$}), rendered through the shell so the
-// nav, theme, and locale chrome are exercised by a real route. The landing body is
-// base.tmpl's own minimal welcome; the real dashboard is a backlog non-goal.
+// home is the authenticated landing (GET /{$}). p23.8: the chart of accounts is the
+// landing for anyone who can read the ledger — the old empty welcome was pointless.
+// It renders accounts INLINE (not a redirect) so `/` stays a real shell page (the
+// theme/nav/lang chrome, and the tests that assert on the `/` body, still hold). A
+// user without ledger access (a pure expense submitter) gets the minimal welcome.
 func (s *server) home(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	u := currentUser(ctx)
+	if u != nil && s.navPermits(ctx, u, TxnRead) {
+		s.accountsPage(w, r)
+		return
+	}
 	s.renderShell(w, r, http.StatusOK, nil)
 }
 
