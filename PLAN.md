@@ -302,7 +302,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p17.1 db: import schema.**
   Tests: schema smoke; dedupe hash uniqueness scoped per account.
   Build: migration — `mapping_profiles(id, name, config JSON)`, `import_batches(id, filename, account_id, subsidiary_id, profile_id, uploaded_by/at)`, `import_rows(id, batch_id, raw_json, parsed date/amount/payee/memo, status CHECK(pending/posted/discarded), dedupe_hash, posted_transaction_id)`. Batch binds one target account **and one subsidiary** (the account must map to it).
-- [ ] **p17.2 web: upload + mapping + staging.**
+- [x] **p17.2 web: upload + mapping + staging.**
   Tests: parser table tests (delimiter sniffing, header detection, single signed amount vs debit/credit column pairs, sign flip, date formats); `TestDedupeFlagsExistingSplitsAndPendingRows`; `TestBatchSubValidated`.
   Build: upload → mapping UI (assign columns; pick account + subsidiary) → 20-row preview → save profile → stage rows with `dedupe_hash = sha256(account|date|amount|normalized payee+memo)`.
 - [ ] **p17.3 web: review queue → post.**

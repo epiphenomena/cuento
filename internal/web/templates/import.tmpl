@@ -1,0 +1,162 @@
+{{/*
+  p17.2 bank-CSV import: upload + mapping form (GET /import, TxnWrite). A
+  self-contained shell page. .Page is an importUploadModel.
+
+  The user picks the target SUBSIDIARY and ACCOUNT (subsidiary-first structurally
+  guarantees the account maps to the subsidiary; the store re-validates on confirm),
+  assigns which zero-based COLUMN indices carry date/amount/payee/memo, and chooses
+  the delimiter / header / amount mode / sign-flip / date format. The form POSTs
+  (multipart) to /import/preview, which swaps a 20-row preview into #import-workspace
+  (the file input cannot survive an htmx swap, so preview carries the CSV forward
+  base64 for the confirm step). A parse/mapping error re-renders THIS page at 422
+  with the message (the file input can't be echoed back, so it is a page-level
+  notice, not an inline field swap).
+
+  Account/subsidiary/profile names are stored proper nouns rendered verbatim; every
+  other string via {{t}} (rule 9); no inline script (rule 12).
+*/ -}}
+{{define "import.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "import.title"))}}
+  {{- with .Page}}
+  <h1>{{t "import.title"}}</h1>
+  <p class="hint">{{t "import.intro"}}</p>
+
+  {{- if .ErrorKey}}
+  <p class="field-error import-error" role="alert">{{if .ErrorArg}}{{t .ErrorKey .ErrorArg}}{{else}}{{t .ErrorKey}}{{end}}</p>
+  {{- end}}
+
+  <form class="import-upload-form" method="post" action="/import/preview"
+        enctype="multipart/form-data"
+        hx-post="/import/preview" hx-target="#import-workspace" hx-swap="innerHTML"
+        hx-encoding="multipart/form-data" id="import-upload-form">
+
+    <fieldset class="import-target">
+      <legend>{{t "import.target"}}</legend>
+      <div class="field">
+        <label for="import-subsidiary">{{t "import.subsidiary"}}</label>
+        <select id="import-subsidiary" name="subsidiary_id" required>
+          <option value="">{{t "import.choose"}}</option>
+          {{- range .Subsidiaries}}
+          <option value="{{.ID}}">{{.Name}}</option>
+          {{- end}}
+        </select>
+      </div>
+      <div class="field">
+        <label for="import-account">{{t "import.account"}}</label>
+        <select id="import-account" name="account_id" required>
+          <option value="">{{t "import.choose"}}</option>
+          {{- range .Accounts}}
+          <option value="{{.ID}}" data-subsidiaries="{{range .SubsidiaryIDs}}{{.}} {{end}}">{{.Name}}</option>
+          {{- end}}
+        </select>
+      </div>
+    </fieldset>
+
+    <fieldset class="import-mapping">
+      <legend>{{t "import.mapping"}}</legend>
+      <div class="field">
+        <label for="import-delimiter">{{t "import.delimiter_label"}}</label>
+        <select id="import-delimiter" name="delimiter">
+          <option value="">{{t "import.delimiter.auto"}}</option>
+          <option value=",">{{t "import.delimiter.comma"}}</option>
+          <option value=";">{{t "import.delimiter.semicolon"}}</option>
+          <option value="&#9;">{{t "import.delimiter.tab"}}</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="import-has-header">
+          <input type="checkbox" id="import-has-header" name="has_header" value="1" checked>
+          {{t "import.has_header"}}
+        </label>
+      </div>
+      <div class="field">
+        <label for="import-amount-mode">{{t "import.amount_mode_label"}}</label>
+        <select id="import-amount-mode" name="amount_mode">
+          <option value="single">{{t "import.amount_mode.single"}}</option>
+          <option value="debit_credit">{{t "import.amount_mode.debit_credit"}}</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="import-sign-flip">
+          <input type="checkbox" id="import-sign-flip" name="sign_flip" value="1">
+          {{t "import.sign_flip"}}
+        </label>
+      </div>
+      <div class="field">
+        <label for="import-date-format">{{t "import.date_format_label"}}</label>
+        <select id="import-date-format" name="date_format">
+          <option value="ISO">{{t "import.date_format.iso"}}</option>
+          <option value="US">{{t "import.date_format.us"}}</option>
+          <option value="EU">{{t "import.date_format.eu"}}</option>
+        </select>
+      </div>
+
+      <p class="hint">{{t "import.columns_hint"}}</p>
+      <div class="field">
+        <label for="import-date-col">{{t "import.col.date"}}</label>
+        <input type="number" id="import-date-col" name="date_col" value="0" min="0" step="1">
+      </div>
+      <div class="field">
+        <label for="import-amount-col">{{t "import.col.amount"}}</label>
+        <input type="number" id="import-amount-col" name="amount_col" value="1" min="0" step="1">
+      </div>
+      <div class="field">
+        <label for="import-debit-col">{{t "import.col.debit"}}</label>
+        <input type="number" id="import-debit-col" name="debit_col" value="1" min="0" step="1">
+      </div>
+      <div class="field">
+        <label for="import-credit-col">{{t "import.col.credit"}}</label>
+        <input type="number" id="import-credit-col" name="credit_col" value="2" min="0" step="1">
+      </div>
+      <div class="field">
+        <label for="import-payee-col">{{t "import.col.payee"}}</label>
+        <input type="number" id="import-payee-col" name="payee_col" value="2" min="-1" step="1">
+      </div>
+      <div class="field">
+        <label for="import-memo-col">{{t "import.col.memo"}}</label>
+        <input type="number" id="import-memo-col" name="memo_col" value="3" min="-1" step="1">
+      </div>
+    </fieldset>
+
+    <fieldset class="import-profile">
+      <legend>{{t "import.profile"}}</legend>
+      {{- if .Profiles}}
+      <div class="field">
+        <label for="import-profile-id">{{t "import.load_profile"}}</label>
+        <select id="import-profile-id" name="profile_id">
+          <option value="">{{t "import.load_profile_none"}}</option>
+          {{- range .Profiles}}
+          <option value="{{.ID}}">{{.Name}}</option>
+          {{- end}}
+        </select>
+        <p class="hint">{{t "import.load_profile_hint"}}</p>
+      </div>
+      {{- end}}
+      <div class="field">
+        <label for="import-save-profile">
+          <input type="checkbox" id="import-save-profile" name="save_profile" value="1">
+          {{t "import.save_profile"}}
+        </label>
+      </div>
+      <div class="field">
+        <label for="import-profile-name">{{t "import.profile_name"}}</label>
+        <input type="text" id="import-profile-name" name="profile_name" value="">
+      </div>
+    </fieldset>
+
+    <div class="field">
+      <label for="import-file">{{t "import.file"}}</label>
+      <input id="import-file" name="file" type="file" accept=".csv,text/csv" required>
+      <p class="hint">{{t "import.file_hint"}}</p>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{{t "import.preview_btn"}}</button>
+    </div>
+  </form>
+
+  {{/* The preview / result is swapped in here by /import/preview (and then /import). */ -}}
+  <div id="import-workspace" class="import-workspace"></div>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

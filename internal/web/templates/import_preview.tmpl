@@ -1,0 +1,110 @@
+{{/*
+  p17.2 import preview + result fragments, swapped into #import-workspace by
+  /import/preview (import-preview) and then /import (import-result). These are BARE
+  partials (no shell): the handler renders them by name and htmx innerHTML-swaps
+  them into the workspace region on the upload page.
+
+  import-preview (data: importPreviewModel) shows the first 20 PARSED rows (all rows
+  still stage on confirm), a total-count line, and a CONFIRM form carrying the CSV
+  base64 + the mapping + target as hidden fields (the file input did not survive the
+  swap). The confirm form POSTs urlencoded to /import.
+
+  import-result (data: importResultModel) shows the staged batch summary (staged /
+  duplicate counts) and a per-row list marking duplicates. A duplicate row is
+  ADVISORY -- it still staged (for the p17.3 reviewer).
+
+  Proper nouns rendered verbatim; every other string via {{t}} (rule 9); money/dates
+  via the formatters (rule 10); no inline script (rule 12).
+*/ -}}
+
+{{define "import-preview" -}}
+<section class="import-preview">
+  <h2>{{t "import.preview.title"}}</h2>
+  <p class="hint import-preview-summary">{{tn "import.preview.count" .TotalRows}}
+    &middot; {{t "import.preview.target"}} <strong>{{.AccountName}}</strong> / <strong>{{.SubsidiaryNm}}</strong></p>
+
+  <table class="import-preview-table">
+    <thead>
+      <tr>
+        <th>{{t "import.col.date"}}</th>
+        <th>{{t "import.col.amount"}}</th>
+        <th>{{t "import.col.payee"}}</th>
+        <th>{{t "import.col.memo"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{- range .Rows}}
+      <tr class="import-preview-row">
+        <td class="import-cell-date">{{.Date}}</td>
+        <td class="import-cell-amount"><span class="amount">{{.AmountFmt}}</span></td>
+        <td class="import-cell-payee">{{.Payee}}</td>
+        <td class="import-cell-memo">{{.Memo}}</td>
+      </tr>
+      {{- end}}
+    </tbody>
+  </table>
+  {{- if gt .MoreRows 0}}
+  <p class="hint import-preview-truncated">{{tn "import.preview.more" .MoreRows}}</p>
+  {{- end}}
+
+  <form class="import-confirm-form" method="post" action="/import"
+        hx-post="/import" hx-target="#import-workspace" hx-swap="innerHTML" id="import-confirm-form">
+    <input type="hidden" name="csv_b64" value="{{.CSVBase64}}">
+    <input type="hidden" name="filename" value="{{.Filename}}">
+    <input type="hidden" name="account_id" value="{{.AccountID}}">
+    <input type="hidden" name="subsidiary_id" value="{{.SubsidiaryID}}">
+    <input type="hidden" name="delimiter" value="{{.Mapping.Delimiter}}">
+    <input type="hidden" name="has_header" value="{{if .Mapping.HasHeader}}1{{else}}0{{end}}">
+    <input type="hidden" name="amount_mode" value="{{.Mapping.Amount}}">
+    <input type="hidden" name="sign_flip" value="{{if .Mapping.SignFlip}}1{{else}}0{{end}}">
+    <input type="hidden" name="date_format" value="{{.Mapping.DateFmt}}">
+    <input type="hidden" name="date_col" value="{{.Mapping.DateCol}}">
+    <input type="hidden" name="amount_col" value="{{.Mapping.AmountCol}}">
+    <input type="hidden" name="debit_col" value="{{.Mapping.DebitCol}}">
+    <input type="hidden" name="credit_col" value="{{.Mapping.CreditCol}}">
+    <input type="hidden" name="payee_col" value="{{.Mapping.PayeeCol}}">
+    <input type="hidden" name="memo_col" value="{{.Mapping.MemoCol}}">
+    <input type="hidden" name="save_profile" value="{{if .SaveProfile}}1{{else}}0{{end}}">
+    <input type="hidden" name="profile_name" value="{{.ProfileName}}">
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{{t "import.stage"}}</button>
+    </div>
+  </form>
+</section>
+{{- end}}
+
+{{define "import-result" -}}
+<section class="import-result">
+  <h2>{{t "import.result.title"}}</h2>
+  <p class="notice import-result-summary" role="status">
+    {{tn "import.result.staged" .Staged}}
+    {{- if gt .Duplicates 0}} &middot; <span class="import-result-dupes">{{tn "import.result.duplicates" .Duplicates}}</span>{{end}}
+  </p>
+
+  <table class="import-result-table">
+    <thead>
+      <tr>
+        <th>{{t "import.col.date"}}</th>
+        <th>{{t "import.col.amount"}}</th>
+        <th>{{t "import.col.payee"}}</th>
+        <th>{{t "import.col.memo"}}</th>
+        <th>{{t "import.col.status"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{- range .Rows}}
+      <tr class="import-result-row{{if .Duplicate}} import-row-duplicate{{end}}">
+        <td class="import-cell-date">{{.Date}}</td>
+        <td class="import-cell-amount"><span class="amount">{{.AmountFmt}}</span></td>
+        <td class="import-cell-payee">{{.Payee}}</td>
+        <td class="import-cell-memo">{{.Memo}}</td>
+        <td class="import-cell-status">
+          {{- if .Duplicate}}<span class="import-dupe-flag" role="note">{{t "import.duplicate"}}</span>
+          {{- else}}<span class="import-new-flag">{{t "import.new"}}</span>{{end}}
+        </td>
+      </tr>
+      {{- end}}
+    </tbody>
+  </table>
+</section>
+{{- end}}

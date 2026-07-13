@@ -296,6 +296,19 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/reconciliations/{id}/splits/{sid}/toggle", TxnWrite, http.HandlerFunc(s.reconToggle)},
 		{http.MethodPost, "/reconciliations/{id}/finalize", TxnWrite, http.HandlerFunc(s.reconFinalize)},
 		{http.MethodPost, "/reconciliations/{id}/reopen", TxnWrite, http.HandlerFunc(s.reconReopen)},
+
+		// p17.2 bank-CSV import (Appendix B/F: /import** = TxnWrite -- importing feeds
+		// the ledger). GET is the upload + mapping form; POST /import/preview parses the
+		// multipart CSV under the mapping and shows the 20-row preview (no batch created);
+		// POST /import confirms -- creates the batch (validating the account maps to the
+		// subsidiary) and stages all rows with duplicates flagged. The literal
+		// "/import/preview" is more specific than "/import", so the Go 1.22+ mux routes
+		// them precisely. All THREE are TxnWrite (a viewer must not stage rows). The nav
+		// entry lights up now that GET /import is registered. The permission-matrix test
+		// picks these up automatically (rule 8); the p17.3 review queue is a later step.
+		{http.MethodGet, "/import", TxnWrite, http.HandlerFunc(s.importPage)},
+		{http.MethodPost, "/import/preview", TxnWrite, http.HandlerFunc(s.importPreview)},
+		{http.MethodPost, "/import", TxnWrite, http.HandlerFunc(s.importConfirm)},
 	}
 	// p15.12 reports index: GET /reports lists the reports the current user may
 	// access, grouped by report group, each a link to a concrete /reports/{id}. The

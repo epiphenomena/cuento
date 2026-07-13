@@ -48,6 +48,8 @@ other = "Funds"
 other = "Programs"
 [nav.reconciliations]
 other = "Reconciliations"
+[nav.import]
+other = "Import"
 [nav.reports]
 other = "Reports"
 [nav.settings]
@@ -1376,3 +1378,115 @@ other = "This account cannot be reconciled."
 other = "That currency is not available for reconciliation."
 [error.recon.open_exists]
 other = "An open reconciliation already exists for this account and currency."
+[import.title]
+other = "Import bank CSV"
+[import.intro]
+other = "Upload a bank statement CSV, map its columns to the target account and subsidiary, preview the parsed rows, then stage them for review. Duplicate rows are flagged but still staged."
+[import.target]
+other = "Target"
+[import.subsidiary]
+other = "Subsidiary"
+[import.account]
+other = "Account"
+[import.choose]
+other = "Choose..."
+[import.mapping]
+other = "Column mapping"
+[import.delimiter_label]
+other = "Delimiter"
+[import.delimiter.auto]
+other = "Auto-detect"
+[import.delimiter.comma]
+other = "Comma"
+[import.delimiter.semicolon]
+other = "Semicolon"
+[import.delimiter.tab]
+other = "Tab"
+[import.has_header]
+other = "First row is a header"
+[import.amount_mode_label]
+other = "Amount mode"
+[import.amount_mode.single]
+other = "Single signed amount column"
+[import.amount_mode.debit_credit]
+other = "Separate debit and credit columns"
+[import.sign_flip]
+other = "Flip the sign (a debit is negative)"
+[import.date_format_label]
+other = "Date format"
+[import.date_format.iso]
+other = "ISO (YYYY-MM-DD)"
+[import.date_format.us]
+other = "US (MM/DD/YYYY)"
+[import.date_format.eu]
+other = "EU (DD/MM/YYYY)"
+[import.columns_hint]
+other = "Column numbers are zero-based. Use -1 for an unmapped payee or memo column."
+[import.col.date]
+other = "Date column"
+[import.col.amount]
+other = "Amount column"
+[import.col.debit]
+other = "Debit column"
+[import.col.credit]
+other = "Credit column"
+[import.col.payee]
+other = "Payee column"
+[import.col.memo]
+other = "Memo column"
+[import.col.status]
+other = "Status"
+[import.profile]
+other = "Saved mapping"
+[import.save_profile]
+other = "Save this mapping as a reusable profile"
+[import.profile_name]
+other = "Profile name"
+[import.file]
+other = "CSV file"
+[import.file_hint]
+other = "A bank statement exported as CSV."
+[import.preview_btn]
+other = "Preview"
+[import.stage]
+other = "Stage rows"
+[import.preview.title]
+other = "Preview"
+[import.preview.count]
+one = "%d row parsed."
+other = "%d rows parsed."
+[import.preview.target]
+other = "Target:"
+[import.preview.more]
+one = "and %d more row will be staged."
+other = "and %d more rows will be staged."
+[import.result.title]
+other = "Staged"
+[import.result.staged]
+one = "Staged %d row."
+other = "Staged %d rows."
+[import.result.duplicates]
+one = "%d flagged as a possible duplicate."
+other = "%d flagged as possible duplicates."
+[import.duplicate]
+other = "Duplicate"
+[import.new]
+other = "New"
+[import.error.no_file]
+other = "Choose a CSV file to upload."
+[import.error.too_large]
+other = "That file is too large."
+[import.error.parse]
+other = "That file could not be read as CSV. Check the delimiter."
+[import.error.row]
+other = "Row %s could not be parsed. Check the column mapping and date format."
+[import.error.no_target]
+other = "Choose a target account and subsidiary."
+[import.error.sub_mismatch]
+other = "That account does not map to the chosen subsidiary."
+[import.load_profile]
+other = "Reuse a saved mapping"
+[import.load_profile_none]
+other = "Enter a new mapping below"
+[import.load_profile_hint]
+other = "Choosing a saved mapping uses its columns and options; the fields below are ignored."

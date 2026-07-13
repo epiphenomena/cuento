@@ -41,6 +41,8 @@ other = "Fondos"
 other = "Programas"
 [nav.reconciliations]
 other = "Conciliaciones"
+[nav.import]
+other = "Importar"
 [nav.reports]
 other = "Informes"
 [nav.settings]
@@ -1376,3 +1378,115 @@ other = "Esta cuenta no se puede conciliar."
 other = "Esa moneda no esta disponible para conciliacion."
 [error.recon.open_exists]
 other = "Ya existe una conciliacion abierta para esta cuenta y moneda."
+[import.title]
+other = "Importar CSV bancario"
+[import.intro]
+other = "Sube un CSV de estado de cuenta, asigna sus columnas a la cuenta y subsidiaria destino, previsualiza las filas y ponlas en cola para revision. Las filas duplicadas se marcan pero igual se ponen en cola."
+[import.target]
+other = "Destino"
+[import.subsidiary]
+other = "Subsidiaria"
+[import.account]
+other = "Cuenta"
+[import.choose]
+other = "Elegir..."
+[import.mapping]
+other = "Asignacion de columnas"
+[import.delimiter_label]
+other = "Delimitador"
+[import.delimiter.auto]
+other = "Detectar automaticamente"
+[import.delimiter.comma]
+other = "Coma"
+[import.delimiter.semicolon]
+other = "Punto y coma"
+[import.delimiter.tab]
+other = "Tabulacion"
+[import.has_header]
+other = "La primera fila es encabezado"
+[import.amount_mode_label]
+other = "Modo de importe"
+[import.amount_mode.single]
+other = "Una sola columna de importe con signo"
+[import.amount_mode.debit_credit]
+other = "Columnas separadas de debito y credito"
+[import.sign_flip]
+other = "Invertir el signo (un debito es negativo)"
+[import.date_format_label]
+other = "Formato de fecha"
+[import.date_format.iso]
+other = "ISO (AAAA-MM-DD)"
+[import.date_format.us]
+other = "EE. UU. (MM/DD/AAAA)"
+[import.date_format.eu]
+other = "Europa (DD/MM/AAAA)"
+[import.columns_hint]
+other = "Los numeros de columna empiezan en cero. Usa -1 para una columna de beneficiario o memo no asignada."
+[import.col.date]
+other = "Columna de fecha"
+[import.col.amount]
+other = "Columna de importe"
+[import.col.debit]
+other = "Columna de debito"
+[import.col.credit]
+other = "Columna de credito"
+[import.col.payee]
+other = "Columna de beneficiario"
+[import.col.memo]
+other = "Columna de memo"
+[import.col.status]
+other = "Estado"
+[import.profile]
+other = "Asignacion guardada"
+[import.save_profile]
+other = "Guardar esta asignacion como perfil reutilizable"
+[import.profile_name]
+other = "Nombre del perfil"
+[import.file]
+other = "Archivo CSV"
+[import.file_hint]
+other = "Un estado de cuenta bancario exportado como CSV."
+[import.preview_btn]
+other = "Previsualizar"
+[import.stage]
+other = "Poner en cola"
+[import.preview.title]
+other = "Previsualizacion"
+[import.preview.count]
+one = "%d fila analizada."
+other = "%d filas analizadas."
+[import.preview.target]
+other = "Destino:"
+[import.preview.more]
+one = "y %d fila mas se pondra en cola."
+other = "y %d filas mas se pondran en cola."
+[import.result.title]
+other = "En cola"
+[import.result.staged]
+one = "Se puso en cola %d fila."
+other = "Se pusieron en cola %d filas."
+[import.result.duplicates]
+one = "%d marcada como posible duplicado."
+other = "%d marcadas como posibles duplicados."
+[import.duplicate]
+other = "Duplicado"
+[import.new]
+other = "Nuevo"
+[import.error.no_file]
+other = "Elige un archivo CSV para subir."
+[import.error.too_large]
+other = "Ese archivo es demasiado grande."
+[import.error.parse]
+other = "No se pudo leer ese archivo como CSV. Revisa el delimitador."
+[import.error.row]
+other = "No se pudo analizar la fila %s. Revisa la asignacion de columnas y el formato de fecha."
+[import.error.no_target]
+other = "Elige una cuenta y subsidiaria destino."
+[import.error.sub_mismatch]
+other = "Esa cuenta no esta asignada a la subsidiaria elegida."
+[import.load_profile]
+other = "Reutilizar una asignacion guardada"
+[import.load_profile_none]
+other = "Introducir una nueva asignacion abajo"
+[import.load_profile_hint]
+other = "Al elegir una asignacion guardada se usan sus columnas y opciones; los campos de abajo se ignoran."
