@@ -140,11 +140,10 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/login", Public, http.HandlerFunc(s.loginSubmit)},
 		{http.MethodPost, "/logout", AnyUser, http.HandlerFunc(s.logout)},
 		{http.MethodGet, "/{$}", AnyUser, http.HandlerFunc(s.home)},
-		// p10.2 shell: the theme control (persists cookie + user setting). p13.1 makes
-		// /settings the real personal-preferences page (GET form, POST save); both are
+		// p13.1 /settings is the personal-preferences page (GET form, POST save):
 		// AnyUser per Appendix B -- a user edits THEIR OWN settings (admin edit-others
-		// is p13.2). The header theme control (POST /theme) stays as a quick toggle.
-		{http.MethodPost, "/theme", AnyUser, http.HandlerFunc(s.setTheme)},
+		// is p13.2). Theme lives here too (its own <select>); p23.1 removed the
+		// redundant header theme-control form and its POST /theme route.
 		{http.MethodGet, "/settings", AnyUser, http.HandlerFunc(s.settingsPage)},
 		{http.MethodPost, "/settings", AnyUser, http.HandlerFunc(s.settingsUpdate)},
 		// A minimal Admin landing so the perm-gated nav has a real, Admin-only

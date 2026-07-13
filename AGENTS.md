@@ -74,6 +74,18 @@ deploy/              systemd units, litestream.yml
 
 `gen` (sqlc) · `lint` (govet, golangci-lint, gofumpt check) · `test` (go test ./... + node --test) · `check` (build + `cuento check` on a fixture db) · `fixture` (local: run ledgerimport → fixtures/sample.db) · `golden` (regenerate report goldens; diff must be reviewed, never blind-committed) · `run` (dev server, `-dev` mode) · `release` (CGO-free linux/amd64, trimpath, version ldflags).
 
+## UI / frontend work
+
+When working on the UI, keep a **live dev server on `localhost:3390`** so changes can be eyeballed as they land:
+
+```
+cp fixtures/sample.db bin/dev.db            # once: a throwaway copy so the fixture stays clean
+printf 'devpass123\n' | bin/cuento user add admin --admin -db bin/dev.db   # once: a login
+bin/cuento serve -dev -addr :3390 -db bin/dev.db   # run (background it)
+```
+
+Rebuild (`make build`) and restart the server after Go/template changes so the embedded assets refresh; static CSS/JS edits also require a rebuild (they are embedded). Log in as `admin` / `devpass123`.
+
 ## Testing conventions
 
 - Table tests by default; property tests where PLAN.md names them.

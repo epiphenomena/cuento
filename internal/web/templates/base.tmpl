@@ -60,23 +60,10 @@
       {{end}}
     </ul>
   </nav>
-  {{template "theme-control" .}}
   <form class="app-logout" method="post" action="/logout">
     <button type="submit" class="btn btn-ghost">{{t "auth.sign_out"}}</button>
   </form>
 </header>
-{{- end}}
-
-{{define "theme-control" -}}
-<form class="theme-control" method="post" action="/theme">
-  <label for="theme-select">{{t "theme.label"}}</label>
-  <select id="theme-select" name="theme">
-    <option value="auto"{{if eq .Shell.Theme "auto"}} selected{{end}}>{{t "theme.auto"}}</option>
-    <option value="light"{{if eq .Shell.Theme "light"}} selected{{end}}>{{t "theme.light"}}</option>
-    <option value="dark"{{if eq .Shell.Theme "dark"}} selected{{end}}>{{t "theme.dark"}}</option>
-  </select>
-  <button type="submit" class="btn">{{t "theme.apply"}}</button>
-</form>
 {{- end}}
 
 {{/* shell-open opens the document through the start of <main>. The caller passes

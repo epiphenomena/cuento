@@ -238,39 +238,8 @@ func TestNavCurrentAccent(t *testing.T) {
 	}
 }
 
-// TestThemePersistsCookieAndSetting: POST /theme sets the theme cookie AND, for a
-// logged-in user, persists the user's theme setting via the store. A subsequent
-// GET renders the persisted theme from the user setting even with no cookie.
-func TestThemePersistsCookieAndSetting(t *testing.T) {
-	h, _, st, db, sm := newMatrixApp(t)
-	user := makeUser(t, st, store.CreateUserInput{Username: "toggler", TxnPerm: "none"})
-
-	form := strings.NewReader("theme=dark")
-	req := httptest.NewRequest(http.MethodPost, "/theme", form)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.AddCookie(mintCookie(t, sm, user.ID))
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusSeeOther && rec.Code != http.StatusOK {
-		t.Fatalf("POST /theme status = %d, want 303 or 200", rec.Code)
-	}
-	// The theme cookie is set.
-	var themeCookie *http.Cookie
-	for _, c := range rec.Result().Cookies() {
-		if c.Name == themeCookieName {
-			themeCookie = c
-		}
-	}
-	if themeCookie == nil || themeCookie.Value != "dark" {
-		t.Fatalf("POST /theme did not set %s=dark cookie: %+v", themeCookieName, themeCookie)
-	}
-
-	// The user setting persisted: re-read the theme column.
-	if got := readTheme(t, db, user.ID); got != "dark" {
-		t.Errorf("persisted user theme = %q, want dark", got)
-	}
-}
+// Theme persistence (cookie + user setting) is exercised via POST /settings in
+// settings_test.go; p23.1 removed the standalone POST /theme route.
 
 // TestStyleguideDevOnly: GET /styleguide is served only in -dev; it 404s (route
 // absent from the registry) when not -dev.
@@ -351,15 +320,4 @@ func setLocale(t *testing.T, db *sql.DB, userID int64, locale string) {
 	if _, err := db.ExecContext(context.Background(), `UPDATE users SET locale = ? WHERE id = ?`, locale, userID); err != nil {
 		t.Fatalf("set locale: %v", err)
 	}
-}
-
-// readTheme reads a user's persisted theme column directly.
-func readTheme(t *testing.T, db *sql.DB, userID int64) string {
-	t.Helper()
-	var theme string
-	if err := db.QueryRowContext(context.Background(),
-		`SELECT theme FROM users WHERE id = ?`, userID).Scan(&theme); err != nil {
-		t.Fatalf("read theme: %v", err)
-	}
-	return theme
 }

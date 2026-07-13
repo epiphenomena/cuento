@@ -2,11 +2,8 @@ package web
 
 import (
 	"context"
-	"errors"
 	"net/http"
-	"net/url"
 	"strings"
-	"time"
 
 	"cuento/internal/i18n"
 	"cuento/internal/store"
@@ -337,88 +334,6 @@ func emailKey(v string) string {
 	return ""
 }
 
-// setTheme handles POST /theme (AnyUser): it validates the requested theme, sets
-// the theme cookie (so the very next request renders it SSR with no flash), and --
-// for a logged-in user -- persists it as the user's setting via the store (audited
-// under one change). It then 303-redirects back so a browser <form> post lands on
-// a fresh GET (Post/Redirect/Get); the Referer is used when safe, else "/".
-func (s *server) setTheme(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-	theme := r.PostFormValue("theme")
-	if !store.ValidTheme(theme) {
-		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-		return
-	}
-
-	// Cookie first: it is the SSR source resolveTheme reads, so the preference
-	// applies on the next paint whether or not the user is logged in. Path "/" so
-	// every page sees it. HttpOnly: no JS ever reads it (the theme is resolved
-	// server-side), so keep it off-limits to script to shrink the surface. Secure
-	// mirrors the session-cookie posture (off only in -dev, for plain-HTTP dev).
-	http.SetCookie(w, &http.Cookie{
-		Name:     themeCookieName,
-		Value:    theme,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   !s.cfg.Dev,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int((365 * 24 * time.Hour).Seconds()),
-	})
-
-	// Persist as the user's durable setting when logged in, so the choice follows
-	// them across devices/sessions. A store failure here is a server fault (the
-	// cookie already applied for this browser); surface it as 500.
-	if u := currentUser(r.Context()); u != nil {
-		ctx := store.WithActor(r.Context(), store.Actor{ID: u.ID})
-		if err := s.store.SetUserTheme(ctx, u.ID, theme); err != nil {
-			if errors.Is(err, store.ErrInvalidTheme) {
-				http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-				return
-			}
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-	}
-
-	http.Redirect(w, r, safeRedirectTarget(r), http.StatusSeeOther)
-}
-
-// safeRedirectTarget returns a same-origin path to redirect to after POST /theme:
-// the Referer when it is a local path, else "/". It never trusts an absolute or
-// cross-origin Referer (open-redirect defense), returning only a leading-slash
-// path that is not "//" (protocol-relative).
-func safeRedirectTarget(r *http.Request) string {
-	if p, ok := sameOriginPath(r.Referer()); ok {
-		return p
-	}
-	return "/"
-}
-
-// sameOriginPath extracts a safe local redirect path from a Referer. It returns
-// ok=false unless the reference resolves to a plain local path: a single leading
-// "/" (not "//", which is protocol-relative), no host, no scheme. This blocks
-// open-redirects -- a cross-origin or absolute Referer yields "/" at the call
-// site. The returned path carries any query so the user lands where they were.
-func sameOriginPath(ref string) (string, bool) {
-	if ref == "" {
-		return "", false
-	}
-	u, err := url.Parse(ref)
-	if err != nil {
-		return "", false
-	}
-	if u.Scheme != "" || u.Host != "" {
-		return "", false
-	}
-	if !strings.HasPrefix(u.Path, "/") || strings.HasPrefix(u.Path, "//") {
-		return "", false
-	}
-	p := u.Path
-	if u.RawQuery != "" {
-		p += "?" + u.RawQuery
-	}
-	return p, true
-}
+// Theme is persisted only through POST /settings now (settingsUpdate). p23.1
+// removed the header theme-control form and its POST /theme handler; the theme
+// cookie is written by settingsUpdate, and resolveTheme reads it for SSR.
