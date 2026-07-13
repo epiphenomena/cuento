@@ -356,13 +356,34 @@ input[aria-invalid="true"] {
 }
 .tree-table .acct-balances { font-variant-numeric: tabular-nums; }
 .tree-table .acct-inactive { opacity: 0.6; }
-.acct-depth-0 { padding-left: var(--space-3); }
-.acct-depth-1 { padding-left: calc(var(--space-3) + 1.5rem); }
-.acct-depth-2 { padding-left: calc(var(--space-3) + 3rem); }
-.acct-depth-3 { padding-left: calc(var(--space-3) + 4.5rem); }
-.acct-depth-4 { padding-left: calc(var(--space-3) + 6rem); }
-.acct-depth-5 { padding-left: calc(var(--space-3) + 7.5rem); }
-.acct-actions .inline { display: inline; }
+/* Tree indentation. The selectors are qualified with `.tree-table td` so they
+   OUTRANK `.tree-table td`'s own padding shorthand (equal-specificity padding-left
+   would otherwise win and flatten the tree). A nesting guide line makes the
+   hierarchy legible beyond the indent alone. */
+.tree-table td.acct-depth-0 { padding-left: var(--space-3); }
+.tree-table td.acct-depth-1 { padding-left: calc(var(--space-3) + 1.5rem); }
+.tree-table td.acct-depth-2 { padding-left: calc(var(--space-3) + 3rem); }
+.tree-table td.acct-depth-3 { padding-left: calc(var(--space-3) + 4.5rem); }
+.tree-table td.acct-depth-4 { padding-left: calc(var(--space-3) + 6rem); }
+.tree-table td.acct-depth-5 { padding-left: calc(var(--space-3) + 7.5rem); }
+/* A child row's name is prefixed with a subtle guide so depth reads at a glance. */
+.tree-table td.acct-depth-1, .tree-table td.acct-depth-2, .tree-table td.acct-depth-3,
+.tree-table td.acct-depth-4, .tree-table td.acct-depth-5 { border-left: 2px solid var(--color-border); }
+
+/* Row actions on one line: a tight, non-wrapping cluster (was a vertical stack).
+   The cell stays a real table-cell (no display:flex on <td>, which would drop it
+   out of the table layout); its inline-block controls just don't wrap. Applies to
+   the chart of accounts, subsidiaries, and programs tables. */
+.acct-actions, .sub-actions, .prog-actions { white-space: nowrap; }
+.acct-actions .btn, .sub-actions .btn, .prog-actions .btn {
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.9rem;
+  margin-right: var(--space-1);
+}
+.acct-actions form.inline, .sub-actions form.inline, .prog-actions form.inline {
+  display: inline-block;
+  margin: 0;
+}
 .acct-balances .bal { display: inline-block; margin-right: var(--space-3); }
 .badge {
   font-size: 0.75em;
