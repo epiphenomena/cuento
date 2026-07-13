@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"cuento/internal/budget"
 	"cuento/internal/db/sqlc"
@@ -306,7 +307,7 @@ func (s *server) parseScheduleForm(r *http.Request, id int64) (scheduleFormModel
 	// Anchor date: parse through the user's format to ISO. A blank/unparseable anchor
 	// is left empty -> the store's engine rejects it for the kinds that need it.
 	if form.AnchorDate != "" {
-		if iso, ok := parseUserDate(form.AnchorDate, df); ok {
+		if iso, ok := parseUserDate(form.AnchorDate, df, s.now()); ok {
 			in.AnchorDate = &iso
 		}
 	}
@@ -320,7 +321,7 @@ func (s *server) parseScheduleForm(r *http.Request, id int64) (scheduleFormModel
 			if line == "" {
 				continue
 			}
-			iso, ok := parseUserDate(line, df)
+			iso, ok := parseUserDate(line, df, s.now())
 			if !ok {
 				badDate = true
 				continue
@@ -468,10 +469,10 @@ func (s *server) parseBudgetForm(r *http.Request, id int64) (budgetFormModel, st
 		Notes:       strings.TrimSpace(r.PostFormValue("notes")),
 	}
 	in := store.BudgetInput{Name: form.Name, Notes: form.Notes}
-	if iso, ok := parseUserDate(form.PeriodStart, df); ok {
+	if iso, ok := parseUserDate(form.PeriodStart, df, s.now()); ok {
 		in.PeriodStart = iso
 	}
-	if iso, ok := parseUserDate(form.PeriodEnd, df); ok {
+	if iso, ok := parseUserDate(form.PeriodEnd, df, s.now()); ok {
 		in.PeriodEnd = iso
 	}
 	return form, in
@@ -968,12 +969,12 @@ func atoiOr(s string, def int) int {
 // parseUserDate parses a display-format date (the user's date_format) to canonical
 // ISO "YYYY-MM-DD" via money.ParseDate (rule 10). ok=false on a blank/malformed
 // value so the caller leaves the field empty (the store/engine then rejects it).
-func parseUserDate(s string, df money.DateFormat) (string, bool) {
+func parseUserDate(s string, df money.DateFormat, now time.Time) (string, bool) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return "", false
 	}
-	t, err := money.ParseDate(s, df)
+	t, err := money.ParseDate(s, df, now)
 	if err != nil {
 		return "", false
 	}

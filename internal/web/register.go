@@ -383,14 +383,14 @@ func (s *server) parseRegisterFilters(r *http.Request, u *store.CurrentUser) (st
 	var echo registerFilterEcho
 
 	if v := q.Get("from"); v != "" {
-		if t, err := money.ParseDate(v, df); err == nil {
+		if t, err := money.ParseDate(v, df, s.now()); err == nil {
 			iso := t.Format("2006-01-02")
 			f.From = iso
 			echo.from = money.FormatDate(t, df)
 		}
 	}
 	if v := q.Get("to"); v != "" {
-		if t, err := money.ParseDate(v, df); err == nil {
+		if t, err := money.ParseDate(v, df, s.now()); err == nil {
 			iso := t.Format("2006-01-02")
 			f.To = iso
 			echo.to = money.FormatDate(t, df)

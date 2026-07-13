@@ -422,7 +422,7 @@ func budgetExists(budgets []budgetOption, id int64) bool {
 // canonical internal date form the store queries expect.
 func resolveDate(v string, df money.DateFormat, fallback time.Time) string {
 	if v != "" {
-		if t, err := money.ParseDate(v, df); err == nil {
+		if t, err := money.ParseDate(v, df, fallback); err == nil {
 			return t.Format("2006-01-02")
 		}
 	}

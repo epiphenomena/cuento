@@ -328,7 +328,7 @@ func (s *server) importRowPost(w http.ResponseWriter, r *http.Request) {
 		model.Payee = payeeID
 	}
 
-	dateISO, dateOK := parseEditorDate(r.FormValue("date"), dateFormatFor(u))
+	dateISO, dateOK := parseEditorDate(r.FormValue("date"), dateFormatFor(u), s.now())
 	model.Date = r.FormValue("date")
 
 	rows, splits := s.parseSplitForms(r, s.currencyExponent(ctx, currency))

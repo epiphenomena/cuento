@@ -9,6 +9,11 @@ import (
 // visibly, so a swapped layout fails loudly.
 var march4 = time.Date(2025, 3, 4, 0, 0, 0, 0, time.UTC)
 
+// refNow is the fixed reference date the flexible parser uses to supply an omitted
+// year (p23.3). Kept deterministic so a 2-part "M-D" form has a stable expected
+// year in tests.
+var refNow = time.Date(2026, 7, 13, 0, 0, 0, 0, time.UTC)
+
 // --- FormatDate table: ISO / US / EU ---
 
 func TestFormatDate(t *testing.T) {
@@ -45,7 +50,7 @@ func TestParseDate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseDate(tt.in, tt.df)
+			got, err := ParseDate(tt.in, tt.df, refNow)
 			if err != nil {
 				t.Fatalf("ParseDate(%q, %v) error: %v", tt.in, tt.df, err)
 			}
@@ -63,7 +68,7 @@ func TestParseDate(t *testing.T) {
 // ISO input is accepted regardless of the DateFormat setting (D16).
 func TestParseDateISOAlwaysAccepted(t *testing.T) {
 	for _, df := range []DateFormat{DateISO, DateUS, DateEU} {
-		got, err := ParseDate("2025-03-04", df)
+		got, err := ParseDate("2025-03-04", df, refNow)
 		if err != nil {
 			t.Fatalf("ParseDate ISO under df=%v error: %v", df, err)
 		}
@@ -91,17 +96,62 @@ func TestParseDateRejects(t *testing.T) {
 		{"feb29NonLeap", "2025-02-29", DateISO}, // non-leap year
 		{"feb30US", "02/30/2025", DateUS},
 		{"trailingGarbage", "2025-03-04x", DateISO},
-		{"wrongSeparators", "2025/03/04", DateISO}, // ISO wants dashes
+		// Flexible-form rejections (p23.3): still bad even under lenient parsing.
+		{"flexBadMonth", "26-13-1", DateISO},     // year 2026, month 13 -> reject
+		{"flexFeb30", "2026-2-30", DateISO},      // impossible day for the month
+		{"flexTooManyParts", "1/2/3/4", DateISO}, // 4 components is not a date
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := ParseDate(tt.in, tt.df)
+			got, err := ParseDate(tt.in, tt.df, refNow)
 			if err == nil {
 				t.Fatalf("ParseDate(%q, %v) = %v, want error", tt.in, tt.df, got)
 			}
 			// Error message should be meaningful: mention the offending input.
 			if !containsInput(err.Error(), tt.in) && tt.in != "" {
 				t.Fatalf("ParseDate(%q) error %q does not mention the input", tt.in, err.Error())
+			}
+		})
+	}
+}
+
+// TestParseDateFlexible: the p23.3 short/partial numeric forms. All parse
+// big-endian (Y-M-D / M-D) regardless of df; a 2-part form takes refNow's year;
+// a 2-digit year pivots (00–68 -> 2000s, 69–99 -> 1900s).
+func TestParseDateFlexible(t *testing.T) {
+	d := func(y, m, day int) time.Time { return time.Date(y, time.Month(m), day, 0, 0, 0, 0, time.UTC) }
+	tests := []struct {
+		name string
+		in   string
+		df   DateFormat
+		want time.Time
+	}{
+		{"shortYMD", "26-6-1", DateISO, d(2026, 6, 1)},
+		{"shortYMDzeroPad", "26-06-01", DateUS, d(2026, 6, 1)},
+		{"fourDigitYearShortMD", "2026-6-1", DateEU, d(2026, 6, 1)},
+		{"impliedYear", "6-1", DateISO, d(2026, 6, 1)}, // refNow year 2026
+		{"slashBigEndian", "26/6/1", DateISO, d(2026, 6, 1)},
+		{"slashImpliedYear", "6/1", DateEU, d(2026, 6, 1)},
+		{"dotSeparators", "26.6.1", DateISO, d(2026, 6, 1)},
+		{"pivotLow", "00-1-1", DateISO, d(2000, 1, 1)},
+		{"pivot68", "68-1-1", DateISO, d(2068, 1, 1)},
+		{"pivot69", "69-1-1", DateISO, d(1969, 1, 1)},
+		{"pivot98", "98-12-31", DateISO, d(1998, 12, 31)},
+		// A slash-separated full date is now accepted as big-endian even under df=ISO
+		// (previously rejected; p23.3 makes entry forgiving — DECISIONS p23.3).
+		{"slashFullUnderISO", "2025/03/04", DateISO, march4},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseDate(tt.in, tt.df, refNow)
+			if err != nil {
+				t.Fatalf("ParseDate(%q, %v) error: %v", tt.in, tt.df, err)
+			}
+			if !got.Equal(tt.want) {
+				t.Fatalf("ParseDate(%q, %v) = %v, want %v", tt.in, tt.df, got, tt.want)
+			}
+			if got.Location() != time.UTC {
+				t.Fatalf("ParseDate(%q) location = %v, want UTC", tt.in, got.Location())
 			}
 		})
 	}

@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"cuento/internal/money"
 )
@@ -262,7 +263,11 @@ func parseDate(s string, layout DateLayout) (string, error) {
 	if s == "" {
 		return "", errors.New("date: blank")
 	}
-	t, err := money.ParseDate(s, dateFormatOf(layout))
+	// Bank cells carry full 4-digit-year dates, so they match money.ParseDate's
+	// strict layouts and never reach its flexible short-form path — the reference
+	// date (which only supplies an omitted year) is inert here. Pass the zero time
+	// to keep this package pure (no wall-clock read).
+	t, err := money.ParseDate(s, dateFormatOf(layout), time.Time{})
 	if err != nil {
 		return "", fmt.Errorf("date %q: %w", s, err)
 	}

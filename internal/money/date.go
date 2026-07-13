@@ -2,6 +2,7 @@ package money
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -57,27 +58,102 @@ func FormatDate(t time.Time, df DateFormat) string {
 	return t.Format(df.layout())
 }
 
-// ParseDate parses s as a date per df, but ALSO always accepts ISO YYYY-MM-DD
-// regardless of df (D16) — text entry stays forgiving of the machine format. It
-// returns a date-only time.Time at UTC midnight. Malformed and impossible dates
-// (month 13, day 40, Feb 30, Feb 29 in a non-leap year, trailing garbage) are
-// rejected: time.Parse validates ranges and day-of-month strictly (it rejects
-// Feb 30 via its internal daysIn), so no lenient normalization slips through and
-// no manual component re-check is needed.
-func ParseDate(s string, df DateFormat) (time.Time, error) {
+// ParseDate parses s as a date per df, forgivingly (D16, p23.3). It tries, in
+// order: (1) the active format's full layout, (2) full ISO YYYY-MM-DD — always
+// accepted regardless of df, (3) a flexible SHORT/partial numeric form. It returns
+// a date-only time.Time at UTC midnight.
+//
+// Flexible forms (p23.3) are dash/slash/dot-separated integers, most-significant
+// first, BIG-ENDIAN regardless of df (DECISIONS p23.3 — the user's examples are
+// Y-M-D / M-D):
+//
+//	26-6-1 -> 2026-06-01   (2-digit year expanded; single-digit month/day)
+//	6-1    -> <now.Year>-06-01   (year omitted -> the reference year)
+//
+// A 2-digit year pivots 00–68 -> 2000–2068, 69–99 -> 1900–1999 (the strptime %y
+// convention, DECISIONS p23.3). now supplies the implied year for the 2-part form;
+// it is passed in (never read from the wall clock here) so parsing stays
+// deterministic and testable.
+//
+// Malformed and impossible dates (month 13, day 40, Feb 30, Feb 29 in a non-leap
+// year, trailing garbage) are rejected: the strict layouts validate via
+// time.Parse, and the flexible path range-checks then round-trips through
+// time.Date so an overflow (Feb 30 -> Mar 2) fails rather than normalizing.
+func ParseDate(s string, df DateFormat, now time.Time) (time.Time, error) {
 	raw := s
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return time.Time{}, fmt.Errorf("parse date %q: empty", raw)
 	}
 
-	// Try the active format first, then ISO as an always-accepted fallback.
-	// (When df is ISO the two are identical; the duplicate attempt is harmless.)
+	// Strict full layouts own the unambiguous full renderings: the active format
+	// first, then ISO as an always-accepted fallback (when df is ISO the two are
+	// identical; the duplicate attempt is harmless). US/EU full dates are matched
+	// here and are NOT reinterpreted by the big-endian flexible path below.
 	if t, err := time.Parse(df.layout(), s); err == nil {
 		return t, nil
 	}
 	if t, err := time.Parse(layoutISO, s); err == nil {
 		return t, nil
 	}
+	// Flexible short/partial numeric entry (p23.3).
+	if t, ok := parseFlexibleDate(s, now); ok {
+		return t, nil
+	}
 	return time.Time{}, fmt.Errorf("parse date %q: not a valid date for the selected format", raw)
+}
+
+// parseFlexibleDate parses the p23.3 short/partial numeric forms: dash/slash/dot
+// separated integers, most-significant first. Three parts are Y-M-D; two parts are
+// M-D with the year taken from now. A 2-digit year is pivoted. It returns ok=false
+// (never an error) so ParseDate can fall through to its single error return.
+func parseFlexibleDate(s string, now time.Time) (time.Time, bool) {
+	parts := strings.FieldsFunc(s, func(r rune) bool { return r == '-' || r == '/' || r == '.' })
+	nums := make([]int, 0, len(parts))
+	for _, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			return time.Time{}, false // non-numeric component -> not a flexible date
+		}
+		nums = append(nums, n)
+	}
+
+	var y, m, d int
+	switch len(nums) {
+	case 3:
+		y, m, d = expandYear(nums[0], parts[0]), nums[1], nums[2]
+	case 2:
+		y, m, d = now.Year(), nums[0], nums[1]
+	default:
+		return time.Time{}, false
+	}
+	return validDate(y, m, d)
+}
+
+// expandYear widens a written year to four digits: a 1- or 2-digit field pivots
+// (00–68 -> 2000s, 69–99 -> 1900s, the strptime %y convention); a 3-/4-digit
+// field is taken as written.
+func expandYear(y int, field string) int {
+	if len(field) <= 2 {
+		if y <= 68 {
+			return 2000 + y
+		}
+		return 1900 + y
+	}
+	return y
+}
+
+// validDate builds a UTC-midnight date and rejects out-of-range or overflowing
+// components: month/day bounds are checked, then a time.Date round-trip catches an
+// impossible day-of-month (Feb 30 would normalize to Mar 2, so the components no
+// longer match — reject).
+func validDate(y, m, d int) (time.Time, bool) {
+	if m < 1 || m > 12 || d < 1 || d > 31 {
+		return time.Time{}, false
+	}
+	t := time.Date(y, time.Month(m), d, 0, 0, 0, 0, time.UTC)
+	if t.Year() != y || int(t.Month()) != m || t.Day() != d {
+		return time.Time{}, false
+	}
+	return t, true
 }

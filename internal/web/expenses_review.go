@@ -328,7 +328,7 @@ func (s *server) expenseReviewPost(w http.ResponseWriter, r *http.Request) {
 	model.Memo = r.FormValue("memo")
 	model.FirstErrorRow = -1
 
-	dateISO, dateOK := parseEditorDate(r.FormValue("date"), dateFormatFor(u))
+	dateISO, dateOK := parseEditorDate(r.FormValue("date"), dateFormatFor(u), s.now())
 	model.Date = r.FormValue("date")
 
 	rows, splits := s.parseSplitForms(r, s.currencyExponent(ctx, currency))

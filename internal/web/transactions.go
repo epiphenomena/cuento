@@ -362,7 +362,7 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 
 	// Parse the date input honoring the user's format (ISO always accepted, D16). A
 	// malformed date is a form error surfaced on the totals bar (a header field).
-	dateISO, dateOK := parseEditorDate(r.FormValue("date"), dateFormatFor(u))
+	dateISO, dateOK := parseEditorDate(r.FormValue("date"), dateFormatFor(u), s.now())
 	model.Date = r.FormValue("date")
 
 	rows, splits := s.parseSplitForms(r, s.currencyExponent(ctx, currency))
@@ -644,11 +644,11 @@ func (s *server) parseSplitForms(r *http.Request, exp int) ([]txnRowModel, []sto
 // parseEditorDate parses the editor's date input honoring df (ISO always accepted,
 // D16), returning the ISO string and whether it parsed. An empty input is invalid
 // (a transaction needs a date).
-func parseEditorDate(s string, df money.DateFormat) (string, bool) {
+func parseEditorDate(s string, df money.DateFormat, now time.Time) (string, bool) {
 	if s == "" {
 		return "", false
 	}
-	t, err := money.ParseDate(s, df)
+	t, err := money.ParseDate(s, df, now)
 	if err != nil {
 		return "", false
 	}

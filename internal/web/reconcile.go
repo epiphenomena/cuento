@@ -239,7 +239,7 @@ func (s *server) reconStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	df := dateFormatFor(u)
-	day, derr := money.ParseDate(dayStr, df)
+	day, derr := money.ParseDate(dayStr, df, s.now())
 	if derr != nil {
 		form.Errors.add("statement_date", "error.recon.bad_date")
 		s.renderFormError(w, r, "recon-start-form", form)
