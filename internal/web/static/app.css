@@ -617,3 +617,86 @@ input[aria-invalid="true"] {
 
 /* A subsidiary that is locked (import / expense-review post) reads as a hint. */
 .txn-subsidiary-locked { font-size: 0.85rem; color: var(--color-text-muted); }
+
+/* ------------------------------------------------------------------ *
+ * p23.4 date field + calendar popover. datefield.js wraps each
+ * input.js-datefield, appends the pick button, and builds the popover; all
+ * styling lives here (strict CSP, rule 12 — no inline style). The widget is a
+ * hand-written calendar (rule 10 — never input[type=date]).
+ * ------------------------------------------------------------------ */
+.datefield-wrap { position: relative; display: inline-flex; align-items: stretch; }
+.datefield-wrap > input { position: relative; }
+/* The pick button hugs the right edge of the input. */
+.datefield-pick {
+  margin-left: calc(-1 * var(--radius));
+  padding: 0 var(--space-2);
+  border: var(--border);
+  border-left: 0;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--color-surface-alt);
+  cursor: pointer;
+  line-height: 1;
+}
+.datefield-pick:hover { border-color: var(--color-primary); }
+
+/* Popover: anchored under the field, above other content. */
+.datefield-popover {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  z-index: 40;
+  width: 16rem;
+  padding: var(--space-2);
+  background: var(--color-surface);
+  border: var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.datefield-popover[hidden] { display: none; }
+
+.datefield-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+.datefield-title { font-weight: 600; }
+.datefield-nav {
+  padding: 0 var(--space-2);
+  border: var(--border);
+  border-radius: var(--radius);
+  background: var(--color-surface-alt);
+  cursor: pointer;
+  line-height: 1.4;
+}
+.datefield-nav:hover { border-color: var(--color-primary); }
+
+/* 7-column month grid: weekday headers, blank leading cells, day buttons. */
+.datefield-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+.datefield-weekday {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  padding: var(--space-1) 0;
+}
+.datefield-blank { visibility: hidden; }
+.datefield-day {
+  padding: var(--space-1) 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.datefield-day:hover { background: var(--color-surface-alt); }
+.datefield-day[aria-current="date"] {
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  font-weight: 600;
+}

@@ -55,7 +55,7 @@
   <div class="kind-block" data-kind-field="onetime annual biweekly">
     <div class="field">
       <label for="sf-anchor">{{t "budget.schedule.form.anchor_date"}}</label>
-      <input id="sf-anchor" name="anchor_date" type="text" value="{{.AnchorDate}}"
+      <input id="sf-anchor" name="anchor_date" type="text" class="js-datefield" value="{{.AnchorDate}}"
              placeholder="{{t "budget.schedule.form.date_placeholder"}}">
       <p class="hint">{{t "budget.schedule.form.anchor_hint"}}</p>
     </div>
@@ -126,7 +126,7 @@
     </div>
     <div class="field">
       <label for="sf-wanchor">{{t "budget.schedule.form.anchor_date"}}</label>
-      <input id="sf-wanchor" name="weekly_anchor" type="text" value="{{.AnchorDate}}"
+      <input id="sf-wanchor" name="weekly_anchor" type="text" class="js-datefield" value="{{.AnchorDate}}"
              placeholder="{{t "budget.schedule.form.date_placeholder"}}">
     </div>
   </div>

@@ -41,10 +41,10 @@
 
       {{if .Params.ShowPeriod}}
       <label for="rp-from">{{t "reports.params.from"}}</label>
-      <input type="text" id="rp-from" name="from" value="{{.Params.From}}"
+      <input type="text" id="rp-from" name="from" class="js-datefield" value="{{.Params.From}}"
              inputmode="numeric" autocomplete="off">
       <label for="rp-to">{{t "reports.params.to"}}</label>
-      <input type="text" id="rp-to" name="to" value="{{.Params.To}}"
+      <input type="text" id="rp-to" name="to" class="js-datefield" value="{{.Params.To}}"
              inputmode="numeric" autocomplete="off">
       {{end}}
 

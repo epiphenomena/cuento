@@ -175,6 +175,10 @@ type baseData struct {
 	// transaction editor, p23.2) can use the full horizontal width. Set via
 	// newWideShellPage; default false keeps the comfortable reading column.
 	Wide bool
+	// DateFormat is the user's date-format code ("ISO"/"US"/"EU"), stamped on <body>
+	// so the global date-field module (datefield.js, p23.4) can format/parse every
+	// date input per the user's setting without each page re-emitting it.
+	DateFormat string
 }
 
 // shellPage bundles the shell chrome (Shell) with a page's own model (Page) so a
@@ -212,10 +216,11 @@ func (s *server) newShellPage(r *http.Request, page any) shellPage {
 	u := currentUser(ctx)
 	return shellPage{
 		Shell: baseData{
-			Lang:    langOf(ctx),
-			Theme:   resolveTheme(r, u),
-			Nav:     s.visibleNav(ctx, u, r.URL.Path),
-			Version: s.cfg.Version,
+			Lang:       langOf(ctx),
+			Theme:      resolveTheme(r, u),
+			Nav:        s.visibleNav(ctx, u, r.URL.Path),
+			Version:    s.cfg.Version,
+			DateFormat: dateFormatCode(u),
 		},
 		Page: page,
 	}

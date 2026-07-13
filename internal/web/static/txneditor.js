@@ -11,7 +11,8 @@
 //   - show the program select only on R/E rows, the class select only on expense
 //     rows, prefilled from the account's data-* defaults (server re-defaults).
 //   - subsidiary re-filter: flag rows whose account left the sub (invalidRowsForSub).
-//   - select-on-focus, date shortcuts (t / + / -), add-row, keyboard grid.
+//   - select-on-focus, add-row, keyboard grid. (The date input's shortcuts +
+//     calendar popover are the shell-wide datefield.js, p23.4.)
 //
 // Guarded so importing under Node is side-effect free (no `document`).
 
@@ -202,23 +203,10 @@ function initEditor(form) {
     }
   });
 
-  // --- date shortcuts (t / + / -) -----------------------------------------
-  const dateInput = form.querySelector('#txn-date');
-  if (dateInput) {
-    dateInput.addEventListener('keydown', (evt) => {
-      const k = evt.key;
-      if (k === 't' || k === 'T') {
-        evt.preventDefault();
-        dateInput.value = shiftDate(today(), 0, form.dataset.dateFormat);
-      } else if (k === '+') {
-        evt.preventDefault();
-        dateInput.value = shiftDate(parseDisplayDate(dateInput.value) || today(), 1, form.dataset.dateFormat);
-      } else if (k === '-') {
-        evt.preventDefault();
-        dateInput.value = shiftDate(parseDisplayDate(dateInput.value) || today(), -1, form.dataset.dateFormat);
-      }
-    });
-  }
+  // --- date field ---------------------------------------------------------
+  // The #txn-date input carries class js-datefield, so the shell-wide datefield.js
+  // (p23.4) owns its flexible parse/format, the GnuCash shortcuts ([ ] - + h t) and
+  // the calendar popover. Nothing to wire here.
 
   // --- per-row wiring -----------------------------------------------------
   function wireRow(row) {
@@ -521,31 +509,6 @@ function initEditor(form) {
   gateAll();
   markSubsidiaryConflicts();
   recompute();
-}
-
-// --- date helpers (glue-local; kept tiny) ---------------------------------
-function today() {
-  const d = new Date();
-  return { y: d.getFullYear(), m: d.getMonth() + 1, d: d.getDate() };
-}
-function shiftDate(dt, days, fmt) {
-  const d = new Date(dt.y, dt.m - 1, dt.d + days);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  if (fmt === 'US') return `${m}/${day}/${y}`;
-  if (fmt === 'EU') return `${day}/${m}/${y}`;
-  return `${y}-${m}-${day}`;
-}
-function parseDisplayDate(s) {
-  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (iso) return { y: +iso[1], m: +iso[2], d: +iso[3] };
-  const parts = s.split(/[/.]/).map(Number);
-  if (parts.length === 3 && parts.every((n) => !Number.isNaN(n))) {
-    // Ambiguous US/EU; assume the value came from our own formatter.
-    return null;
-  }
-  return null;
 }
 
 // Browser glue: initialize each editor form on load and after an htmx swap (the

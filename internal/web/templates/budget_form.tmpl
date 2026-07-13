@@ -27,7 +27,7 @@
 
   <div class="field">
     <label for="bf-start">{{t "budget.form.period_start"}}</label>
-    <input id="bf-start" name="period_start" type="text" value="{{.PeriodStart}}"
+    <input id="bf-start" name="period_start" type="text" class="js-datefield" value="{{.PeriodStart}}"
            placeholder="{{t "budget.schedule.form.date_placeholder"}}"
       {{- if eq .Errors.FirstInvalid "period_start"}} autofocus{{end}}>
     {{with .Errors.ErrorKey "period_start"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
@@ -35,7 +35,7 @@
 
   <div class="field">
     <label for="bf-end">{{t "budget.form.period_end"}}</label>
-    <input id="bf-end" name="period_end" type="text" value="{{.PeriodEnd}}"
+    <input id="bf-end" name="period_end" type="text" class="js-datefield" value="{{.PeriodEnd}}"
            placeholder="{{t "budget.schedule.form.date_placeholder"}}">
   </div>
 

@@ -2024,3 +2024,17 @@ other = "Allow this user to draft and submit expense reports (independent of led
 other = "Can submit expense reports"
 [admin.users.save_submit]
 other = "Save"
+
+# Calendar popover + date field (p23.4). cal.months / cal.weekdays are
+# comma-joined lists datefield.js splits (Sunday-first weekdays). These are the
+# ONLY user-visible calendar strings (rule 9: emitted onto <body> for the module).
+[cal.months]
+other = "January,February,March,April,May,June,July,August,September,October,November,December"
+[cal.weekdays]
+other = "Su,Mo,Tu,We,Th,Fr,Sa"
+[cal.pick]
+other = "Pick a date"
+[cal.prev_month]
+other = "Previous month"
+[cal.next_month]
+other = "Next month"

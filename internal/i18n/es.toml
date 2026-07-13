@@ -2018,3 +2018,16 @@ other = "Permitir que este usuario redacte y envíe informes de gastos (independ
 other = "Puede enviar informes de gastos"
 [admin.users.save_submit]
 other = "Guardar"
+
+# Calendar popover + date field (p23.4). cal.months / cal.weekdays are
+# comma-joined lists datefield.js splits (Sunday-first weekdays).
+[cal.months]
+other = "Enero,Febrero,Marzo,Abril,Mayo,Junio,Julio,Agosto,Septiembre,Octubre,Noviembre,Diciembre"
+[cal.weekdays]
+other = "Do,Lu,Ma,Mi,Ju,Vi,Sá"
+[cal.pick]
+other = "Elegir fecha"
+[cal.prev_month]
+other = "Mes anterior"
+[cal.next_month]
+other = "Mes siguiente"

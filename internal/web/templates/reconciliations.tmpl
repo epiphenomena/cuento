@@ -26,7 +26,7 @@
   <input type="hidden" name="account_id" value="{{.AccountID}}">
   <input type="hidden" name="currency" value="{{.Currency}}">
   <label for="recon-date-{{.AccountID}}">{{t "recon.start.statement_date"}}</label>
-  <input type="text" id="recon-date-{{.AccountID}}" name="statement_date" value="{{.StatementDay}}"
+  <input type="text" id="recon-date-{{.AccountID}}" name="statement_date" class="js-datefield" value="{{.StatementDay}}"
          placeholder="{{t "recon.start.date_hint"}}"
          {{if eq .Errors.FirstInvalid "statement_date"}}autofocus{{end}}>
   {{if .Errors.ErrorKey "statement_date"}}<span class="field-error" role="alert">{{t (.Errors.ErrorKey "statement_date")}}</span>{{end}}

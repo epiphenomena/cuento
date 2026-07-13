@@ -98,8 +98,17 @@
        loads under script-src 'self' — no inline handler; unit-tested via node
        --test (formfocus.test.js). */}}
   <script type="module" src="{{asset "formfocus.js"}}"></script>
+  {{/* p23.4 global date-field enhancer: enhances every input.js-datefield with the
+       flexible parse/format, GnuCash shortcuts, and a hand-written calendar popover
+       (rule 10: never input[type=date]; rule 12: external module, no inline script).
+       Loaded shell-wide so it applies on every page with a date input. */}}
+  <script type="module" src="{{asset "datefield.js"}}"></script>
 </head>
-<body>
+{{/* data-* feed datefield.js: the per-user date format and the localized calendar
+     labels (rule 9: the strings originate in the i18n catalog, rendered here). */ -}}
+<body data-date-format="{{.Shell.DateFormat}}"
+      data-cal-months="{{t "cal.months"}}" data-cal-weekdays="{{t "cal.weekdays"}}"
+      data-cal-pick="{{t "cal.pick"}}" data-cal-prev="{{t "cal.prev_month"}}" data-cal-next="{{t "cal.next_month"}}">
   <a class="skip-link" href="#main">{{t "common.skip_to_content"}}</a>
   {{template "shell-nav" .}}
   <div class="flash" role="status" aria-live="polite"></div>

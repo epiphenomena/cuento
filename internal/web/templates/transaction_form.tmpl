@@ -167,7 +167,7 @@
     </div>
     <div class="txn-field">
       <label for="txn-date">{{t "txn.date"}}</label>
-      <input type="text" name="date" id="txn-date" class="txn-date" value="{{.Date}}"
+      <input type="text" name="date" id="txn-date" class="txn-date js-datefield" value="{{.Date}}"
              placeholder="{{t "txn.date_hint"}}"
              {{if eq $.Page.FirstErrorRow -2}}autofocus{{end}}>
     </div>
