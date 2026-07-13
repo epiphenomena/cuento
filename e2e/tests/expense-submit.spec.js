@@ -94,13 +94,17 @@ test('expenses: submitter drafts an unbalanced report, submits, sees a rejection
   // ===== PHASE 2: the submitter drives the workspace =====
   await login(page, subUser, subPass);
 
-  // The submitter sees ONLY their expenses nav (no accounts/reports/admin).
+  // The submitter sees ONLY the Expenses section (no accounts/reports/admin). p24: the
+  // Expenses parent (top nav) and the "My expenses" section-bar child both point to
+  // /expenses; the review queue is hidden (no TxnWrite) — that absence is the access
+  // boundary that matters here.
   await page.goto('/expenses');
   await expect(page.locator('main#main h1')).toHaveText(/my expense reports/i);
   await expect(page.locator('nav a[href="/accounts"]')).toHaveCount(0);
   await expect(page.locator('nav a[href="/reports"]')).toHaveCount(0);
   await expect(page.locator('nav a[href="/admin"]')).toHaveCount(0);
-  await expect(page.locator('nav a[href="/expenses"]')).toHaveCount(1);
+  await expect(page.locator('nav a[href="/expenses"]').first()).toBeVisible();
+  await expect(page.locator('nav a[href="/expenses/review"]')).toHaveCount(0);
 
   // Create a new report (root subsidiary is the only option).
   await page.getByRole('button', { name: /new expense report/i }).click();

@@ -51,14 +51,14 @@ func navSections() []navEntry {
 		// Home entry. Accounts leads the nav and is the landing.
 		{"nav.accounts", "/accounts", TxnRead},
 		{"nav.reports", "/reports", ReportGroup("")},
-		// p20.2: the submitter workspace. Gated by ExpenseSubmit (the standalone
-		// capability) so a PURE submitter (txn_perm=none, no grants) sees ONLY this
-		// entry (+ More), never the ledger/reports/admin -- the access boundary. An
-		// admin sees it too (is_admin implies everything, D10).
-		{"nav.myexpenses", "/expenses", ExpenseSubmit},
-		// p20.3: the reviewer queue (TxnWrite). A submit-only user never sees it (fails
-		// TxnWrite); an editing user (or admin) does.
-		{"nav.expensereview", "/expenses/review", TxnWrite},
+		// p24: ONE top-level "Expenses" section consolidating the submit workspace
+		// (p20.2) and the review queue (p20.3); the section bar (subNavGroups) carries
+		// "My expenses" (ExpenseSubmit) and "Expense review" (TxnWrite), each perm-gated
+		// so a pure submitter sees only the former and a pure reviewer only the latter.
+		// visibleNav treats /expenses SPECIALLY (its Perm field below is nominal): it is
+		// shown when the user can do EITHER, and lands the parent on whichever they can
+		// reach (a pure reviewer must not land on /expenses and 403).
+		{"nav.expenses", "/expenses", ExpenseSubmit},
 		// p23.9: everything else (funds, programs, reconciliations, budgets, import,
 		// settings, admin) lives under the AnyUser "More" hub as perm-gated cards,
 		// keeping the top nav lean. The hub page is a card grid; the second-level menu
@@ -92,6 +92,28 @@ func (s *server) visibleNav(ctx context.Context, u *store.CurrentUser, currentPa
 		if !registered[e.Href] {
 			continue // route not wired yet (later phase) -> no dead link
 		}
+		// p24: the Expenses section spans two routes/perms (submit + review), which no
+		// single Perm models. Show it if the user can do EITHER, and land the parent on
+		// whichever they can reach — a pure reviewer (TxnWrite, no ExpenseSubmit) must
+		// land on /expenses/review, not 403 on /expenses. Current is the whole
+		// /expenses prefix, independent of the resolved href.
+		if e.Href == "/expenses" {
+			canSubmit := s.navPermits(ctx, u, ExpenseSubmit)
+			canReview := s.navPermits(ctx, u, TxnWrite)
+			if !canSubmit && !canReview {
+				continue
+			}
+			href := "/expenses"
+			if !canSubmit {
+				href = "/expenses/review"
+			}
+			out = append(out, navItem{
+				Label:   i18n.T(lang, e.LabelKey),
+				Href:    href,
+				Current: isCurrentNav("/expenses", currentPath),
+			})
+			continue
+		}
 		if !s.navPermits(ctx, u, e.Perm) {
 			continue
 		}
@@ -122,6 +144,17 @@ type subNavGroup struct {
 // belongs to budgeting), so both prefixes select the same group.
 func subNavGroups() []subNavGroup {
 	return []subNavGroup{
+		{
+			// p24: the Expenses section — the submit workspace and the review queue,
+			// each perm-gated (a pure submitter sees only My expenses; a pure reviewer
+			// only Expense review; admin both). subNav marks the more-specific entry
+			// current on nested paths (/expenses/review/{id}), never both.
+			Prefixes: []string{"/expenses"},
+			Entries: []navEntry{
+				{"nav.myexpenses", "/expenses", ExpenseSubmit},
+				{"nav.expensereview", "/expenses/review", TxnWrite},
+			},
+		},
 		{
 			// Reuse the existing section-title keys the admin index already renders
 			// (both catalogs), so the sub-nav adds no new label strings.
@@ -179,18 +212,30 @@ func (s *server) subNav(ctx context.Context, u *store.CurrentUser, currentPath s
 
 	registered := s.registeredGetPaths()
 	lang := langOf(ctx)
-	var out []navItem
+
+	// Eligible entries: registered (no dead links) AND permitted (route-parity gating).
+	var eligible []navEntry
 	for _, e := range group.Entries {
-		if !registered[e.Href] {
-			continue
+		if registered[e.Href] && s.navPermits(ctx, u, e.Perm) {
+			eligible = append(eligible, e)
 		}
-		if !s.navPermits(ctx, u, e.Perm) {
-			continue
+	}
+	// p24: the LONGEST matching href wins "current". On a nested path like
+	// /expenses/review/5 (under BOTH /expenses and /expenses/review) only the most
+	// specific entry is marked, never two. For sibling sections (e.g. /admin/*, where
+	// no href prefixes another) this degenerates to a plain match.
+	bestHref := ""
+	for _, e := range eligible {
+		if isCurrentNav(e.Href, currentPath) && len(e.Href) > len(bestHref) {
+			bestHref = e.Href
 		}
+	}
+	var out []navItem
+	for _, e := range eligible {
 		out = append(out, navItem{
 			Label:   i18n.T(lang, e.LabelKey),
 			Href:    e.Href,
-			Current: isCurrentNav(e.Href, currentPath),
+			Current: e.Href == bestHref,
 		})
 	}
 	return out

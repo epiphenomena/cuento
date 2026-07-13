@@ -1868,6 +1868,8 @@ other = "That line no longer exists."
 # error.expense.* (NO bare `expense` leaf beside them -- the go-i18n dotted-key/
 # leaf collision watch). nav.myexpenses lights up the submitter nav entry; the
 # admin.users.* keys drive the p20.1-deferred can_submit_expenses admin toggle.
+[nav.expenses]
+other = "Expenses"
 [nav.myexpenses]
 other = "My expenses"
 [nav.expensereview]

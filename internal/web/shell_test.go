@@ -293,6 +293,68 @@ func TestSubNavRendersPerSection(t *testing.T) {
 	}
 }
 
+// TestExpensesNavConsolidated (p24): the two expense workspaces live under ONE
+// top-level "Expenses" section. The parent shows when the user can do EITHER (submit
+// or review) and lands on whichever they can reach; the section bar carries the two
+// children, each perm-gated; and on a nested review path only the more-specific child
+// is marked current (no double aria-current from prefix nesting).
+func TestExpensesNavConsolidated(t *testing.T) {
+	h, _, st, _, sm := newMatrixApp(t)
+
+	submitter := mkSubmitter(t, st, "nav_submitter")                                               // ExpenseSubmit only
+	reviewer := makeUser(t, st, store.CreateUserInput{Username: "nav_reviewer", TxnPerm: "write"}) // TxnWrite only
+	reader := makeUser(t, st, store.CreateUserInput{Username: "nav_reader", TxnPerm: "read"})      // neither
+	admin := makeUser(t, st, store.CreateUserInput{Username: "nav_exp_admin", IsAdmin: true})      // both (D10)
+	expensesLabel := i18n.T("en", "nav.expenses")
+
+	// Pure submitter: parent shown, lands on /expenses (the submit workspace).
+	body := asUser(t, h, sm, submitter, http.MethodGet, "/", nil).Body.String()
+	if !strings.Contains(body, expensesLabel) || !strings.Contains(body, `href="/expenses"`) {
+		t.Errorf("submitter missing the Expenses top-nav -> /expenses:\n%s", body)
+	}
+
+	// Pure reviewer (no submit grant): parent lands on /expenses/review, not /expenses.
+	body = asUser(t, h, sm, reviewer.ID, http.MethodGet, "/", nil).Body.String()
+	if !strings.Contains(body, `href="/expenses/review"`) {
+		t.Errorf("reviewer's Expenses top-nav should land on /expenses/review:\n%s", body)
+	}
+
+	// Reader (neither perm): no Expenses top-nav at all (home is the accounts section,
+	// so no expenses link should appear anywhere on the page).
+	body = asUser(t, h, sm, reader.ID, http.MethodGet, "/", nil).Body.String()
+	if strings.Contains(body, `href="/expenses"`) || strings.Contains(body, `href="/expenses/review"`) {
+		t.Errorf("reader should see no Expenses nav:\n%s", body)
+	}
+
+	// Section bar on /expenses (submitter): My expenses child present + current; the
+	// Review child is hidden (no TxnWrite).
+	body = asUser(t, h, sm, submitter, http.MethodGet, "/expenses", nil).Body.String()
+	if !strings.Contains(body, `class="app-subnav"`) {
+		t.Errorf("/expenses missing the section bar:\n%s", body)
+	}
+	if !strings.Contains(body, `href="/expenses" aria-current="page"`) {
+		t.Errorf("/expenses: the My-expenses child is not current:\n%s", body)
+	}
+	if strings.Contains(body, `href="/expenses/review"`) {
+		t.Errorf("submitter must not see the Expense-review child:\n%s", body)
+	}
+
+	// Admin on a NESTED review path: both children show, but only Expense review is
+	// current. The top-nav parent (href="/expenses") is legitimately current too, so
+	// `href="/expenses" aria-current` must appear EXACTLY once (the parent) — a second
+	// occurrence would be the section-bar My-expenses child wrongly double-marked.
+	body = asUser(t, h, sm, admin.ID, http.MethodGet, "/expenses/review", nil).Body.String()
+	if !strings.Contains(body, `href="/expenses/review" aria-current="page"`) {
+		t.Errorf("admin /expenses/review: the Review child is not current:\n%s", body)
+	}
+	if !strings.Contains(body, `href="/expenses"`) {
+		t.Errorf("admin should also see the My-expenses child:\n%s", body)
+	}
+	if n := strings.Count(body, `href="/expenses" aria-current="page"`); n != 1 {
+		t.Errorf("admin /expenses/review: `href=\"/expenses\" aria-current` count = %d, want 1 (parent only; a 2 means the child was double-marked):\n%s", n, body)
+	}
+}
+
 // Theme persistence (cookie + user setting) is exercised via POST /settings in
 // settings_test.go; p23.1 removed the standalone POST /theme route.
 

@@ -1862,6 +1862,8 @@ other = "Esa linea ya no existe."
 
 # ---------------------------------------------------------------------------
 # p20.2 espacio de trabajo del solicitante (Fase 20). Ver en.toml.
+[nav.expenses]
+other = "Gastos"
 [nav.myexpenses]
 other = "Mis gastos"
 [nav.expensereview]
