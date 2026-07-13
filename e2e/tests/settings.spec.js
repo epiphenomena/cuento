@@ -54,12 +54,13 @@ test.describe('my settings', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'es');
 
     // The change is durable and applies to the CHROME on a subsequent, different
-    // page: the nav renders in Spanish (Ajustes / Cuentas), proving locale is read
-    // per-render from the stored setting.
+    // page: the top nav renders in Spanish (Cuentas / Más), proving locale is read
+    // per-render from the stored setting. (p23.9 moved Settings into the More hub, so
+    // the top-nav es labels are Cuentas + Más.)
     await page.goto('/accounts');
     const nav = page.locator('nav.app-nav');
-    await expect(nav.getByRole('link', { name: 'Ajustes' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'Cuentas' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Más' })).toBeVisible();
 
     // Restore the shared admin to the seeded defaults (en / signed) so sibling
     // tests in this worker (worker-scoped server fixture) see the app in English.

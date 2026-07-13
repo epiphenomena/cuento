@@ -35,11 +35,11 @@ test.describe('authenticated shell', () => {
     await expect(page.locator('main#main')).toBeVisible();
     await expect(page.locator('footer.app-footer')).toBeVisible();
 
-    // A localized nav label (the admin persona is en by default): the Settings and
-    // Admin sections render for an admin user.
+    // p23.9: the top nav is lean (Accounts + More + role items); Settings/Admin moved
+    // into the "More" hub as perm-gated cards.
     const nav = page.locator('nav.app-nav');
-    await expect(nav.getByRole('link', { name: 'Settings' })).toBeVisible();
-    await expect(nav.getByRole('link', { name: 'Admin' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'Accounts' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'More' })).toBeVisible();
 
     // p18.1: the footer surfaces the build version (the release binary bakes it
     // via -X main.version; the e2e binary is a plain `make build`, so it shows
@@ -47,8 +47,14 @@ test.describe('authenticated shell', () => {
     // pattern, never a hard-coded value, so the spec holds across build paths.
     await expect(page.locator('footer.app-footer')).toContainText(/Version\s+\S+/);
 
-    // The Settings nav target is live (renders through the shell, AnyUser).
-    await nav.getByRole('link', { name: 'Settings' }).click();
+    // The More hub lists the Settings + Admin cards (admin persona sees both), and
+    // Settings is a live target through the hub.
+    await nav.getByRole('link', { name: 'More' }).click();
+    await page.waitForURL('**/more');
+    const main = page.locator('main#main');
+    await expect(main.locator('a.hub-card-link[href="/settings"]')).toBeVisible();
+    await expect(main.locator('a.hub-card-link[href="/admin"]')).toBeVisible();
+    await main.locator('a.hub-card-link[href="/settings"]').click();
     await page.waitForURL('**/settings');
     await expect(page.locator('main#main h1')).toHaveText('Settings');
   });

@@ -104,18 +104,24 @@ func TestLocaleSwitchSwapsChrome(t *testing.T) {
 
 	body := asUser(t, h, sm, esUser, http.MethodGet, "/settings", nil).Body.String()
 
-	// Chrome (nav): the es nav label for Settings ("Ajustes") appears in the nav.
+	// Chrome (top nav): the es labels render. p23.9 moved Settings into the "More"
+	// hub, so the top-nav es labels are "Cuentas" (accounts) and "Más" (more); the
+	// Settings es label "Ajustes" now lives in the section bar (asserted below).
 	navStart := strings.Index(body, `<nav class="app-nav"`)
 	if navStart < 0 {
 		t.Fatal("no app-nav in the rendered shell")
 	}
 	navEnd := strings.Index(body[navStart:], "</nav>")
 	nav := body[navStart : navStart+navEnd]
-	if !strings.Contains(nav, "Ajustes") {
-		t.Errorf("nav chrome not in es: missing 'Ajustes'\nnav=%s", nav)
-	}
 	if !strings.Contains(nav, "Cuentas") {
 		t.Errorf("nav chrome not in es: missing 'Cuentas' (accounts)")
+	}
+	if !strings.Contains(nav, "Más") {
+		t.Errorf("nav chrome not in es: missing 'Más' (more)\nnav=%s", nav)
+	}
+	// The section bar (More area) carries the localized Settings link ("Ajustes").
+	if !strings.Contains(body, "Ajustes") {
+		t.Errorf("section bar not in es: missing 'Ajustes' (settings)")
 	}
 
 	// Page content (<main>): the es settings labels render (page body localized too).

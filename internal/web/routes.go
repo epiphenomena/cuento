@@ -144,6 +144,10 @@ func (s *server) routes() []Route {
 		// AnyUser per Appendix B -- a user edits THEIR OWN settings (admin edit-others
 		// is p13.2). Theme lives here too (its own <select>); p23.1 removed the
 		// redundant header theme-control form and its POST /theme route.
+		// p23.9 the "More" hub: an AnyUser card grid to the sections lifted out of the
+		// top nav (funds/programs/reconciliations/budgets/import/settings/admin), each
+		// card perm-gated. The perm-matrix test picks it up automatically.
+		{http.MethodGet, "/more", AnyUser, http.HandlerFunc(s.moreHub)},
 		{http.MethodGet, "/settings", AnyUser, http.HandlerFunc(s.settingsPage)},
 		{http.MethodPost, "/settings", AnyUser, http.HandlerFunc(s.settingsUpdate)},
 		// A minimal Admin landing so the perm-gated nav has a real, Admin-only

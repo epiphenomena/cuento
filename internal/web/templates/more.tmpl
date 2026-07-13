@@ -1,0 +1,36 @@
+{{/*
+  p23.9 "More" hub (GET /more, AnyUser). A card grid linking to the sections lifted
+  out of the top nav — funds, programs, reconciliations, budgets, import, settings,
+  and the admin sub-hub. Cards are perm-gated server-side (visibleHubCards), so a
+  user only sees what they can reach. Self-contained shell page. .Page is a
+  hubPageModel. Every string via {{t}} (rule 9); no inline script (rule 12).
+
+  This is the reusable card-hub layout — the "cards linking to subpages" pattern the
+  user asked for; other hub landings can render the same "hub-cards" partial.
+*/ -}}
+
+{{define "hub-cards" -}}
+{{- /* Dot is a hubPageModel. */ -}}
+<ul class="hub-cards">
+  {{range .Cards}}
+  <li class="hub-card">
+    <a class="hub-card-link" href="{{.Href}}">
+      <span class="hub-card-label">{{.Label}}</span>
+      <span class="hub-card-desc">{{.Desc}}</span>
+    </a>
+  </li>
+  {{else}}
+  <li class="hub-empty">{{t "more.empty"}}</li>
+  {{end}}
+</ul>
+{{- end}}
+
+{{define "more.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "more.title"))}}
+  {{- with .Page}}
+  <h1>{{t .TitleKey}}</h1>
+  <p class="hint">{{t .IntroKey}}</p>
+  {{template "hub-cards" .}}
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

@@ -94,17 +94,18 @@ func TestNavLocalized(t *testing.T) {
 	enBody := getHomeAs(t, h, sm, enUser).Body.String()
 	esBody := getHomeAs(t, h, sm, esUser).Body.String()
 
-	// The Settings nav label differs across catalogs.
-	enSettings := i18n.T("en", "nav.settings")
-	esSettings := i18n.T("es", "nav.settings")
-	if enSettings == esSettings {
-		t.Fatalf("catalog test precondition: en and es nav.settings are equal (%q)", enSettings)
+	// The "More" nav label differs across catalogs (p23.9: Settings/Admin moved into
+	// the More hub, so the top nav's discriminating label is now nav.more).
+	enMore := i18n.T("en", "nav.more")
+	esMore := i18n.T("es", "nav.more")
+	if enMore == esMore {
+		t.Fatalf("catalog test precondition: en and es nav.more are equal (%q)", enMore)
 	}
-	if !strings.Contains(enBody, enSettings) {
-		t.Errorf("en body missing en nav label %q", enSettings)
+	if !strings.Contains(enBody, enMore) {
+		t.Errorf("en body missing en nav label %q", enMore)
 	}
-	if !strings.Contains(esBody, esSettings) {
-		t.Errorf("es body missing es nav label %q", esSettings)
+	if !strings.Contains(esBody, esMore) {
+		t.Errorf("es body missing es nav label %q", esMore)
 	}
 
 	// No raw catalog key must leak: a rendered "nav." literal means a {{t}} key
@@ -143,24 +144,30 @@ func TestNavPermGated(t *testing.T) {
 	admin := makeUser(t, st, store.CreateUserInput{Username: "pg_admin", IsAdmin: true})
 	_ = db
 
-	adminLabel := i18n.T("en", "nav.admin")
-	settingsLabel := i18n.T("en", "nav.settings")
+	moreLabel := i18n.T("en", "nav.more")
 
-	// Admin: sees the admin section.
-	adminBody := getHomeAs(t, h, sm, admin).Body.String()
-	if !strings.Contains(adminBody, adminLabel) {
-		t.Errorf("admin persona missing admin nav entry %q:\n%s", adminLabel, adminBody)
+	// p23.9: Settings/Admin moved into the "More" hub, so the perm gating is on the
+	// hub CARDS (/more), not the top nav. Every logged-in user sees the "More" top-nav
+	// entry (AnyUser).
+	for _, u := range []*store.CurrentUser{admin, bookkeeper, noAccess} {
+		if !strings.Contains(getHomeAs(t, h, sm, u).Body.String(), moreLabel) {
+			t.Errorf("logged-in %s missing the More nav entry", u.Username)
+		}
 	}
 
-	// Non-admin (bookkeeper, no-access): NOT the admin section, but Settings
-	// (AnyUser) is present for every logged-in user.
+	// The admin card (-> /admin) shows on /more only for an admin; Settings (AnyUser)
+	// shows for everyone.
+	adminMore := asUser(t, h, sm, admin.ID, http.MethodGet, "/more", nil).Body.String()
+	if !strings.Contains(adminMore, `href="/admin"`) {
+		t.Errorf("admin persona missing the Admin card on /more:\n%s", adminMore)
+	}
 	for _, u := range []*store.CurrentUser{bookkeeper, noAccess} {
-		body := getHomeAs(t, h, sm, u).Body.String()
-		if strings.Contains(body, ">"+adminLabel+"<") {
-			t.Errorf("non-admin %s sees the admin nav entry (should not):\n%s", u.Username, body)
+		body := asUser(t, h, sm, u.ID, http.MethodGet, "/more", nil).Body.String()
+		if strings.Contains(body, `href="/admin"`) {
+			t.Errorf("non-admin %s sees the Admin card on /more (should not):\n%s", u.Username, body)
 		}
-		if !strings.Contains(body, settingsLabel) {
-			t.Errorf("logged-in %s missing Settings nav entry:\n%s", u.Username, body)
+		if !strings.Contains(body, `href="/settings"`) {
+			t.Errorf("logged-in %s missing the Settings card on /more:\n%s", u.Username, body)
 		}
 	}
 

@@ -774,3 +774,31 @@ input[aria-invalid="true"] {
   color: var(--color-primary-text);
   font-weight: 600;
 }
+
+/* p23.9 card hub ("More", and the reusable card-grid layout): a responsive grid of
+   tiles linking to sections. Whole-card is the link (big hit target). */
+.hub-cards {
+  list-style: none;
+  margin: var(--space-6) 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: var(--space-4);
+}
+.hub-card { display: flex; }
+.hub-card-link {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-4);
+  border: var(--border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  color: var(--color-text);
+}
+.hub-card-link:hover { border-color: var(--color-primary); }
+.hub-card-label { font-weight: 700; color: var(--color-primary); }
+.hub-card-desc { color: var(--color-text-muted); font-size: 0.9rem; }

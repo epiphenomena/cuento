@@ -49,23 +49,20 @@ func navSections() []navEntry {
 		// p23.8: the brand logo is "home" (-> the chart of accounts); no separate
 		// Home entry. Accounts leads the nav and is the landing.
 		{"nav.accounts", "/accounts", TxnRead},
-		{"nav.funds", "/funds", TxnRead},
-		{"nav.programs", "/programs", TxnRead},
-		{"nav.reconciliations", "/reconciliations", TxnRead},
-		{"nav.budgets", "/budgets", TxnRead},
-		{"nav.import", "/import", TxnWrite},
+		{"nav.reports", "/reports", ReportGroup("")},
 		// p20.2: the submitter workspace. Gated by ExpenseSubmit (the standalone
 		// capability) so a PURE submitter (txn_perm=none, no grants) sees ONLY this
-		// entry (+ home/settings), never the ledger/reports/admin -- the access
-		// boundary. An admin sees it too (is_admin implies everything, D10).
+		// entry (+ More), never the ledger/reports/admin -- the access boundary. An
+		// admin sees it too (is_admin implies everything, D10).
 		{"nav.myexpenses", "/expenses", ExpenseSubmit},
 		// p20.3: the reviewer queue (TxnWrite). A submit-only user never sees it (fails
-		// TxnWrite); an editing user (or admin) does. Lights up once GET /expenses/review
-		// is registered (visibleNav drops entries with no route).
+		// TxnWrite); an editing user (or admin) does.
 		{"nav.expensereview", "/expenses/review", TxnWrite},
-		{"nav.reports", "/reports", ReportGroup("")},
-		{"nav.settings", "/settings", AnyUser},
-		{"nav.admin", "/admin", Admin},
+		// p23.9: everything else (funds, programs, reconciliations, budgets, import,
+		// settings, admin) lives under the AnyUser "More" hub as perm-gated cards,
+		// keeping the top nav lean. The hub page is a card grid; the second-level menu
+		// carries the same links (subNavGroups).
+		{"nav.more", "/more", AnyUser},
 	}
 }
 
@@ -138,10 +135,19 @@ func subNavGroups() []subNavGroup {
 			},
 		},
 		{
-			Prefixes: []string{"/budgets", "/schedules"},
+			// p23.9 the "More" hub area: every page under it shows the same lateral
+			// sub-nav (perm-filtered by navPermits). /admin is NOT a prefix here — it
+			// has its own group above (a sub-hub); the More bar links out to it.
+			Prefixes: []string{"/more", "/funds", "/programs", "/reconciliations", "/budgets", "/schedules", "/import", "/settings"},
 			Entries: []navEntry{
+				{"nav.funds", "/funds", TxnRead},
+				{"nav.programs", "/programs", TxnRead},
+				{"nav.reconciliations", "/reconciliations", TxnRead},
 				{"nav.budgets", "/budgets", TxnRead},
 				{"budget.schedules.title", "/schedules", TxnRead},
+				{"nav.import", "/import", TxnWrite},
+				{"nav.settings", "/settings", AnyUser},
+				{"nav.admin", "/admin", Admin},
 			},
 		},
 	}
@@ -251,9 +257,9 @@ func (s *server) registeredGetPaths() map[string]bool {
 // footer. Page handlers wrap their own data in shellPage so the template can reach
 // both.
 type baseData struct {
-	Lang    string
-	Theme   string
-	Nav     []navItem
+	Lang   string
+	Theme  string
+	Nav    []navItem
 	SubNav []navItem // p23.5 second-row section nav (nil = no section bar)
 	// SubNavControls names a page-specific controls partial (p23.10) the section bar
 	// renders alongside the sub-nav — filters/buttons a page moves out of its body
@@ -361,6 +367,78 @@ func (s *server) home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.renderShell(w, r, http.StatusOK, nil)
+}
+
+// hubCard is one card on a hub landing (p23.9): a localized label + description
+// linking to a section, shown only when the section is registered AND the user's
+// perm permits it (so a hub never links somewhere the user would be 403'd).
+type hubCard struct {
+	LabelKey string
+	DescKey  string
+	Href     string
+	Perm     Perm
+}
+
+// hubCardItem is a resolved card for the template (localized, no Perm/keys leaked).
+type hubCardItem struct {
+	Label string
+	Desc  string
+	Href  string
+}
+
+// moreCards is the "More" hub's contents (p23.9): the ledger dimensions/operations
+// plus personal settings and the admin sub-hub, each perm-gated. Reuses the existing
+// nav.* labels; descriptions are the new more.desc.* keys.
+func moreCards() []hubCard {
+	return []hubCard{
+		{"nav.funds", "more.desc.funds", "/funds", TxnRead},
+		{"nav.programs", "more.desc.programs", "/programs", TxnRead},
+		{"nav.reconciliations", "more.desc.reconciliations", "/reconciliations", TxnRead},
+		{"nav.budgets", "more.desc.budgets", "/budgets", TxnRead},
+		{"nav.import", "more.desc.import", "/import", TxnWrite},
+		{"nav.settings", "more.desc.settings", "/settings", AnyUser},
+		{"nav.admin", "more.desc.admin", "/admin", Admin},
+	}
+}
+
+// visibleHubCards resolves cards for the current user: registered route + permitted
+// (reusing navPermits, so a card and its route agree), localized.
+func (s *server) visibleHubCards(ctx context.Context, u *store.CurrentUser, cards []hubCard) []hubCardItem {
+	registered := s.registeredGetPaths()
+	lang := langOf(ctx)
+	var out []hubCardItem
+	for _, c := range cards {
+		if !registered[c.Href] || !s.navPermits(ctx, u, c.Perm) {
+			continue
+		}
+		out = append(out, hubCardItem{
+			Label: i18n.T(lang, c.LabelKey),
+			Desc:  i18n.T(lang, c.DescKey),
+			Href:  c.Href,
+		})
+	}
+	return out
+}
+
+// hubPageModel is the model for a card-hub landing.
+type hubPageModel struct {
+	TitleKey string
+	IntroKey string
+	Cards    []hubCardItem
+}
+
+// moreHub handles GET /more (AnyUser, p23.9): the "More" landing — a grid of
+// perm-gated cards to the sections lifted out of the top nav. A pure submitter sees
+// only the cards their perms allow (often just Settings).
+func (s *server) moreHub(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	u := currentUser(ctx)
+	model := hubPageModel{
+		TitleKey: "more.title",
+		IntroKey: "more.intro",
+		Cards:    s.visibleHubCards(ctx, u, moreCards()),
+	}
+	s.render(w, r, http.StatusOK, "more.tmpl", s.newShellPage(r, model))
 }
 
 // adminIndex is the GET /admin landing (Admin): the section hub linking every
