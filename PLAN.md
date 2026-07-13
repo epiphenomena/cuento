@@ -354,7 +354,7 @@ A submission→review workflow decoupled from book-editing: a low-privilege user
 - [x] **p20.2 web: submitter workspace.**
   Tests: a submit-only user (single sub) enters revenue/expense splits (need not balance), submits, sees status, and resubmits after a rejection with the reviewer's reason shown; cannot see the ledger/reports; perm enforced.
   Build: expense-report editor (one subsidiary; revenue/expense split rows with fund/program/memo — reuses phase-12 grid pieces but no balancing requirement); my-reports list with status.
-- [ ] **p20.3 web: reviewer queue → convert / reject.**
+- [x] **p20.3 web: reviewer queue → convert / reject.**
   Tests: an editing (TxnWrite) user sees the queue, opens a report in the phase-12 editor prefilled with the submitted splits, balances + posts it (a real versioned transaction, linked via `posted_transaction_id`), OR rejects with a reason routing it back to the submitter; the converted report is immutable and shows the resulting txn.
   Build: review queue; "review & post" = the phase-12 editor prefilled with the report's splits and its subsidiary locked; reject-with-reason; batch/status indicators.
 

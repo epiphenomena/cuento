@@ -316,6 +316,53 @@ func (s *Store) ConvertExpenseReport(ctx context.Context, reportID, postedTxnID 
 	return nil
 }
 
+// PostAndConvertExpenseReport posts a balanced ledger transaction from the reviewer's
+// (possibly adjusted) editor splits AND converts the report to that txn -- IN ONE
+// change (atomic, p20.3). This is the MIRROR of PostImportRow: the report is re-read on
+// the tx-bound q and must still be 'submitted' (ErrExpenseReportState) -- this re-read,
+// not atomicity alone, is what stops a double-review double-post and blocks a converted
+// (terminal) report from being re-posted. postTransactionTx is the SOLE validator: an
+// unbalanced/invalid post rolls the whole write back, so the report stays submitted for
+// free (no window). On success the report is CONVERTED (terminal/immutable) and its
+// posted_transaction_id points at the just-created real, versioned txn. Returns the
+// created transaction id.
+//
+// Distinct from ConvertExpenseReport (which links an ALREADY-existing txn, p20.1): here
+// the txn is created in the same funnel call, so a converted report can never point at a
+// missing txn and vice versa.
+func (s *Store) PostAndConvertExpenseReport(ctx context.Context, reportID int64, in PostTransactionInput) (int64, error) {
+	var txnID int64
+	_, err := s.write(ctx, "expense_report.post_convert", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			rep, err := loadExpenseReport(ctx, q, reportID)
+			if err != nil {
+				return err
+			}
+			if rep.Status == "converted" {
+				return ErrExpenseReportImmutable
+			}
+			if rep.Status != "submitted" {
+				return ErrExpenseReportState
+			}
+			id, err := s.postTransactionTx(ctx, q, changeID, in)
+			if err != nil {
+				return err
+			}
+			txnID = id
+			if err := q.SetExpenseReportConverted(ctx, sqlc.SetExpenseReportConvertedParams{
+				PostedTransactionID: sql.NullInt64{Int64: id, Valid: true},
+				ID:                  reportID,
+			}); err != nil {
+				return fmt.Errorf("set converted: %w", err)
+			}
+			return insertExpenseReportVersion(ctx, q, changeID, "update", reportID)
+		})
+	if err != nil {
+		return 0, fmt.Errorf("post and convert expense report %d: %w", reportID, err)
+	}
+	return txnID, nil
+}
+
 // GetExpenseReport returns a report's current live row (read; sqlc).
 func (s *Store) GetExpenseReport(ctx context.Context, id int64) (sqlc.ExpenseReport, error) {
 	row, err := s.q.GetExpenseReport(ctx, id)

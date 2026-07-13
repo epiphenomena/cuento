@@ -61,6 +61,10 @@ func navSections() []navEntry {
 		// entry (+ home/settings), never the ledger/reports/admin -- the access
 		// boundary. An admin sees it too (is_admin implies everything, D10).
 		{"nav.myexpenses", "/expenses", ExpenseSubmit},
+		// p20.3: the reviewer queue (TxnWrite). A submit-only user never sees it (fails
+		// TxnWrite); an editing user (or admin) does. Lights up once GET /expenses/review
+		// is registered (visibleNav drops entries with no route).
+		{"nav.expensereview", "/expenses/review", TxnWrite},
 		{"nav.reports", "/reports", ReportGroup("")},
 		{"nav.settings", "/settings", AnyUser},
 		{"nav.admin", "/admin", Admin},

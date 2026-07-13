@@ -1867,6 +1867,8 @@ other = "That line no longer exists."
 # admin.users.* keys drive the p20.1-deferred can_submit_expenses admin toggle.
 [nav.myexpenses]
 other = "My expenses"
+[nav.expensereview]
+other = "Expense review"
 [expense.list.title]
 other = "My expense reports"
 [expense.list.intro]
@@ -1965,6 +1967,53 @@ other = "Choose a revenue or expense account in this report's subsidiary."
 other = "Enter a positive amount."
 [error.expense.empty]
 other = "Add at least one line before submitting."
+
+# p20.3 reviewer queue -> convert / reject (TxnWrite). All keys under expreview.*
+# (NO bare `expreview` leaf -- the go-i18n dotted-key/leaf collision watch).
+[expreview.title]
+other = "Expense review"
+[expreview.intro]
+other = "Submitted expense reports awaiting review. Review & post creates a balanced ledger transaction; reject routes the report back to the submitter with your reason."
+[expreview.pending_count]
+other = "%d report(s) pending review"
+[expreview.empty]
+other = "No reports are awaiting review."
+[expreview.history]
+other = "Recently reviewed"
+[expreview.col.id]
+other = "Report"
+[expreview.col.submitter]
+other = "Submitter"
+[expreview.col.subsidiary]
+other = "Subsidiary"
+[expreview.col.lines]
+other = "Lines"
+[expreview.col.total]
+other = "Total"
+[expreview.col.status]
+other = "Status"
+[expreview.col.actions]
+other = "Actions"
+[expreview.review_post]
+other = "Review & post"
+[expreview.reject]
+other = "Reject"
+[expreview.reject_reason_placeholder]
+other = "Reason (required)"
+[expreview.reject_reason_label]
+other = "Rejection reason"
+[expreview.reject_reason_required]
+other = "A reason is required to reject a report."
+[expreview.view_txn]
+other = "View transaction"
+[expreview.sub_locked]
+other = "Locked to the report's subsidiary."
+[expreview.post_title]
+other = "Review & post expense report"
+[expreview.post_intro]
+other = "The report's lines are prefilled. Add the cash or bank counter-side until the transaction balances, then post."
+[expreview.post_btn]
+other = "Post & convert"
 [admin.users.submit_title]
 other = "Expense submission"
 [admin.users.submit_intro]

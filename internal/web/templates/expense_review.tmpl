@@ -1,0 +1,103 @@
+{{/*
+  p20.3 reviewer queue (GET /expenses/review, TxnWrite). A self-contained shell page.
+  .Page is a reviewQueueModel. This is the MIRROR of import_queue.tmpl.
+
+  The queue lists SUBMITTED expense reports across ALL submitters (submitter,
+  subsidiary, line count, total) with a pending-count indicator. Each offers "review &
+  post" (opens the phase-12 editor prefilled, subsidiary locked -> creates the balanced
+  txn + converts the report atomically) and an inline REJECT form that REQUIRES a reason
+  (routing the report back to the submitter, who sees the reason via p20.2). A history
+  section shows recently converted/rejected reports for context; a CONVERTED report
+  links to its posted transaction (immutable -- no re-review).
+
+  A missing reject reason re-renders THIS page at 422 with the reject-reason error (the
+  p10.3 form-error convention -- a page-level notice, since the reason input is per-row).
+  Submitter/subsidiary names are stored proper nouns rendered verbatim; every other
+  string via {{t}} (rule 9); money via the formatters (rule 10); no inline script
+  (rule 12).
+*/ -}}
+{{define "expense_review.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "expreview.title"))}}
+  {{- with .Page}}
+  <h1>{{t "expreview.title"}}</h1>
+  <p class="hint">{{t "expreview.intro"}}</p>
+
+  {{- if .ErrorKey}}
+  <p class="field-error expreview-error" role="alert">{{t .ErrorKey}}</p>
+  {{- end}}
+
+  <p class="expreview-count" role="status">{{t "expreview.pending_count" .NumPending}}</p>
+
+  {{- if .Pending}}
+  <table class="expreview-table expreview-pending">
+    <thead>
+      <tr>
+        <th>{{t "expreview.col.id"}}</th>
+        <th>{{t "expreview.col.submitter"}}</th>
+        <th>{{t "expreview.col.subsidiary"}}</th>
+        <th>{{t "expreview.col.lines"}}</th>
+        <th>{{t "expreview.col.total"}}</th>
+        <th>{{t "expreview.col.actions"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{- range .Pending}}
+      <tr class="expreview-row" data-report-id="{{.ID}}">
+        <td class="expreview-cell-id">#{{.ID}}</td>
+        <td class="expreview-cell-submitter">{{.Submitter}}</td>
+        <td class="expreview-cell-sub">{{.SubName}}</td>
+        <td class="expreview-cell-lines">{{.LineCount}}</td>
+        <td class="expreview-cell-total"><span class="amount">{{.TotalFmt}}</span></td>
+        <td class="expreview-cell-actions">
+          <a href="/expenses/review/{{.ID}}" class="btn btn-primary expreview-post">{{t "expreview.review_post"}}</a>
+          {{/* Plain form (no htmx): a missing reason re-renders the WHOLE queue at 422
+               (page-level notice); a successful reject 303-redirects back here. */}}
+          <form class="expreview-reject-form" method="post" action="/expenses/review/reject/{{.ID}}">
+            <input type="text" name="reason" class="expreview-reject-reason"
+                   placeholder="{{t "expreview.reject_reason_placeholder"}}"
+                   aria-label="{{t "expreview.reject_reason_label"}}">
+            <button type="submit" class="btn btn-ghost expreview-reject-btn">{{t "expreview.reject"}}</button>
+          </form>
+        </td>
+      </tr>
+      {{- end}}
+    </tbody>
+  </table>
+  {{- else}}
+  <p class="expreview-empty">{{t "expreview.empty"}}</p>
+  {{- end}}
+
+  {{- if .History}}
+  <h2 class="expreview-history-heading">{{t "expreview.history"}}</h2>
+  <table class="expreview-table expreview-history">
+    <thead>
+      <tr>
+        <th>{{t "expreview.col.id"}}</th>
+        <th>{{t "expreview.col.submitter"}}</th>
+        <th>{{t "expreview.col.subsidiary"}}</th>
+        <th>{{t "expreview.col.status"}}</th>
+        <th>{{t "expreview.col.actions"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{- range .History}}
+      <tr class="expreview-row expreview-row-{{if .Converted}}converted{{else}}rejected{{end}}" data-report-id="{{.ID}}">
+        <td class="expreview-cell-id">#{{.ID}}</td>
+        <td class="expreview-cell-submitter">{{.Submitter}}</td>
+        <td class="expreview-cell-sub">{{.SubName}}</td>
+        <td class="expreview-cell-status"><span class="badge er-status-{{.StatusKey}}">{{t .StatusKey}}</span></td>
+        <td class="expreview-cell-actions">
+          {{- if .Converted}}
+          {{- if .PostedTxnID}}<a href="/transactions/{{.PostedTxnID}}/history" class="btn btn-ghost expreview-view-txn">{{t "expreview.view_txn"}}</a>{{end}}
+          {{- else if .Rejected}}
+          <span class="expreview-reason" role="note">{{.ReviewNotes}}</span>
+          {{- end}}
+        </td>
+      </tr>
+      {{- end}}
+    </tbody>
+  </table>
+  {{- end}}
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

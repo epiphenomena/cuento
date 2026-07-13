@@ -99,6 +99,12 @@ type txnEditorModel struct {
 	ImportRowID   int64
 	ImportBatchID int64 // the batch to return to on cancel / after post (import mode)
 
+	// ExpenseReportID != 0 puts the editor in p20.3 "review & post" mode: the form
+	// posts to /expenses/review/{id}/post (create the balanced txn + CONVERT the report
+	// atomically), the subsidiary is LOCKED to the report's subsidiary (same disabled
+	// select + hidden carrier as import mode), and cancel returns to the review queue.
+	ExpenseReportID int64
+
 	Rows []txnRowModel
 
 	// Options.

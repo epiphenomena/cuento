@@ -401,6 +401,30 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/expenses/{id}/lines/{lid}/delete", ExpenseSubmit, http.HandlerFunc(s.expenseLineDelete)},
 		{http.MethodPost, "/expenses/{id}/submit", ExpenseSubmit, http.HandlerFunc(s.expenseSubmit)},
 		{http.MethodPost, "/expenses/{id}/resubmit", ExpenseSubmit, http.HandlerFunc(s.expenseResubmit)},
+		// p20.3 reviewer queue -> convert / reject (Phase 20, COMPLETES it). ALL TxnWrite
+		// -- reviewing = editing the books (the mirror of the p17.3 import review->post).
+		// This is a DISTINCT surface from the p20.2 submitter workspace (ExpenseSubmit): a
+		// pure submitter hitting these routes is gated by TxnWrite -> 403 (the two roles
+		// are separate). The literal "/expenses/review" beats the "/expenses/{id}"
+		// ExpenseSubmit wildcard (Go 1.22+ mux precedence), and ".../review/{id}/post" /
+		// ".../review/{id}/reject" beat the "/expenses/{id}/..." ExpenseSubmit wildcards.
+		// "review & post" opens the phase-12 editor prefilled with the report's splits +
+		// the subsidiary LOCKED; POST creates the balanced txn AND converts the report
+		// atomically (store.PostAndConvertExpenseReport); reject-with-reason routes it back
+		// to the submitter. The permission matrix picks these up automatically (rule 8),
+		// and nav.expensereview (shell.go) lights up now that GET /expenses/review exists.
+		//
+		// ROUTING: the 2-segment queue route "/expenses/review" beats "/expenses/{id}"
+		// (a literal is more specific). The ACTION routes deliberately put the verb in
+		// segment 3 as a LITERAL ("/expenses/review/post/{id}", ".../reject/{id}") -- NOT
+		// "/expenses/review/{id}/post" -- specifically to avoid a mux AMBIGUITY with
+		// "/expenses/{id}/lines/{lid}" (both would match "/expenses/review/lines/post"
+		// with neither dominating -> a register panic). With the verb literal in seg 3
+		// (post/reject can never equal "lines"), no path matches both patterns.
+		{http.MethodGet, "/expenses/review", TxnWrite, http.HandlerFunc(s.expenseReview)},
+		{http.MethodGet, "/expenses/review/{id}", TxnWrite, http.HandlerFunc(s.expenseReviewForm)},
+		{http.MethodPost, "/expenses/review/post/{id}", TxnWrite, http.HandlerFunc(s.expenseReviewPost)},
+		{http.MethodPost, "/expenses/review/reject/{id}", TxnWrite, http.HandlerFunc(s.expenseReviewReject)},
 	}
 	// p15.12 reports index: GET /reports lists the reports the current user may
 	// access, grouped by report group, each a link to a concrete /reports/{id}. The

@@ -1861,6 +1861,8 @@ other = "Esa linea ya no existe."
 # p20.2 espacio de trabajo del solicitante (Fase 20). Ver en.toml.
 [nav.myexpenses]
 other = "Mis gastos"
+[nav.expensereview]
+other = "Revisión de gastos"
 [expense.list.title]
 other = "Mis informes de gastos"
 [expense.list.intro]
@@ -1959,6 +1961,53 @@ other = "Elija una cuenta de ingresos o gastos en la filial de este informe."
 other = "Ingrese un importe positivo."
 [error.expense.empty]
 other = "Agregue al menos una línea antes de enviar."
+
+# p20.3 cola del revisor -> convertir / rechazar (TxnWrite). Claves bajo expreview.*
+# (SIN hoja `expreview` suelta -- vigilancia de colisión clave-con-puntos/hoja).
+[expreview.title]
+other = "Revisión de gastos"
+[expreview.intro]
+other = "Informes de gastos enviados pendientes de revisión. Revisar y contabilizar crea un asiento contable equilibrado; rechazar devuelve el informe al remitente con su motivo."
+[expreview.pending_count]
+other = "%d informe(s) pendiente(s) de revisión"
+[expreview.empty]
+other = "No hay informes pendientes de revisión."
+[expreview.history]
+other = "Revisados recientemente"
+[expreview.col.id]
+other = "Informe"
+[expreview.col.submitter]
+other = "Remitente"
+[expreview.col.subsidiary]
+other = "Subsidiaria"
+[expreview.col.lines]
+other = "Líneas"
+[expreview.col.total]
+other = "Total"
+[expreview.col.status]
+other = "Estado"
+[expreview.col.actions]
+other = "Acciones"
+[expreview.review_post]
+other = "Revisar y contabilizar"
+[expreview.reject]
+other = "Rechazar"
+[expreview.reject_reason_placeholder]
+other = "Motivo (obligatorio)"
+[expreview.reject_reason_label]
+other = "Motivo del rechazo"
+[expreview.reject_reason_required]
+other = "Se requiere un motivo para rechazar un informe."
+[expreview.view_txn]
+other = "Ver transacción"
+[expreview.sub_locked]
+other = "Fijada a la subsidiaria del informe."
+[expreview.post_title]
+other = "Revisar y contabilizar informe de gastos"
+[expreview.post_intro]
+other = "Las líneas del informe están prellenadas. Agregue la contrapartida de caja o banco hasta que la transacción cuadre, luego contabilícela."
+[expreview.post_btn]
+other = "Contabilizar y convertir"
 [admin.users.submit_title]
 other = "Envío de gastos"
 [admin.users.submit_intro]

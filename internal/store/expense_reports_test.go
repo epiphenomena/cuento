@@ -247,6 +247,83 @@ func TestExpenseReportStateMachine(t *testing.T) {
 	}
 }
 
+// TestPostAndConvertExpenseReport proves the p20.3 atomic reviewer path: a submitted
+// report is posted to a real balanced versioned ledger txn AND converted, in ONE change;
+// an unbalanced post rolls the whole thing back (report stays submitted, no txn); and a
+// converted report is terminal (re-post rejected).
+func TestPostAndConvertExpenseReport(t *testing.T) {
+	s, d, ctx, submitterID, expenseAcct := seedExpenseReportEnv(t)
+	sysCtx := WithActor(context.Background(), Actor{ID: 1})
+	cash, err := s.CreateAccount(sysCtx, CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD",
+		Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{1},
+	})
+	if err != nil {
+		t.Fatalf("seed cash: %v", err)
+	}
+	prog := int64(1) // seeded root "General"
+	fc := "program"
+
+	// A submitted report (one expense line).
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	if err != nil {
+		t.Fatalf("CreateExpenseReport: %v", err)
+	}
+	if _, err := s.AddExpenseReportLine(ctx, reportID, ExpenseReportLineInput{AccountID: expenseAcct, Amount: 2000, Memo: "taxi"}); err != nil {
+		t.Fatalf("AddExpenseReportLine: %v", err)
+	}
+	if err := s.SubmitExpenseReport(ctx, reportID); err != nil {
+		t.Fatalf("SubmitExpenseReport: %v", err)
+	}
+
+	// UNBALANCED post -> rejected; report stays submitted, nothing linked.
+	unbalanced := PostTransactionInput{
+		Date: "2025-06-01", SubsidiaryID: 1, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: expenseAcct, Amount: 2000, Position: 0, ProgramID: &prog, FunctionalClass: &fc},
+			{AccountID: cash, Amount: -1500, Position: 1}, // does not net to zero
+		},
+	}
+	if _, err := s.PostAndConvertExpenseReport(ctx, reportID, unbalanced); !errors.Is(err, ErrUnbalanced) {
+		t.Fatalf("unbalanced post = %v, want ErrUnbalanced", err)
+	}
+	if got := expenseReportStatus(t, d, reportID); got != "submitted" {
+		t.Fatalf("status after unbalanced post = %q, want submitted (rolled back)", got)
+	}
+	if postedTxnID(t, d, reportID).Valid {
+		t.Fatal("posted_transaction_id set after a rejected post")
+	}
+
+	// BALANCED post -> converted + linked to a real versioned txn.
+	balanced := PostTransactionInput{
+		Date: "2025-06-01", SubsidiaryID: 1, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: expenseAcct, Amount: 2000, Position: 0, ProgramID: &prog, FunctionalClass: &fc},
+			{AccountID: cash, Amount: -2000, Position: 1},
+		},
+	}
+	txnID, err := s.PostAndConvertExpenseReport(ctx, reportID, balanced)
+	if err != nil {
+		t.Fatalf("PostAndConvertExpenseReport (balanced): %v", err)
+	}
+	if got := expenseReportStatus(t, d, reportID); got != "converted" {
+		t.Fatalf("status after balanced post = %q, want converted", got)
+	}
+	pt := postedTxnID(t, d, reportID)
+	if !pt.Valid || pt.Int64 != txnID {
+		t.Fatalf("posted_transaction_id = %v, want %d", pt, txnID)
+	}
+	// The report convert is versioned op='update'; the created txn is a real versioned
+	// ledger entry.
+	testutil.AssertVersioned(t, d, "expense_reports", reportID, "update")
+	testutil.AssertVersioned(t, d, "transactions", txnID, "create")
+
+	// Terminal: a converted report cannot be re-posted.
+	if _, err := s.PostAndConvertExpenseReport(ctx, reportID, balanced); !errors.Is(err, ErrExpenseReportImmutable) {
+		t.Fatalf("re-post converted = %v, want ErrExpenseReportImmutable", err)
+	}
+}
+
 // TestCanSubmitExpensesVersioned proves the standalone user capability is a versioned
 // column: SetUserCanSubmitExpenses appends a users_versions row naming the acting
 // admin, the live row + snapshot carry the new value, and the system user is refused.
