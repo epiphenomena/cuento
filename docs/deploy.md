@@ -13,7 +13,8 @@ service account, and TLS certs are provisioned on first request.
 
 The unit files referenced here live in [`deploy/`](../deploy):
 `cuento.service`, `litestream.service`, `litestream.yml`, `ratesync.service`,
-`ratesync.timer`.
+`ratesync.timer`. Every `cuento` subcommand and flag used below is documented in
+[docs/cli.md](cli.md).
 
 ---
 
@@ -250,4 +251,12 @@ Routine checks:
 
 Upgrades: build a new binary (`make release`), copy it over
 `/usr/local/bin/cuento`, and `sudo systemctl restart cuento` — the auto-migrate
-on start applies any new schema (backing up the db file first).
+on start applies any new schema (backing up the db file first). Migrations are
+**forward-only and idempotent** (AGENTS rule 4): restarting the new binary
+re-runs the migrator, which applies only what is pending and is a no-op when the
+schema is already current, so an upgrade never needs a manual `migrate` step and
+a restart is safe to repeat. Litestream keeps replicating across the restart; no
+Litestream action is needed for an upgrade.
+
+For the full list of subcommands and flags used above (`serve`, `migrate`,
+`user add`, `check --strict`, `ratesync`), see [docs/cli.md](cli.md).
