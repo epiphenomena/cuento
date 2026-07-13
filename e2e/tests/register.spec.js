@@ -56,5 +56,20 @@ test.describe('account register', () => {
 
     // No transactions yet -> the empty-state row shows.
     await expect(page.locator('tr.reg-empty')).toBeVisible();
+
+    // p23.12: changing a section-bar filter AUTO-APPLIES — an htmx GET to this
+    // register carrying the filter param, swapping ONLY #register-results (no Apply
+    // button, no full navigation). Drive a real subsidiary change and confirm the
+    // GET fires with sub= and the results region re-renders in place.
+    const registerUrl = page.url();
+    const swap = page.waitForResponse(
+      (r) => r.url().includes('/register?') && /[?&]sub=[1-9]/.test(r.url()) && r.status() === 200,
+    );
+    await page.locator('#reg-sub').selectOption({ index: 1 });
+    await swap;
+    // htmx swaps outerHTML in place: the URL is unchanged (no hx-push-url) and the
+    // results table is still present (now scoped to the chosen subsidiary).
+    await expect(page).toHaveURL(registerUrl);
+    await expect(page.locator('#register-results table.register-table')).toBeVisible();
   });
 });
