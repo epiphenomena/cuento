@@ -954,6 +954,8 @@ other = "Cuenta"
 other = "Fondo"
 [reports.params.program]
 other = "Programa"
+[reports.params.reconciliation]
+other = "Conciliación"
 [reports.params.run]
 other = "Generar informe"
 [reports.detail.converted]
@@ -989,6 +991,8 @@ other = "Fondos"
 other = "Programas"
 [reports.group.tax]
 other = "Impuestos (IRS 990)"
+[reports.group.reconciliation]
+other = "Conciliación"
 [reports.trial_balance.title]
 other = "Balance de comprobación"
 [reports.trial_balance.col.account]
@@ -1245,6 +1249,42 @@ other = "Total de activos netos"
 [reports.form_990.x.total_liabilities_net_assets]
 other = "Total de pasivos y activos netos"
 
+# p16.4 reconciliation statement report
+[reports.reconciliation_statement.title]
+other = "Estado de conciliación"
+[reports.reconciliation_statement.choose]
+other = "— elija una conciliación —"
+[reports.reconciliation_statement.col.date]
+other = "Fecha"
+[reports.reconciliation_statement.col.description]
+other = "Descripción"
+[reports.reconciliation_statement.col.fund]
+other = "Fondo"
+[reports.reconciliation_statement.col.amount]
+other = "Importe"
+[reports.reconciliation_statement.info.account]
+other = "Cuenta"
+[reports.reconciliation_statement.info.statement_date]
+other = "Fecha del estado"
+[reports.reconciliation_statement.info.statement_balance]
+other = "Saldo del estado"
+[reports.reconciliation_statement.info.currency]
+other = "Moneda"
+[reports.reconciliation_statement.info.status]
+other = "Estado"
+[reports.reconciliation_statement.status.open]
+other = "Abierta"
+[reports.reconciliation_statement.status.finalized]
+other = "Finalizada"
+[reports.reconciliation_statement.opening]
+other = "Saldo inicial"
+[reports.reconciliation_statement.cleared_total]
+other = "Total conciliado"
+[reports.reconciliation_statement.closing]
+other = "Saldo final"
+[reports.reconciliation_statement.unrestricted]
+other = "Sin restricción"
+
 # p16.3 reconciliation workspace
 [recon.title]
 other = "Conciliaciones"
@@ -1312,6 +1352,20 @@ other = "Diferencia"
 other = "Finalizar"
 [recon.finalize_blocked]
 other = "Finalizar esta disponible cuando la diferencia es cero."
+[recon.history.title]
+other = "Conciliaciones finalizadas"
+[recon.history.intro]
+other = "El historial de auditoría de las conciliaciones completadas. Abra un estado para ver sus movimientos incluidos y los saldos inicial y final."
+[recon.history.col.statement_date]
+other = "Fecha del estado"
+[recon.history.col.balance]
+other = "Saldo del estado"
+[recon.history.col.finalized]
+other = "Finalizada"
+[recon.history.col.statement]
+other = "Estado"
+[recon.history.view_statement]
+other = "Ver estado"
 [error.recon.bad_date]
 other = "Ingresa una fecha de estado valida."
 [error.recon.bad_balance]

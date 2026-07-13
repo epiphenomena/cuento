@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"cuento/internal/money"
+	"cuento/internal/reports"
 	"cuento/internal/store"
 )
 
@@ -87,11 +88,35 @@ type reconAccountRow struct {
 	// StartForm is the empty per-account start form (rendered only when no open
 	// recon exists). It carries the account id + currency the POST needs.
 	StartForm reconStartForm
+
+	// History is the account's FINALIZED reconciliations (p16.4), newest first -- the
+	// audit trail of completed statements, each linking to its statement report. Empty
+	// for an account with none.
+	History []reconHistoryRow
+}
+
+// reconHistoryRow is one FINALIZED reconciliation on the history list (p16.4): its
+// statement date + balance, currency, the finalized-at date, and the link to its
+// statement report.
+type reconHistoryRow struct {
+	ReconID       int64
+	StatementDate string // formatted statement date
+	BalanceFmt    string // formatted statement balance (currency-prefixed)
+	Currency      string
+	FinalizedDate string // formatted finalized-at date (the date portion of the audit timestamp)
+	ReportHref    string // /reports/reconciliation_statement?reconciliation={id}
 }
 
 // reconListModel is the GET /reconciliations model: the reconcilable-account rows.
 type reconListModel struct {
 	Rows []reconAccountRow
+}
+
+// reconStatementReportHref builds the statement report URL for a finalized recon
+// (p16.4): the report's /reports/{id} route with the reconciliation id param.
+func reconStatementReportHref(reconID int64) string {
+	return "/reports/" + reports.ReconciliationStatementReportID +
+		"?reconciliation=" + strconv.FormatInt(reconID, 10)
 }
 
 // reconList handles GET /reconciliations (TxnRead): every reconcilable account with
@@ -145,6 +170,29 @@ func (s *server) reconList(w http.ResponseWriter, r *http.Request) {
 			AccountName: row.AccountName,
 			Currency:    a.DefaultCurrency,
 		}
+
+		// History (p16.4): every FINALIZED reconciliation on this account (both
+		// currencies), newest first, each linking to its statement report.
+		fins, err := s.store.FinalizedReconciliationsForAccount(ctx, a.ID)
+		if err != nil {
+			s.serverError(w)
+			return
+		}
+		for _, fr := range fins {
+			finDate := ""
+			if fr.FinalizedAt != "" {
+				finDate = money.FormatDate(parseISOForDisplay(dateOnly(fr.FinalizedAt)), df)
+			}
+			row.History = append(row.History, reconHistoryRow{
+				ReconID:       fr.ID,
+				StatementDate: money.FormatDate(parseISOForDisplay(fr.StatementDate), df),
+				BalanceFmt:    fr.Currency + " " + money.Format(fr.StatementBalance, exps[fr.Currency], opts),
+				Currency:      fr.Currency,
+				FinalizedDate: finDate,
+				ReportHref:    reconStatementReportHref(fr.ID),
+			})
+		}
+
 		model.Rows = append(model.Rows, row)
 	}
 	s.render(w, r, http.StatusOK, "reconciliations.tmpl", s.newShellPage(r, model))

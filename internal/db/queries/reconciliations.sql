@@ -160,3 +160,39 @@ WHERE s.account_id = ?
   AND t.deleted = 0
   AND (s.reconciliation_id IS NULL OR s.reconciliation_id = ?)
 ORDER BY t.date, s.id;
+
+-- name: ReconciliationClearedSplits :many
+-- The p16.4 statement report's INCLUDED (cleared) splits for ONE reconciliation:
+-- every split cleared against reconciliation_id on a NON-DELETED transaction. The
+-- predicate matches ReconciliationClearedSum EXACTLY (reconciliation_id = ? AND
+-- t.deleted = 0), so the golden identity holds: SUM(amount) over these rows equals
+-- the recon's cleared total, hence opening + Sigma(these) == statement_balance. The
+-- row shape mirrors WorkspaceSplits (date, payee, memo, fund, amount, txn id) so the
+-- report reuses the register-row rendering. Ordered ascending by (date, split id) so
+-- the statement reads chronologically. NOTE: no account/currency/scope filter -- a
+-- reconciliation spans all funds AND all subsidiaries (D13/D20), and its cleared set
+-- is fully identified by reconciliation_id; scoping would shrink the set and break the
+-- chain. Param: reconciliation_id.
+SELECT s.id, s.transaction_id, s.amount, s.fund_id, s.memo,
+       t.date, t.subsidiary_id, t.payee_id, t.memo AS txn_memo
+FROM splits s
+JOIN transactions t ON t.id = s.transaction_id
+WHERE s.reconciliation_id = ?
+  AND t.deleted = 0
+ORDER BY t.date, s.id;
+
+-- name: FinalizedReconciliationsForAccount :many
+-- The p16.4 HISTORY source: every FINALIZED reconciliation on an account (both
+-- currencies), newest statement first -- the audit trail of completed reconciliations.
+-- finalized_at is the valid_from of the reconciliations_versions row that recorded the
+-- finalize (the op='update' snapshot whose status is 'finalized'); MAX picks the most
+-- recent finalize event when a recon was reopened + refinalized. There is no
+-- finalized_at column on reconciliations (00014), so the version twin is the only
+-- audit source for WHEN a statement was finalized. Ordered so the history reads
+-- newest-first. Param: account_id.
+SELECT r.id, r.statement_date, r.statement_balance, r.currency,
+       CAST((SELECT MAX(v.valid_from) FROM reconciliations_versions v
+        WHERE v.entity_id = r.id AND v.op = 'update' AND v.status = 'finalized') AS TEXT) AS finalized_at
+FROM reconciliations r
+WHERE r.account_id = ? AND r.status = 'finalized'
+ORDER BY r.statement_date DESC, r.id DESC;

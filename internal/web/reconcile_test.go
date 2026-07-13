@@ -348,6 +348,82 @@ func TestReconStartFormErrorPartial(t *testing.T) {
 	}
 }
 
+// --- HISTORY (p16.4): finalized recons per account on the list page -------
+
+// finalizeRecon clears both Checking splits and finalizes a recon whose statement
+// balance is their net sum (-15,000 = +25,000 - 40,000, opening 0), returning its id.
+// Used by the p16.4 history tests to build a FINALIZED recon through the store.
+func (e reconWebEnv) finalizeRecon(t *testing.T) int64 {
+	t.Helper()
+	ctx := store.WithActor(context.Background(), store.Actor{ID: e.writer})
+	id := e.startRecon(t, -15_000)
+	for _, sp := range []int64{e.spDep, e.spExp} {
+		if err := e.st.SetSplitReconciled(ctx, id, sp, true); err != nil {
+			t.Fatalf("clear split %d: %v", sp, err)
+		}
+	}
+	if err := e.st.Finalize(ctx, id); err != nil {
+		t.Fatalf("finalize: %v", err)
+	}
+	return id
+}
+
+// TestReconHistoryListsFinalizedRecon: the /reconciliations list page renders the
+// p16.4 HISTORY section listing the account's FINALIZED reconciliation with its
+// statement date + balance and a link to its statement report (TxnRead).
+func TestReconHistoryListsFinalizedRecon(t *testing.T) {
+	e := newReconWebEnv(t)
+	id := e.finalizeRecon(t)
+
+	rec := asUser(t, e.h, e.sm, e.reader, http.MethodGet, "/reconciliations", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /reconciliations = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+
+	// The history section heading + the finalized recon's row (its statement date and a
+	// link to its statement report) appear.
+	if !strings.Contains(body, `class="recon-history-table"`) {
+		t.Errorf("list missing the history section; body:\n%s", body)
+	}
+	if !strings.Contains(body, "recon-history-"+strconv.FormatInt(id, 10)) {
+		t.Errorf("history missing the finalized recon row (id %d)", id)
+	}
+	if !strings.Contains(body, "2026-02-28") {
+		t.Errorf("history missing the finalized recon's statement date")
+	}
+	// Each history row links to the statement report with the recon id param.
+	wantHref := reconStatementReportHref(id)
+	if !strings.Contains(body, wantHref) {
+		t.Errorf("history row missing statement-report link %q; body:\n%s", wantHref, body)
+	}
+	// The history row shows the finalized recon's statement balance (-15,000 minor =
+	// USD -150.00), formatted currency-prefixed.
+	if !strings.Contains(body, "-150.00") {
+		t.Errorf("history missing the finalized recon's statement balance (-150.00); body:\n%s", body)
+	}
+}
+
+// TestReconHistoryEmptyForAccountWithNone: an account with NO finalized recon shows no
+// history rows (the history section renders but is empty for it) -- an OPEN recon is
+// not history.
+func TestReconHistoryEmptyForAccountWithNone(t *testing.T) {
+	e := newReconWebEnv(t)
+	openID := e.startRecon(t, 0) // open, not finalized -> not history
+
+	rec := asUser(t, e.h, e.sm, e.reader, http.MethodGet, "/reconciliations", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /reconciliations = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "recon-history-"+strconv.FormatInt(openID, 10)) {
+		t.Errorf("open recon %d wrongly listed as finalized history", openID)
+	}
+	if strings.Contains(body, `class="recon-history-row"`) {
+		t.Errorf("history has rows for an account with no finalized recon; body:\n%s", body)
+	}
+}
+
 // --- helpers for the assertions ------------------------------------------
 
 // finalizeDisabled reports whether the workspace's Finalize button is rendered with

@@ -426,6 +426,88 @@ func (s *Store) ReconciliationsForAccount(ctx context.Context, accountID int64) 
 	return rows, nil
 }
 
+// ReconciliationStatementSplit is one INCLUDED (cleared) split of a finalized
+// reconciliation, for the p16.4 statement report: the split's financial fields plus
+// its txn context (date/subsidiary/payee/memo). RAW values (the report formats them,
+// rule 10). Mirrors ReconciliationWorkspaceSplit but without the Cleared flag (these
+// are all cleared, by definition of the query).
+type ReconciliationStatementSplit struct {
+	SplitID      int64
+	TxnID        int64
+	Amount       int64 // net-debit signed minor units (D2)
+	FundID       *int64
+	SubsidiaryID int64
+	PayeeID      *int64
+	SplitMemo    string
+	TxnMemo      string
+	Date         string // raw YYYY-MM-DD
+}
+
+// ReconciliationStatementSplits returns the INCLUDED (cleared) splits of a
+// reconciliation -- every split cleared against it on a non-deleted transaction, in
+// chronological (date, split id) order. The predicate is byte-identical to
+// ReconciliationClearedSum's filter, so Sum(these amounts) == the recon's cleared
+// total: the p16.4 statement report re-derives opening + Sigma(these) == statement
+// balance from THESE rows. It spans ALL funds and ALL subsidiaries (D13/D20) -- the
+// cleared set is fully identified by the reconciliation id, so there is no scope.
+func (s *Store) ReconciliationStatementSplits(ctx context.Context, reconID int64) ([]ReconciliationStatementSplit, error) {
+	rows, err := s.q.ReconciliationClearedSplits(ctx, sql.NullInt64{Int64: reconID, Valid: true})
+	if err != nil {
+		return nil, fmt.Errorf("store: reconciliation statement splits %d: %w", reconID, err)
+	}
+	out := make([]ReconciliationStatementSplit, len(rows))
+	for i, r := range rows {
+		out[i] = ReconciliationStatementSplit{
+			SplitID:      r.ID,
+			TxnID:        r.TransactionID,
+			Amount:       r.Amount,
+			FundID:       nullInt64ToPtr(r.FundID),
+			SubsidiaryID: r.SubsidiaryID,
+			PayeeID:      nullInt64ToPtr(r.PayeeID),
+			SplitMemo:    r.Memo,
+			TxnMemo:      r.TxnMemo,
+			Date:         r.Date,
+		}
+	}
+	return out, nil
+}
+
+// FinalizedReconciliation is one row of the p16.4 HISTORY: a finalized reconciliation
+// on an account -- its id, statement date + balance, currency, and the audited
+// finalized-at timestamp (the valid_from of the version row that recorded the
+// finalize). FinalizedAt is a raw timestamp string (the change's `at`); the web layer
+// renders its date portion (money has no datetime formatter, D-p16.4).
+type FinalizedReconciliation struct {
+	ID               int64
+	StatementDate    string
+	StatementBalance int64
+	Currency         string
+	FinalizedAt      string
+}
+
+// FinalizedReconciliationsForAccount returns every FINALIZED reconciliation on an
+// account (both currencies), newest statement first -- the p16.4 history / audit trail
+// of completed reconciliations. Each carries the finalized-at timestamp from its
+// version twin (the finalize event's valid_from). An account with none returns an
+// empty slice.
+func (s *Store) FinalizedReconciliationsForAccount(ctx context.Context, accountID int64) ([]FinalizedReconciliation, error) {
+	rows, err := s.q.FinalizedReconciliationsForAccount(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("store: finalized reconciliations for account %d: %w", accountID, err)
+	}
+	out := make([]FinalizedReconciliation, len(rows))
+	for i, r := range rows {
+		out[i] = FinalizedReconciliation{
+			ID:               r.ID,
+			StatementDate:    r.StatementDate,
+			StatementBalance: r.StatementBalance,
+			Currency:         r.Currency,
+			FinalizedAt:      r.FinalizedAt,
+		}
+	}
+	return out, nil
+}
+
 // GetReconciliation returns the current live row for one reconciliation (read; sqlc).
 func (s *Store) GetReconciliation(ctx context.Context, id int64) (sqlc.Reconciliation, error) {
 	row, err := s.q.GetReconciliation(ctx, id)

@@ -61,6 +61,10 @@ type Report struct {
 //     revenue/expense per program.
 //   - "tax"       — the IRS-990 / tax package (functional expenses = 990 Part IX,
 //     and the full 990 package): p15.7, p15.11. Year-end preparer reports.
+//   - "reconciliation" — the bank-reconciliation statement report (p16.4): the
+//     statement detail (statement info + included splits + opening/closing chain) and
+//     the finalized-recon audit trail. Gated separately so an org can grant the
+//     reconciler the statement reports without exposing the financial statements.
 //
 // Grouping is by AUDIENCE/permission need, not by data source, so an org can grant
 // a bookkeeper the financial statements without exposing the 990 package, and a
@@ -68,7 +72,7 @@ type Report struct {
 // grant UI shows. A group may exist before any report references it (the smoke
 // report below lands under "financial").
 func Groups() []string {
-	return []string{"financial", "funds", "programs", "tax"}
+	return []string{"financial", "funds", "programs", "tax", "reconciliation"}
 }
 
 // validGroup reports whether g is a declared report group.

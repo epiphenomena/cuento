@@ -79,6 +79,39 @@
       {{end}}
     </tbody>
   </table>
+
+  {{/* p16.4 HISTORY: the audit trail of FINALIZED reconciliations per account, each
+       linking to its statement report. Rendered only for accounts that have at least
+       one finalized recon; an account with none contributes nothing here. */ -}}
+  <h2 class="recon-history-heading">{{t "recon.history.title"}}</h2>
+  <p class="hint">{{t "recon.history.intro"}}</p>
+  <table class="recon-history-table">
+    <thead>
+      <tr>
+        <th>{{t "recon.col.account"}}</th>
+        <th>{{t "recon.history.col.statement_date"}}</th>
+        <th>{{t "recon.history.col.balance"}}</th>
+        <th>{{t "recon.history.col.finalized"}}</th>
+        <th>{{t "recon.history.col.statement"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+        {{$acct := .AccountName -}}
+        {{range .History}}
+        <tr class="recon-history-row" id="recon-history-{{.ReconID}}">
+          <td class="recon-history-acct">{{$acct}}</td>
+          <td class="recon-history-date">{{.StatementDate}}</td>
+          <td class="recon-history-balance"><span class="amount">{{.BalanceFmt}}</span></td>
+          <td class="recon-history-finalized">{{if .FinalizedDate}}{{.FinalizedDate}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
+          <td class="recon-history-report">
+            <a class="recon-history-link" href="{{.ReportHref}}">{{t "recon.history.view_statement"}}</a>
+          </td>
+        </tr>
+        {{end}}
+      {{end}}
+    </tbody>
+  </table>
   {{- end}}
 {{template "shell-close" .}}
 {{- end}}

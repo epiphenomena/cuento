@@ -65,6 +65,19 @@ type Params struct {
 	// selection (it is the synthetic unrestricted group, which appears only in the list).
 	Fund int64
 
+	// Reconciliation is the single finalized reconciliation a report-specific "which
+	// reconciliation" control names (p16.4 statement report): the recon whose statement
+	// detail (statement info + included splits + opening/closing chain) the report
+	// prints. Meaningful only when ParamsSpec.Reconciliation is set; the empty value (0)
+	// means "no reconciliation chosen" and the report returns an empty Table (the
+	// framework's nothing-to-show rule), so a bare hit still renders 200. Mirrors
+	// Account/Fund/Program: a report-specific param the web layer parses only for a
+	// report whose spec declares it (from either ?reconciliation= or ?recon=), validated
+	// against the real finalized-recon set. It is NOT scoped by subsidiary -- a
+	// reconciliation spans all funds AND subsidiaries (D13/D20), so Scope is inert on the
+	// statement report.
+	Reconciliation int64
+
 	// Program is the single program a report-specific "which program" control names
 	// (p15.10 program statement): the program whose subtree the report prints (that
 	// program plus ALL its descendants, rolled up, D24). Meaningful only when
@@ -166,4 +179,10 @@ type ParamsSpec struct {
 	// offers a program select bound to Params.Program (with an "— all programs —" default
 	// that yields the comparative side-by-side view). Report-SPECIFIC, like Account/Fund.
 	Program bool
+	// Reconciliation: the report takes a single finalized RECONCILIATION (p16.4 statement
+	// report); the form offers a finalized-recon select bound to Params.Reconciliation.
+	// Report-SPECIFIC, like Account/Fund/Program. The scope selector still renders (every
+	// report is scoped) but is INERT here -- a reconciliation spans all funds AND
+	// subsidiaries (D13/D20), so the statement's included set never narrows by scope.
+	Reconciliation bool
 }

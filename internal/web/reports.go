@@ -160,6 +160,26 @@ func (s *server) resolveParams(
 			}
 		}
 	}
+	if rep.ParamsSpec.Reconciliation {
+		// The report-specific RECONCILIATION param (p16.4): parse it from ?reconciliation=
+		// (or the ?recon= alias) and validate against the real FINALIZED-recon set (an
+		// arbitrary/open/unknown id is dropped -> no recon, empty table). Only fetched for a
+		// report whose spec declares it. NOT scoped -- a recon spans all funds AND
+		// subsidiaries (D13/D20), so the report's included set never narrows by scope.
+		recons, err := s.reconStatementOptions(ctx, langOf(ctx))
+		if err != nil {
+			return reports.Params{}, paramsForm{}, err
+		}
+		v := first(q, "reconciliation")
+		if v == "" {
+			v = first(q, "recon")
+		}
+		if v != "" {
+			if id := parseID(v); id != 0 && reconExists(recons, id) {
+				p.Reconciliation = id
+			}
+		}
+	}
 
 	form, err := s.buildParamsForm(ctx, u, rep, p, subs)
 	if err != nil {
@@ -283,6 +303,53 @@ func programExists(progs []programOption, id int64) bool {
 	return false
 }
 
+// reconOption is one selectable finalized reconciliation in the statement report's
+// RECONCILIATION selector (p16.4): a finalized recon with a human label built from its
+// account name + statement date + currency (proper-noun account name resolved for lang;
+// the rest already ISO/code). Picking one prints that recon's statement detail.
+type reconOption struct {
+	ID    int64
+	Label string
+}
+
+// reconStatementOptions returns every FINALIZED reconciliation across all reconcilable
+// accounts (newest statement first per account), each with a display label, for the
+// statement report's recon selector. The account name is a stored proper noun resolved
+// for lang (D5); the statement date + currency are appended as plain context. It is the
+// report-specific analogue of programStatementOptions.
+func (s *server) reconStatementOptions(ctx context.Context, lang string) ([]reconOption, error) {
+	accts, err := s.store.ReconcilableAccounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []reconOption
+	for _, a := range accts {
+		recs, err := s.store.FinalizedReconciliationsForAccount(ctx, a.ID)
+		if err != nil {
+			return nil, err
+		}
+		name := s.accountName(ctx, a.ID, lang)
+		for _, rc := range recs {
+			out = append(out, reconOption{
+				ID:    rc.ID,
+				Label: name + " " + rc.StatementDate + " " + rc.Currency,
+			})
+		}
+	}
+	return out, nil
+}
+
+// reconExists reports whether id is one of the offered finalized recons (a query recon
+// override must name a real finalized recon, else no recon is selected -> empty table).
+func reconExists(recons []reconOption, id int64) bool {
+	for _, rc := range recons {
+		if rc.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveDate parses a query date value per the user's date format (ISO always
 // accepted), falling back to fallback (a time.Time) rendered ISO when the value is
 // empty or unparseable. The stored/param form is always ISO (YYYY-MM-DD), the
@@ -318,6 +385,7 @@ type paramsForm struct {
 	ShowAccount     bool
 	ShowFund        bool
 	ShowProgram     bool
+	ShowRecon       bool
 
 	// Resolved control values (formatted for display where dated).
 	AsOf        string // user-formatted date
@@ -329,12 +397,14 @@ type paramsForm struct {
 	Account     int64  // selected leaf account id (0 = none chosen)
 	Fund        int64  // selected fund id (0 = all funds / list view)
 	Program     int64  // selected program id (0 = all programs / comparative view)
+	Recon       int64  // selected finalized recon id (0 = none chosen / empty)
 
 	// Options for the selects.
 	Currencies []ccyChoice
 	Accounts   []acctOption    // the leaf-account options (account-ledger only)
 	Funds      []fundOption    // the fund options (fund-activity report only)
 	Programs   []programOption // the program options (program-statement report only)
+	Recons     []reconOption   // the finalized-recon options (statement report only)
 }
 
 // scopeOption is one subsidiary choice in the scope selector.
@@ -374,12 +444,14 @@ func (s *server) buildParamsForm(
 		ShowAccount:     rep.ParamsSpec.Account,
 		ShowFund:        rep.ParamsSpec.Fund,
 		ShowProgram:     rep.ParamsSpec.Program,
+		ShowRecon:       rep.ParamsSpec.Reconciliation,
 		Granularity:     p.Granularity.String(),
 		Currency:        p.TargetCurrency,
 		Detail:          p.Detail,
 		Account:         p.Account,
 		Fund:            p.Fund,
 		Program:         p.Program,
+		Recon:           p.Reconciliation,
 	}
 	for _, sub := range subs {
 		f.Scopes = append(f.Scopes, scopeOption{
@@ -429,6 +501,13 @@ func (s *server) buildParamsForm(
 			return paramsForm{}, err
 		}
 		f.Programs = progs
+	}
+	if rep.ParamsSpec.Reconciliation {
+		recons, err := s.reconStatementOptions(ctx, langOf(ctx))
+		if err != nil {
+			return paramsForm{}, err
+		}
+		f.Recons = recons
 	}
 	return f, nil
 }

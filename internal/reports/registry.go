@@ -39,6 +39,7 @@ func Default() *Registry {
 	registerActivitiesByRestriction(reg)
 	registerProgramStatement(reg)
 	registerForm990(reg)
+	registerReconciliationStatement(reg)
 	return reg
 }
 

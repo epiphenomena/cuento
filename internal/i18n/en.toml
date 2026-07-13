@@ -958,6 +958,8 @@ other = "Account"
 other = "Fund"
 [reports.params.program]
 other = "Program"
+[reports.params.reconciliation]
+other = "Reconciliation"
 [reports.params.run]
 other = "Run report"
 [reports.detail.converted]
@@ -992,6 +994,8 @@ other = "Funds"
 other = "Programs"
 [reports.group.tax]
 other = "Tax (IRS 990)"
+[reports.group.reconciliation]
+other = "Reconciliation"
 [reports.trial_balance.title]
 other = "Trial balance"
 [reports.trial_balance.col.account]
@@ -1245,6 +1249,42 @@ other = "Total net assets"
 [reports.form_990.x.total_liabilities_net_assets]
 other = "Total liabilities and net assets"
 
+# p16.4 reconciliation statement report
+[reports.reconciliation_statement.title]
+other = "Reconciliation statement"
+[reports.reconciliation_statement.choose]
+other = "— choose a reconciliation —"
+[reports.reconciliation_statement.col.date]
+other = "Date"
+[reports.reconciliation_statement.col.description]
+other = "Description"
+[reports.reconciliation_statement.col.fund]
+other = "Fund"
+[reports.reconciliation_statement.col.amount]
+other = "Amount"
+[reports.reconciliation_statement.info.account]
+other = "Account"
+[reports.reconciliation_statement.info.statement_date]
+other = "Statement date"
+[reports.reconciliation_statement.info.statement_balance]
+other = "Statement balance"
+[reports.reconciliation_statement.info.currency]
+other = "Currency"
+[reports.reconciliation_statement.info.status]
+other = "Status"
+[reports.reconciliation_statement.status.open]
+other = "Open"
+[reports.reconciliation_statement.status.finalized]
+other = "Finalized"
+[reports.reconciliation_statement.opening]
+other = "Opening balance"
+[reports.reconciliation_statement.cleared_total]
+other = "Cleared total"
+[reports.reconciliation_statement.closing]
+other = "Closing balance"
+[reports.reconciliation_statement.unrestricted]
+other = "Unrestricted"
+
 # p16.3 reconciliation workspace
 [recon.title]
 other = "Reconciliations"
@@ -1312,6 +1352,20 @@ other = "Difference"
 other = "Finalize"
 [recon.finalize_blocked]
 other = "Finalize is available when the difference is zero."
+[recon.history.title]
+other = "Finalized reconciliations"
+[recon.history.intro]
+other = "The audit trail of completed reconciliations. Open a statement for its included splits and opening/closing balances."
+[recon.history.col.statement_date]
+other = "Statement date"
+[recon.history.col.balance]
+other = "Statement balance"
+[recon.history.col.finalized]
+other = "Finalized"
+[recon.history.col.statement]
+other = "Statement"
+[recon.history.view_statement]
+other = "View statement"
 [error.recon.bad_date]
 other = "Enter a valid statement date."
 [error.recon.bad_balance]

@@ -293,7 +293,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p16.3 web: reconciliation workspace.**
   Tests: handler toggles persist without scroll loss (targeted swap of the row + the diff chip); finalize disabled until difference is zero; perms (view TxnRead, act TxnWrite).
   Build: recon list (reconcilable accounts only, prior statement prefill) → workspace: uncleared splits, Space toggles the focused row, sticky cleared/difference summary.
-- [ ] **p16.4 web+reports: recon history + statement report.**
+- [x] **p16.4 web+reports: recon history + statement report.**
   Tests: goldens for the statement detail report; history page lists finalized recons per account.
   Build: report (group `reconciliation`): statement info, included splits, opening/closing chain.
 

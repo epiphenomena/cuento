@@ -65,6 +65,60 @@ func (q *Queries) FinalizedReconciledSplitIDs(ctx context.Context, transactionID
 	return items, nil
 }
 
+const finalizedReconciliationsForAccount = `-- name: FinalizedReconciliationsForAccount :many
+SELECT r.id, r.statement_date, r.statement_balance, r.currency,
+       CAST((SELECT MAX(v.valid_from) FROM reconciliations_versions v
+        WHERE v.entity_id = r.id AND v.op = 'update' AND v.status = 'finalized') AS TEXT) AS finalized_at
+FROM reconciliations r
+WHERE r.account_id = ? AND r.status = 'finalized'
+ORDER BY r.statement_date DESC, r.id DESC
+`
+
+type FinalizedReconciliationsForAccountRow struct {
+	ID               int64
+	StatementDate    string
+	StatementBalance int64
+	Currency         string
+	FinalizedAt      string
+}
+
+// The p16.4 HISTORY source: every FINALIZED reconciliation on an account (both
+// currencies), newest statement first -- the audit trail of completed reconciliations.
+// finalized_at is the valid_from of the reconciliations_versions row that recorded the
+// finalize (the op='update' snapshot whose status is 'finalized'); MAX picks the most
+// recent finalize event when a recon was reopened + refinalized. There is no
+// finalized_at column on reconciliations (00014), so the version twin is the only
+// audit source for WHEN a statement was finalized. Ordered so the history reads
+// newest-first. Param: account_id.
+func (q *Queries) FinalizedReconciliationsForAccount(ctx context.Context, accountID int64) ([]FinalizedReconciliationsForAccountRow, error) {
+	rows, err := q.db.QueryContext(ctx, finalizedReconciliationsForAccount, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FinalizedReconciliationsForAccountRow
+	for rows.Next() {
+		var i FinalizedReconciliationsForAccountRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.StatementDate,
+			&i.StatementBalance,
+			&i.Currency,
+			&i.FinalizedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getReconciliation = `-- name: GetReconciliation :one
 SELECT id, account_id, statement_date, statement_balance, currency, status, notes
 FROM reconciliations
@@ -319,6 +373,72 @@ func (q *Queries) PriorFinalizedStatementBalance(ctx context.Context, arg PriorF
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const reconciliationClearedSplits = `-- name: ReconciliationClearedSplits :many
+SELECT s.id, s.transaction_id, s.amount, s.fund_id, s.memo,
+       t.date, t.subsidiary_id, t.payee_id, t.memo AS txn_memo
+FROM splits s
+JOIN transactions t ON t.id = s.transaction_id
+WHERE s.reconciliation_id = ?
+  AND t.deleted = 0
+ORDER BY t.date, s.id
+`
+
+type ReconciliationClearedSplitsRow struct {
+	ID            int64
+	TransactionID int64
+	Amount        int64
+	FundID        sql.NullInt64
+	Memo          string
+	Date          string
+	SubsidiaryID  int64
+	PayeeID       sql.NullInt64
+	TxnMemo       string
+}
+
+// The p16.4 statement report's INCLUDED (cleared) splits for ONE reconciliation:
+// every split cleared against reconciliation_id on a NON-DELETED transaction. The
+// predicate matches ReconciliationClearedSum EXACTLY (reconciliation_id = ? AND
+// t.deleted = 0), so the golden identity holds: SUM(amount) over these rows equals
+// the recon's cleared total, hence opening + Sigma(these) == statement_balance. The
+// row shape mirrors WorkspaceSplits (date, payee, memo, fund, amount, txn id) so the
+// report reuses the register-row rendering. Ordered ascending by (date, split id) so
+// the statement reads chronologically. NOTE: no account/currency/scope filter -- a
+// reconciliation spans all funds AND all subsidiaries (D13/D20), and its cleared set
+// is fully identified by reconciliation_id; scoping would shrink the set and break the
+// chain. Param: reconciliation_id.
+func (q *Queries) ReconciliationClearedSplits(ctx context.Context, reconciliationID sql.NullInt64) ([]ReconciliationClearedSplitsRow, error) {
+	rows, err := q.db.QueryContext(ctx, reconciliationClearedSplits, reconciliationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReconciliationClearedSplitsRow
+	for rows.Next() {
+		var i ReconciliationClearedSplitsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TransactionID,
+			&i.Amount,
+			&i.FundID,
+			&i.Memo,
+			&i.Date,
+			&i.SubsidiaryID,
+			&i.PayeeID,
+			&i.TxnMemo,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const reconciliationClearedSum = `-- name: ReconciliationClearedSum :one

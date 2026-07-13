@@ -92,7 +92,9 @@ test('reconcile: start, toggle splits (targeted swap), reach zero, finalize', as
 
   // --- the recon LIST shows the reconcilable account with a start form ---
   await page.goto('/reconciliations');
-  await expect(page.getByRole('heading', { name: /reconciliations/i })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Reconciliations', exact: true }),
+  ).toBeVisible();
   const acctRow = page.locator('tr.recon-list-row', { hasText: checking });
   await expect(acctRow).toBeVisible();
 
@@ -167,4 +169,30 @@ test('reconcile: start, toggle splits (targeted swap), reach zero, finalize', as
   await expect(page.locator('button.recon-toggle')).toHaveCount(0);
   // We are on the same workspace URL (the finalized recon "shows").
   expect(page.url()).toBe(workspaceURL);
+
+  // --- p16.4 HISTORY + STATEMENT REPORT: the finalized recon appears on the
+  // /reconciliations history and its statement report renders the statement info +
+  // included splits + opening/closing chain. ---
+  await page.goto('/reconciliations');
+  const historyRow = page.locator('tr.recon-history-row', { hasText: checking });
+  await expect(historyRow.first()).toBeVisible();
+  // The history row shows the statement date and links to the statement report.
+  await expect(historyRow.first()).toContainText('2026-03-31');
+  const statementLink = historyRow.first().locator('a.recon-history-link');
+  await expect(statementLink).toBeVisible();
+
+  // Open the statement report from the history link.
+  await statementLink.click();
+  await page.waitForURL('**/reports/reconciliation_statement**');
+  const reportTable = page.locator('table.report-table');
+  await expect(reportTable).toBeVisible();
+  // Statement info: the account name + finalized status show in the preamble.
+  await expect(reportTable).toContainText(checking);
+  // The two cleared deposits are INCLUDED as split lines (their income counterpart is
+  // NOT on this account, so exactly the two checking deposits appear as data lines).
+  await expect(reportTable).toContainText('250.00');
+  await expect(reportTable).toContainText('150.00');
+  // Opening + Closing balance rows frame the statement (the chain). Statement balance
+  // 400.00 == closing (opening 0 + cleared 400).
+  await expect(reportTable).toContainText('400.00');
 });
