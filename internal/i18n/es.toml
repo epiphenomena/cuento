@@ -1639,8 +1639,6 @@ other = "Nuevo presupuesto"
 other = "Abrir"
 [budget.list.empty]
 other = "Aun no hay presupuestos."
-[budget.list.schedules_link]
-other = "Gestionar calendarios"
 [budget.list.col.name]
 other = "Nombre"
 [budget.list.col.period]

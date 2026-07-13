@@ -418,7 +418,7 @@ func (s *server) budgetsPage(w http.ResponseWriter, r *http.Request) {
 			PeriodEnd:   money.FormatDate(parseISOForDisplay(b.PeriodEnd), df),
 		})
 	}
-	s.render(w, r, http.StatusOK, "budgets.tmpl", s.newShellPage(r, model))
+	s.render(w, r, http.StatusOK, "budgets.tmpl", s.newShellPageControls(r, model, "budgets"))
 }
 
 // budgetFormModel is the budget create/edit form. Dates are in the user's format.

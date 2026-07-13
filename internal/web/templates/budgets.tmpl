@@ -1,22 +1,32 @@
 {{/*
   p19.3 budget LIST (/budgets, TxnRead view / TxnWrite manage). Each budget is a name
-  + period bounds; the inline create form fetches into #budget-form via htmx. A link
-  to the schedule LIBRARY sits alongside. Every string via {{t}} (rule 9); dates via
-  the money formatter (rule 10); no inline script (rule 12).
+  + period bounds; the inline create form fetches into #budget-form via htmx.
+
+  p23.12: the New trigger lives in the SECOND-LEVEL menu (the "budgets-controls"
+  partial the shell renders in the section bar), and the Schedules link is dropped
+  from the body (the section bar's More group already links to /schedules). The body
+  #budget-form stays as the empty swap target. Every string via {{t}} (rule 9); dates
+  via the money formatter (rule 10); no inline script (rule 12).
 */ -}}
+{{/* budgets-controls: the section-bar New trigger (p23.12). */ -}}
+{{define "budgets-controls" -}}
+<div class="subnav-actions">
+  <button type="button" class="btn btn-primary"
+          hx-get="/budgets/new" hx-target="#budget-form" hx-swap="outerHTML">
+    {{t "budget.list.new"}}
+  </button>
+</div>
+{{- end}}
+
 {{define "budgets.tmpl" -}}
 {{template "shell-open" (shellTitle . (t "budget.list.title"))}}
   {{- with .Page}}
   <h1>{{t "budget.list.title"}}</h1>
   <p class="hint">{{t "budget.list.intro"}}</p>
-  <p><a class="btn btn-ghost" href="/schedules">{{t "budget.list.schedules_link"}}</a></p>
 
-  <div id="budget-form" class="budget-form-region">
-    <button type="button" class="btn btn-primary"
-            hx-get="/budgets/new" hx-target="#budget-form" hx-swap="outerHTML">
-      {{t "budget.list.new"}}
-    </button>
-  </div>
+  {{/* The inline create form (New trigger lives in the section bar, p23.12) swaps in
+       here; empty until opened. */}}
+  <div id="budget-form" class="budget-form-region"></div>
 
   <table class="budgets-table">
     <thead>
