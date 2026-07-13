@@ -310,6 +310,11 @@ function enhance(input) {
 
   btn.addEventListener('click', () => (pop.hidden ? open() : close()));
 
+  // NB: "click outside closes" is NOT wired per-field (that would leak one
+  // document listener per enhanced input, accumulating on every htmx:afterSwap
+  // that re-creates #txn-date). A single delegated document listener at module
+  // scope (below) closes any open popover instead.
+
   // Arrow-key navigation across the day grid + Escape to close.
   pop.addEventListener('keydown', (evt) => {
     if (evt.key === 'Escape') {
@@ -331,9 +336,19 @@ function enhance(input) {
     if (want) want.focus();
   });
 
-  // Click outside closes.
-  document.addEventListener('click', (evt) => {
-    if (!pop.hidden && !wrap.contains(evt.target)) close();
+}
+
+// closeOnOutsideClick is the SINGLE delegated document listener (registered once, in
+// the init block) that closes any open date popover when the click lands outside its
+// wrapper — replacing the per-field listener that would leak on every htmx swap.
+function closeOnOutsideClick(evt) {
+  document.querySelectorAll('.datefield-popover:not([hidden])').forEach((pop) => {
+    const wrap = pop.closest('.datefield-wrap');
+    if (wrap && !wrap.contains(evt.target)) {
+      pop.hidden = true;
+      const btn = wrap.querySelector('.datefield-pick');
+      if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
   });
 }
 
@@ -345,4 +360,6 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
   document.addEventListener('DOMContentLoaded', () => enhanceAll());
   // Re-scan after htmx swaps (the txn form re-render, filter swaps, etc.).
   document.addEventListener('htmx:afterSwap', () => enhanceAll());
+  // ONE document-level "click outside closes" listener for all popovers.
+  document.addEventListener('click', closeOnOutsideClick);
 }

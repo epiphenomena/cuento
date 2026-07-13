@@ -59,9 +59,12 @@ test.describe('authenticated shell', () => {
     // Default theme is "auto" (server-side from the absent cookie / default).
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'auto');
 
-    // Toggle to dark via the plain-form theme control (no JS).
-    await page.locator('#theme-select').selectOption('dark');
-    await page.locator('form.theme-control button[type="submit"]').click();
+    // Toggle to dark via the Settings page (p23.1 consolidated the theme control
+    // there and removed the header form). Saving POSTs /settings, which writes the
+    // theme cookie and 303-redirects back.
+    await page.goto('/settings');
+    await page.locator('#setting-theme').selectOption('dark');
+    await page.locator('form.settings-form button[type="submit"]').click();
 
     // After the POST/redirect the page re-renders with data-theme="dark" applied
     // server-side (read from the cookie), so it is present on first paint.
