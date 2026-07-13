@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
+
+	"cuento/internal/store"
 )
 
 // The mapping is two stdlib-parseable files (a deliberate within-allowlist
@@ -159,8 +162,22 @@ type Config struct {
 	Subsidiaries map[string]SubsidiaryConfig `json:"subsidiaries"`
 
 	// Programs maps a source `kat` code -> a program name created under the seeded
-	// root program ("General"). A `kat` with no entry falls back to the root.
+	// root program ("General"). A `kat` with no entry falls back to the root. This
+	// is the PARENT-level program dimension.
 	Programs map[string]string `json:"programs"`
+
+	// ProgramClasses maps a source `klass` (the raw, hierarchical QuickBooks class)
+	// -> a program name, giving CHILD-level program detail that `kat` collapses. It
+	// takes precedence over Programs on a split: klass is finer AND more correct
+	// (e.g. a US-ledger split classed "UPH:Summer Camp" is a UPH program even though
+	// its kat is "uplam"). A klass with no entry falls back to the kat program. Merges
+	// bilingual (EN/US, ES/HNL) classes to one program by mapping both to one name.
+	ProgramClasses map[string]string `json:"program_classes"`
+
+	// ProgramParents maps a program NAME -> its parent program name, so ProgramClasses
+	// children nest under their kat-level parent (which nests under root "General").
+	// A program with no entry is created directly under "General".
+	ProgramParents map[string]string `json:"program_parents"`
 
 	// Funds maps a source `donor` value -> a fund definition. A donor with no
 	// entry (or a blank donor) means unrestricted (NULL fund).
@@ -223,6 +240,56 @@ func ReadConfig(r io.Reader) (Config, error) {
 		return Config{}, fmt.Errorf("read config: %w", err)
 	}
 	return c, nil
+}
+
+// rateCols is the header of the optional historical-rates CSV, in order. The file
+// is a flat list of report-time FX facts (D12) the go-live build loads via
+// store.PutRates so the shipped db can convert HNL->USD (etc.) at report time --
+// the importer stores native minor units only, so without these no consolidated-
+// USD report can be produced. Kept as one list so any future writer and this
+// reader agree by construction.
+var rateCols = []string{"rate_date", "base", "quote", "rate", "source"}
+
+// ReadRates parses the historical-rates CSV from r into store.Rate rows for a
+// single PutRates batch. The header is required and validated against rateCols so
+// a scrambled/short file fails loudly rather than mis-loading columns. rate is a
+// float (D12 / rule 3 -- the one place a non-integer amount is allowed). Blank
+// source defaults to "import" for the audit trail.
+func ReadRates(r io.Reader) ([]store.Rate, error) {
+	cr := csv.NewReader(r)
+	cr.FieldsPerRecord = len(rateCols)
+	rows, err := cr.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("read rates: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("read rates: empty (missing header)")
+	}
+	for i, h := range rateCols {
+		if rows[0][i] != h {
+			return nil, fmt.Errorf("read rates: header col %d = %q, want %q", i, rows[0][i], h)
+		}
+	}
+
+	out := make([]store.Rate, 0, len(rows)-1)
+	for i, f := range rows[1:] {
+		val, err := strconv.ParseFloat(strings.TrimSpace(f[3]), 64)
+		if err != nil {
+			return nil, fmt.Errorf("read rates: row %d rate %q: %w", i+2, f[3], err)
+		}
+		src := strings.TrimSpace(f[4])
+		if src == "" {
+			src = "import"
+		}
+		out = append(out, store.Rate{
+			RateDate: strings.TrimSpace(f[0]),
+			Base:     strings.TrimSpace(f[1]),
+			Quote:    strings.TrimSpace(f[2]),
+			Value:    val,
+			Source:   src,
+		})
+	}
+	return out, nil
 }
 
 // contains reports whether s is in list (small linear scan; lists are tiny).

@@ -121,6 +121,7 @@ func buildCmd(ctx context.Context, args []string) error {
 	source := fs.String("source", "", "path to the source ledger CSV export")
 	mapPath := fs.String("map", "", "path to the reviewed account-mapping CSV")
 	configPath := fs.String("config", "", "path to the global mapping config JSON")
+	ratesPath := fs.String("rates", "", "optional path to a historical FX-rates CSV (rate_date,base,quote,rate,source)")
 	outPath := fs.String("o", "fixtures/sample.db", "output SQLite db path")
 	anonymize := fs.Bool("anonymize", false, "hash payees/memos so the sample db carries no real names/notes")
 	if err := fs.Parse(args); err != nil {
@@ -138,6 +139,15 @@ func buildCmd(ctx context.Context, args []string) error {
 	cfg, err := readConfigFile(*configPath)
 	if err != nil {
 		return err
+	}
+	// Optional historical FX rates (D12): without them the produced db cannot
+	// render any converted (consolidated-currency) report.
+	var rates []store.Rate
+	if *ratesPath != "" {
+		rates, err = readRatesFile(*ratesPath)
+		if err != nil {
+			return err
+		}
 	}
 
 	src, err := os.Open(*source)
@@ -164,7 +174,7 @@ func buildCmd(ctx context.Context, args []string) error {
 	st := store.New(sqldb)
 	actorCtx := store.WithActor(ctx, store.Actor{ID: systemActorID})
 
-	res, err := runBuild(actorCtx, src, accMap, cfg, st, *anonymize)
+	res, err := runBuild(actorCtx, src, accMap, cfg, rates, st, *anonymize)
 	if err != nil {
 		return err
 	}
@@ -206,4 +216,13 @@ func readConfigFile(path string) (Config, error) {
 	}
 	defer func() { _ = f.Close() }()
 	return ReadConfig(f)
+}
+
+func readRatesFile(path string) ([]store.Rate, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open rates: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	return ReadRates(f)
 }

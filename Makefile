@@ -80,13 +80,15 @@ LEDGERIMPORT   ?= $(BINDIR)/ledgerimport
 FIXTURE_SOURCE ?= fixtures/source/jrnl.csv
 FIXTURE_MAP    ?= fixtures/source/mapping-accounts.csv
 FIXTURE_CONFIG ?= fixtures/source/mapping.json
+FIXTURE_RATES  ?= fixtures/source/rates.csv
 FIXTURE_DB     ?= fixtures/sample.db
 fixture:
 	@mkdir -p $(BINDIR)
 	$(GO) build -o $(LEDGERIMPORT) ./cmd/ledgerimport
 	rm -f $(FIXTURE_DB) $(FIXTURE_DB)-* $(FIXTURE_DB).*
 	$(LEDGERIMPORT) build -source $(FIXTURE_SOURCE) -map $(FIXTURE_MAP) \
-		-config $(FIXTURE_CONFIG) -o $(FIXTURE_DB) --anonymize
+		-config $(FIXTURE_CONFIG) $(if $(wildcard $(FIXTURE_RATES)),-rates $(FIXTURE_RATES),) \
+		-o $(FIXTURE_DB) --anonymize
 
 ## golden — regenerate report goldens (internal/reports/testdata/*.{txt,csv}) via the
 ## -update test flag; deterministic (params/currency/locale pinned in the tests). The

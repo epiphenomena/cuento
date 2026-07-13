@@ -54,12 +54,21 @@ func runBuild(
 	source io.Reader,
 	accMap []AccountMap,
 	cfg Config,
+	rates []store.Rate,
 	st *store.Store,
 	anonymize bool,
 ) (*BuildResult, error) {
 	recs, err := ParseRecords(source)
 	if err != nil {
 		return nil, err
+	}
+
+	// Load historical FX rates first (reference data, D12): the currencies they
+	// reference are all migration-seeded, so this needs none of the entity phases,
+	// and loading it up front means a report run against the produced db can convert
+	// immediately. An empty batch is a no-op.
+	if err := st.PutRates(ctx, rates); err != nil {
+		return nil, fmt.Errorf("load rates: %w", err)
 	}
 
 	res := &BuildResult{
@@ -145,24 +154,69 @@ func (b *builder) subsidiaries(ctx context.Context) error {
 // derived from `kat` are created under it (D24).
 const rootProgramID = int64(1)
 
-// programs creates one program per configured kat value under the seeded root and
-// records the program NAME -> id map.
+// programs creates the program tree: one program per distinct name in the kat
+// map (Programs) and the klass map (ProgramClasses), nested per ProgramParents
+// (default parent = root "General"). Names are created parent-before-child so a
+// child's parent id exists, and each name is created once (many kats/klasses may
+// map to one program). Records the program NAME -> id map.
 func (b *builder) programs(ctx context.Context) error {
 	// Root "General" is always addressable for the fallback default.
 	b.res.ProgramIDs["General"] = rootProgramID
-	for _, kat := range sortedKeys(b.cfg.Programs) {
-		name := b.cfg.Programs[kat]
+
+	// Collect every distinct program name referenced by either map.
+	names := map[string]bool{}
+	for _, n := range b.cfg.Programs {
+		names[n] = true
+	}
+	for _, n := range b.cfg.ProgramClasses {
+		names[n] = true
+	}
+
+	// parentOf resolves a name's parent name (default "General"). A parent that is
+	// itself a mapped program is created first via the recursive create below.
+	parentOf := func(name string) string {
+		if p, ok := b.cfg.ProgramParents[name]; ok && p != "" {
+			return p
+		}
+		return "General"
+	}
+
+	// create is parent-before-child, memoized via ProgramIDs; it rejects a cycle and
+	// an unknown parent that is neither General nor a mapped program name.
+	var create func(name string, stack map[string]bool) error
+	create = func(name string, stack map[string]bool) error {
 		if _, ok := b.res.ProgramIDs[name]; ok {
-			continue // two kats mapping to one program name -> create once
+			return nil // already created (or the root)
+		}
+		if stack[name] {
+			return fmt.Errorf("program tree cycle at %q", name)
+		}
+		parent := parentOf(name)
+		if _, ok := b.res.ProgramIDs[parent]; !ok {
+			if !names[parent] {
+				return fmt.Errorf("program %q: parent %q is not a configured program", name, parent)
+			}
+			stack[name] = true
+			if err := create(parent, stack); err != nil {
+				return err
+			}
+			delete(stack, name)
 		}
 		id, err := b.st.CreateProgram(ctx, store.CreateProgramInput{
-			ParentID: rootProgramID,
+			ParentID: b.res.ProgramIDs[parent],
 			Name:     name,
 		})
 		if err != nil {
 			return fmt.Errorf("create program %q: %w", name, err)
 		}
 		b.res.ProgramIDs[name] = id
+		return nil
+	}
+
+	for _, name := range sortedKeys(names) { // deterministic id order
+		if err := create(name, map[string]bool{}); err != nil {
+			return err
+		}
 	}
 	return nil
 }

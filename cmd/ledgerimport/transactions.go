@@ -268,12 +268,20 @@ func (b *builder) resolveSplit(r Record) (pending, error) {
 			s.FundID = &fid
 		}
 	}
-	// Program from kat (D24), ONLY on revenue/expense splits: the store rejects a
-	// program on an A/L/E split (ErrProgramOnBalanceSheet), and the source populates
-	// kat on non-R/E lines too. The store defaults program from the account when
-	// omitted, so we set it only when we have a mapped kat on an R/E account.
-	if isRE && r.Kat != "" {
-		if pname, ok := b.cfg.Programs[r.Kat]; ok {
+	// Program, ONLY on revenue/expense splits (the store rejects a program on an
+	// A/L/E split, ErrProgramOnBalanceSheet). Resolution, finest-first:
+	//   1. the raw `klass` (child program) -- finer AND more correct than kat (a
+	//      US-ledger "UPH:Summer Camp" split is a UPH program though its kat is uplam);
+	//   2. else the `kat` (parent program);
+	//   3. else nothing -> the store defaults from the account (default_program).
+	if isRE {
+		pname := ""
+		if p, ok := b.cfg.ProgramClasses[r.Klass]; ok {
+			pname = p
+		} else if p, ok := b.cfg.Programs[r.Kat]; ok && r.Kat != "" {
+			pname = p
+		}
+		if pname != "" {
 			if pid, ok := b.res.ProgramIDs[pname]; ok {
 				s.ProgramID = &pid
 			}

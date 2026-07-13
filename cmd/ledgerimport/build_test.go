@@ -115,6 +115,117 @@ func testSource() string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
+// TestReadRatesParses checks the historical-rates CSV reader: header validation,
+// float parsing (D12), and the blank-source default. All values synthetic (rule 11).
+func TestReadRatesParses(t *testing.T) {
+	csv := "rate_date,base,quote,rate,source\n" +
+		"2024-01-01,HNL,USD,0.0405,yahoo\n" +
+		"2024-02-01,HNL,USD,0.0402,\n"
+	rates, err := ReadRates(strings.NewReader(csv))
+	if err != nil {
+		t.Fatalf("ReadRates: %v", err)
+	}
+	if len(rates) != 2 {
+		t.Fatalf("got %d rates, want 2", len(rates))
+	}
+	if rates[0] != (store.Rate{RateDate: "2024-01-01", Base: "HNL", Quote: "USD", Value: 0.0405, Source: "yahoo"}) {
+		t.Errorf("row 0 = %+v", rates[0])
+	}
+	if rates[1].Source != "import" { // blank source defaults
+		t.Errorf("blank source = %q, want import", rates[1].Source)
+	}
+
+	// A scrambled header must fail loudly, not mis-map columns.
+	if _, err := ReadRates(strings.NewReader("base,rate_date,quote,rate,source\n")); err == nil {
+		t.Error("scrambled header accepted; want error")
+	}
+}
+
+// TestBuildLoadsRates asserts the build loads a rates batch so the produced db can
+// convert at report time (RateOn resolves the loaded pair).
+func TestBuildLoadsRates(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	accMap, err := ReadAccountMap(strings.NewReader(testAccountMap()))
+	if err != nil {
+		t.Fatalf("ReadAccountMap: %v", err)
+	}
+	cfg, err := ReadConfig(strings.NewReader(testConfig()))
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	rates := []store.Rate{{RateDate: "2024-01-01", Base: "HNL", Quote: "USD", Value: 0.04, Source: "import"}}
+	if _, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, rates, st, false); err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+	got, err := st.RateOn(ctx, "HNL", "USD", "2024-06-01")
+	if err != nil {
+		t.Fatalf("RateOn: %v", err)
+	}
+	if got.Rate != 0.04 || got.RateDate != "2024-01-01" {
+		t.Errorf("RateOn = %+v, want rate 0.04 on 2024-01-01", got)
+	}
+}
+
+// TestProgramTreeFromKlass asserts the klass-keyed child-program tree: a program
+// named in program_classes is created under its program_parents parent, and a R/E
+// split routes to it by `klass` even though its `kat` maps to the parent program
+// (klass is finer AND more correct). The shared source fixes klass="subclass".
+func TestProgramTreeFromKlass(t *testing.T) {
+	cfg, err := ReadConfig(strings.NewReader(`{
+  "root_subsidiary_name": "Test Org Root", "root_base_currency": "USD",
+  "subsidiaries": {"US": {"name": "Test US", "base_currency": "USD"},
+                   "MX": {"name": "Test MX", "base_currency": "MXN"}},
+  "programs": {"EDU": "Education"},
+  "program_classes": {"subclass": "Summer Camp"},
+  "program_parents": {"Summer Camp": "Education"},
+  "funds": {}, "functional_classes": {"PRG": "program", "MGT": "management"},
+  "base_currency": "USD", "fx_clearing_account": "FX Clearing",
+  "opening_balance_account": "Opening Balances", "payee_column": "desc",
+  "skip_countries": ["CONSOL"], "opening_balance_typs": ["opening"]
+}`))
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	accMap, err := ReadAccountMap(strings.NewReader(testAccountMap()))
+	if err != nil {
+		t.Fatalf("ReadAccountMap: %v", err)
+	}
+	res, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, nil, st, false)
+	if err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+
+	// Tree: Summer Camp exists and its parent is Education (not the root).
+	camp, ok := res.ProgramIDs["Summer Camp"]
+	if !ok {
+		t.Fatal("Summer Camp program not created")
+	}
+	edu := res.ProgramIDs["Education"]
+	prog, err := st.GetProgram(ctx, camp)
+	if err != nil {
+		t.Fatalf("GetProgram: %v", err)
+	}
+	if !prog.ParentID.Valid || prog.ParentID.Int64 != edu {
+		t.Errorf("Summer Camp parent = %v, want Education (%d)", prog.ParentID, edu)
+	}
+
+	// Routing: at least one R/E split lands on Summer Camp (via klass), proving klass
+	// took precedence over the kat=EDU->Education mapping.
+	var n int
+	if err := sqldb.QueryRow(`SELECT COUNT(*) FROM splits WHERE program_id = ?`, camp).Scan(&n); err != nil {
+		t.Fatalf("count splits: %v", err)
+	}
+	if n == 0 {
+		t.Error("no split routed to Summer Camp via klass")
+	}
+}
+
 // buildInto runs the build core into a fresh migrated temp db and returns the
 // result. anonymize toggles the payee/memo hashing.
 func buildInto(t *testing.T, anonymize bool) (*sql.DB, *store.Store, *BuildResult) {
@@ -131,7 +242,7 @@ func buildInto(t *testing.T, anonymize bool) (*sql.DB, *store.Store, *BuildResul
 	if err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	res, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, st, anonymize)
+	res, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, nil, st, anonymize)
 	if err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
