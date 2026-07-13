@@ -808,6 +808,8 @@ other = "No payee"
 other = "Search payees..."
 [txn.memo]
 other = "Memo"
+[txn.notes]
+other = "Notes"
 [txn.account.choose]
 other = "Choose an account"
 [txn.fund.unrestricted]
@@ -942,6 +944,8 @@ other = "Subsidiary"
 other = "Payee"
 [history.field.memo]
 other = "Memo"
+[history.field.notes]
+other = "Notes"
 [history.field.currency]
 other = "Currency"
 [history.field.account]

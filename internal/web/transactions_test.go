@@ -155,6 +155,37 @@ func TestTxnCreateRoundTrip(t *testing.T) {
 	}
 }
 
+// TestTxnNotesPersistsAndPrefills (p24.2): the transaction-level notes textarea is
+// parsed on submit, stored on the header, and prefilled when the txn is reopened.
+func TestTxnNotesPersistsAndPrefills(t *testing.T) {
+	e := newTxnWebEnv(t)
+
+	f := e.balancedForm("100.00", "-100.00")
+	notes := "Longer explanation for the auditors: reclassified per board minutes."
+	f.Set("notes", notes)
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions", f)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create: status=%d, body=%s", rec.Code, rec.Body.String())
+	}
+	id := latestTxnID(t, e)
+
+	// Stored on the header.
+	hdr, err := e.st.GetTransaction(context.Background(), id)
+	must(t, err, "GetTransaction")
+	if hdr.Notes != notes {
+		t.Errorf("stored notes = %q, want %q", hdr.Notes, notes)
+	}
+
+	// The edit form prefills the notes textarea.
+	getRec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(id)+"/edit", nil)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("edit form: status=%d", getRec.Code)
+	}
+	if body := getRec.Body.String(); !strings.Contains(body, `id="txn-notes"`) || !strings.Contains(body, notes) {
+		t.Errorf("edit form did not prefill the notes textarea:\n%s", body)
+	}
+}
+
 // TestTxnEditSplitIDRoundTrip (TRAP 1): editing ONE split of a 3-split txn produces
 // exactly ONE op=update split-version and leaves the other two version-untouched.
 func TestTxnEditSplitIDRoundTrip(t *testing.T) {

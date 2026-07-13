@@ -802,6 +802,8 @@ other = "Sin beneficiario"
 other = "Buscar beneficiarios..."
 [txn.memo]
 other = "Nota"
+[txn.notes]
+other = "Observaciones"
 [txn.account.choose]
 other = "Elija una cuenta"
 [txn.fund.unrestricted]
@@ -936,6 +938,8 @@ other = "Subsidiaria"
 other = "Beneficiario"
 [history.field.memo]
 other = "Nota"
+[history.field.notes]
+other = "Observaciones"
 [history.field.currency]
 other = "Moneda"
 [history.field.account]

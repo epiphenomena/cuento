@@ -87,6 +87,7 @@ type txnEditorModel struct {
 	Payee      int64
 	PayeeName  string // the typed/picked payee name (create-on-save + 422 echo)
 	Memo       string
+	Notes      string // longer multiline explanation (p24.2)
 	Currency   string
 
 	DisplayDRCR bool // the user's display_mode == dr_cr -> render twin columns
@@ -169,6 +170,7 @@ func (s *server) txnNewForm(w http.ResponseWriter, r *http.Request) {
 			model.Date = d
 		}
 		model.Memo = r.URL.Query().Get("memo")
+		model.Notes = r.URL.Query().Get("notes")
 		model.Payee = parseID(r.URL.Query().Get("payee"))
 	} else {
 		// First load: today's date (Appendix C `t` = today) and two empty rows.
@@ -259,6 +261,7 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	model.Memo = hdr.Memo
+	model.Notes = hdr.Notes
 
 	exp := s.currencyExponent(ctx, hdr.Currency)
 	// The prefilled amount MUST use the user's NUMBER format (rule 10) so that a
@@ -344,6 +347,7 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 	model.Payee = parseID(r.FormValue("payee"))
 	model.PayeeName = strings.TrimSpace(r.FormValue("payee_name"))
 	model.Memo = r.FormValue("memo")
+	model.Notes = r.FormValue("notes")
 	model.FirstErrorRow = -1
 
 	// Resolve the payee (p12.3 create-on-save): prefer a picked existing id; else, if a
@@ -378,6 +382,7 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 		Date:         dateISO,
 		SubsidiaryID: subID,
 		Memo:         model.Memo,
+		Notes:        model.Notes,
 		Currency:     currency,
 		Splits:       splits,
 	}

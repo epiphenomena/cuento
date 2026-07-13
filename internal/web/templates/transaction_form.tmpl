@@ -253,6 +253,14 @@
     {{if .TotalsError}}<span class="field-error txn-totals-error" id="txn-totals-error" role="alert"{{if eq $.Page.FirstErrorRow -1}} autofocus{{end}}>{{t .TotalsError}}</span>{{else}}<span class="txn-totals-error" id="txn-totals-error"></span>{{end}}
   </div>
 
+  {{/* p24.2 transaction-level notes: a longer multiline explanation (distinct from
+       the short per-split memos). Full-width below the grid so it never crowds the
+       header fields; echoed on the subsidiary re-filter and on a 422. */}}
+  <div class="txn-notes-field">
+    <label for="txn-notes">{{t "txn.notes"}}</label>
+    <textarea name="notes" id="txn-notes" class="txn-notes" rows="2">{{.Notes}}</textarea>
+  </div>
+
   <div class="txn-submit">
     <button type="submit" class="btn btn-primary">{{if .ImportRowID}}{{t "import.posthdr_btn"}}{{else if .ExpenseReportID}}{{t "expreview.post_btn"}}{{else}}{{t "common.save"}}{{end}}</button>
     <a href="{{if .ImportRowID}}/import/batches/{{.ImportBatchID}}{{else if .ExpenseReportID}}/expenses/review{{else}}/accounts{{end}}" class="btn btn-ghost">{{t "common.cancel"}}</a>

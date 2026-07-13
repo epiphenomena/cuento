@@ -687,6 +687,12 @@ input[aria-invalid="true"] {
 .txn-total-chip:empty { display: none; }
 .txn-totals-error:not(:empty) { color: var(--color-danger); font-weight: 600; }
 
+/* p24.2 transaction-level notes: a full-width multiline field below the grid, for a
+   longer explanation than the short per-split memos. */
+.txn-notes-field { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-4); }
+.txn-notes-field > label { font-weight: 600; font-size: 0.85rem; color: var(--color-text-muted); }
+.txn-notes { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }
+
 .txn-submit { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
 
 /* A subsidiary that is locked (import / expense-review post) reads as a hint. */

@@ -96,6 +96,7 @@ type PostTransactionInput struct {
 	SubsidiaryID int64
 	PayeeID      *int64
 	Memo         string
+	Notes        string // longer multiline explanation (p24.2), distinct from split memos
 	Currency     string
 	Splits       []SplitInput
 }
@@ -153,6 +154,7 @@ func (s *Store) postTransactionTx(ctx context.Context, q *sqlc.Queries, changeID
 		SubsidiaryID: in.SubsidiaryID,
 		PayeeID:      nullInt64Ptr(in.PayeeID),
 		Memo:         in.Memo,
+		Notes:        in.Notes,
 		Currency:     in.Currency,
 	})
 	if err != nil {
@@ -307,6 +309,7 @@ func (s *Store) UpdateTransaction(ctx context.Context, id int64, in PostTransact
 				SubsidiaryID: in.SubsidiaryID,
 				PayeeID:      nullInt64Ptr(in.PayeeID),
 				Memo:         in.Memo,
+				Notes:        in.Notes,
 				Currency:     in.Currency,
 				Deleted:      cur.Deleted,
 				ID:           id,
@@ -408,6 +411,7 @@ type TransactionState struct {
 	SubsidiaryID int64
 	PayeeID      sql.NullInt64
 	Memo         string
+	Notes        string
 	Currency     string
 	Splits       []SplitState
 }
@@ -478,6 +482,7 @@ func (s *Store) TransactionAsOf(ctx context.Context, id int64, at time.Time) (Tr
 		SubsidiaryID: hdr.SubsidiaryID,
 		PayeeID:      hdr.PayeeID,
 		Memo:         hdr.Memo,
+		Notes:        hdr.Notes,
 		Currency:     hdr.Currency,
 		Splits:       splits,
 	}, nil

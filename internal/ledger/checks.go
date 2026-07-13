@@ -220,6 +220,7 @@ LEFT JOIN transactions_versions v
 WHERE v.id IS NULL
    OR v.date IS NOT c.date OR v.subsidiary_id IS NOT c.subsidiary_id
    OR v.payee_id IS NOT c.payee_id OR v.memo IS NOT c.memo
+   OR v.notes IS NOT c.notes
    OR v.currency IS NOT c.currency OR v.deleted IS NOT c.deleted
 UNION ALL
 -- splits: soft-deleting a transaction leaves its splits live but writes NO split

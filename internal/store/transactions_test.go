@@ -168,6 +168,69 @@ func TestPostBalanced(t *testing.T) {
 	}
 }
 
+// TestTransactionNotesRoundTrip (p24.2): the header-level notes field persists on
+// post, reconstructs as-of (Z3 snapshot parity), updates in place, and the change
+// surfaces as a FieldNotes header diff in the timeline.
+func TestTransactionNotesRoundTrip(t *testing.T) {
+	e := newTxnEnv(t)
+
+	in := e.balancedInput(10_000)
+	in.Notes = "Board-approved travel reimbursement; see attached itinerary."
+	id, err := e.s.PostTransaction(mutCtx(), in)
+	if err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+
+	// Live header carries the notes.
+	hdr, err := e.s.GetTransaction(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("GetTransaction: %v", err)
+	}
+	if hdr.Notes != in.Notes {
+		t.Errorf("live notes = %q, want %q", hdr.Notes, in.Notes)
+	}
+
+	// As-of reconstruction sees the same notes (the versions snapshot includes it).
+	st, err := e.s.TransactionAsOf(mutCtx(), id, time.Now())
+	if err != nil {
+		t.Fatalf("TransactionAsOf: %v", err)
+	}
+	if !st.Present || st.Notes != in.Notes {
+		t.Errorf("as-of notes = %q (present=%v), want %q", st.Notes, st.Present, in.Notes)
+	}
+
+	// Update the notes (same balanced splits); the live header reflects the new value.
+	upd := e.balancedInput(10_000)
+	upd.Notes = "Corrected: reimbursement, not an advance."
+	if err := e.s.UpdateTransaction(mutCtx(), id, upd); err != nil {
+		t.Fatalf("UpdateTransaction: %v", err)
+	}
+	hdr2, err := e.s.GetTransaction(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("GetTransaction (post-update): %v", err)
+	}
+	if hdr2.Notes != upd.Notes {
+		t.Errorf("updated notes = %q, want %q", hdr2.Notes, upd.Notes)
+	}
+
+	// The timeline records the notes change as a FieldNotes header diff.
+	entries, err := e.s.TransactionHistory(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("TransactionHistory: %v", err)
+	}
+	found := false
+	for _, ent := range entries {
+		for _, d := range ent.HeaderDiffs {
+			if d.Field == FieldNotes && d.New.Text == upd.Notes {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Errorf("history has no FieldNotes diff with the updated notes text")
+	}
+}
+
 // --- Post: zero-sum rejections (two distinct errors) ---------------------
 
 func TestPostUnbalancedRejected(t *testing.T) {

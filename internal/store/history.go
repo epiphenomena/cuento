@@ -40,6 +40,7 @@ const (
 	FieldSubsidiary HistoryField = "subsidiary"
 	FieldPayee      HistoryField = "payee"
 	FieldMemo       HistoryField = "memo"
+	FieldNotes      HistoryField = "notes"
 	FieldCurrency   HistoryField = "currency"
 	FieldAccount    HistoryField = "account"
 	FieldAmount     HistoryField = "amount"
@@ -188,6 +189,7 @@ func headerDiff(prev, cur *sqlc.TransactionVersionHistoryRow) []FieldDiff {
 		add(FieldSubsidiary, DiffValue{}, DiffValue{ID: valid(cur.SubsidiaryID)}, true)
 		add(FieldPayee, DiffValue{}, DiffValue{ID: cur.PayeeID}, cur.PayeeID.Valid)
 		add(FieldMemo, DiffValue{}, DiffValue{Text: cur.Memo}, cur.Memo != "")
+		add(FieldNotes, DiffValue{}, DiffValue{Text: cur.Notes}, cur.Notes != "")
 		add(FieldCurrency, DiffValue{}, DiffValue{Text: cur.Currency}, true)
 		return diffs
 	}
@@ -195,6 +197,7 @@ func headerDiff(prev, cur *sqlc.TransactionVersionHistoryRow) []FieldDiff {
 	add(FieldSubsidiary, DiffValue{ID: valid(prev.SubsidiaryID)}, DiffValue{ID: valid(cur.SubsidiaryID)}, prev.SubsidiaryID != cur.SubsidiaryID)
 	add(FieldPayee, DiffValue{ID: prev.PayeeID}, DiffValue{ID: cur.PayeeID}, !nullInt64Eq(prev.PayeeID, cur.PayeeID))
 	add(FieldMemo, DiffValue{Text: prev.Memo}, DiffValue{Text: cur.Memo}, prev.Memo != cur.Memo)
+	add(FieldNotes, DiffValue{Text: prev.Notes}, DiffValue{Text: cur.Notes}, prev.Notes != cur.Notes)
 	add(FieldCurrency, DiffValue{Text: prev.Currency}, DiffValue{Text: cur.Currency}, prev.Currency != cur.Currency)
 	return diffs
 }

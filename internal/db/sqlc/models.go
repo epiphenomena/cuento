@@ -455,6 +455,7 @@ type Transaction struct {
 	Memo         string
 	Currency     string
 	Deleted      int64
+	Notes        string
 }
 
 type TransactionsVersion struct {
@@ -469,6 +470,7 @@ type TransactionsVersion struct {
 	Memo         string
 	Currency     string
 	Deleted      int64
+	Notes        string
 }
 
 type User struct {

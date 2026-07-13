@@ -92,22 +92,25 @@ WHERE c.id = ? AND p.id = ?;
 
 -- name: InsertTransaction :one
 -- Live insert of the transaction header (D18: exactly one subsidiary; D3: single
--- currency). deleted defaults to 0. Returns the new id.
-INSERT INTO transactions (date, subsidiary_id, payee_id, memo, currency, deleted)
-VALUES (?, ?, ?, ?, ?, 0)
+-- currency). deleted defaults to 0. notes is the longer free-text explanation
+-- (p24.2), distinct from the short per-split memo. Returns the new id.
+INSERT INTO transactions (date, subsidiary_id, payee_id, memo, notes, currency, deleted)
+VALUES (?, ?, ?, ?, ?, ?, 0)
 RETURNING id;
 
 -- name: GetTransaction :one
-SELECT id, date, subsidiary_id, payee_id, memo, currency, deleted
+-- Column order matches the transactions table (ALTER appended notes LAST, p24.2) so
+-- sqlc maps this to the shared sqlc.Transaction model rather than a bespoke row type.
+SELECT id, date, subsidiary_id, payee_id, memo, currency, deleted, notes
 FROM transactions
 WHERE id = ?;
 
 -- name: UpdateTransaction :exec
--- Live update of the header fields (date/payee/memo; subsidiary and currency may
--- also change on an edit). deleted is carried through by the store (never flipped
--- here -- soft-delete is its own query).
+-- Live update of the header fields (date/payee/memo/notes; subsidiary and currency
+-- may also change on an edit). deleted is carried through by the store (never
+-- flipped here -- soft-delete is its own query).
 UPDATE transactions
-SET date = ?, subsidiary_id = ?, payee_id = ?, memo = ?, currency = ?, deleted = ?
+SET date = ?, subsidiary_id = ?, payee_id = ?, memo = ?, notes = ?, currency = ?, deleted = ?
 WHERE id = ?;
 
 -- name: SoftDeleteTransaction :exec
@@ -120,8 +123,8 @@ UPDATE transactions SET deleted = 1 WHERE id = ?;
 -- Runs AFTER the live write. Snapshot column set matches 00010 exactly. Params
 -- (positional): op, change_id, entity_id -> generated Op, ID (change_id), ID_2.
 INSERT INTO transactions_versions
-  (entity_id, change_id, valid_from, op, date, subsidiary_id, payee_id, memo, currency, deleted)
-SELECT t.id, c.id, c.at, ?, t.date, t.subsidiary_id, t.payee_id, t.memo, t.currency, t.deleted
+  (entity_id, change_id, valid_from, op, date, subsidiary_id, payee_id, memo, notes, currency, deleted)
+SELECT t.id, c.id, c.at, ?, t.date, t.subsidiary_id, t.payee_id, t.memo, t.notes, t.currency, t.deleted
 FROM transactions t, changes c
 WHERE c.id = ? AND t.id = ?;
 
@@ -233,7 +236,7 @@ SELECT subtree.id FROM subtree;
 -- The transaction header as of a time: the latest transactions_versions row with
 -- valid_from <= at (op='delete' means the txn is absent -- the store excludes it).
 -- Tiebreak (valid_from DESC, id DESC) matches AssertVersioned's append order.
-SELECT op, date, subsidiary_id, payee_id, memo, currency, deleted
+SELECT op, date, subsidiary_id, payee_id, memo, notes, currency, deleted
 FROM transactions_versions
 WHERE entity_id = ? AND valid_from <= ?
 ORDER BY valid_from DESC, id DESC
@@ -266,7 +269,7 @@ ORDER BY entity_id, valid_from DESC, id DESC;
 -- change's actor id, actor display name, and timestamp. Includes op='delete' rows
 -- (a voided txn's history must still render). Params (positional): entity_id.
 SELECT tv.change_id, tv.op, tv.valid_from,
-       tv.date, tv.subsidiary_id, tv.payee_id, tv.memo, tv.currency, tv.deleted,
+       tv.date, tv.subsidiary_id, tv.payee_id, tv.memo, tv.notes, tv.currency, tv.deleted,
        c.actor_id, u.display_name AS actor_name, c.at
 FROM transactions_versions tv
 JOIN changes c ON c.id = tv.change_id
