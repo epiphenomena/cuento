@@ -143,6 +143,63 @@ WHERE v.id = (SELECT id FROM fund_subsidiaries_versions x
   AND NOT EXISTS (SELECT 1 FROM fund_subsidiaries c
                   WHERE c.fund_id = v.entity_id AND c.subsidiary_id = v.subsidiary_id)
 UNION ALL
+-- budget_schedules (p19.1 single-id twin)
+SELECT 'budget_schedules:' || CAST(c.id AS TEXT)
+FROM budget_schedules c
+LEFT JOIN budget_schedules_versions v
+  ON v.id = (SELECT id FROM budget_schedules_versions x WHERE x.entity_id = c.id
+             ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
+WHERE v.id IS NULL OR v.op = 'delete'
+   OR v.name IS NOT c.name OR v.kind IS NOT c.kind
+   OR v.day_of_month IS NOT c.day_of_month OR v.day_of_month_2 IS NOT c.day_of_month_2
+   OR v.ordinal IS NOT c.ordinal OR v.weekday IS NOT c.weekday
+   OR v.anchor_date IS NOT c.anchor_date OR v.weekend_adjust IS NOT c.weekend_adjust
+   OR v.notes IS NOT c.notes
+UNION ALL
+-- budget_schedule_dates (composite membership: schedule_id + occurs_on)
+SELECT 'budget_schedule_dates:' || CAST(c.schedule_id AS TEXT) || '/' || c.occurs_on
+FROM budget_schedule_dates c
+LEFT JOIN budget_schedule_dates_versions v
+  ON v.id = (SELECT id FROM budget_schedule_dates_versions x
+             WHERE x.entity_id = c.schedule_id AND x.occurs_on = c.occurs_on
+             ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
+WHERE v.id IS NULL OR v.op = 'delete'
+UNION ALL
+-- budget_schedule_dates: a list row whose latest version is 'create' but that has
+-- no live row is a dangling snapshot (deleted live without a delete version).
+SELECT 'budget_schedule_dates(dangling):' || CAST(v.entity_id AS TEXT) || '/' || v.occurs_on
+FROM budget_schedule_dates_versions v
+WHERE v.id = (SELECT id FROM budget_schedule_dates_versions x
+              WHERE x.entity_id = v.entity_id AND x.occurs_on = v.occurs_on
+              ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
+  AND v.op <> 'delete'
+  AND NOT EXISTS (SELECT 1 FROM budget_schedule_dates c
+                  WHERE c.schedule_id = v.entity_id AND c.occurs_on = v.occurs_on)
+UNION ALL
+-- budgets (p19.1 single-id twin)
+SELECT 'budgets:' || CAST(c.id AS TEXT)
+FROM budgets c
+LEFT JOIN budgets_versions v
+  ON v.id = (SELECT id FROM budgets_versions x WHERE x.entity_id = c.id
+             ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
+WHERE v.id IS NULL OR v.op = 'delete'
+   OR v.name IS NOT c.name OR v.period_start IS NOT c.period_start
+   OR v.period_end IS NOT c.period_end OR v.notes IS NOT c.notes
+UNION ALL
+-- budget_lines (p19.1 single-id twin; a line can be hard-deleted, so a missing
+-- live row for a 'delete' version is legitimate -- handled by the standard
+-- single-id block, which only checks CURRENT live rows against their snapshot).
+SELECT 'budget_lines:' || CAST(c.id AS TEXT)
+FROM budget_lines c
+LEFT JOIN budget_lines_versions v
+  ON v.id = (SELECT id FROM budget_lines_versions x WHERE x.entity_id = c.id
+             ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
+WHERE v.id IS NULL OR v.op = 'delete'
+   OR v.budget_id IS NOT c.budget_id OR v.subsidiary_id IS NOT c.subsidiary_id
+   OR v.account_id IS NOT c.account_id OR v.fund_id IS NOT c.fund_id
+   OR v.program_id IS NOT c.program_id OR v.amount IS NOT c.amount
+   OR v.currency IS NOT c.currency OR v.schedule_id IS NOT c.schedule_id
+UNION ALL
 -- payees
 SELECT 'payees:' || CAST(c.id AS TEXT)
 FROM payees c
@@ -219,6 +276,10 @@ FROM (
   UNION ALL SELECT 'funds_versions', id, change_id FROM funds_versions
   UNION ALL SELECT 'fund_subsidiaries_versions', id, change_id FROM fund_subsidiaries_versions
   UNION ALL SELECT 'payees_versions', id, change_id FROM payees_versions
+  UNION ALL SELECT 'budget_schedules_versions', id, change_id FROM budget_schedules_versions
+  UNION ALL SELECT 'budget_schedule_dates_versions', id, change_id FROM budget_schedule_dates_versions
+  UNION ALL SELECT 'budgets_versions', id, change_id FROM budgets_versions
+  UNION ALL SELECT 'budget_lines_versions', id, change_id FROM budget_lines_versions
   UNION ALL SELECT 'transactions_versions', id, change_id FROM transactions_versions
   UNION ALL SELECT 'splits_versions', id, change_id FROM splits_versions
   UNION ALL SELECT 'users_versions', id, change_id FROM users_versions

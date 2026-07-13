@@ -663,3 +663,77 @@ func TestZ19UnmappedActiveLeaf(t *testing.T) {
 		t.Errorf("Z19 corruption should not raise Error violations; got %v", vs)
 	}
 }
+
+// --- p19.1: the budget versioned tables enter the Z3/Z5 set cleanly ----------
+
+// mkBudgetData populates a budget with a schedule (incl. a custom date list) and a
+// versioned budget line ON THE WORLD, all through the store, so the four new
+// versioned twins hold real snapshot rows. Empty tables pass Z3/Z5 trivially; this
+// gives the new UNION ALL blocks actual rows to prove byte-consistency.
+func mkBudgetData(t *testing.T, w *world) (budget, sched, line int64) {
+	t.Helper()
+	var err error
+	budget, err = w.s.CreateBudget(mutCtx(), store.BudgetInput{
+		Name: "FY25", PeriodStart: "2025-01-01", PeriodEnd: "2025-12-31",
+	})
+	if err != nil {
+		t.Fatalf("CreateBudget: %v", err)
+	}
+	sched, err = w.s.CreateSchedule(mutCtx(), store.ScheduleInput{
+		Name: "custom import", Kind: "custom",
+		CustomDates: []string{"2025-01-15", "2025-07-15"},
+	})
+	if err != nil {
+		t.Fatalf("CreateSchedule: %v", err)
+	}
+	// A line on the world's revenue account (R/E), tagged the world's fund/program.
+	line, err = w.s.CreateBudgetLine(mutCtx(), budget, store.BudgetLineInput{
+		SubsidiaryID: w.subUS, AccountID: w.contrib, FundID: &w.fund, ProgramID: w.prog,
+		Amount: 50_000, Currency: "USD", ScheduleID: sched,
+	})
+	if err != nil {
+		t.Fatalf("CreateBudgetLine: %v", err)
+	}
+	return budget, sched, line
+}
+
+// TestBudgetTablesCheckClean: populating the budget tables through the store keeps
+// the full integrity suite clean -- the new Z3 blocks (budget_schedules, the
+// composite budget_schedule_dates + its dangling guard, budgets, budget_lines) and
+// the new Z5 entries all pass on valid, versioned data.
+func TestBudgetTablesCheckClean(t *testing.T) {
+	w := newWorld(t)
+	mkBudgetData(t, w)
+	assertClean(t, w.d)
+}
+
+// TestBudgetLineZ3Bites: tampering a live budget_lines row so it diverges from its
+// latest version snapshot must trip Z3 -- proving the new single-id block is wired
+// (a silent omission from Z3 would leave this corruption undetected).
+func TestBudgetLineZ3Bites(t *testing.T) {
+	w := newWorld(t)
+	_, _, line := mkBudgetData(t, w)
+	// Raw UPDATE the live amount without appending a version -> live != snapshot.
+	exec(t, w.d, `UPDATE budget_lines SET amount = amount + 1 WHERE id = ?`, line)
+	assertFlags(t, w.d, "Z3")
+}
+
+// TestBudgetScheduleDateZ3Bites: deleting a live custom-date row WITHOUT a delete
+// version leaves its latest version 'create' with no live row -> the dangling-
+// snapshot branch of the composite budget_schedule_dates Z3 block fires.
+func TestBudgetScheduleDateZ3Bites(t *testing.T) {
+	w := newWorld(t)
+	_, sched, _ := mkBudgetData(t, w)
+	exec(t, w.d, `DELETE FROM budget_schedule_dates WHERE schedule_id = ? AND occurs_on = '2025-01-15'`, sched)
+	assertFlags(t, w.d, "Z3")
+}
+
+// TestBudgetZ5Bites: a budget version row pointing at a non-existent change is
+// audit corruption Z5 must catch -- proving budgets_versions is in the Z5 set.
+func TestBudgetZ5Bites(t *testing.T) {
+	w := newWorld(t)
+	budget, _, _ := mkBudgetData(t, w)
+	exec(t, w.d, `PRAGMA foreign_keys=OFF`)
+	exec(t, w.d, `UPDATE budgets_versions SET change_id = 987654 WHERE entity_id = ?`, budget)
+	assertFlags(t, w.d, "Z5")
+}

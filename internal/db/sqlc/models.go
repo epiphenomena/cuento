@@ -72,6 +72,98 @@ type AccountsVersion struct {
 	DefaultProgramID sql.NullInt64
 }
 
+type Budget struct {
+	ID          int64
+	Name        string
+	PeriodStart string
+	PeriodEnd   string
+	Notes       string
+}
+
+type BudgetLine struct {
+	ID           int64
+	BudgetID     int64
+	SubsidiaryID int64
+	AccountID    int64
+	FundID       sql.NullInt64
+	ProgramID    int64
+	Amount       int64
+	Currency     string
+	ScheduleID   int64
+}
+
+type BudgetLinesVersion struct {
+	ID           int64
+	EntityID     int64
+	ChangeID     int64
+	ValidFrom    string
+	Op           string
+	BudgetID     int64
+	SubsidiaryID int64
+	AccountID    int64
+	FundID       sql.NullInt64
+	ProgramID    int64
+	Amount       int64
+	Currency     string
+	ScheduleID   int64
+}
+
+type BudgetSchedule struct {
+	ID            int64
+	Name          string
+	Kind          string
+	DayOfMonth    sql.NullInt64
+	DayOfMonth2   sql.NullInt64
+	Ordinal       sql.NullInt64
+	Weekday       sql.NullInt64
+	AnchorDate    sql.NullString
+	WeekendAdjust string
+	Notes         string
+}
+
+type BudgetScheduleDate struct {
+	ScheduleID int64
+	OccursOn   string
+}
+
+type BudgetScheduleDatesVersion struct {
+	ID        int64
+	EntityID  int64
+	ChangeID  int64
+	ValidFrom string
+	Op        string
+	OccursOn  string
+}
+
+type BudgetSchedulesVersion struct {
+	ID            int64
+	EntityID      int64
+	ChangeID      int64
+	ValidFrom     string
+	Op            string
+	Name          string
+	Kind          string
+	DayOfMonth    sql.NullInt64
+	DayOfMonth2   sql.NullInt64
+	Ordinal       sql.NullInt64
+	Weekday       sql.NullInt64
+	AnchorDate    sql.NullString
+	WeekendAdjust string
+	Notes         string
+}
+
+type BudgetsVersion struct {
+	ID          int64
+	EntityID    int64
+	ChangeID    int64
+	ValidFrom   string
+	Op          string
+	Name        string
+	PeriodStart string
+	PeriodEnd   string
+	Notes       string
+}
+
 type Change struct {
 	ID      int64
 	ActorID int64
