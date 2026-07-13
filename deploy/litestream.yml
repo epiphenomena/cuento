@@ -1,0 +1,28 @@
+# litestream.yml — continuous streaming replication of the cuento SQLite db to
+# Google Cloud Storage (D8: free-tier GCS, 5 GB). Litestream is an EXTERNAL
+# binary (https://litestream.io), not a Go dependency of cuento; it is installed
+# alongside the app on the VM. Install to /etc/litestream.yml (its default) and
+# run it via deploy/litestream.service.
+#
+# All values below are PLACEHOLDERS (DATA RULE 11): replace your-bucket and the
+# path prefix with your real bucket, and authenticate the VM to GCS via its
+# attached service account (no keys in this file — see docs/deploy.md).
+
+# The database to replicate. Must match CUENTO_DATA_DIR/cuento.db from the
+# cuento.service unit. Litestream reads the WAL, so cuento's WAL journal mode
+# (set by db.Open) is exactly what it needs.
+dbs:
+  - path: /var/lib/cuento/cuento.db
+    replicas:
+      - type: gcs
+        bucket: your-bucket
+        path: cuento
+        # Snapshot + retention (D8, 5 GB free tier). A snapshot each day plus a
+        # 720h (30-day) retention window keeps restore points for a month while
+        # staying comfortably inside the free quota for a db of this size.
+        snapshot-interval: 24h
+        retention: 720h
+        retention-check-interval: 12h
+        # Flush WAL frames to GCS at least every 10s (default is 1s; 10s trims
+        # request volume against the free tier with a 10s worst-case RPO).
+        sync-interval: 10s

@@ -1,0 +1,67 @@
+# cuento.service — the cuento application server (systemd unit).
+#
+# Runs the single release binary in `serve` mode as a dedicated non-root user,
+# fronted by in-process autocert TLS (D8). Configuration is entirely via the
+# CUENTO_* environment variables below; edit them, then:
+#
+#   sudo cp deploy/cuento.service /etc/systemd/system/cuento.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now cuento.service
+#
+# See docs/deploy.md for the full e2-micro walkthrough (user creation, data dir,
+# first-run migrate + admin, autocert provisioning).
+
+[Unit]
+Description=cuento fund accounting server
+Documentation=https://example.com/cuento/docs/deploy.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cuento
+Group=cuento
+
+# Configuration. CUENTO_DOMAIN set => HTTPS on :443 + a :80 ACME/redirect
+# listener, with the certificate cache under CUENTO_DATA_DIR/autocert. Leave
+# CUENTO_DOMAIN unset (and add CUENTO_ADDR) to serve plain HTTP instead.
+Environment=CUENTO_DATA_DIR=/var/lib/cuento
+Environment=CUENTO_DOMAIN=books.example.com
+# Environment=CUENTO_ADDR=:8080   # only used when CUENTO_DOMAIN is unset
+# Do NOT set CUENTO_DEV in production (it disables the Secure cookie flag).
+
+ExecStart=/usr/local/bin/cuento serve
+Restart=on-failure
+RestartSec=2s
+
+# Bind the privileged ports 80/443 without running as root: grant only the one
+# capability that allows it, and cap the bounding set to the same so nothing can
+# be re-acquired. Requires NoNewPrivileges (below). If you would rather front the
+# app with a reverse proxy on high ports, drop these three lines and run plain
+# HTTP on CUENTO_ADDR.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+# --- Hardening ---------------------------------------------------------------
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+# ProtectSystem=strict makes the whole filesystem read-only EXCEPT paths listed
+# here — the data dir must be writable (db, autocert cache, litestream replica).
+ReadWritePaths=/var/lib/cuento
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target

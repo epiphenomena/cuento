@@ -1,0 +1,23 @@
+# ratesync.timer — schedules ratesync.service (the p14.2 deferred timer).
+#
+# Runs once a day on weekdays after markets have settled. Yahoo has no weekend
+# quotes, so Mon–Fri is enough; RateOn's on-or-before lookup covers weekends.
+# Persistent=true catches up a missed run after downtime; RandomizedDelaySec
+# spreads load off the exact minute.
+#
+# Enable with:  sudo systemctl enable --now ratesync.timer
+# Inspect with: systemctl list-timers cuento-ratesync ratesync
+
+[Unit]
+Description=Daily cuento exchange-rate sync
+Documentation=https://example.com/cuento/docs/deploy.md
+
+[Timer]
+# 18:30 UTC on weekdays — after the US market close, before the next open.
+OnCalendar=Mon..Fri *-*-* 18:30:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+Unit=ratesync.service
+
+[Install]
+WantedBy=timers.target

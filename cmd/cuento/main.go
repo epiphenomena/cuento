@@ -13,8 +13,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
+
+	"golang.org/x/crypto/acme/autocert"
 
 	"cuento/internal/db"
 	"cuento/internal/store"
@@ -106,16 +109,77 @@ func migrate(args []string) error {
 	return nil
 }
 
-// serve runs the HTTP server until SIGINT/SIGTERM, then shuts down gracefully.
-func serve(args []string) error {
+// newServeFlags builds the serve subcommand's flag set. Each of the four
+// configurable knobs (data dir, addr, domain, dev) has a flag that mirrors a
+// CUENTO_* env var; -db is an explicit override with no env twin (so the e2e
+// harness's `serve -dev -db <path>` keeps resolving to one physical file).
+// Factored out so config_test.go drives the exact same parse path resolveConfig
+// sees at runtime — the flag DEFAULTS must never clobber a set env var, and the
+// test proves it.
+func newServeFlags() *flag.FlagSet {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
-	addr := fs.String("addr", ":8080", "listen address")
-	dbPath := fs.String("db", defaultDBPath, "path to the SQLite database file")
+	fs.String("data-dir", "", "data directory (db, autocert cache, litestream replica); env CUENTO_DATA_DIR")
+	fs.String("addr", "", "plain-HTTP listen address when not serving TLS; env CUENTO_ADDR")
+	fs.String("domain", "", "TLS hostname: if set, serve HTTPS on :443 with a :80 redirect via autocert; env CUENTO_DOMAIN")
+	// -db overrides the derived <data-dir>/cuento.db. No env twin by design.
+	fs.String("db", "", "path to the SQLite database file (default <data-dir>/cuento.db)")
 	// -dev relaxes the session cookie's Secure attribute so the dev server works
 	// over plain HTTP (rule 13, D9). The Makefile `run` target passes it.
-	dev := fs.Bool("dev", false, "development mode: session cookie not marked Secure (plain HTTP)")
+	fs.Bool("dev", false, "development mode: session cookie not marked Secure (plain HTTP); env CUENTO_DEV")
+	return fs
+}
+
+// osEnv snapshots the CUENTO_* environment into the map resolveConfig consumes.
+// Keeping resolveConfig env-driven (not calling os.Getenv itself) is what lets
+// the config test stay pure.
+func osEnv() map[string]string {
+	keys := []string{"CUENTO_DATA_DIR", "CUENTO_ADDR", "CUENTO_DOMAIN", "CUENTO_DEV"}
+	env := make(map[string]string, len(keys))
+	for _, k := range keys {
+		if v, ok := os.LookupEnv(k); ok {
+			env[k] = v
+		}
+	}
+	return env
+}
+
+// serve runs the HTTP server until SIGINT/SIGTERM, then shuts down gracefully.
+// Configuration comes from CUENTO_* env vars overridden by flags (resolveConfig,
+// tested in isolation). With a domain configured it serves HTTPS on :443 via
+// autocert plus a :80 ACME/redirect listener; otherwise plain HTTP on the addr.
+func serve(args []string) error {
+	fs := newServeFlags()
 	if err := fs.Parse(args); err != nil {
+		// flag.ErrHelp (from -h) is not a failure: usage was already printed.
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
+	}
+	set := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	cfg := resolveConfig(osEnv(), fs, set)
+
+	// Resolve the data dir to an absolute path so the derived db path and the
+	// autocert cache are cwd-independent (p06.4 db.Open note). Done HERE, not in
+	// the pure resolveConfig, to keep that function hermetic. An explicit -db is
+	// left as given (the e2e harness relies on that).
+	if abs, err := filepath.Abs(cfg.DataDir); err == nil {
+		cfg.DataDir = abs
+		// Re-derive the db path under the now-absolute data dir, unless -db was
+		// passed explicitly (that value is used verbatim — the e2e harness's
+		// relative -db must keep resolving to its own file).
+		if !set["db"] {
+			cfg.DBPath = filepath.Join(cfg.DataDir, defaultDBFile)
+		}
+	}
+
+	// The data dir must exist and be writable: the db, the autocert cache, and
+	// the litestream replica all live under it. Create it up front so a bad
+	// config (e.g. an unwritable path) fails with a clear error, not a panic
+	// mid-startup.
+	if err := os.MkdirAll(cfg.DataDir, 0o750); err != nil {
+		return fmt.Errorf("data dir %q: %w", cfg.DataDir, err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -123,13 +187,13 @@ func serve(args []string) error {
 
 	// Auto-migrate before listening so the running binary always matches its
 	// schema (backup-before-apply is handled inside db.Migrate).
-	if err := db.Migrate(ctx, *dbPath); err != nil {
+	if err := db.Migrate(ctx, cfg.DBPath); err != nil {
 		return err
 	}
 
 	// Open the pooled handle the web layer needs: the store (single writer/read
 	// funnel) and the scs session store both operate over it.
-	sqldb, err := db.Open(*dbPath)
+	sqldb, err := db.Open(cfg.DBPath)
 	if err != nil {
 		return err
 	}
@@ -155,17 +219,25 @@ func serve(args []string) error {
 		log.Print("no users yet: create the first admin with `cuento user add <username> --admin`")
 	}
 
-	handler := web.Handler(web.Config{Version: version, Dev: *dev}, sqldb, st)
+	handler := web.Handler(web.Config{Version: version, Dev: cfg.Dev}, sqldb, st)
 
+	if cfg.UseTLS() {
+		return serveTLS(ctx, cfg, handler)
+	}
+	return servePlain(ctx, cfg.Addr, handler)
+}
+
+// servePlain runs a single plain-HTTP server on addr (the -dev / no-domain
+// path), shutting down gracefully on ctx cancellation.
+func servePlain(ctx context.Context, addr string, handler http.Handler) error {
 	srv := &http.Server{
-		Addr:              *addr,
+		Addr:              addr,
 		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-
 	errc := make(chan error, 1)
 	go func() {
-		log.Printf("cuento %s listening on %s", version, *addr)
+		log.Printf("cuento %s listening on %s (plain HTTP)", version, addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errc <- err
 			return
@@ -178,11 +250,82 @@ func serve(args []string) error {
 		return err
 	case <-ctx.Done():
 		log.Print("shutting down")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(shutdownCtx); err != nil {
-			return fmt.Errorf("shutdown: %w", err)
-		}
-		return nil
+		return shutdown(srv)
 	}
+}
+
+// serveTLS runs the production TLS setup (D8): an autocert manager fronting an
+// HTTPS server on :443 whose certificates are provisioned on demand and cached
+// in <data-dir>/autocert, plus a :80 listener serving the manager's HTTP handler
+// (ACME http-01 challenges + redirect-to-HTTPS for everything else). Both
+// servers shut down gracefully on ctx cancellation.
+func serveTLS(ctx context.Context, cfg Config, handler http.Handler) error {
+	if err := os.MkdirAll(cfg.AutocertCacheDir(), 0o700); err != nil {
+		return fmt.Errorf("autocert cache dir %q: %w", cfg.AutocertCacheDir(), err)
+	}
+	m := &autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		HostPolicy: autocert.HostWhitelist(cfg.Domain),
+		Cache:      autocert.DirCache(cfg.AutocertCacheDir()),
+	}
+
+	httpsSrv := &http.Server{
+		Addr:              ":443",
+		Handler:           handler,
+		TLSConfig:         m.TLSConfig(),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	// :80 serves ACME http-01 challenges and 301-redirects everything else to
+	// HTTPS (autocert's HTTPHandler does exactly this when given a nil fallback).
+	httpSrv := &http.Server{
+		Addr:              ":80",
+		Handler:           m.HTTPHandler(nil),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	errc := make(chan error, 2)
+	go func() {
+		log.Printf("cuento %s serving ACME/redirect on :80 for %s", version, cfg.Domain)
+		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errc <- fmt.Errorf("http :80: %w", err)
+			return
+		}
+		errc <- nil
+	}()
+	go func() {
+		log.Printf("cuento %s listening on :443 (TLS, autocert cache %s)", version, cfg.AutocertCacheDir())
+		// Certs come from the manager's TLSConfig, so ListenAndServeTLS takes no
+		// cert/key files.
+		if err := httpsSrv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errc <- fmt.Errorf("https :443: %w", err)
+			return
+		}
+		errc <- nil
+	}()
+
+	select {
+	case err := <-errc:
+		// One listener failed; tear the other down and report.
+		_ = shutdown(httpSrv)
+		_ = shutdown(httpsSrv)
+		return err
+	case <-ctx.Done():
+		log.Print("shutting down")
+		e1 := shutdown(httpSrv)
+		e2 := shutdown(httpsSrv)
+		if e1 != nil {
+			return e1
+		}
+		return e2
+	}
+}
+
+// shutdown gracefully stops one server with a bounded timeout.
+func shutdown(srv *http.Server) error {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("shutdown: %w", err)
+	}
+	return nil
 }

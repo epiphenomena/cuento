@@ -1,0 +1,42 @@
+# litestream.service — continuous replication of the cuento db to GCS (D8).
+#
+# Runs the external `litestream replicate` daemon against /etc/litestream.yml
+# (deploy/litestream.yml). It must be running whenever cuento is writing, so it
+# is ordered after cuento.service and shares its lifecycle loosely (BindsTo would
+# be too strict — replication should survive a cuento restart).
+#
+#   sudo cp deploy/litestream.service /etc/systemd/system/litestream.service
+#   sudo cp deploy/litestream.yml /etc/litestream.yml
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now litestream.service
+#
+# GCS auth: the VM's attached service account is used automatically (Application
+# Default Credentials). No key file, no secret in any unit — see docs/deploy.md.
+
+[Unit]
+Description=Litestream replication for cuento
+Documentation=https://litestream.io/
+After=network-online.target cuento.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cuento
+Group=cuento
+ExecStart=/usr/local/bin/litestream replicate -config /etc/litestream.yml
+Restart=on-failure
+RestartSec=5s
+
+# Hardening: litestream only needs to read the data dir and reach GCS.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/cuento
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

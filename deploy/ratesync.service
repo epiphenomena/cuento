@@ -1,0 +1,37 @@
+# ratesync.service — one-shot `cuento ratesync` run, triggered by ratesync.timer.
+#
+# This is the systemd realization of the timer deferred from p14.2: it fetches
+# the configured currency pairs (the root subsidiary's base currency against
+# every active currency) from Yahoo Finance and writes them as one change. It is
+# Type=oneshot — it runs, records the rates, and exits; the .timer schedules it.
+#
+#   sudo cp deploy/ratesync.service deploy/ratesync.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ratesync.timer
+#
+# Runs as the same non-root user and against the same data-dir db as the server.
+
+[Unit]
+Description=cuento exchange-rate sync (one-shot)
+Documentation=https://example.com/cuento/docs/deploy.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=cuento
+Group=cuento
+# ratesync has no env-based config of its own; point it at the same db the
+# server uses (CUENTO_DATA_DIR/cuento.db).
+ExecStart=/usr/local/bin/cuento ratesync -db /var/lib/cuento/cuento.db
+
+# Hardening (read/write the db; reach Yahoo Finance over the network).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/cuento
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true

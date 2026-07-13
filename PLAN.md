@@ -317,7 +317,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p18.1 build: release binary.**
   Tests: version string surfaces on `/healthz` and the footer.
   Build: `make release` — CGO-free linux/amd64, `-trimpath`, version from `git describe` via ldflags.
-- [ ] **p18.2 ops: config, TLS, deploy docs.**
+- [x] **p18.2 ops: config, TLS, deploy docs.**
   Tests: config parsing (flags/env `CUENTO_DATA_DIR`, `CUENTO_ADDR`, `CUENTO_DOMAIN`, `CUENTO_DEV`).
   Build: if `CUENTO_DOMAIN` set → autocert on :443 with :80 redirect (cert cache in data dir), else plain HTTP; `deploy/` — `cuento.service`, `litestream.service`, `ratesync.timer`, `litestream.yml` (replica → GCS); `docs/deploy.md` — e2-micro walkthrough (always-free region, 30 GB pd-standard, firewall 80/443, Litestream restore drill, backup retention).
 - [ ] **p18.3 web: admin ops page.**
