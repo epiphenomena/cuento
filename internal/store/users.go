@@ -261,6 +261,9 @@ type AdminUser struct {
 	IsAdmin     bool
 	TxnPerm     string
 	Disabled    bool
+	// CanSubmitExpenses is the standalone expense-submit capability (p20.1); the
+	// admin detail page (p20.2) shows + toggles it via SetUserCanSubmitExpenses.
+	CanSubmitExpenses bool
 }
 
 // ListUsers returns the manageable operators (every user except the seeded system
@@ -297,6 +300,7 @@ func (s *Store) AdminUserByID(ctx context.Context, userID int64) (AdminUser, err
 	return AdminUser{
 		ID: r.ID, Username: r.Username, DisplayName: r.DisplayName,
 		IsAdmin: r.IsAdmin != 0, TxnPerm: r.TxnPerm, Disabled: r.DisabledAt.Valid,
+		CanSubmitExpenses: r.CanSubmitExpenses != 0,
 	}, nil
 }
 

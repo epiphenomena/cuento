@@ -1,0 +1,57 @@
+{{/*
+  p20.2 submitter "my reports" list (GET /expenses, Perm ExpenseSubmit). The current
+  user's OWN expense reports with status; a rejected report shows the reviewer's
+  reason and links to the editor to fix + resubmit. A "new report" form picks the
+  subsidiary (one sub per report) and POSTs to /expenses. .Page is an
+  expensesPageModel. Every string via {{t}} (rule 9); subsidiary names are stored
+  proper nouns; no inline script (rule 12).
+*/ -}}
+{{define "expenses.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "expense.list.title"))}}
+  {{- with .Page}}
+  <h1>{{t "expense.list.title"}}</h1>
+  <p class="hint">{{t "expense.list.intro"}}</p>
+
+  <form method="post" action="/expenses" class="expense-new-form">
+    <div class="field">
+      <label for="er-sub">{{t "expense.new.subsidiary"}}</label>
+      <select id="er-sub" name="subsidiary_id">
+        {{range .Subs}}<option value="{{.ID}}">{{.Name}}</option>
+        {{end}}
+      </select>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{{t "expense.new.btn"}}</button>
+    </div>
+  </form>
+
+  <table class="expense-reports-table">
+    <thead>
+      <tr>
+        <th>{{t "expense.list.col.id"}}</th>
+        <th>{{t "expense.list.col.subsidiary"}}</th>
+        <th>{{t "expense.list.col.status"}}</th>
+        <th>{{t "expense.list.col.actions"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="expense-report-row" id="expense-report-row-{{.ID}}">
+        <td class="er-id">{{.ID}}</td>
+        <td class="er-sub">{{.SubName}}</td>
+        <td class="er-status">
+          <span class="badge er-status-{{.StatusKey}}">{{t .StatusKey}}</span>
+          {{if .Rejected}}<p class="er-reason" role="note">{{t "expense.list.reason"}}: {{.ReviewNotes}}</p>{{end}}
+        </td>
+        <td class="er-actions">
+          <a class="btn btn-ghost" href="/expenses/{{.ID}}">{{t "expense.list.open"}}</a>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="4">{{t "expense.list.empty"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

@@ -83,18 +83,19 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (GetUserRow, error) {
 }
 
 const getUserRow = `-- name: GetUserRow :one
-SELECT id, username, display_name, is_admin, txn_perm, disabled_at
+SELECT id, username, display_name, is_admin, txn_perm, can_submit_expenses, disabled_at
 FROM users
 WHERE id = ?
 `
 
 type GetUserRowRow struct {
-	ID          int64
-	Username    string
-	DisplayName string
-	IsAdmin     int64
-	TxnPerm     string
-	DisabledAt  sql.NullString
+	ID                int64
+	Username          string
+	DisplayName       string
+	IsAdmin           int64
+	TxnPerm           string
+	CanSubmitExpenses int64
+	DisabledAt        sql.NullString
 }
 
 // Full live user row for the admin detail page (p13.2): the columns the per-user
@@ -109,6 +110,7 @@ func (q *Queries) GetUserRow(ctx context.Context, id int64) (GetUserRowRow, erro
 		&i.DisplayName,
 		&i.IsAdmin,
 		&i.TxnPerm,
+		&i.CanSubmitExpenses,
 		&i.DisabledAt,
 	)
 	return i, err

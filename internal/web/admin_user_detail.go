@@ -40,7 +40,10 @@ type userDetailModel struct {
 	TxnPerm     string
 	TxnPerms    []settingOption
 	Grants      []grantCheckbox
-	Saved       bool
+	// CanSubmitExpenses drives the p20.2 admin toggle for the standalone expense-
+	// submit capability (p20.1). Admin-gated; a versioned change on save.
+	CanSubmitExpenses bool
+	Saved             bool
 
 	// errorKey/errorField carry the single crafted-bad-perm validation message and
 	// the field it applies to (autofocus). Lowercase (template-invisible directly);
@@ -100,7 +103,8 @@ func (s *server) buildUserDetail(r *http.Request, id int64) (userDetailModel, er
 	model := userDetailModel{
 		ID: u.ID, Username: u.Username, DisplayName: u.DisplayName,
 		IsAdmin: u.IsAdmin, Disabled: u.Disabled, TxnPerm: u.TxnPerm,
-		TxnPerms: txnPermOptions(),
+		TxnPerms:          txnPermOptions(),
+		CanSubmitExpenses: u.CanSubmitExpenses,
 	}
 	for _, g := range groups {
 		model.Grants = append(model.Grants, grantCheckbox{Name: g, Granted: heldSet[g]})
@@ -198,6 +202,48 @@ func (s *server) userSetGrants(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+	}
+	http.Redirect(w, r, userDetailURL(id), http.StatusSeeOther)
+}
+
+// userSetCanSubmit handles POST /admin/users/{id}/can-submit (Admin): toggle the
+// standalone can_submit_expenses capability (p20.1). The checkbox value ("1" when
+// checked) is the DESIRED state; a versioned change naming the acting admin records
+// it. The system user is unreachable (the store refuses id 1); an unknown id 404s.
+// Success 303-redirects back with a saved notice (PRG). This is the p20.1-deferred
+// admin UI for the ExpenseSubmit right.
+func (s *server) userSetCanSubmit(w http.ResponseWriter, r *http.Request) {
+	id := parseID(r.PathValue("id"))
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	// Confirm the subject is a real, manageable user (refuses id 1 / unknown) before
+	// the versioned write, mirroring userSetGrants -- so an unknown id 404s cleanly and
+	// no stray version row is written.
+	if _, err := s.store.AdminUserByID(r.Context(), id); err != nil {
+		if errors.Is(err, store.ErrSystemUser) {
+			http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+			return
+		}
+		if errors.Is(err, store.ErrUserNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		s.serverError(w)
+		return
+	}
+	can := r.PostFormValue("can_submit_expenses") != ""
+	if err := s.store.SetUserCanSubmitExpenses(s.actorCtx(r.Context()), id, can); err != nil {
+		switch {
+		case errors.Is(err, store.ErrSystemUser):
+			http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+		case errors.Is(err, store.ErrUserNotFound):
+			http.NotFound(w, r)
+		default:
+			s.serverError(w)
+		}
+		return
 	}
 	http.Redirect(w, r, userDetailURL(id), http.StatusSeeOther)
 }

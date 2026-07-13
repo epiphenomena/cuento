@@ -69,6 +69,10 @@ func main() {
 		if err := ratesyncCmd(args); err != nil {
 			log.Fatalf("ratesync: %v", err)
 		}
+	case "expense-report":
+		if err := expenseReportCmd(args); err != nil {
+			log.Fatalf("expense-report: %v", err)
+		}
 	case "check":
 		if err := checkCmd(args); err != nil {
 			// A deliberate non-zero exit (ledger violations) carries its own
@@ -87,7 +91,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage: cuento <command> [flags]\n\ncommands:\n  serve     run the HTTP server (auto-migrates on start; -dev relaxes cookie Secure)\n  migrate   apply pending database migrations\n  user      manage users (add|passwd|disable)\n  check     run the ledger integrity suite ([-db PATH] [--strict])\n  ratesync  fetch configured currency pairs from Yahoo Finance into exchange rates ([-db PATH])\n")
+	fmt.Fprintf(os.Stderr, "usage: cuento <command> [flags]\n\ncommands:\n  serve     run the HTTP server (auto-migrates on start; -dev relaxes cookie Secure)\n  migrate   apply pending database migrations\n  user      manage users (add|passwd|disable)\n  check     run the ledger integrity suite ([-db PATH] [--strict])\n  ratesync  fetch configured currency pairs from Yahoo Finance into exchange rates ([-db PATH])\n  expense-report  maintenance over expense reports (reject <id> --reason ...) ([-db PATH])\n")
 }
 
 // migrate applies any pending embedded migrations to the configured database

@@ -41,6 +41,22 @@
     </form>
   </section>
 
+  <section class="submit-section">
+    <h2>{{t "admin.users.submit_title"}}</h2>
+    <p class="hint">{{t "admin.users.submit_intro"}}</p>
+    <form method="post" action="/admin/users/{{.ID}}/can-submit" class="can-submit-form">
+      <div class="field field-check">
+        <label>
+          <input type="checkbox" name="can_submit_expenses" value="1"{{if .CanSubmitExpenses}} checked{{end}}>
+          {{t "admin.users.form.can_submit"}}
+        </label>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">{{t "admin.users.save_submit"}}</button>
+      </div>
+    </form>
+  </section>
+
   <section class="grant-section">
     <h2>{{t "admin.users.grants_title"}}</h2>
     <p class="hint">{{t "admin.users.grants_intro"}}</p>

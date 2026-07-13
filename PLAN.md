@@ -351,7 +351,7 @@ A submission→review workflow decoupled from book-editing: a low-privilege user
 - [x] **p20.1 db+store: expense-report model + submit permission.**
   Tests: a NEW standalone capability to submit expense reports, independent of `txn_perm` (none/read/write) and report grants — a pure submitter has no ledger access; matrix picks up the new perm; versioned lifecycle (draft→submitted→rejected→resubmitted→converted) with AssertVersioned; `posted_transaction_id` set only on convert.
   Build: migration `expense_reports(id, submitter_id, subsidiary_id, status CHECK(draft/submitted/rejected/converted), review_notes, posted_transaction_id NULL, …)` + `expense_report_lines(id, report_id, account_id, amount INTEGER minor, fund_id, program_id, memo)` + versions; a user capability (e.g. `can_submit_expenses` column or a new `Perm`); store: `SubmitExpenseReport`, `RejectExpenseReport(reason)`, `ConvertExpenseReport(→ links the posted txn)`, `ResubmitExpenseReport`.
-- [ ] **p20.2 web: submitter workspace.**
+- [x] **p20.2 web: submitter workspace.**
   Tests: a submit-only user (single sub) enters revenue/expense splits (need not balance), submits, sees status, and resubmits after a rejection with the reviewer's reason shown; cannot see the ledger/reports; perm enforced.
   Build: expense-report editor (one subsidiary; revenue/expense split rows with fund/program/memo — reuses phase-12 grid pieces but no balancing requirement); my-reports list with status.
 - [ ] **p20.3 web: reviewer queue → convert / reject.**

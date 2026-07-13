@@ -1,0 +1,102 @@
+{{/*
+  p20.2 expense-report editor / detail (GET /expenses/{id}, Perm ExpenseSubmit;
+  ownership-enforced -> not-owned/missing is a 404). The report header (subsidiary +
+  status), the reviewer's REJECTION REASON when rejected, the lines table, and -- when
+  the report is EDITABLE (draft|rejected) -- the inline add/edit-line form (swapped via
+  htmx into #expense-line-form, exactly like the budget-line editor) and the Submit /
+  Resubmit action. NO balancing requirement: an unbalanced report submits fine (the
+  reviewer balances it at convert, p20.3). A submitted/converted report renders
+  READ-ONLY (no form, no submit). .Page is an expenseDetailModel. Account/fund/program/
+  subsidiary names are stored proper nouns; every other string via {{t}} (rule 9);
+  amounts via the money formatter (rule 10); no inline script (rule 12).
+*/ -}}
+{{define "expense_detail.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "expense.detail.title"))}}
+  {{- with .Page}}
+  <p><a class="btn btn-ghost" href="/expenses">{{t "expense.detail.back"}}</a></p>
+  <h1>{{t "expense.detail.title"}} #{{.ID}}</h1>
+  <p class="hint">{{t "expense.detail.subsidiary"}}: {{.SubName}} &middot;
+    <span class="badge er-status-{{.StatusKey}}">{{t .StatusKey}}</span>
+  </p>
+
+  {{if .ErrorKey}}
+  <p class="error" role="alert" id="expense-error">{{.ErrorKey}}</p>
+  {{end}}
+
+  {{if .Rejected}}
+  <div class="notice er-rejection" role="status">
+    <strong>{{t "expense.detail.rejected_heading"}}</strong>
+    <p class="er-reason" id="expense-review-notes">{{.ReviewNotes}}</p>
+    <p class="hint">{{t "expense.detail.rejected_hint"}}</p>
+  </div>
+  {{end}}
+
+  {{if .Editable}}
+  <h2>{{t "expense.detail.add_line"}}</h2>
+  <div id="expense-line-form" class="expense-line-form-region">
+    <button type="button" class="btn btn-primary"
+            hx-get="/expenses/{{.ID}}/lines/new" hx-target="#expense-line-form" hx-swap="outerHTML">
+      {{t "expense.detail.new_line"}}
+    </button>
+  </div>
+  {{end}}
+
+  <h2>{{t "expense.detail.lines"}}</h2>
+  <table class="expense-lines-table txn-grid">
+    <thead>
+      <tr>
+        <th>{{t "expense.line.col.account"}}</th>
+        <th>{{t "expense.line.col.amount"}}</th>
+        <th>{{t "expense.line.col.fund"}}</th>
+        <th>{{t "expense.line.col.program"}}</th>
+        <th>{{t "expense.line.col.memo"}}</th>
+        {{if .Editable}}<th>{{t "expense.line.col.actions"}}</th>{{end}}
+      </tr>
+    </thead>
+    <tbody>
+      {{$rid := .ID}}
+      {{$editable := .Editable}}
+      {{range .Lines}}
+      <tr class="expense-line-row" id="expense-line-row-{{.ID}}">
+        <td class="el-account">{{.AcctName}}</td>
+        <td class="el-amount amount">{{.AmountFmt}}</td>
+        <td class="el-fund">{{if .FundName}}{{.FundName}}{{else}}<span class="muted">{{t "expense.line.unrestricted"}}</span>{{end}}</td>
+        <td class="el-program">{{if .ProgName}}{{.ProgName}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
+        <td class="el-memo">{{.Memo}}</td>
+        {{if $editable}}
+        <td class="el-actions">
+          <button type="button" class="btn btn-ghost"
+                  hx-get="/expenses/{{$rid}}/lines/{{.ID}}/edit" hx-target="#expense-line-form" hx-swap="outerHTML">
+            {{t "common.edit"}}
+          </button>
+          <form method="post" action="/expenses/{{$rid}}/lines/{{.ID}}/delete" class="inline">
+            <button type="submit" class="btn btn-ghost">{{t "common.delete"}}</button>
+          </form>
+        </td>
+        {{end}}
+      </tr>
+      {{else}}
+      <tr><td colspan="{{if .Editable}}6{{else}}5{{end}}">{{t "expense.detail.no_lines"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+
+  {{if .Editable}}
+  <div class="expense-submit">
+    {{if .Rejected}}
+    <form method="post" action="/expenses/{{.ID}}/resubmit" class="inline">
+      <button type="submit" class="btn btn-primary" id="expense-resubmit">{{t "expense.detail.resubmit"}}</button>
+    </form>
+    {{else}}
+    <form method="post" action="/expenses/{{.ID}}/submit" class="inline">
+      <button type="submit" class="btn btn-primary" id="expense-submit">{{t "expense.detail.submit"}}</button>
+    </form>
+    {{end}}
+    <p class="hint">{{t "expense.detail.submit_hint"}}</p>
+  </div>
+  {{else}}
+  <p class="hint" id="expense-readonly">{{t "expense.detail.readonly"}}</p>
+  {{end}}
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

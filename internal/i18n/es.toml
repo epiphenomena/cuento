@@ -1856,3 +1856,114 @@ other = "Ingresa una fecha de fin igual o posterior a la de inicio."
 other = "Ese presupuesto ya no existe."
 [error.budget.line_not_found]
 other = "Esa linea ya no existe."
+
+# ---------------------------------------------------------------------------
+# p20.2 espacio de trabajo del solicitante (Fase 20). Ver en.toml.
+[nav.myexpenses]
+other = "Mis gastos"
+[expense.list.title]
+other = "Mis informes de gastos"
+[expense.list.intro]
+other = "Redacte un informe de líneas de ingresos y gastos propuestas y envíelo para revisión."
+[expense.list.col.id]
+other = "Informe"
+[expense.list.col.subsidiary]
+other = "Filial"
+[expense.list.col.status]
+other = "Estado"
+[expense.list.col.actions]
+other = "Acciones"
+[expense.list.open]
+other = "Abrir"
+[expense.list.reason]
+other = "Motivo del revisor"
+[expense.list.empty]
+other = "Aún no tiene informes de gastos."
+[expense.new.subsidiary]
+other = "Filial"
+[expense.new.btn]
+other = "Nuevo informe de gastos"
+[expense.status.draft]
+other = "Borrador"
+[expense.status.submitted]
+other = "Enviado"
+[expense.status.rejected]
+other = "Rechazado"
+[expense.status.converted]
+other = "Contabilizado"
+[expense.detail.title]
+other = "Informe de gastos"
+[expense.detail.back]
+other = "Volver a mis informes"
+[expense.detail.subsidiary]
+other = "Filial"
+[expense.detail.rejected_heading]
+other = "Este informe fue devuelto para cambios."
+[expense.detail.rejected_hint]
+other = "Edite las líneas de abajo y vuelva a enviarlo."
+[expense.detail.add_line]
+other = "Agregar una línea"
+[expense.detail.new_line]
+other = "Nueva línea"
+[expense.detail.lines]
+other = "Líneas"
+[expense.detail.no_lines]
+other = "Aún no hay líneas."
+[expense.detail.submit]
+other = "Enviar para revisión"
+[expense.detail.resubmit]
+other = "Reenviar para revisión"
+[expense.detail.submit_hint]
+other = "El informe no necesita cuadrar; un revisor lo finalizará."
+[expense.detail.readonly]
+other = "Este informe está en revisión y no se puede editar."
+[expense.line.col.account]
+other = "Cuenta"
+[expense.line.col.amount]
+other = "Importe"
+[expense.line.col.fund]
+other = "Fondo"
+[expense.line.col.program]
+other = "Programa"
+[expense.line.col.memo]
+other = "Nota"
+[expense.line.col.actions]
+other = "Acciones"
+[expense.line.unrestricted]
+other = "Sin restricción"
+[expense.line.form.new_title]
+other = "Nueva línea"
+[expense.line.form.edit_title]
+other = "Editar línea"
+[expense.line.form.account]
+other = "Cuenta"
+[expense.line.form.account_none]
+other = "Elija una cuenta"
+[expense.line.form.account_hint]
+other = "Una cuenta de ingresos o gastos en la filial de este informe."
+[expense.line.form.amount]
+other = "Importe"
+[expense.line.form.amount_hint]
+other = "Ingrese un importe positivo."
+[expense.line.form.fund]
+other = "Fondo"
+[expense.line.form.program]
+other = "Programa"
+[expense.line.form.program_none]
+other = "Ninguno"
+[expense.line.form.memo]
+other = "Nota"
+[error.expense.account_not_offered]
+other = "Elija una cuenta de ingresos o gastos en la filial de este informe."
+[error.expense.amount]
+other = "Ingrese un importe positivo."
+[error.expense.empty]
+other = "Agregue al menos una línea antes de enviar."
+[admin.users.submit_title]
+other = "Envío de gastos"
+[admin.users.submit_intro]
+other = "Permitir que este usuario redacte y envíe informes de gastos (independiente del acceso al libro mayor)."
+[admin.users.form.can_submit]
+other = "Puede enviar informes de gastos"
+[admin.users.save_submit]
+other = "Guardar"

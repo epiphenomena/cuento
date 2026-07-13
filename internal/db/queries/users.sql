@@ -91,7 +91,7 @@ WHERE id <> ? AND is_admin = 1 AND disabled_at IS NULL;
 -- Full live user row for the admin detail page (p13.2): the columns the per-user
 -- perm/grant editor needs. Distinct from UserByID (session projection) so this
 -- step touches no existing query.
-SELECT id, username, display_name, is_admin, txn_perm, disabled_at
+SELECT id, username, display_name, is_admin, txn_perm, can_submit_expenses, disabled_at
 FROM users
 WHERE id = ?;
 

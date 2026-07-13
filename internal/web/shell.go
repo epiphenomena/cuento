@@ -56,6 +56,11 @@ func navSections() []navEntry {
 		{"nav.reconciliations", "/reconciliations", TxnRead},
 		{"nav.budgets", "/budgets", TxnRead},
 		{"nav.import", "/import", TxnWrite},
+		// p20.2: the submitter workspace. Gated by ExpenseSubmit (the standalone
+		// capability) so a PURE submitter (txn_perm=none, no grants) sees ONLY this
+		// entry (+ home/settings), never the ledger/reports/admin -- the access
+		// boundary. An admin sees it too (is_admin implies everything, D10).
+		{"nav.myexpenses", "/expenses", ExpenseSubmit},
 		{"nav.reports", "/reports", ReportGroup("")},
 		{"nav.settings", "/settings", AnyUser},
 		{"nav.admin", "/admin", Admin},

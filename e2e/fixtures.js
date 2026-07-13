@@ -148,6 +148,16 @@ const test = base.extend({
         password: ADMIN_PASSWORD,
         dbPath,
         workerIndex: workerInfo.workerIndex,
+        // rejectReport drives the p20.1 `expense-report reject` CLI verb (the CLI face
+        // of store.RejectExpenseReport) against THIS worker's db, so the p20.2 e2e can
+        // seed a submitted->rejected transition out of band (the reviewer WEB queue is
+        // p20.3). The reject CLI writes the SAME db `serve` holds open; WAL +
+        // busy_timeout (the p08.2 concurrency finding) handle the second-process write,
+        // so the server need not be stopped. Worker-scoped: the spec rejects the exact
+        // id it just created.
+        rejectReport(id, reason) {
+          run(['expense-report', 'reject', String(id), '--reason', reason, '-db', dbPath]);
+        },
       });
 
       // Teardown: stop serve, remove the temp db + dir.

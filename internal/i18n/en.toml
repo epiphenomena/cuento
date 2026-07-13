@@ -1858,3 +1858,118 @@ other = "Enter an end date on or after the start date."
 other = "That budget no longer exists."
 [error.budget.line_not_found]
 other = "That line no longer exists."
+
+# ---------------------------------------------------------------------------
+# p20.2 submitter workspace (Phase 20). The low-privilege SUBMITTER's "my
+# reports" list + the expense-report editor. All keys under expense.* /
+# error.expense.* (NO bare `expense` leaf beside them -- the go-i18n dotted-key/
+# leaf collision watch). nav.myexpenses lights up the submitter nav entry; the
+# admin.users.* keys drive the p20.1-deferred can_submit_expenses admin toggle.
+[nav.myexpenses]
+other = "My expenses"
+[expense.list.title]
+other = "My expense reports"
+[expense.list.intro]
+other = "Draft a report of proposed revenue and expense lines, then submit it for review."
+[expense.list.col.id]
+other = "Report"
+[expense.list.col.subsidiary]
+other = "Subsidiary"
+[expense.list.col.status]
+other = "Status"
+[expense.list.col.actions]
+other = "Actions"
+[expense.list.open]
+other = "Open"
+[expense.list.reason]
+other = "Reviewer's reason"
+[expense.list.empty]
+other = "You have no expense reports yet."
+[expense.new.subsidiary]
+other = "Subsidiary"
+[expense.new.btn]
+other = "New expense report"
+[expense.status.draft]
+other = "Draft"
+[expense.status.submitted]
+other = "Submitted"
+[expense.status.rejected]
+other = "Rejected"
+[expense.status.converted]
+other = "Posted"
+[expense.detail.title]
+other = "Expense report"
+[expense.detail.back]
+other = "Back to my reports"
+[expense.detail.subsidiary]
+other = "Subsidiary"
+[expense.detail.rejected_heading]
+other = "This report was returned for changes."
+[expense.detail.rejected_hint]
+other = "Edit the lines below, then resubmit."
+[expense.detail.add_line]
+other = "Add a line"
+[expense.detail.new_line]
+other = "New line"
+[expense.detail.lines]
+other = "Lines"
+[expense.detail.no_lines]
+other = "No lines yet."
+[expense.detail.submit]
+other = "Submit for review"
+[expense.detail.resubmit]
+other = "Resubmit for review"
+[expense.detail.submit_hint]
+other = "The report does not need to balance; a reviewer will finalize it."
+[expense.detail.readonly]
+other = "This report is under review and cannot be edited."
+[expense.line.col.account]
+other = "Account"
+[expense.line.col.amount]
+other = "Amount"
+[expense.line.col.fund]
+other = "Fund"
+[expense.line.col.program]
+other = "Program"
+[expense.line.col.memo]
+other = "Memo"
+[expense.line.col.actions]
+other = "Actions"
+[expense.line.unrestricted]
+other = "Unrestricted"
+[expense.line.form.new_title]
+other = "New line"
+[expense.line.form.edit_title]
+other = "Edit line"
+[expense.line.form.account]
+other = "Account"
+[expense.line.form.account_none]
+other = "Choose an account"
+[expense.line.form.account_hint]
+other = "A revenue or expense account in this report's subsidiary."
+[expense.line.form.amount]
+other = "Amount"
+[expense.line.form.amount_hint]
+other = "Enter a positive amount."
+[expense.line.form.fund]
+other = "Fund"
+[expense.line.form.program]
+other = "Program"
+[expense.line.form.program_none]
+other = "None"
+[expense.line.form.memo]
+other = "Memo"
+[error.expense.account_not_offered]
+other = "Choose a revenue or expense account in this report's subsidiary."
+[error.expense.amount]
+other = "Enter a positive amount."
+[error.expense.empty]
+other = "Add at least one line before submitting."
+[admin.users.submit_title]
+other = "Expense submission"
+[admin.users.submit_intro]
+other = "Allow this user to draft and submit expense reports (independent of ledger access)."
+[admin.users.form.can_submit]
+other = "Can submit expense reports"
+[admin.users.save_submit]
+other = "Save"

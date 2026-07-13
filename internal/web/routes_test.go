@@ -203,6 +203,34 @@ func buildPersonas(t *testing.T, st *store.Store, db *sql.DB) []persona {
 		submitter = &cu
 	}
 
+	// Seed one expense report (id 1) OWNED BY THE ADMIN persona, in draft state, with
+	// one line (id 1), so p20.2's /expenses/{id}, /expenses/{id}/lines/new,
+	// /expenses/{id}/lines/{lid}/edit, /expenses/{id}/lines/{lid}, /expenses/{id}/lines/
+	// {lid}/delete, /expenses/{id}/submit, /expenses/{id}/resubmit resolve to a REAL,
+	// OWNED resource when the reachability check substitutes {id}/{lid} -> 1 (the
+	// handlers enforce OWNERSHIP -> a not-owned/missing id is a 404, so the report MUST
+	// belong to the reachability persona, Admin). A draft report keeps the line editor
+	// reachable (a submitted report freezes lines -> 404 on the line routes). The line
+	// needs an R/E account; the "Seed Revenue" account (rev, id created in newMatrixApp)
+	// is one, resolved here by name. The routes only need the rows to exist so an
+	// authorized persona reaches the handler (non-404).
+	repID, err := st.CreateExpenseReport(ctx, admin.ID, 1)
+	if err != nil {
+		t.Fatalf("seed expense report: %v", err)
+	}
+	if repID != 1 {
+		t.Fatalf("seed expense report id = %d, want 1", repID)
+	}
+	seedRevID := accountIDByName(t, st, "Seed Revenue")
+	if seedRevID == 0 {
+		t.Fatalf("seed revenue account not found for expense line")
+	}
+	if _, err := st.AddExpenseReportLine(ctx, repID, store.ExpenseReportLineInput{
+		AccountID: seedRevID, Amount: -5000, Memo: "seed",
+	}); err != nil {
+		t.Fatalf("seed expense report line: %v", err)
+	}
+
 	// Grant the ReportsOnly persona the "financial" report group -- the group the
 	// p15.3 trial-balance report (the first real mounted report route) is gated by.
 	// This is what makes the permission matrix prove per-group report enforcement with

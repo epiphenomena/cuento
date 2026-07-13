@@ -171,6 +171,14 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/admin/users/{id}/reset-password", Admin, http.HandlerFunc(s.userResetPassword)},
 		{http.MethodPost, "/admin/users/{id}/txn-perm", Admin, http.HandlerFunc(s.userSetTxnPerm)},
 		{http.MethodPost, "/admin/users/{id}/grants", Admin, http.HandlerFunc(s.userSetGrants)},
+		// p20.2: the admin toggle for the p20.1 can_submit_expenses capability (the
+		// standalone ExpenseSubmit right). p20.1 deferred this UI ("Admin manages it,
+		// p13.2 UI later"); it lands here so an admin can grant a user submit access (and
+		// so the e2e can seed a pure submitter via the real admin flow). Admin-gated (it
+		// does NOT breach the submitter boundary), a VERSIONED change naming the acting
+		// admin (SetUserCanSubmitExpenses). The literal ".../can-submit" is distinct from
+		// the other ".../{id}/..." action segments; the matrix picks it up (rule 8).
+		{http.MethodPost, "/admin/users/{id}/can-submit", Admin, http.HandlerFunc(s.userSetCanSubmit)},
 		{http.MethodGet, "/admin/currencies", Admin, http.HandlerFunc(s.currenciesPage)},
 		{http.MethodPost, "/admin/currencies", Admin, http.HandlerFunc(s.currencyAdd)},
 		{http.MethodPost, "/admin/currencies/{code}/toggle", Admin, http.HandlerFunc(s.currencyToggle)},
@@ -371,6 +379,28 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/budgets/{id}/lines", TxnWrite, http.HandlerFunc(s.lineCreate)},
 		{http.MethodPost, "/budgets/{id}/lines/{lid}", TxnWrite, http.HandlerFunc(s.lineUpdate)},
 		{http.MethodPost, "/budgets/{id}/lines/{lid}/delete", TxnWrite, http.HandlerFunc(s.lineDelete)},
+		// p20.2 submitter workspace (Phase 20). ALL ExpenseSubmit -- the STANDALONE
+		// capability (p20.1, INDEPENDENT of txn_perm): a pure submitter passes these and
+		// is 403 on the ledger/reports (Txn*/ReportGroup). Ownership is enforced INSIDE
+		// each id-taking handler (a missing OR not-owned report id -> 404, uniform, no
+		// enumeration) -- the perm gate alone is not enough. GET /expenses is the "my
+		// reports" list (lighting up the nav.myexpenses entry, shell.go); POST /expenses
+		// creates a draft; GET /expenses/{id} is the editor; the line CRUD (line-at-a-time,
+		// reusing the phase-12 sub-scoped selector row -- DECISIONS p20.2) and submit/
+		// resubmit follow. The literal ".../lines/new" is more specific than the
+		// ".../lines/{lid}" wildcard, so the Go 1.22+ mux routes them precisely; likewise
+		// ".../submit"/".../resubmit" vs the ".../{id}" GET. The permission-matrix test
+		// picks these up automatically (rule 8).
+		{http.MethodGet, "/expenses", ExpenseSubmit, http.HandlerFunc(s.expensesPage)},
+		{http.MethodPost, "/expenses", ExpenseSubmit, http.HandlerFunc(s.expenseCreate)},
+		{http.MethodGet, "/expenses/{id}", ExpenseSubmit, http.HandlerFunc(s.expenseDetail)},
+		{http.MethodGet, "/expenses/{id}/lines/new", ExpenseSubmit, http.HandlerFunc(s.expenseLineNewForm)},
+		{http.MethodGet, "/expenses/{id}/lines/{lid}/edit", ExpenseSubmit, http.HandlerFunc(s.expenseLineEditForm)},
+		{http.MethodPost, "/expenses/{id}/lines", ExpenseSubmit, http.HandlerFunc(s.expenseLineCreate)},
+		{http.MethodPost, "/expenses/{id}/lines/{lid}", ExpenseSubmit, http.HandlerFunc(s.expenseLineUpdate)},
+		{http.MethodPost, "/expenses/{id}/lines/{lid}/delete", ExpenseSubmit, http.HandlerFunc(s.expenseLineDelete)},
+		{http.MethodPost, "/expenses/{id}/submit", ExpenseSubmit, http.HandlerFunc(s.expenseSubmit)},
+		{http.MethodPost, "/expenses/{id}/resubmit", ExpenseSubmit, http.HandlerFunc(s.expenseResubmit)},
 	}
 	// p15.12 reports index: GET /reports lists the reports the current user may
 	// access, grouped by report group, each a link to a concrete /reports/{id}. The
