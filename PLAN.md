@@ -299,7 +299,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 
 ## Phase 17 — Bank CSV import
 
-- [ ] **p17.1 db: import schema.**
+- [x] **p17.1 db: import schema.**
   Tests: schema smoke; dedupe hash uniqueness scoped per account.
   Build: migration — `mapping_profiles(id, name, config JSON)`, `import_batches(id, filename, account_id, subsidiary_id, profile_id, uploaded_by/at)`, `import_rows(id, batch_id, raw_json, parsed date/amount/payee/memo, status CHECK(pending/posted/discarded), dedupe_hash, posted_transaction_id)`. Batch binds one target account **and one subsidiary** (the account must map to it).
 - [ ] **p17.2 web: upload + mapping + staging.**

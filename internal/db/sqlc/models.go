@@ -150,6 +150,36 @@ type FundsVersion struct {
 	Active      int64
 }
 
+type ImportBatch struct {
+	ID           int64
+	Filename     string
+	AccountID    int64
+	SubsidiaryID int64
+	ProfileID    int64
+	UploadedBy   int64
+	UploadedAt   string
+}
+
+type ImportRow struct {
+	ID                  int64
+	BatchID             int64
+	AccountID           int64
+	RawJson             string
+	ParsedDate          sql.NullString
+	ParsedAmount        sql.NullInt64
+	ParsedPayee         sql.NullString
+	ParsedMemo          sql.NullString
+	Status              string
+	DedupeHash          string
+	PostedTransactionID sql.NullInt64
+}
+
+type MappingProfile struct {
+	ID     int64
+	Name   string
+	Config string
+}
+
 type OrgSetting struct {
 	Key   string
 	Value string
