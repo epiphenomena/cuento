@@ -53,25 +53,43 @@ func (s *server) chain(next http.Handler) http.Handler {
 	h = s.authMiddleware(h)
 	h = s.sessions.LoadAndSave(h)
 	h = crossOrigin(h)
-	h = secureHeaders(h)
+	h = secureHeaders(!s.cfg.Dev)(h)
 	return h
 }
 
-// secureHeaders sets the response security headers on every request (rule 13;
-// the full cross-route sweep is p18.4). It sets them BEFORE calling next so they
-// are present even if a downstream handler writes headers and a body. HTML
+// hstsMaxAge is the Strict-Transport-Security max-age: one year, the value the
+// header's own spec and every browser preload list expect. It is emitted ONLY
+// outside -dev (production speaks TLS via autocert, p18.2), mirroring the
+// Secure-cookie gate — sending HSTS over the -dev plain-HTTP server would pin the
+// browser to https for a host that only speaks http.
+const hstsMaxAge = "max-age=31536000; includeSubDomains"
+
+// secureHeaders returns the middleware that sets the response security headers on
+// every request (rule 13; the p18.4 cross-route sweep asserts them on every
+// registered route). Because this is the OUTERMOST wrapper (chain), the headers
+// land on EVERY response — 200, 302, 403, 404, static, JSON, octet-stream alike —
+// before any downstream handler runs, so no route is exempt. It sets them BEFORE
+// calling next so they survive a handler that also writes headers and a body. HTML
 // cache posture (no-store) is applied by the HTML handlers themselves, not here,
 // so static assets and /healthz keep their own caching (p10 owns asset caching).
-func secureHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := w.Header()
-		h.Set("Content-Security-Policy", contentSecurityPolicy)
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("Referrer-Policy", "same-origin")
-		h.Set("Cross-Origin-Opener-Policy", "same-origin")
-		h.Set("X-Frame-Options", "DENY")
-		next.ServeHTTP(w, r)
-	})
+//
+// prod gates the ONE header that must not appear on the -dev plain-HTTP server:
+// Strict-Transport-Security (see hstsMaxAge). Everything else is unconditional.
+func secureHeaders(prod bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := w.Header()
+			h.Set("Content-Security-Policy", contentSecurityPolicy)
+			h.Set("X-Content-Type-Options", "nosniff")
+			h.Set("Referrer-Policy", "same-origin")
+			h.Set("Cross-Origin-Opener-Policy", "same-origin")
+			h.Set("X-Frame-Options", "DENY")
+			if prod {
+				h.Set("Strict-Transport-Security", hstsMaxAge)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // crossOrigin wraps next with the stdlib Cross-Origin Protection (Go 1.25, D9):

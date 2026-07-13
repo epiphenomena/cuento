@@ -323,7 +323,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p18.3 web: admin ops page.**
   Tests: admin-only (matrix); snapshot download is a valid SQLite file (`PRAGMA quick_check` on the result); actions audited.
   Build: run `ledger.Check` with rendered violations (errors and warnings, incl. Z17–Z19); backup snapshot via `VACUUM INTO`; build info.
-- [ ] **p18.4 hardening sweep.**
+- [x] **p18.4 hardening sweep.**
   Tests: security-header assertions across all routes; CSP console clean in a `-dev` click-through; catalog parity green with the final key set.
   Build: govulncheck green, dependency prune to D15, session lifetime settings reviewed, `make check` run against local `sample.db`, `docs/security.md` (threat model: authenticated misuse + commodity web attacks; explicitly not storing bank credentials), DECISIONS.md tidy.
 
