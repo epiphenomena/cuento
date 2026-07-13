@@ -1061,7 +1061,7 @@ other = "Total (converted)"
 
 # p15.4 balance sheet: statement of financial position (A/L/E, net-asset split).
 [reports.balance_sheet.title]
-other = "Balance sheet"
+other = "Statement of Financial Position"
 [reports.balance_sheet.col.line]
 other = "Line"
 [reports.balance_sheet.col.amount]
@@ -1091,14 +1091,14 @@ other = "Net assets without donor restrictions"
 [reports.balance_sheet.na.with]
 other = "Net assets with donor restrictions"
 [reports.balance_sheet.na.surplus_of_which]
-other = "of which net surplus to date"
+other = "of which change in net assets to date"
 [reports.balance_sheet.intercompany_warning]
 other = "Intercompany accounts do not net to zero"
 
 # p15.5 income statement: statement of activities over a period (Revenue - Expense =
 # net surplus/deficit), with comparative month/quarter columns and txn-date conversion.
 [reports.income_statement.title]
-other = "Income statement"
+other = "Statement of Activities"
 [reports.income_statement.col.line]
 other = "Line"
 [reports.income_statement.col.period]
@@ -1114,7 +1114,7 @@ other = "Total revenue"
 [reports.income_statement.total.expenses]
 other = "Total expenses"
 [reports.income_statement.net]
-other = "Net surplus (deficit)"
+other = "Change in net assets"
 
 # p15.3d drill-down: the transaction list behind one report figure.
 [reports.drill.title]
@@ -1155,7 +1155,7 @@ other = "Choose an account…"
 # per-line labels are the IRS-seeded form990_lines reference text (stored data), and
 # the three class column headers reuse the functional.<class> catalog labels.
 [reports.functional_expenses.title]
-other = "Functional expenses (990 Part IX)"
+other = "Statement of Functional Expenses"
 [reports.functional_expenses.col.line]
 other = "Line"
 [reports.functional_expenses.col.total]
@@ -1210,7 +1210,7 @@ other = "— all funds —"
 # assets released from restrictions" line is DERIVED (D20, no journaled transfer): it
 # nets to zero in Total (it moves restricted resources to unrestricted as they are spent).
 [reports.activities_by_restriction.title]
-other = "Statement of activities (by restriction)"
+other = "Statement of Activities by Donor Restriction"
 [reports.activities_by_restriction.col.line]
 other = "Line"
 [reports.activities_by_restriction.col.currency]

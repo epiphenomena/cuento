@@ -184,7 +184,7 @@ test('reports: open the income statement, set period + granularity, see the R/E 
   await expect(table).toBeVisible();
   await expect(table).toContainText('Revenue');
   await expect(table).toContainText('Expenses');
-  await expect(table).toContainText('Net surplus');
+  await expect(table).toContainText('Change in net assets');
 
   // The COMPARATIVE columns: quarterly over 18 months => 6 period columns + Line + Total
   // = 8 header cells. Assert at least 4 (structural: Line + >=2 periods + Total), which a
@@ -466,7 +466,7 @@ test('reports: open the balance sheet, see the sections + net-asset split + a ba
   await expect(table).toContainText('Net assets');
   await expect(table).toContainText('Net assets without donor restrictions');
   await expect(table).toContainText('Net assets with donor restrictions');
-  await expect(table).toContainText('net surplus to date');
+  await expect(table).toContainText('change in net assets to date');
 
   // A BALANCING grand-total row is present -- the identity's right-hand side (Total
   // liabilities and net assets == total assets). The renderer marks it report-total.

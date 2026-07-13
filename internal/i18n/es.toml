@@ -1058,7 +1058,7 @@ other = "Total (convertido)"
 
 # p15.4 balance general: estado de situacion financiera (A/P/PN, division de activos netos).
 [reports.balance_sheet.title]
-other = "Balance general"
+other = "Estado de Situacion Financiera"
 [reports.balance_sheet.col.line]
 other = "Linea"
 [reports.balance_sheet.col.amount]
@@ -1088,7 +1088,7 @@ other = "Activos netos sin restricciones de donantes"
 [reports.balance_sheet.na.with]
 other = "Activos netos con restricciones de donantes"
 [reports.balance_sheet.na.surplus_of_which]
-other = "de los cuales superavit neto a la fecha"
+other = "de los cuales cambio en activos netos a la fecha"
 [reports.balance_sheet.intercompany_warning]
 other = "Las cuentas intercompania no se compensan a cero"
 
@@ -1096,7 +1096,7 @@ other = "Las cuentas intercompania no se compensan a cero"
 # superavit/deficit neto), con columnas comparativas mensuales/trimestrales y conversion
 # a la tasa de la fecha de transaccion.
 [reports.income_statement.title]
-other = "Estado de resultados"
+other = "Estado de Actividades"
 [reports.income_statement.col.line]
 other = "Linea"
 [reports.income_statement.col.period]
@@ -1112,7 +1112,7 @@ other = "Total ingresos"
 [reports.income_statement.total.expenses]
 other = "Total gastos"
 [reports.income_statement.net]
-other = "Superavit (deficit) neto"
+other = "Cambio en los activos netos"
 
 # p15.3d drill-down: la lista de transacciones detras de una cifra del informe.
 [reports.drill.title]
@@ -1153,7 +1153,7 @@ other = "Elija una cuenta…"
 # etiquetas por linea son el texto de referencia sembrado de form990_lines (datos
 # almacenados); los encabezados de clase reutilizan las etiquetas functional.<clase>.
 [reports.functional_expenses.title]
-other = "Gastos funcionales (990 Parte IX)"
+other = "Estado de Gastos Funcionales"
 [reports.functional_expenses.col.line]
 other = "Linea"
 [reports.functional_expenses.col.total]
@@ -1209,7 +1209,7 @@ other = "— todos los fondos —"
 # "activos netos liberados de restricciones" es DERIVADA (D20, sin traspaso asentado):
 # neta a cero en el Total (traslada recursos restringidos a no restringidos al gastarse).
 [reports.activities_by_restriction.title]
-other = "Estado de actividades (por restriccion)"
+other = "Estado de Actividades por Restriccion de Donantes"
 [reports.activities_by_restriction.col.line]
 other = "Linea"
 [reports.activities_by_restriction.col.currency]
