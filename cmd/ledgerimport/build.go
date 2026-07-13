@@ -97,6 +97,13 @@ func runBuild(
 	if err := b.transactions(ctx, recs); err != nil {
 		return nil, err
 	}
+	// Deactivate accounts flagged inactive in the source (QuickBooks "(deleted)")
+	// AFTER posting: an inactive account still holds its historical splits, but the
+	// leaf-active trigger forbids posting TO an inactive account, so it must be
+	// active during the transactions phase and deactivated only now.
+	if err := b.deactivateAccounts(ctx); err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 
@@ -110,6 +117,7 @@ type builder struct {
 
 	exponent map[string]int // currency code -> minor-unit exponent (D1)
 	payeeID  map[string]int64
+	inactive []int64 // account ids to deactivate after posting (source "(deleted)")
 
 	// acctType maps a created account id -> its cuento type. resolveSplit consults
 	// it so a source dimension (functional class from kls, program from kat) is only
@@ -317,6 +325,24 @@ func (b *builder) accounts(ctx context.Context, rows []AccountMap) error {
 		}
 		b.res.AccountIDs[r.SourceAcct] = id
 		b.acctType[id] = r.CuentoType
+		if !r.Active {
+			// Deepest-first so a placeholder is deactivated after its children (order
+			// is not store-enforced, but keeps the log readable). `ordered` is
+			// parent-before-child, so prepend to reverse it.
+			b.inactive = append([]int64{id}, b.inactive...)
+		}
+	}
+	return nil
+}
+
+// deactivateAccounts sets active=0 on the accounts flagged inactive in the mapping
+// (source "(deleted)"), once their historical splits are posted. Each is one
+// versioned store change (op='update', never a hard delete -- rule 14).
+func (b *builder) deactivateAccounts(ctx context.Context) error {
+	for _, id := range b.inactive {
+		if err := b.st.DeactivateAccount(ctx, id); err != nil {
+			return fmt.Errorf("deactivate account %d: %w", id, err)
+		}
 	}
 	return nil
 }

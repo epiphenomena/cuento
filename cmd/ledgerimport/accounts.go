@@ -49,6 +49,7 @@ func runAccounts(source io.Reader, out io.Writer) error {
 					CuentoParent:    r.Parent,
 					FunctionalClass: functionalGuess(r.Kls),
 					DefaultProgram:  r.Kat,
+					Active:          true, // accounts default active; the human flags "(deleted)"
 					NameEN:          r.Acct,
 					NameES:          r.Acct,
 				},

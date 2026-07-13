@@ -57,6 +57,9 @@ func testAccountMap() string {
 		{SourceAcct: "Opening Balances", CuentoType: "equity", CuentoParent: "Equity", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Opening Balances", NameES: "Saldos Iniciales"},
 		{SourceAcct: "FX Clearing", CuentoType: "equity", CuentoParent: "Equity", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "FX Clearing", NameES: "Compensacion FX"},
 	}
+	for i := range rows { // accounts are active unless a test says otherwise
+		rows[i].Active = true
+	}
 	var b strings.Builder
 	if err := WriteAccountMap(&b, rows); err != nil {
 		panic(err)
@@ -161,10 +164,16 @@ func TestAccountMapIntercompanyColumn(t *testing.T) {
 	}
 
 	// A garbage intercompany cell fails loudly (not silently false).
-	bad := "source_acct,cuento_type,cuento_parent,subsidiaries,functional_class_default,default_program,form990_code,intercompany,name_en,name_es\n" +
-		"X,expense,,A,,,,notabool,X,X\n"
+	bad := "source_acct,cuento_type,cuento_parent,subsidiaries,functional_class_default,default_program,form990_code,intercompany,active,name_en,name_es\n" +
+		"X,expense,,A,,,,notabool,true,X,X\n"
 	if _, err := ReadAccountMap(strings.NewReader(bad)); err == nil {
 		t.Error("garbage intercompany cell accepted; want error")
+	}
+	// A garbage active cell also fails loudly.
+	bad2 := "source_acct,cuento_type,cuento_parent,subsidiaries,functional_class_default,default_program,form990_code,intercompany,active,name_en,name_es\n" +
+		"X,expense,,A,,,,false,maybe,X,X\n"
+	if _, err := ReadAccountMap(strings.NewReader(bad2)); err == nil {
+		t.Error("garbage active cell accepted; want error")
 	}
 }
 
@@ -193,6 +202,48 @@ func TestBuildLoadsRates(t *testing.T) {
 	}
 	if got.Rate != 0.04 || got.RateDate != "2024-01-01" {
 		t.Errorf("RateOn = %+v, want rate 0.04 on 2024-01-01", got)
+	}
+}
+
+// TestBuildDeactivatesInactiveAccounts: an account flagged inactive (source
+// "(deleted)") is created ACTIVE, receives its historical splits, then is
+// deactivated — the splits survive (rule 14: deactivate, never delete).
+func TestBuildDeactivatesInactiveAccounts(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	accMap, err := ReadAccountMap(strings.NewReader(testAccountMap()))
+	if err != nil {
+		t.Fatalf("ReadAccountMap: %v", err)
+	}
+	for i := range accMap {
+		if accMap[i].SourceAcct == "Checking" { // an account that carries splits
+			accMap[i].Active = false
+		}
+	}
+	cfg, err := ReadConfig(strings.NewReader(testConfig()))
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	res, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, nil, st, false)
+	if err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+	id := res.AccountIDs["Checking"]
+
+	var active, nSplits int
+	if err := sqldb.QueryRow(`SELECT active FROM accounts WHERE id=?`, id).Scan(&active); err != nil {
+		t.Fatalf("query active: %v", err)
+	}
+	if active != 0 {
+		t.Errorf("inactive-flagged account not deactivated (active=%d)", active)
+	}
+	if err := sqldb.QueryRow(`SELECT COUNT(*) FROM splits WHERE account_id=?`, id).Scan(&nSplits); err != nil {
+		t.Fatalf("query splits: %v", err)
+	}
+	if nSplits == 0 {
+		t.Error("historical splits lost on the deactivated account")
 	}
 }
 

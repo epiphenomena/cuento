@@ -32,6 +32,7 @@ var accountMapCols = []string{
 	"default_program",
 	"form990_code",
 	"intercompany",
+	"active",
 	"name_en",
 	"name_es",
 }
@@ -48,6 +49,7 @@ type AccountMap struct {
 	DefaultProgram  string // program name (R/E only)
 	Form990Code     string
 	Intercompany    bool // D19: an intra-group account eliminated at consolidation
+	Active          bool // false = inactivated in the source (QuickBooks "(deleted)")
 	NameEN          string
 	NameES          string
 }
@@ -88,6 +90,7 @@ func WriteAccountMap(w io.Writer, rows []AccountMap) error {
 			r.DefaultProgram,
 			r.Form990Code,
 			strconv.FormatBool(r.Intercompany),
+			strconv.FormatBool(r.Active),
 			r.NameEN,
 			r.NameES,
 		}
@@ -120,9 +123,13 @@ func ReadAccountMap(r io.Reader) ([]AccountMap, error) {
 
 	out := make([]AccountMap, 0, len(rows)-1)
 	for i, f := range rows[1:] {
-		ic, err := parseBoolCell(f[7])
+		ic, err := parseBoolCell(f[7], false)
 		if err != nil {
 			return nil, fmt.Errorf("read account map: row %d intercompany %q: %w", i+2, f[7], err)
+		}
+		active, err := parseBoolCell(f[8], true) // blank = active (the common case)
+		if err != nil {
+			return nil, fmt.Errorf("read account map: row %d active %q: %w", i+2, f[8], err)
 		}
 		out = append(out, AccountMap{
 			SourceAcct:      f[0],
@@ -133,20 +140,21 @@ func ReadAccountMap(r io.Reader) ([]AccountMap, error) {
 			DefaultProgram:  f[5],
 			Form990Code:     f[6],
 			Intercompany:    ic,
-			NameEN:          f[8],
-			NameES:          f[9],
+			Active:          active,
+			NameEN:          f[9],
+			NameES:          f[10],
 		})
 	}
 	return out, nil
 }
 
-// parseBoolCell parses an intercompany flag cell: blank = false, else a Go bool
-// literal (true/false, also accepts 1/0/t/f via strconv). A garbage value fails
-// loudly rather than silently defaulting.
-func parseBoolCell(s string) (bool, error) {
+// parseBoolCell parses a boolean flag cell: blank = def, else a Go bool literal
+// (true/false, also 1/0/t/f via strconv). A garbage value fails loudly rather than
+// silently defaulting.
+func parseBoolCell(s string, def bool) (bool, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
-		return false, nil
+		return def, nil
 	}
 	return strconv.ParseBool(s)
 }
