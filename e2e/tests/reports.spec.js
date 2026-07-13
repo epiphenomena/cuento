@@ -520,7 +520,12 @@ async function createRevenueAccount(page, name) {
   await page.getByRole('button', { name: /new account/i }).click();
   await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
   await page.locator('#af-type').selectOption('revenue');
-  await expect(page.locator('#af-name-en')).toBeVisible();
+  // #af-program (the IsRE default-program select) exists ONLY on the revenue/expense
+  // form, so waiting for it confirms the type-change hx-get swap landed (the old asset
+  // form is gone) BEFORE we fill — #af-name-en is on both forms, so waiting for it can
+  // let the fill race the in-flight swap and be lost under parallel load. saveAndReload
+  // then waits for the new form to settle so Save's hx-post is wired.
+  await expect(page.locator('#af-program')).toBeVisible();
   await page.locator('#af-name-en').fill(name);
   const rootSub = page.locator('input[name="sub_1"]');
   if (!(await rootSub.isChecked())) await rootSub.check();
