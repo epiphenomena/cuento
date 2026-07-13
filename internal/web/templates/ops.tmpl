@@ -1,0 +1,68 @@
+{{/*
+  p18.3 Admin ops page (GET /admin/ops, Admin). Three sections an operator needs:
+  build info (running version + Go version), the integrity check (ledger.Check -- the
+  SAME Z1-Z19 suite `cuento check` runs, grouped errors-first then warnings incl.
+  Z17-Z19, each with its rule + detail; a clean db shows a "no violations" notice),
+  and a backup-snapshot action. The backup is a POST form (it mutates the audit trail,
+  so it needs the cross-origin guard, rule 13); its response is the octet-stream
+  download itself. .Page is an opsPageModel. Every string via {{t}} (rule 9); no inline
+  script (rule 12). Selectors for the e2e suite are language-independent (ids, classes,
+  data-* attrs) so a locale change never breaks them.
+*/ -}}
+{{define "ops.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "admin.ops.title"))}}
+  {{- with .Page}}
+  <h1>{{t "admin.ops.title"}}</h1>
+  <p class="hint">{{t "admin.ops.intro"}}</p>
+
+  <section class="ops-build" aria-labelledby="ops-build-h">
+    <h2 id="ops-build-h">{{t "admin.ops.build.title"}}</h2>
+    <dl class="ops-build-info">
+      <dt>{{t "admin.ops.build.version"}}</dt>
+      <dd class="ops-version">{{.Version}}</dd>
+      <dt>{{t "admin.ops.build.go"}}</dt>
+      <dd class="ops-go-version">{{.GoVersion}}</dd>
+    </dl>
+  </section>
+
+  <section class="ops-check" aria-labelledby="ops-check-h">
+    <h2 id="ops-check-h">{{t "admin.ops.check.title"}}</h2>
+    <p class="hint">{{t "admin.ops.check.intro"}}</p>
+    {{- if .Clean}}
+    <p class="notice ops-check-clean" role="status">{{t "admin.ops.check.clean"}}</p>
+    {{- else}}
+    {{- if .Errors}}
+    <h3 class="ops-errors-h">{{t "admin.ops.check.errors"}}</h3>
+    <ul class="ops-violations ops-errors">
+      {{- range .Errors}}
+      <li class="ops-violation" data-severity="error" data-rule="{{.Rule}}">
+        <span class="ops-violation-rule">{{.Rule}}</span>
+        <span class="ops-violation-detail">{{.Detail}}</span>
+      </li>
+      {{- end}}
+    </ul>
+    {{- end}}
+    {{- if .Warnings}}
+    <h3 class="ops-warnings-h">{{t "admin.ops.check.warnings"}}</h3>
+    <ul class="ops-violations ops-warnings">
+      {{- range .Warnings}}
+      <li class="ops-violation" data-severity="warning" data-rule="{{.Rule}}">
+        <span class="ops-violation-rule">{{.Rule}}</span>
+        <span class="ops-violation-detail">{{.Detail}}</span>
+      </li>
+      {{- end}}
+    </ul>
+    {{- end}}
+    {{- end}}
+  </section>
+
+  <section class="ops-backup" aria-labelledby="ops-backup-h">
+    <h2 id="ops-backup-h">{{t "admin.ops.backup.title"}}</h2>
+    <p class="hint">{{t "admin.ops.backup.intro"}}</p>
+    <form method="post" action="/admin/ops/backup" class="ops-backup-form">
+      <button type="submit" class="btn btn-primary ops-backup-button">{{t "admin.ops.backup.download"}}</button>
+    </form>
+  </section>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

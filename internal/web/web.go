@@ -64,6 +64,7 @@ func NewApp(cfg Config, db *sql.DB, st *store.Store) *App {
 
 	srv := &server{
 		cfg:      cfg,
+		db:       db,
 		store:    st,
 		sessions: sessions,
 		tmpl:     mustParseTemplates(),
@@ -99,6 +100,7 @@ func NewApp(cfg Config, db *sql.DB, st *store.Store) *App {
 // per-application state; there is no package-level mutable state (AGENTS Style).
 type server struct {
 	cfg       Config
+	db        *sql.DB // the raw handle: p18.3 ops runs ledger.Check + VACUUM INTO on it
 	store     *store.Store
 	sessions  *scs.SessionManager
 	tmpl      *htmltemplate.Template

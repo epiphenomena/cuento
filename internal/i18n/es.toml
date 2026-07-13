@@ -343,6 +343,36 @@ other = "Idiomas de nombres de cuenta"
 [org.form.enabled_languages_hint]
 other = "Codigos de idioma separados por comas (por ejemplo en,es). El ingles siempre esta disponible. Anadir un idioma agrega un campo de nombre al formulario de cuenta."
 
+# Pagina de operaciones del admin (p18.3): informacion de compilacion, la verificacion
+# de integridad y una copia de seguridad. Las claves se anidan bajo admin.ops.* como
+# tablas (sin hoja admin.ops suelta) para evitar colisiones de clave punteada.
+[admin.ops.title]
+other = "Operaciones"
+[admin.ops.intro]
+other = "Estado de la instancia: la compilacion en ejecucion, la verificacion de integridad del libro mayor y una copia de seguridad de la base de datos."
+[admin.ops.build.title]
+other = "Compilacion"
+[admin.ops.build.version]
+other = "Version"
+[admin.ops.build.go]
+other = "Entorno de Go"
+[admin.ops.check.title]
+other = "Verificacion de integridad"
+[admin.ops.check.intro]
+other = "Las mismas comprobaciones que ejecuta la linea de comandos, sobre toda la base de datos."
+[admin.ops.check.clean]
+other = "Sin violaciones. El libro mayor es consistente."
+[admin.ops.check.errors]
+other = "Errores"
+[admin.ops.check.warnings]
+other = "Advertencias"
+[admin.ops.backup.title]
+other = "Copia de seguridad"
+[admin.ops.backup.intro]
+other = "Descargue una instantanea consistente de la base de datos como un unico archivo SQLite."
+[admin.ops.backup.download]
+other = "Descargar copia de seguridad"
+
 # Etiqueta para un fondo sin restricciones (fund_id NULL), segun D20.
 [fund.unrestricted]
 other = "Fondo General No Restringido"

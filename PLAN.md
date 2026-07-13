@@ -320,7 +320,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p18.2 ops: config, TLS, deploy docs.**
   Tests: config parsing (flags/env `CUENTO_DATA_DIR`, `CUENTO_ADDR`, `CUENTO_DOMAIN`, `CUENTO_DEV`).
   Build: if `CUENTO_DOMAIN` set → autocert on :443 with :80 redirect (cert cache in data dir), else plain HTTP; `deploy/` — `cuento.service`, `litestream.service`, `ratesync.timer`, `litestream.yml` (replica → GCS); `docs/deploy.md` — e2-micro walkthrough (always-free region, 30 GB pd-standard, firewall 80/443, Litestream restore drill, backup retention).
-- [ ] **p18.3 web: admin ops page.**
+- [x] **p18.3 web: admin ops page.**
   Tests: admin-only (matrix); snapshot download is a valid SQLite file (`PRAGMA quick_check` on the result); actions audited.
   Build: run `ledger.Check` with rendered violations (errors and warnings, incl. Z17–Z19); backup snapshot via `VACUUM INTO`; build info.
 - [ ] **p18.4 hardening sweep.**

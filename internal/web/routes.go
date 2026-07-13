@@ -216,6 +216,16 @@ func (s *server) routes() []Route {
 		// NOT a setting here -- it follows the scoped subsidiary (D18).
 		{http.MethodGet, "/admin/org", Admin, http.HandlerFunc(s.orgPage)},
 		{http.MethodPost, "/admin/org", Admin, http.HandlerFunc(s.orgUpdate)},
+		// p18.3 ops page (Appendix B/F: /admin/** = Admin). GET renders build info +
+		// the integrity check (ledger.Check, the SAME suite `cuento check` runs, Z1-Z19
+		// grouped by severity). POST /admin/ops/backup produces a VACUUM INTO snapshot,
+		// streams it as an octet-stream attachment, and AUDITS the action (an ops.backup
+		// change naming the admin). The backup is a POST -- it mutates the audit trail, so
+		// it must sit behind the cross-origin guard (rule 13), which the middleware applies
+		// to mutating (non-GET) routes. The permission-matrix test picks these up
+		// automatically (rule 8); the /admin landing (admin.tmpl) links this page.
+		{http.MethodGet, "/admin/ops", Admin, http.HandlerFunc(s.opsPage)},
+		{http.MethodPost, "/admin/ops/backup", Admin, http.HandlerFunc(s.opsBackup)},
 		// p11.5 programs management (Appendix B/F). Programs are a DIMENSION and their
 		// structure is BOOKKEEPING (D24), so GET /programs is TxnRead (the tree list +
 		// per-program activity totals + the inline form fetches) and the create/edit/

@@ -349,6 +349,36 @@ other = "Account name languages"
 [org.form.enabled_languages_hint]
 other = "Comma-separated language codes (for example en,es). English is always available. Adding a language adds a name field to the account form."
 
+# Admin ops page (p18.3): build info, the integrity check, and a backup snapshot.
+# Keys are namespaced under admin.ops.* as tables (no bare admin.ops leaf) so the
+# dotted-key catalog never has a leaf/table collision.
+[admin.ops.title]
+other = "Operations"
+[admin.ops.intro]
+other = "Instance health: the running build, the ledger integrity check, and a database backup."
+[admin.ops.build.title]
+other = "Build"
+[admin.ops.build.version]
+other = "Version"
+[admin.ops.build.go]
+other = "Go runtime"
+[admin.ops.check.title]
+other = "Integrity check"
+[admin.ops.check.intro]
+other = "The same checks the command line runs, over the whole database."
+[admin.ops.check.clean]
+other = "No violations. The ledger is consistent."
+[admin.ops.check.errors]
+other = "Errors"
+[admin.ops.check.warnings]
+other = "Warnings"
+[admin.ops.backup.title]
+other = "Backup snapshot"
+[admin.ops.backup.intro]
+other = "Download a consistent snapshot of the database as a single SQLite file."
+[admin.ops.backup.download]
+other = "Download backup snapshot"
+
 # Label for a NULL fund_id (unrestricted general fund), per D20.
 [fund.unrestricted]
 other = "Unrestricted General"
