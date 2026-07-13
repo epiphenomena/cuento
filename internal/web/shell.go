@@ -254,8 +254,13 @@ type baseData struct {
 	Lang    string
 	Theme   string
 	Nav     []navItem
-	SubNav  []navItem // p23.5 second-row section nav (nil = no section bar)
-	Version string
+	SubNav []navItem // p23.5 second-row section nav (nil = no section bar)
+	// SubNavControls names a page-specific controls partial (p23.10) the section bar
+	// renders alongside the sub-nav — filters/buttons a page moves out of its body
+	// into the second-level menu (e.g. "accounts"). "" = none. The shell renders it
+	// by a constant-name {{template}} guarded on this string (no dynamic dispatch).
+	SubNavControls string
+	Version        string
 	// Wide opts <main> out of the centered 60rem column so a data-dense page (the
 	// transaction editor, p23.2) can use the full horizontal width. Set via
 	// newWideShellPage; default false keeps the comfortable reading column.

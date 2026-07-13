@@ -260,10 +260,21 @@ func TestSubNavRendersPerSection(t *testing.T) {
 		t.Errorf("/admin/users sub-nav entry not marked current:\n%s", body)
 	}
 
-	// /accounts has no sub-nav -> no section bar.
+	// /accounts has no sub-nav LINKS but DOES render a section bar for its controls
+	// (p23.10): the subsidiary/active filters + New/Merge moved into the bar.
 	rec = asUser(t, h, sm, admin.ID, http.MethodGet, "/accounts", nil)
+	body = rec.Body.String()
+	if !strings.Contains(body, `class="app-subnav"`) || !strings.Contains(body, `class="app-subnav-controls"`) {
+		t.Errorf("/accounts should render a section bar with controls:\n%s", body)
+	}
+	if !strings.Contains(body, `class="subnav-filters"`) {
+		t.Errorf("/accounts section bar missing the filter form")
+	}
+
+	// A page with neither sub-nav nor controls (the reports index) renders no bar.
+	rec = asUser(t, h, sm, admin.ID, http.MethodGet, "/reports", nil)
 	if strings.Contains(rec.Body.String(), `class="app-subnav"`) {
-		t.Errorf("/accounts should render no section bar")
+		t.Errorf("/reports should render no section bar")
 	}
 
 	// /schedules belongs to the Budgets section: the bar shows Budgets + Schedules,

@@ -179,7 +179,16 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 		model.Subs = append(model.Subs, subOption{ID: sub.ID, Name: sub.Name})
 	}
 
-	s.render(w, r, http.StatusOK, "accounts.tmpl", s.newShellPage(r, model))
+	// p23.10: a filter change is the section-bar form's hx-get targeting
+	// #accounts-results (HX-Target header), so swap ONLY the results fragment; a full
+	// load or a boosted nav (HX-Target absent / "body") renders the whole page.
+	if r.Header.Get("HX-Target") == "accounts-results" {
+		s.render(w, r, http.StatusOK, "accounts-results", model)
+		return
+	}
+	sp := s.newShellPage(r, model)
+	sp.Shell.SubNavControls = "accounts"
+	s.render(w, r, http.StatusOK, "accounts.tmpl", sp)
 }
 
 // treeDepths computes each account's indent depth from the pre-ordered tree rows

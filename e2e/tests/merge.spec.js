@@ -74,12 +74,14 @@ test.describe('merge accounts', () => {
     await page.waitForLoadState('load');
 
     // The source is deactivated: it drops out of the active tree. Filter to
-    // active-only via the REAL filter form (a plain JS-free GET form) rather than a
-    // raw page.goto right after the htmx redirect (which races the in-flight
-    // navigation -> intermittent net::ERR_ABORTED). This also exercises the filter.
-    await page.locator('form.filters input[name="active"]').check();
-    await page.locator('form.filters button[type="submit"]').click();
-    await page.waitForLoadState('load');
+    // active-only via the section-bar filter (p23.10): checking the box auto-applies
+    // (htmx GET swapping #accounts-results, no Apply button). Wait for that swap
+    // response so the assertion runs against the filtered table.
+    const swap = page.waitForResponse(
+      (r) => new URL(r.url()).pathname === '/accounts' && r.request().method() === 'GET',
+    );
+    await page.locator('.subnav-filters input[name="active"]').check();
+    await swap;
     await expect(page.getByText('Supplies E2E', { exact: true })).toHaveCount(0);
     // The destination survives.
     await expect(page.getByText('Office E2E', { exact: true })).toBeVisible();

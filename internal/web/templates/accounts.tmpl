@@ -1,51 +1,57 @@
 {{/*
-  p11.1 chart of accounts page. Like the other shell pages it is a self-contained
-  top-level template that emits shell-open, its <main> content, then shell-close
-  (base.tmpl explains the split-partial frame). .Page is an accountsPageModel.
+  p11.1 chart of accounts page (also the home landing, p23.8). Self-contained shell
+  page (shell-open / <main> / shell-close). .Page is an accountsPageModel.
 
-  The tree table shows each account (indented by depth), its type, its per-currency
-  balances (already formatted through the money formatter honoring user settings,
-  rule 10), and TxnWrite actions (Edit / Deactivate). The subsidiary + active
-  filters are a plain GET form (JS-free; htmx boosts nav only). The inline
-  create/edit form is fetched into #account-form via htmx (GET /accounts/new or
-  /accounts/{id}/edit) and swapped in place -- reusing the p10.3 form-error
-  convention on a bad submit. Every string via {{t}} (rule 9); no inline script
-  (rule 12).
+  p23.10: the subsidiary + active filters and the New/Merge triggers live in the
+  SECOND-LEVEL menu (the "accounts-controls" partial the shell renders in the
+  section bar), not the page body. The filter form auto-applies on change (htmx GET
+  swapping #accounts-results) — no Apply button — and degrades to a plain GET form
+  (Enter submits, full reload) with no JS. The results (as-of + tree table) live in
+  "accounts-results" so a filter change swaps only them, leaving any open
+  create/edit form in #account-form untouched.
+
+  Tree rows are indented by depth (rule: names are stored/proper, rendered verbatim);
+  balances go through the money formatter (rule 10); every other string via {{t}}
+  (rule 9); no inline script (rule 12).
 */ -}}
-{{define "accounts.tmpl" -}}
-{{template "shell-open" (shellTitle . (t "accounts.title"))}}
-  {{- with .Page}}
-  <h1>{{t "accounts.title"}}</h1>
 
-  <form class="filters" method="get" action="/accounts">
-    <label for="sub-filter">{{t "accounts.filter.subsidiary"}}</label>
-    <select id="sub-filter" name="sub">
-      <option value="0">{{t "accounts.filter.all_subsidiaries"}}</option>
-      {{range .Subs}}<option value="{{.ID}}"{{if eq .ID $.Page.SubFilter}} selected{{end}}>{{.Name}}</option>
-      {{end}}
-    </select>
-    <label class="check">
-      <input type="checkbox" name="active" value="1"{{if .ActiveOnly}} checked{{end}}>
-      {{t "accounts.filter.active_only"}}
-    </label>
-    <button type="submit" class="btn">{{t "accounts.filter.apply"}}</button>
-  </form>
+{{/* accounts-controls: the section-bar controls (p23.10). Dot is the accountsPageModel. */ -}}
+{{define "accounts-controls" -}}
+{{- with .}}
+<form class="subnav-filters" method="get" action="/accounts"
+      hx-get="/accounts" hx-trigger="change" hx-target="#accounts-results" hx-swap="outerHTML">
+  <label for="sub-filter">{{t "accounts.filter.subsidiary"}}</label>
+  <select id="sub-filter" name="sub">
+    <option value="0">{{t "accounts.filter.all_subsidiaries"}}</option>
+    {{range .Subs}}<option value="{{.ID}}"{{if eq .ID $.SubFilter}} selected{{end}}>{{.Name}}</option>
+    {{end}}
+  </select>
+  <label class="check">
+    <input type="checkbox" name="active" value="1"{{if .ActiveOnly}} checked{{end}}>
+    {{t "accounts.filter.active_only"}}
+  </label>
+  {{/* No-JS fallback: without htmx the change-trigger can't fire, so keep a submit. */}}
+  <noscript><button type="submit" class="btn">{{t "accounts.filter.apply"}}</button></noscript>
+</form>
+<div class="subnav-actions">
+  <button type="button" class="btn btn-primary"
+          hx-get="/accounts/new" hx-target="#account-form" hx-swap="outerHTML">
+    {{t "accounts.new"}}
+  </button>
+  <button type="button" class="btn btn-ghost"
+          hx-get="/accounts/merge" hx-target="#account-form" hx-swap="outerHTML">
+    {{t "accounts.merge"}}
+  </button>
+</div>
+{{- end}}
+{{- end}}
 
+{{/* accounts-results: the as-of line + tree table. Swapped alone on a filter change
+     (hx-target #accounts-results). Dot is the accountsPageModel. */ -}}
+{{define "accounts-results" -}}
+{{- with .}}
+<div id="accounts-results">
   <p class="asof">{{t "accounts.balances_as_of"}} {{.AsOf}}</p>
-
-  <div id="account-form" class="account-form-region">
-    {{/* The inline form fetches here. Initially the New-account and Merge triggers;
-         each htmx-swaps its form into #account-form (p11.1 create/edit, p11.2 merge). */}}
-    <button type="button" class="btn btn-primary"
-            hx-get="/accounts/new" hx-target="#account-form" hx-swap="outerHTML">
-      {{t "accounts.new"}}
-    </button>
-    <button type="button" class="btn btn-ghost"
-            hx-get="/accounts/merge" hx-target="#account-form" hx-swap="outerHTML">
-      {{t "accounts.merge"}}
-    </button>
-  </div>
-
   <table class="tree-table">
     <thead>
       <tr>
@@ -81,6 +87,20 @@
       {{end}}
     </tbody>
   </table>
+</div>
+{{- end}}
+{{- end}}
+
+{{define "accounts.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "accounts.title"))}}
+  {{- with .Page}}
+  <h1>{{t "accounts.title"}}</h1>
+
+  {{/* The inline create/edit/merge form swaps in here; the New/Merge triggers live
+       in the section bar (p23.10) and target this region. Empty until opened. */}}
+  <div id="account-form" class="account-form-region"></div>
+
+  {{template "accounts-results" .}}
   {{- end}}
 {{template "shell-close" .}}
 {{- end}}
