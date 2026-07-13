@@ -14,6 +14,9 @@
 {{template "shell-open" (shellTitle . (t "void.title"))}}
   {{- with .Page}}
   <h1>{{t "void.title"}}</h1>
+  {{- if .ErrorKey}}
+  <p class="error" role="alert">{{t .ErrorKey}}</p>
+  {{- end}}
   <p class="hint">{{t "void.intro"}}</p>
 
   <dl class="void-summary">

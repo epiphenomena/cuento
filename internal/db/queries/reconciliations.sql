@@ -110,6 +110,21 @@ SELECT CAST(COALESCE((
   ORDER BY p.statement_date DESC, p.id DESC LIMIT 1
 ), 0) AS INTEGER);
 
+-- name: HasLaterFinalizedReconciliation :one
+-- 1 when a LATER FINALIZED reconciliation exists for the SAME (account, currency),
+-- by (statement_date, id) order, strictly AFTER this one. Reopen uses it to enforce
+-- reverse-chronological reopen (p16.5, Gap 2): reopening an earlier statement while
+-- a later finalized one exists would corrupt the opening chain. The mirror image of
+-- PriorFinalizedStatementBalance's "prior" bound. Params: account_id, currency,
+-- statement_date, statement_date, id (of the recon being reopened).
+SELECT EXISTS (
+  SELECT 1 FROM reconciliations l
+  WHERE l.status = 'finalized' AND l.account_id = ?
+    AND l.currency = ?
+    AND (l.statement_date > ?
+         OR (l.statement_date = ? AND l.id > ?))
+) AS has_later;
+
 -- name: FinalizedReconciledSplitIDs :many
 -- The ids of splits on a given transaction that are cleared against a FINALIZED
 -- reconciliation. UpdateTransaction uses this to reject financial edits (amount/

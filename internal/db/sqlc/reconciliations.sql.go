@@ -175,6 +175,43 @@ func (q *Queries) GetSplitForReconcile(ctx context.Context, id int64) (GetSplitF
 	return i, err
 }
 
+const hasLaterFinalizedReconciliation = `-- name: HasLaterFinalizedReconciliation :one
+SELECT EXISTS (
+  SELECT 1 FROM reconciliations l
+  WHERE l.status = 'finalized' AND l.account_id = ?
+    AND l.currency = ?
+    AND (l.statement_date > ?
+         OR (l.statement_date = ? AND l.id > ?))
+) AS has_later
+`
+
+type HasLaterFinalizedReconciliationParams struct {
+	AccountID       int64
+	Currency        string
+	StatementDate   string
+	StatementDate_2 string
+	ID              int64
+}
+
+// 1 when a LATER FINALIZED reconciliation exists for the SAME (account, currency),
+// by (statement_date, id) order, strictly AFTER this one. Reopen uses it to enforce
+// reverse-chronological reopen (p16.5, Gap 2): reopening an earlier statement while
+// a later finalized one exists would corrupt the opening chain. The mirror image of
+// PriorFinalizedStatementBalance's "prior" bound. Params: account_id, currency,
+// statement_date, statement_date, id (of the recon being reopened).
+func (q *Queries) HasLaterFinalizedReconciliation(ctx context.Context, arg HasLaterFinalizedReconciliationParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, hasLaterFinalizedReconciliation,
+		arg.AccountID,
+		arg.Currency,
+		arg.StatementDate,
+		arg.StatementDate_2,
+		arg.ID,
+	)
+	var has_later bool
+	err := row.Scan(&has_later)
+	return has_later, err
+}
+
 const insertReconciliation = `-- name: InsertReconciliation :one
 
 INSERT INTO reconciliations (account_id, statement_date, statement_balance, currency)

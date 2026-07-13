@@ -34,6 +34,8 @@ type reconWebEnv struct {
 	checking int64
 	spDep    int64 // +250 checking split
 	spExp    int64 // -400 checking split
+	txnDep   int64 // the deposit transaction (owns spDep)
+	txnExp   int64 // the expense transaction (owns spExp)
 }
 
 func newReconWebEnv(t *testing.T) reconWebEnv {
@@ -95,8 +97,9 @@ func newReconWebEnv(t *testing.T) reconWebEnv {
 	return reconWebEnv{
 		h: app.handler, st: st, sm: app.sessions,
 		writer: writer, reader: reader, checking: checking,
-		spDep: splitOnAccount(t, db, txnDep, checking),
-		spExp: splitOnAccount(t, db, txnExp, checking),
+		spDep:  splitOnAccount(t, db, txnDep, checking),
+		spExp:  splitOnAccount(t, db, txnExp, checking),
+		txnDep: txnDep, txnExp: txnExp,
 	}
 }
 
@@ -274,6 +277,50 @@ func TestFinalizeAtZeroSucceeds(t *testing.T) {
 	got, _ := e.st.GetReconciliation(context.Background(), id)
 	if got.Status != "finalized" {
 		t.Errorf("recon status = %q, want finalized", got.Status)
+	}
+}
+
+// --- p16.5 void-block surfaces cleanly (409, not 500) --------------------
+
+// TestVoidReconciledTxnRejectedCleanly: POSTing a confirmed void of a transaction
+// whose split is cleared in a FINALIZED recon is a clean 409 with the localized
+// banner (store.ErrSplitReconciled mapped), NOT a 500; the txn stays live. After the
+// recon is reopened the same void succeeds (redirect). Load-bearing: without the
+// store guard + handler arm this void would 500 (or silently drop the split).
+func TestVoidReconciledTxnRejectedCleanly(t *testing.T) {
+	e := newReconWebEnv(t)
+	recon := e.finalizeRecon(t) // clears spDep + spExp, finalizes
+
+	voidPath := "/transactions/" + strconv.FormatInt(e.txnExp, 10) + "/void"
+	form := url.Values{}
+	form.Set("confirm", "1")
+
+	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, voidPath, form)
+	if rec.Code == http.StatusInternalServerError {
+		t.Fatalf("void of reconciled txn returned 500 (should be a clean guard); body: %s", rec.Body.String())
+	}
+	if rec.Code != http.StatusConflict {
+		t.Errorf("void of reconciled txn = %d, want 409; body: %s", rec.Code, rec.Body.String())
+	}
+	// Localized banner (not the raw i18n key).
+	if !strings.Contains(rec.Body.String(), "finalized reconciliation") {
+		t.Errorf("void error response missing the localized recon-lock banner; body:\n%s", rec.Body.String())
+	}
+	// The txn stays live (GetTransaction still returns it).
+	if _, err := e.st.GetTransaction(context.Background(), e.txnExp); err != nil {
+		t.Errorf("txn should still be live after blocked void: %v", err)
+	}
+
+	// After reopening the recon the void succeeds (redirect, not 4xx/5xx).
+	if err := e.st.Reopen(store.WithActor(context.Background(), store.Actor{ID: e.writer}), recon); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	rec2 := asUser(t, e.h, e.sm, e.writer, http.MethodPost, voidPath, form)
+	if rec2.Code >= 400 {
+		t.Fatalf("void after reopen = %d, want redirect; body: %s", rec2.Code, rec2.Body.String())
+	}
+	if _, err := e.st.GetTransaction(context.Background(), e.txnExp); err == nil {
+		t.Errorf("txn should be voided (not found) after reopen+void")
 	}
 }
 

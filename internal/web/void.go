@@ -29,11 +29,12 @@ import (
 
 // voidReviewModel is the review page: the transaction summary shown before confirm.
 type voidReviewModel struct {
-	TxnID int64
-	Date  string // formatted per the user's date format (rule 10)
-	Payee string // "" = none
-	Memo  string // "" = none
-	Lines []voidLine
+	TxnID    int64
+	Date     string // formatted per the user's date format (rule 10)
+	Payee    string // "" = none
+	Memo     string // "" = none
+	Lines    []voidLine
+	ErrorKey string // "" = none; an i18n key shown as a banner (p16.5 recon lock)
 }
 
 // voidLine is one split line in the void review (account + formatted amount + fund).
@@ -87,6 +88,20 @@ func (s *server) void(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.DeleteTransaction(s.actorCtx(ctx), id); err != nil {
 		if errors.Is(err, store.ErrTransactionNotFound) {
 			http.NotFound(w, r)
+			return
+		}
+		// A split of this txn is locked by a FINALIZED reconciliation (p16.5): voiding
+		// would drop it from the statement. Re-render the review with a clean banner at
+		// 409, not a 500 -- the user must reopen the reconciliation first. The txn is
+		// still live (the store rolled the void back), so buildVoidReview succeeds.
+		if errors.Is(err, store.ErrSplitReconciled) {
+			model, berr := s.buildVoidReview(ctx, u, lang, id)
+			if berr != nil {
+				http.NotFound(w, r)
+				return
+			}
+			model.ErrorKey = "void.error.reconciled"
+			s.render(w, r, http.StatusConflict, "void.tmpl", s.newShellPage(r, model))
 			return
 		}
 		s.serverError(w)

@@ -545,7 +545,10 @@ func (s *server) reconReopen(w http.ResponseWriter, r *http.Request) {
 	id := parseID(r.PathValue("id"))
 	if err := s.store.Reopen(s.actorCtx(ctx), id); err != nil {
 		switch {
-		case errors.Is(err, store.ErrReconciliationNotFinalized):
+		case errors.Is(err, store.ErrReconciliationNotFinalized),
+			errors.Is(err, store.ErrReconciliationNotLatest):
+			// A later finalized recon must be reopened first (p16.5, in-order): a plain
+			// 409, matching the existing not-finalized conflict -- never a 500.
 			http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
 			return
 		case errors.Is(err, store.ErrReconciliationNotFound):

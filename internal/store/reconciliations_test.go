@@ -498,6 +498,212 @@ func TestEditReconciledTxnBlocked(t *testing.T) {
 	}
 }
 
+// --- p16.5 void block on a finalized-reconciled split --------------------
+
+// TestVoidReconciledTransactionBlocked proves the STORE refuses to soft-delete
+// (void) a transaction that has a split cleared in a FINALIZED recon (Gap 1: the
+// split-lock trigger fires on UPDATE only, so a void would silently drop the split
+// from the recon's balance and break Z9). DeleteTransaction returns the clean typed
+// ErrSplitReconciled and the txn stays live; after Reopen the void succeeds.
+func TestVoidReconciledTransactionBlocked(t *testing.T) {
+	e := newReconEnv(t)
+	ctx := mutCtx()
+
+	// A balanced txn: Checking -1,000 (a payment) / expense +1,000.
+	base := PostTransactionInput{
+		Date: "2026-01-10", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: e.expense, Amount: 100_000, Position: 0},
+			{AccountID: e.checking, Amount: -100_000, Position: 1},
+		},
+	}
+	txn, err := e.s.PostTransaction(ctx, base)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	chkID := checkingSplitID(t, e.d, txn, e.checking)
+
+	recon, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-01-31", -100_000)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if err := e.s.SetSplitReconciled(ctx, recon, chkID, true); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if err := e.s.Finalize(ctx, recon); err != nil {
+		t.Fatalf("finalize: %v", err)
+	}
+
+	// Void is BLOCKED: the checking split is cleared in a finalized recon.
+	if err := e.s.DeleteTransaction(ctx, txn); !errors.Is(err, ErrSplitReconciled) {
+		t.Fatalf("void of reconciled txn: err = %v, want ErrSplitReconciled", err)
+	}
+	// The txn stays LIVE (the rejected write rolled back).
+	var deleted int64
+	if err := e.d.QueryRow(`SELECT deleted FROM transactions WHERE id = ?`, txn).Scan(&deleted); err != nil {
+		t.Fatalf("read deleted: %v", err)
+	}
+	if deleted != 0 {
+		t.Errorf("txn deleted = %d after blocked void, want 0 (still live)", deleted)
+	}
+	// The finalized statement still proves (Z9 clean): the void did not drop the split.
+	assertLedgerClean(t, e.d)
+
+	// After Reopen the same void SUCCEEDS.
+	if err := e.s.Reopen(ctx, recon); err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if err := e.s.DeleteTransaction(ctx, txn); err != nil {
+		t.Fatalf("void after reopen: %v", err)
+	}
+	if err := e.d.QueryRow(`SELECT deleted FROM transactions WHERE id = ?`, txn).Scan(&deleted); err != nil {
+		t.Fatalf("read deleted after reopen-void: %v", err)
+	}
+	if deleted != 1 {
+		t.Errorf("txn deleted = %d after reopen+void, want 1", deleted)
+	}
+}
+
+// TestVoidOpenReconciledTransactionAllowed proves the void guard does NOT
+// over-block: a txn whose split is cleared only in an OPEN recon (not finalized) is
+// still voidable. Uncleared/never-reconciled txns are covered by TestDeleteIsSoft.
+func TestVoidOpenReconciledTransactionAllowed(t *testing.T) {
+	e := newReconEnv(t)
+	ctx := mutCtx()
+
+	base := PostTransactionInput{
+		Date: "2026-01-10", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: e.expense, Amount: 100_000, Position: 0},
+			{AccountID: e.checking, Amount: -100_000, Position: 1},
+		},
+	}
+	txn, err := e.s.PostTransaction(ctx, base)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	chkID := checkingSplitID(t, e.d, txn, e.checking)
+
+	// Cleared in an OPEN recon (never finalized).
+	recon, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-01-31", -100_000)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if err := e.s.SetSplitReconciled(ctx, recon, chkID, true); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+
+	if err := e.s.DeleteTransaction(ctx, txn); err != nil {
+		t.Fatalf("void of open-reconciled txn: err = %v, want nil (no over-block)", err)
+	}
+}
+
+// --- p16.5 reopen in-order guard -----------------------------------------
+
+// TestReopenBlockedWhenLaterFinalizedExists proves Reopen refuses to reopen a
+// finalized recon when a LATER finalized recon exists on the same (account,
+// currency) -- reopening out of order corrupts the opening chain (Gap 2). Two
+// finalized recons E (earlier) and L (later): Reopen(E) -> ErrReconciliationNotLatest;
+// Reopen(L) succeeds; then Reopen(E) succeeds (L no longer finalized). A single
+// finalized recon reopens fine.
+func TestReopenBlockedWhenLaterFinalizedExists(t *testing.T) {
+	e := newReconEnv(t)
+	ctx := mutCtx()
+
+	// txn1: Checking -1,000 (Jan). txn2: Checking -400 (Feb).
+	post := func(date string, amt int64) int64 {
+		id, err := e.s.PostTransaction(ctx, PostTransactionInput{
+			Date: date, SubsidiaryID: e.subUS, Currency: "USD",
+			Splits: []SplitInput{
+				{AccountID: e.expense, Amount: -amt, Position: 0},
+				{AccountID: e.checking, Amount: amt, Position: 1},
+			},
+		})
+		if err != nil {
+			t.Fatalf("post %s: %v", date, err)
+		}
+		return id
+	}
+	txn1 := post("2026-01-10", -100_000)
+	txn2 := post("2026-02-10", -40_000)
+	sp1 := checkingSplitID(t, e.d, txn1, e.checking)
+	sp2 := checkingSplitID(t, e.d, txn2, e.checking)
+
+	// Recon E (earlier): opening 0 + cleared -100,000 == statement -100,000.
+	reconE, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-01-31", -100_000)
+	if err != nil {
+		t.Fatalf("start E: %v", err)
+	}
+	if err := e.s.SetSplitReconciled(ctx, reconE, sp1, true); err != nil {
+		t.Fatalf("clear sp1: %v", err)
+	}
+	if err := e.s.Finalize(ctx, reconE); err != nil {
+		t.Fatalf("finalize E: %v", err)
+	}
+
+	// Recon L (later): opening -100,000 + cleared -40,000 == statement -140,000.
+	reconL, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-02-28", -140_000)
+	if err != nil {
+		t.Fatalf("start L: %v", err)
+	}
+	if err := e.s.SetSplitReconciled(ctx, reconL, sp2, true); err != nil {
+		t.Fatalf("clear sp2: %v", err)
+	}
+	if err := e.s.Finalize(ctx, reconL); err != nil {
+		t.Fatalf("finalize L: %v", err)
+	}
+
+	// Reopening the EARLIER recon while a LATER finalized one exists is blocked.
+	if err := e.s.Reopen(ctx, reconE); !errors.Is(err, ErrReconciliationNotLatest) {
+		t.Fatalf("reopen earlier: err = %v, want ErrReconciliationNotLatest", err)
+	}
+	// It stays finalized (the rejected write rolled back).
+	if got, _ := e.s.GetReconciliation(ctx, reconE); got.Status != "finalized" {
+		t.Errorf("recon E status after blocked reopen = %q, want finalized", got.Status)
+	}
+
+	// Reopening the LATEST finalized recon succeeds.
+	if err := e.s.Reopen(ctx, reconL); err != nil {
+		t.Fatalf("reopen latest: %v", err)
+	}
+	// Now E is the latest finalized -> reopen succeeds.
+	if err := e.s.Reopen(ctx, reconE); err != nil {
+		t.Fatalf("reopen E after L reopened: %v", err)
+	}
+}
+
+// TestReopenSingleFinalized proves a lone finalized recon reopens without the
+// in-order guard tripping (no later finalized exists).
+func TestReopenSingleFinalized(t *testing.T) {
+	e := newReconEnv(t)
+	ctx := mutCtx()
+
+	txn, err := e.s.PostTransaction(ctx, PostTransactionInput{
+		Date: "2026-01-10", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: e.expense, Amount: 100_000, Position: 0},
+			{AccountID: e.checking, Amount: -100_000, Position: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	chkID := checkingSplitID(t, e.d, txn, e.checking)
+	recon, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-01-31", -100_000)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if err := e.s.SetSplitReconciled(ctx, recon, chkID, true); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if err := e.s.Finalize(ctx, recon); err != nil {
+		t.Fatalf("finalize: %v", err)
+	}
+	if err := e.s.Reopen(ctx, recon); err != nil {
+		t.Fatalf("reopen lone finalized: %v", err)
+	}
+}
+
 // --- p16.3 workspace read methods ----------------------------------------
 
 // TestReconciliationWorkspaceReads exercises the p16.3 read surface:

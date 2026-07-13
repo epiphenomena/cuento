@@ -50,6 +50,11 @@ var (
 	// ErrReconciliationNotFinalized: Reopen was attempted on a recon that is not
 	// finalized.
 	ErrReconciliationNotFinalized = errors.New("store: reconciliation is not finalized")
+	// ErrReconciliationNotLatest: Reopen was attempted on a finalized recon while a
+	// LATER finalized recon exists on the same (account, currency) (p16.5). Reopening
+	// out of order corrupts the opening chain; reopen the later reconciliation(s)
+	// first (reverse-chronological order, newest finalized first).
+	ErrReconciliationNotLatest = errors.New("store: a later finalized reconciliation exists; reopen it first")
 	// ErrSplitReconAccount: the split's account does not match the recon's account
 	// (D13 -- a recon clears splits of ONE account).
 	ErrSplitReconAccount = errors.New("store: split account does not match the reconciliation account")
@@ -64,7 +69,8 @@ var (
 	ErrReconciliationDifference = errors.New("store: reconciliation does not balance to the statement")
 	// ErrSplitReconciled: an UpdateTransaction tried a financial edit (date/amount/
 	// account/fund) touching a split cleared in a FINALIZED reconciliation, or the
-	// deletion of such a split. Reopen the recon first (memo/payee are allowed).
+	// deletion of such a split, or a DeleteTransaction (void) of a transaction with
+	// such a split (p16.5). Reopen the recon first (memo/payee edits are allowed).
 	ErrSplitReconciled = errors.New("store: split is locked by a finalized reconciliation")
 )
 
@@ -275,6 +281,24 @@ func (s *Store) Reopen(ctx context.Context, reconID int64) error {
 			}
 			if recon.Status != "finalized" {
 				return ErrReconciliationNotFinalized
+			}
+			// In-order reopen (p16.5, Gap 2). A finalized recon may only be reopened when
+			// it is the LATEST finalized statement on its (account, currency): reopening an
+			// earlier one while a later finalized statement stands would corrupt the
+			// opening chain (its edits would land under the later statement). Refuse with
+			// ErrReconciliationNotLatest -- the user backs up newest-first.
+			later, err := q.HasLaterFinalizedReconciliation(ctx, sqlc.HasLaterFinalizedReconciliationParams{
+				AccountID:       recon.AccountID,
+				Currency:        recon.Currency,
+				StatementDate:   recon.StatementDate,
+				StatementDate_2: recon.StatementDate,
+				ID:              recon.ID,
+			})
+			if err != nil {
+				return fmt.Errorf("later finalized check for reconciliation %d: %w", reconID, err)
+			}
+			if later {
+				return ErrReconciliationNotLatest
 			}
 			if err := q.SetReconciliationStatus(ctx, sqlc.SetReconciliationStatusParams{Status: "open", ID: reconID}); err != nil {
 				return fmt.Errorf("reopen reconciliation %d: %w", reconID, err)

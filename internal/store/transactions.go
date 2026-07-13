@@ -318,6 +318,19 @@ func (s *Store) DeleteTransaction(ctx context.Context, id int64) error {
 				}
 				return fmt.Errorf("load transaction %d: %w", id, err)
 			}
+			// STORE-LEVEL void lock (D13/p16.5, TestVoidReconciledTransactionBlocked).
+			// The split-lock trigger fires on UPDATE of splits only -- it cannot see a
+			// soft-delete of the transaction. Voiding a txn whose split is cleared in a
+			// FINALIZED recon would silently drop that split from the recon's balance and
+			// break Z9. Mirror UpdateTransaction's lock: reject with the clean typed
+			// ErrSplitReconciled BEFORE the soft-delete. Reopen the recon first to void.
+			locked, err := q.FinalizedReconciledSplitIDs(ctx, id)
+			if err != nil {
+				return fmt.Errorf("locked splits of %d: %w", id, err)
+			}
+			if len(locked) > 0 {
+				return ErrSplitReconciled
+			}
 			if err := q.SoftDeleteTransaction(ctx, id); err != nil {
 				return fmt.Errorf("soft-delete transaction %d: %w", id, err)
 			}

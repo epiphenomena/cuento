@@ -296,6 +296,9 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p16.4 web+reports: recon history + statement report.**
   Tests: goldens for the statement detail report; history page lists finalized recons per account.
   Build: report (group `reconciliation`): statement info, included splits, opening/closing chain.
+- [x] **p16.5 store+web: reconciliation-lock hardening (extends D13).**
+  Tests: `TestVoidReconciledTransactionBlocked` (store refuses to void a txn with a split cleared in a finalized recon — `ErrSplitReconciled`; succeeds after Reopen; Z9 stays clean) + no over-block for open-recon splits; `TestReopenBlockedWhenLaterFinalizedExists` (Reopen refuses when a later finalized recon exists on the same account+currency — `ErrReconciliationNotLatest`; reverse-chronological reopen); web void surfaces the lock as a clean 409 banner (not 500).
+  Build: `DeleteTransaction` mirrors the UpdateTransaction split-lock; `Reopen` in-order guard via `HasLaterFinalizedReconciliation` (mirror of the opening-chain query); void handler + `reconReopen` map the typed errors; `void.error.reconciled` in both catalogs.
 
 ## Phase 17 — Bank CSV import
 

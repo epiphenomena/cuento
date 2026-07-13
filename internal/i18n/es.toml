@@ -928,6 +928,8 @@ other = "Importe"
 other = "Fondo"
 [void.confirm]
 other = "Anular esta transacción"
+[void.error.reconciled]
+other = "Esta transacción tiene una partida conciliada en una conciliación finalizada. Reabra esa conciliación antes de anular."
 
 # p15.1 marco de informes. Etiquetas del formulario de parámetros compartido (el
 # selector de alcance se muestra en TODOS los informes; el resto según el informe),
