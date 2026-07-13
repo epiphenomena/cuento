@@ -168,6 +168,38 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-weight: 600;
 }
 
+/* p23.5 second-row section navigation: a lighter bar under the header carrying the
+   current section's sub-pages (and, later, per-page filters/search). Rendered only
+   when the section has sub-nav. */
+.app-subnav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-6);
+  background: var(--color-surface-alt);
+  border-bottom: var(--border);
+}
+.app-subnav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  list-style: none;
+}
+.app-subnav a {
+  text-decoration: none;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+  color: var(--color-text-muted);
+  border-bottom: 2px solid transparent;
+}
+.app-subnav a:hover { background: var(--color-surface); color: var(--color-text); }
+.app-subnav a[aria-current="page"] {
+  color: var(--color-text);
+  border-bottom-color: var(--color-accent);
+  font-weight: 600;
+}
+
 .app-main {
   max-width: 60rem;
   margin: 0 auto;

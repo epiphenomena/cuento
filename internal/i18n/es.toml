@@ -31,6 +31,9 @@ other = "Ir al contenido"
 # cuando su ruta existe; fases posteriores (p11-p18) conectan el resto.
 [nav.label]
 other = "Principal"
+# p23.5 aria-label for the second-row section navigation.
+[nav.section_label]
+other = "Sección"
 [nav.home]
 other = "Inicio"
 [nav.accounts]

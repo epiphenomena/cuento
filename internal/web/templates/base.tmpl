@@ -64,6 +64,17 @@
     <button type="submit" class="btn btn-ghost">{{t "auth.sign_out"}}</button>
   </form>
 </header>
+{{/* p23.5 second row: the current section's sub-navigation. Rendered only when the
+     section has sub-nav (nil = no bar); this row is also where per-page filters and
+     search land in later work. hx-boosted like the top nav. */ -}}
+{{if .Shell.SubNav}}
+<nav class="app-subnav" aria-label="{{t "nav.section_label"}}" hx-boost="true">
+  <ul>
+    {{range .Shell.SubNav}}<li><a href="{{.Href}}"{{if .Current}} aria-current="page"{{end}}>{{.Label}}</a></li>
+    {{end}}
+  </ul>
+</nav>
+{{end}}
 {{- end}}
 
 {{/* shell-open opens the document through the start of <main>. The caller passes

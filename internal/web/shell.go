@@ -105,6 +105,88 @@ func (s *server) visibleNav(ctx context.Context, u *store.CurrentUser, currentPa
 	return out
 }
 
+// subNavGroup is one top-level section's SECOND-ROW navigation (p23.5): the request
+// belongs to the group when its path matches any Prefix, and Entries are the
+// sub-pages shown in the section bar. Data-driven exactly like navSections — a
+// section lights up its sub-nav by appending an entry here; filtered to
+// registered+permitted at render so there are no dead links.
+type subNavGroup struct {
+	Prefixes []string // a request under any of these belongs to this section
+	Entries  []navEntry
+}
+
+// subNavGroups is the ordered section→sub-nav map (p23.5). Only sections with real
+// sub-pages appear; the rest render no second row (the frame stays out of the way
+// until a section needs it, and later phases add filters/search into this slot).
+// Budgets and Schedules are one section (Schedules is a distinct top-level path but
+// belongs to budgeting), so both prefixes select the same group.
+func subNavGroups() []subNavGroup {
+	return []subNavGroup{
+		{
+			// Reuse the existing section-title keys the admin index already renders
+			// (both catalogs), so the sub-nav adds no new label strings.
+			Prefixes: []string{"/admin"},
+			Entries: []navEntry{
+				{"admin.users.title", "/admin/users", Admin},
+				{"subsidiaries.title", "/admin/subsidiaries", Admin},
+				{"admin.currencies.title", "/admin/currencies", Admin},
+				{"admin.rates.title", "/admin/rates", Admin},
+				{"org.title", "/admin/org", Admin},
+				{"admin.ops.title", "/admin/ops", Admin},
+			},
+		},
+		{
+			Prefixes: []string{"/budgets", "/schedules"},
+			Entries: []navEntry{
+				{"nav.budgets", "/budgets", TxnRead},
+				{"budget.schedules.title", "/schedules", TxnRead},
+			},
+		},
+	}
+}
+
+// subNav resolves the current request's section bar (p23.5): it finds the group the
+// path belongs to (any Prefix matches), then keeps each entry that is BOTH registered
+// (no dead links) AND permitted (reusing navPermits, so the section bar and route
+// enforcement share one truth). Returns nil when the section has no sub-nav — the
+// template then renders no second row.
+func (s *server) subNav(ctx context.Context, u *store.CurrentUser, currentPath string) []navItem {
+	var group *subNavGroup
+	for i := range subNavGroups() {
+		g := subNavGroups()[i]
+		for _, p := range g.Prefixes {
+			if isCurrentNav(p, currentPath) {
+				group = &g
+				break
+			}
+		}
+		if group != nil {
+			break
+		}
+	}
+	if group == nil {
+		return nil
+	}
+
+	registered := s.registeredGetPaths()
+	lang := langOf(ctx)
+	var out []navItem
+	for _, e := range group.Entries {
+		if !registered[e.Href] {
+			continue
+		}
+		if !s.navPermits(ctx, u, e.Perm) {
+			continue
+		}
+		out = append(out, navItem{
+			Label:   i18n.T(lang, e.LabelKey),
+			Href:    e.Href,
+			Current: isCurrentNav(e.Href, currentPath),
+		})
+	}
+	return out
+}
+
 // isCurrentNav reports whether nav entry href is the active section for the
 // request path: an exact match, or (for a non-root section like "/accounts") the
 // path being under it ("/accounts/new"). The root "/" matches only itself so it
@@ -170,6 +252,7 @@ type baseData struct {
 	Lang    string
 	Theme   string
 	Nav     []navItem
+	SubNav  []navItem // p23.5 second-row section nav (nil = no section bar)
 	Version string
 	// Wide opts <main> out of the centered 60rem column so a data-dense page (the
 	// transaction editor, p23.2) can use the full horizontal width. Set via
@@ -219,6 +302,7 @@ func (s *server) newShellPage(r *http.Request, page any) shellPage {
 			Lang:       langOf(ctx),
 			Theme:      resolveTheme(r, u),
 			Nav:        s.visibleNav(ctx, u, r.URL.Path),
+			SubNav:     s.subNav(ctx, u, r.URL.Path),
 			Version:    s.cfg.Version,
 			DateFormat: dateFormatCode(u),
 		},

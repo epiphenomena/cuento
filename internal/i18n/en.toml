@@ -38,6 +38,9 @@ other = "Skip to content"
 # later phases (p11-p18) wire the remaining sections as their routes land.
 [nav.label]
 other = "Primary"
+# p23.5 aria-label for the second-row section navigation.
+[nav.section_label]
+other = "Section"
 [nav.home]
 other = "Home"
 [nav.accounts]

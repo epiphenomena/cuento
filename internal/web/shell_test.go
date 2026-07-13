@@ -238,6 +238,43 @@ func TestNavCurrentAccent(t *testing.T) {
 	}
 }
 
+// TestSubNavRendersPerSection (p23.5): the two-row nav. The section bar appears
+// only on sections that have sub-nav, lists that section's sub-pages (marking the
+// current one), and is absent on sections without one.
+func TestSubNavRendersPerSection(t *testing.T) {
+	h, _, st, _, sm := newMatrixApp(t)
+	admin := makeUser(t, st, store.CreateUserInput{Username: "subnav_admin", IsAdmin: true})
+
+	// /admin/users: the section bar shows the admin sub-pages, Users current.
+	rec := asUser(t, h, sm, admin.ID, http.MethodGet, "/admin/users", nil)
+	body := rec.Body.String()
+	if !strings.Contains(body, `class="app-subnav"`) {
+		t.Fatalf("/admin/users missing the section bar:\n%s", body)
+	}
+	for _, href := range []string{"/admin/subsidiaries", "/admin/currencies", "/admin/org"} {
+		if !strings.Contains(body, `href="`+href+`"`) {
+			t.Errorf("/admin section bar missing sub-link %s", href)
+		}
+	}
+	if !strings.Contains(body, `href="/admin/users" aria-current="page"`) {
+		t.Errorf("/admin/users sub-nav entry not marked current:\n%s", body)
+	}
+
+	// /accounts has no sub-nav -> no section bar.
+	rec = asUser(t, h, sm, admin.ID, http.MethodGet, "/accounts", nil)
+	if strings.Contains(rec.Body.String(), `class="app-subnav"`) {
+		t.Errorf("/accounts should render no section bar")
+	}
+
+	// /schedules belongs to the Budgets section: the bar shows Budgets + Schedules,
+	// with Schedules current (a distinct top-level path, same section).
+	rec = asUser(t, h, sm, admin.ID, http.MethodGet, "/schedules", nil)
+	body = rec.Body.String()
+	if !strings.Contains(body, `href="/budgets"`) || !strings.Contains(body, `href="/schedules" aria-current="page"`) {
+		t.Errorf("/schedules section bar wrong (want Budgets + current Schedules):\n%s", body)
+	}
+}
+
 // Theme persistence (cookie + user setting) is exercised via POST /settings in
 // settings_test.go; p23.1 removed the standalone POST /theme route.
 
