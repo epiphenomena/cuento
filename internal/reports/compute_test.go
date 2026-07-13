@@ -411,6 +411,45 @@ func TestIntercompanyNetCorrupted(t *testing.T) {
 	}
 }
 
+// TestActivityExcludesIntercompanyConsolidated: an intercompany-flagged R/E account
+// (an intra-group transfer, D19) is DROPPED from Activity at a CONSOLIDATED (root)
+// scope but KEPT at a leaf/single-sub scope (there it is the entity's real line).
+func TestActivityExcludesIntercompanyConsolidated(t *testing.T) {
+	f := fixture.New(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// Flag an expense account that carries activity as intercompany.
+	yes := true
+	if err := f.Store.UpdateAccount(ctx, f.IDs.Salaries, store.UpdateAccountInput{Intercompany: &yes}); err != nil {
+		t.Fatalf("flag intercompany: %v", err)
+	}
+	from, to := f.Expected.ActivityFrom, f.Expected.ActivityTo
+
+	// Consolidated root scope: the flagged account is excluded.
+	rootAct, err := tkFor(f, f.IDs.Root).Activity(ctx, reports.Scope{Sub: f.IDs.Root}, from, to, reports.ConvertOpts{Mode: reports.RateNone})
+	if err != nil {
+		t.Fatalf("root Activity: %v", err)
+	}
+	if _, ok := rootAct[f.IDs.Salaries]; ok {
+		t.Error("intercompany account NOT excluded at consolidated root scope")
+	}
+
+	// Leaf scopes: the account is kept where it has activity (not consolidated).
+	usAct, err := tkFor(f, f.IDs.US).Activity(ctx, reports.Scope{Sub: f.IDs.US}, from, to, reports.ConvertOpts{Mode: reports.RateNone})
+	if err != nil {
+		t.Fatalf("US Activity: %v", err)
+	}
+	mxAct, err := tkFor(f, f.IDs.MX).Activity(ctx, reports.Scope{Sub: f.IDs.MX}, from, to, reports.ConvertOpts{Mode: reports.RateNone})
+	if err != nil {
+		t.Fatalf("MX Activity: %v", err)
+	}
+	_, inUS := usAct[f.IDs.Salaries]
+	_, inMX := mxAct[f.IDs.Salaries]
+	if !inUS && !inMX {
+		t.Error("intercompany account excluded at a LEAF scope (should only drop when consolidated)")
+	}
+}
+
 // TestRollupTreeOrder: Rollup emits a placeholder subtotal row for each placeholder
 // (parent) account in TREE ORDER, its subtotal = the sum of its subtree's leaf
 // amounts, plus the leaf rows themselves. Feeding the expense leaf balances, the

@@ -290,6 +290,7 @@ func (b *builder) accounts(ctx context.Context, rows []AccountMap) error {
 			DefaultCurrency: b.cfg.BaseCurrency,
 			Names:           map[string]string{"en": r.NameEN},
 			Subsidiaries:    subs,
+			Intercompany:    r.Intercompany,
 		}
 		if r.NameES != "" {
 			in.Names["es"] = r.NameES

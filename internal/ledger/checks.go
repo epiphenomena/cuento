@@ -526,16 +526,25 @@ SELECT 'program tree cycle at ' || CAST(start AS TEXT) FROM (
   )
   SELECT start FROM up WHERE (depth > 0 AND id = start) OR depth >= 100000 GROUP BY start)`
 
-// --- Z17 (warning): intercompany accounts net to zero per currency (D19) ------
-// At full consolidation, the splits on intercompany-flagged accounts must net to
-// zero within each currency. A non-zero net per currency is a warning row (never
-// silently dropped). Non-deleted txns only.
+// --- Z17 (warning): intercompany BALANCE-SHEET accounts net to zero per currency
+// (D19) ------
+// At full consolidation, the splits on intercompany-flagged ASSET/LIABILITY
+// accounts (due-to/due-from) must net to zero within each currency — that is how
+// the balance sheet collapses them. A non-zero net per currency is a warning row
+// (never silently dropped). Non-deleted txns only.
+//
+// Intercompany REVENUE/EXPENSE accounts (intra-group transfers) are handled
+// differently: the consolidated income statement / 990 EXCLUDE them (each leg
+// dropped independently), so they are NOT required to net per currency — indeed
+// their two legs are typically in DIFFERENT currencies (one subsidiary's USD
+// expense vs another's local-currency revenue) and never would. Restricting this
+// check to asset/liability accounts is what makes that R/E-exclusion model clean.
 const sqlZ17 = `
 SELECT 'intercompany net for ' || t.currency || ' is ' || CAST(SUM(s.amount) AS TEXT)
 FROM splits s
 JOIN transactions t ON t.id = s.transaction_id
 JOIN accounts a ON a.id = s.account_id
-WHERE t.deleted = 0 AND a.intercompany = 1
+WHERE t.deleted = 0 AND a.intercompany = 1 AND a.type IN ('asset','liability')
 GROUP BY t.currency
 HAVING SUM(s.amount) <> 0`
 

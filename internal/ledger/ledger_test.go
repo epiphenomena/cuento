@@ -621,6 +621,38 @@ func TestZ17IntercompanyImbalance(t *testing.T) {
 	}
 }
 
+// TestZ17IgnoresIncomeStatementIntercompany: an intercompany REVENUE/EXPENSE
+// account (an intra-group transfer leg) that does NOT net at consolidation must
+// NOT trip Z17 — those are eliminated in reporting by EXCLUSION, not per-currency
+// netting (their two legs are typically different currencies). Z17 covers only
+// asset/liability intercompany (due-to/due-from).
+func TestZ17IgnoresIncomeStatementIntercompany(t *testing.T) {
+	w := newWorld(t)
+	mgmt := "management"
+	code990Exp := "IX.16"
+	// An intercompany EXPENSE account (defaults let the split omit class/program).
+	xfer := mkAcct(t, w.s, acct{
+		typ: "expense", name: "Transfer To MX", subs: []int64{w.subUS},
+		fclass: &mgmt, defProg: &rootProg, code990: &code990Exp, intercompany: true,
+	})
+	// One-sided intercompany expense: DR xfer 500 / CR checking 500. Balanced
+	// (Z1/Z10 clean) but leaves the intercompany EXPENSE netting +500.
+	post(t, w.s, store.PostTransactionInput{
+		Date: "2025-06-01", SubsidiaryID: w.subUS, Currency: "USD",
+		Splits: []store.SplitInput{
+			{AccountID: xfer, Amount: 500, Position: 0},
+			{AccountID: w.checkingUS, Amount: -500, Position: 1},
+		},
+	})
+	vs := checkAll(t, w.d)
+	if rulesOf(vs)["Z17"] {
+		t.Errorf("Z17 flagged an income-statement intercompany account; want ignored: %v", vs)
+	}
+	if ledger.HasErrors(vs) {
+		t.Errorf("no Error violations expected; got %v", vs)
+	}
+}
+
 // --- Z18 (warning): restricted fund negative balance ------------------------
 
 func TestZ18NegativeRestrictedFund(t *testing.T) {

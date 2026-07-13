@@ -141,6 +141,33 @@ func TestReadRatesParses(t *testing.T) {
 	}
 }
 
+// TestAccountMapIntercompanyColumn: the intercompany column parses (blank=false,
+// "true"=true) and a bad value fails loudly. Round-trips through Write/Read.
+func TestAccountMapIntercompanyColumn(t *testing.T) {
+	rows := []AccountMap{
+		{SourceAcct: "Transfer", CuentoType: "expense", Subsidiaries: []string{"A"}, Intercompany: true, NameEN: "Transfer", NameES: "Transfer"},
+		{SourceAcct: "Rent", CuentoType: "expense", Subsidiaries: []string{"A"}, Intercompany: false, NameEN: "Rent", NameES: "Renta"},
+	}
+	var b strings.Builder
+	if err := WriteAccountMap(&b, rows); err != nil {
+		t.Fatalf("WriteAccountMap: %v", err)
+	}
+	got, err := ReadAccountMap(strings.NewReader(b.String()))
+	if err != nil {
+		t.Fatalf("ReadAccountMap: %v", err)
+	}
+	if !got[0].Intercompany || got[1].Intercompany {
+		t.Errorf("intercompany round-trip wrong: %v / %v", got[0].Intercompany, got[1].Intercompany)
+	}
+
+	// A garbage intercompany cell fails loudly (not silently false).
+	bad := "source_acct,cuento_type,cuento_parent,subsidiaries,functional_class_default,default_program,form990_code,intercompany,name_en,name_es\n" +
+		"X,expense,,A,,,,notabool,X,X\n"
+	if _, err := ReadAccountMap(strings.NewReader(bad)); err == nil {
+		t.Error("garbage intercompany cell accepted; want error")
+	}
+}
+
 // TestBuildLoadsRates asserts the build loads a rates batch so the produced db can
 // convert at report time (RateOn resolves the loaded pair).
 func TestBuildLoadsRates(t *testing.T) {

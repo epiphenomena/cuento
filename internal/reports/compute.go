@@ -148,6 +148,10 @@ func (tk *Toolkit) BalancesAsOf(ctx context.Context, s Scope, d string, o Conver
 // HALF-EVEN once (D12 "at final aggregates"); RateClosing converts the whole-period
 // total at the on-or-before as-of rate.
 func (tk *Toolkit) Activity(ctx context.Context, s Scope, from, to string, o ConvertOpts) (map[AccountID][]CurAmt, error) {
+	excl, err := tk.consolidatedICExclusions(ctx, s.Sub)
+	if err != nil {
+		return nil, err
+	}
 	if o.Mode != RateTxnDate {
 		rows, err := tk.store.PeriodActivity(ctx, from, to, s.Sub)
 		if err != nil {
@@ -155,6 +159,9 @@ func (tk *Toolkit) Activity(ctx context.Context, s Scope, from, to string, o Con
 		}
 		native := make(map[AccountID][]CurAmt, len(rows))
 		for _, r := range rows {
+			if excl[r.AccountID] {
+				continue // intra-group R/E, excluded at consolidation (D19)
+			}
 			native[r.AccountID] = append(native[r.AccountID], CurAmt{Currency: r.Currency, Minor: r.Amount})
 		}
 		if o.Mode == RateNone {
@@ -178,12 +185,15 @@ func (tk *Toolkit) Activity(ctx context.Context, s Scope, from, to string, o Con
 	// the per-transaction-date rate for every transaction in that month.
 	unrounded := make(map[AccountID]float64)
 	present := make(map[AccountID]bool)
-	err := tk.ByPeriod(from, to, GranMonth, func(pFrom, pTo string) error {
+	err = tk.ByPeriod(from, to, GranMonth, func(pFrom, pTo string) error {
 		rows, err := tk.store.PeriodActivity(ctx, pFrom, pTo, s.Sub)
 		if err != nil {
 			return err
 		}
 		for _, r := range rows {
+			if excl[r.AccountID] {
+				continue // intra-group R/E, excluded at consolidation (D19)
+			}
 			rr, err := tk.RateOn(ctx, r.Currency, o.To, pTo)
 			if err != nil {
 				return err
@@ -413,8 +423,15 @@ func (tk *Toolkit) FunctionalMatrix(ctx context.Context, s Scope, from, to strin
 	if err != nil {
 		return nil, err
 	}
+	excl, err := tk.consolidatedICExclusions(ctx, s.Sub)
+	if err != nil {
+		return nil, err
+	}
 	native := make(map[AccountID]map[Class][]CurAmt)
 	for _, r := range rows {
+		if excl[r.AccountID] {
+			continue // intra-group expense, excluded at consolidation (D19)
+		}
 		if native[r.AccountID] == nil {
 			native[r.AccountID] = make(map[Class][]CurAmt)
 		}
@@ -448,6 +465,10 @@ func (tk *Toolkit) ProgramActivity(ctx context.Context, s Scope, from, to string
 	if err != nil {
 		return nil, err
 	}
+	excl, err := tk.consolidatedICExclusions(ctx, s.Sub)
+	if err != nil {
+		return nil, err
+	}
 	tree, err := tk.store.ProgramTree(ctx)
 	if err != nil {
 		return nil, err
@@ -472,6 +493,9 @@ func (tk *Toolkit) ProgramActivity(ctx context.Context, s Scope, from, to string
 		acc[p][a][ccy] += minor
 	}
 	for _, r := range rows {
+		if excl[r.AccountID] {
+			continue // intra-group R/E, excluded at consolidation (D19)
+		}
 		// Add to the program and every ancestor (tree rollup).
 		for p := r.ProgramID; ; {
 			add(p, r.AccountID, r.Currency, r.Amount)
@@ -982,6 +1006,33 @@ func (tk *Toolkit) codeOrder(ctx context.Context) (map[string]int, error) {
 		}
 	}
 	return order, nil
+}
+
+// consolidatedICExclusions returns the intercompany account ids to DROP from a
+// consolidated-scope activity/functional/program result (D19): across a
+// consolidated (multi-sub) scope an intra-group revenue/expense transfer is
+// internal and must not inflate the group's income statement / 990 (mirroring the
+// balance sheet's intercompany collapse). At a leaf/single-sub scope the set is
+// EMPTY — there the intercompany account is that entity's real external-facing
+// line and stays. The two legs of a transfer are flagged independently, so both
+// drop; no cross-currency netting is needed (they are simply excluded).
+func (tk *Toolkit) consolidatedICExclusions(ctx context.Context, scope int64) (map[AccountID]bool, error) {
+	consolidated, err := tk.isConsolidated(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	if !consolidated {
+		return nil, nil
+	}
+	ids, err := tk.store.IntercompanyAccountIDs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[AccountID]bool, len(ids))
+	for _, id := range ids {
+		set[AccountID(id)] = true
+	}
+	return set, nil
 }
 
 // reAccounts returns the set of revenue/expense account ids (for NetIncome). It
