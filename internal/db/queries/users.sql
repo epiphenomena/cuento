@@ -62,6 +62,14 @@ UPDATE users SET disabled_at = ? WHERE id = ?;
 -- against {none,read,write} first; the column CHECK is only a backstop.
 UPDATE users SET txn_perm = ? WHERE id = ?;
 
+-- name: SetUserCanSubmitExpenses :exec
+-- Live update of a user's standalone expense-submit capability (p20.1 admin, wired
+-- in p13.2 later). Versioned as op='update'; can_submit_expenses IS part of the
+-- users_versions snapshot, so the change names the acting admin in the audit trail.
+-- Independent of txn_perm (a submitter may have txn_perm='none'). Param is an INTEGER
+-- boolean (0/1).
+UPDATE users SET can_submit_expenses = ? WHERE id = ?;
+
 -- name: ListUsers :many
 -- Admin user list (p13.2 /admin/users). Excludes the seeded system user (id 1):
 -- it is passwordless machinery, not an operator, and must never be managed here
@@ -109,9 +117,12 @@ WHERE username = ?;
 -- p12.2 adds default_subsidiary_id (nullable): the transaction editor defaults its
 -- header subsidiary to the user's setting, else the sole/root sub -- resolved here
 -- so the editor needs no second query.
+-- p20.1 adds can_submit_expenses (the standalone expense-submit capability,
+-- INDEPENDENT of txn_perm): the auth middleware resolves it here so decide() can
+-- gate the ExpenseSubmit perm per-request without a second query.
 SELECT id, username, disabled_at, txn_perm, is_admin, locale, theme,
        date_format, number_format, display_mode, neg_style,
-       default_subsidiary_id
+       default_subsidiary_id, can_submit_expenses
 FROM users
 WHERE id = ?;
 
@@ -139,10 +150,10 @@ INSERT INTO users_versions
   (entity_id, change_id, valid_from, op,
    username, display_name, created_at, disabled_at, is_admin, txn_perm,
    locale, date_format, number_format, display_mode, neg_style, theme,
-   default_subsidiary_id)
+   default_subsidiary_id, can_submit_expenses)
 SELECT u.id, c.id, c.at, ?,
        u.username, u.display_name, u.created_at, u.disabled_at, u.is_admin, u.txn_perm,
        u.locale, u.date_format, u.number_format, u.display_mode, u.neg_style, u.theme,
-       u.default_subsidiary_id
+       u.default_subsidiary_id, u.can_submit_expenses
 FROM users u, changes c
 WHERE c.id = ? AND u.id = ?;

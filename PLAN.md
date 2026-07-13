@@ -348,7 +348,7 @@ Budget lines keyed by **(subsidiary, account [revenue/expense], fund, program)**
 
 A submission→review workflow decoupled from book-editing: a low-privilege user submits an expense report; an editing user converts it to a balanced ledger transaction or rejects it. Data follows the versioning / write-funnel discipline; the posted transaction links back to its source report for audit.
 
-- [ ] **p20.1 db+store: expense-report model + submit permission.**
+- [x] **p20.1 db+store: expense-report model + submit permission.**
   Tests: a NEW standalone capability to submit expense reports, independent of `txn_perm` (none/read/write) and report grants — a pure submitter has no ledger access; matrix picks up the new perm; versioned lifecycle (draft→submitted→rejected→resubmitted→converted) with AssertVersioned; `posted_transaction_id` set only on convert.
   Build: migration `expense_reports(id, submitter_id, subsidiary_id, status CHECK(draft/submitted/rejected/converted), review_notes, posted_transaction_id NULL, …)` + `expense_report_lines(id, report_id, account_id, amount INTEGER minor, fund_id, program_id, memo)` + versions; a user capability (e.g. `can_submit_expenses` column or a new `Perm`); store: `SubmitExpenseReport`, `RejectExpenseReport(reason)`, `ConvertExpenseReport(→ links the posted txn)`, `ResubmitExpenseReport`.
 - [ ] **p20.2 web: submitter workspace.**

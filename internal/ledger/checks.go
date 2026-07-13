@@ -252,7 +252,34 @@ WHERE v.id IS NULL OR v.op = 'delete'
    OR v.locale IS NOT c.locale OR v.date_format IS NOT c.date_format
    OR v.number_format IS NOT c.number_format OR v.display_mode IS NOT c.display_mode
    OR v.neg_style IS NOT c.neg_style OR v.theme IS NOT c.theme
-   OR v.default_subsidiary_id IS NOT c.default_subsidiary_id`
+   OR v.default_subsidiary_id IS NOT c.default_subsidiary_id
+   OR v.can_submit_expenses IS NOT c.can_submit_expenses
+UNION ALL
+-- expense_reports (p20.1 single-id twin; mutable header, no delete op -- a report
+-- terminates as 'rejected'/'converted', never hard-deleted).
+SELECT 'expense_reports:' || CAST(c.id AS TEXT)
+FROM expense_reports c
+LEFT JOIN expense_reports_versions v
+  ON v.id = (SELECT id FROM expense_reports_versions x WHERE x.entity_id = c.id
+             ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
+WHERE v.id IS NULL OR v.op = 'delete'
+   OR v.submitter_id IS NOT c.submitter_id OR v.subsidiary_id IS NOT c.subsidiary_id
+   OR v.status IS NOT c.status OR v.review_notes IS NOT c.review_notes
+   OR v.posted_transaction_id IS NOT c.posted_transaction_id
+   OR v.created_at IS NOT c.created_at
+UNION ALL
+-- expense_report_lines (p20.1 single-id twin; a line can be hard-deleted, so a
+-- missing live row for a 'delete' version is legitimate -- the standard single-id
+-- block only checks CURRENT live rows against their snapshot).
+SELECT 'expense_report_lines:' || CAST(c.id AS TEXT)
+FROM expense_report_lines c
+LEFT JOIN expense_report_lines_versions v
+  ON v.id = (SELECT id FROM expense_report_lines_versions x WHERE x.entity_id = c.id
+             ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
+WHERE v.id IS NULL OR v.op = 'delete'
+   OR v.report_id IS NOT c.report_id OR v.account_id IS NOT c.account_id
+   OR v.amount IS NOT c.amount OR v.fund_id IS NOT c.fund_id
+   OR v.program_id IS NOT c.program_id OR v.memo IS NOT c.memo`
 
 // --- Z4: PRAGMA foreign_key_check returns nothing ----------------------------
 // The pragma table-valued function yields one row per FK violation with the
@@ -284,6 +311,8 @@ FROM (
   UNION ALL SELECT 'splits_versions', id, change_id FROM splits_versions
   UNION ALL SELECT 'users_versions', id, change_id FROM users_versions
   UNION ALL SELECT 'user_report_grants_versions', id, change_id FROM user_report_grants_versions
+  UNION ALL SELECT 'expense_reports_versions', id, change_id FROM expense_reports_versions
+  UNION ALL SELECT 'expense_report_lines_versions', id, change_id FROM expense_report_lines_versions
 ) vr
 WHERE NOT EXISTS (SELECT 1 FROM changes ch WHERE ch.id = vr.change_id)`
 

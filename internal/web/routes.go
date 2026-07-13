@@ -24,6 +24,9 @@ import (
 //   - TxnRead      txn_perm in {read,write} OR admin; else 403 (anon -> login).
 //   - TxnWrite     txn_perm == write   OR admin; else 403 (anon -> login).
 //   - ReportGroup  a read grant for the named group OR admin; else 403 (anon -> login).
+//   - ExpenseSubmit can_submit_expenses OR admin; else 403 (anon -> login). A
+//     STANDALONE capability independent of txn_perm (p20.1): a pure submitter
+//     (can_submit_expenses, txn_perm=none) passes this but fails Txn*/ReportGroup.
 //   - Admin        is_admin; else 403 (anon -> login).
 //
 // The anon->login case uses a 302 redirect to /login; handlers' own redirects use
@@ -40,6 +43,7 @@ const (
 	permTxnRead
 	permTxnWrite
 	permReportGroup
+	permExpenseSubmit
 	permAdmin
 )
 
@@ -59,6 +63,12 @@ var (
 	TxnRead  = Perm{kind: permTxnRead}
 	TxnWrite = Perm{kind: permTxnWrite}
 	Admin    = Perm{kind: permAdmin}
+	// ExpenseSubmit is a STANDALONE capability (p20.1, Phase 20): the right to
+	// submit expense reports, INDEPENDENT of txn_perm and report grants. A pure
+	// submitter (can_submit_expenses=true, txn_perm=none, no grants) passes
+	// ExpenseSubmit but fails TxnRead/TxnWrite/ReportGroup -- decoupling submission
+	// from book-editing. p20.2's submitter routes will declare this Perm.
+	ExpenseSubmit = Perm{kind: permExpenseSubmit}
 )
 
 // ReportGroup returns the Perm requiring a read grant on the named report group
@@ -79,6 +89,8 @@ func (p Perm) String() string {
 		return "TxnWrite"
 	case permReportGroup:
 		return "ReportGroup(" + p.group + ")"
+	case permExpenseSubmit:
+		return "ExpenseSubmit"
 	case permAdmin:
 		return "Admin"
 	default:
@@ -487,6 +499,12 @@ func decide(p Perm, u *store.CurrentUser, hasGrant func(group string) bool) outc
 		}
 	case permReportGroup:
 		if hasGrant(p.group) {
+			return outcomeAllow
+		}
+	case permExpenseSubmit:
+		// STANDALONE capability (p20.1): reads ONLY the can_submit_expenses flag, so
+		// it is independent of txn_perm by construction (admin already allowed above).
+		if u.CanSubmitExpenses {
 			return outcomeAllow
 		}
 	case permAdmin:

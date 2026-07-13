@@ -186,6 +186,23 @@ func buildPersonas(t *testing.T, st *store.Store, db *sql.DB) []persona {
 	reportsOnly := mk("reportsonly", store.CreateUserInput{TxnPerm: "none"})
 	admin := mk("admin", store.CreateUserInput{IsAdmin: true})
 
+	// A PURE expense submitter (p20.1): the standalone can_submit_expenses capability,
+	// txn_perm=none, no grants. CreateUser has no submit field (it lands via the p20.1
+	// setter, wired to admin UI in p13.2), so grant it via the versioned setter, then
+	// re-read so the persona's CurrentUser carries the flag. With NO ExpenseSubmit
+	// route mounted yet (p20.2 adds them), the HTTP matrix drives this persona like
+	// NoAccess across every ledger/report/admin route -- proving a submitter has no
+	// ledger access; decide() (TestDecidePolicy) proves the ExpenseSubmit ALLOW.
+	submitter := mk("submitter", store.CreateUserInput{TxnPerm: "none"})
+	if err := st.SetUserCanSubmitExpenses(ctx, submitter.ID, true); err != nil {
+		t.Fatalf("grant can_submit_expenses: %v", err)
+	}
+	if cu, err := st.UserByID(ctx, submitter.ID); err != nil {
+		t.Fatalf("re-read submitter: %v", err)
+	} else {
+		submitter = &cu
+	}
+
 	// Grant the ReportsOnly persona the "financial" report group -- the group the
 	// p15.3 trial-balance report (the first real mounted report route) is gated by.
 	// This is what makes the permission matrix prove per-group report enforcement with
@@ -205,6 +222,9 @@ func buildPersonas(t *testing.T, st *store.Store, db *sql.DB) []persona {
 		{name: "ReadOnly", user: readOnly},
 		{name: "Bookkeeper", user: bookkeeper},
 		{name: "ReportsOnly", user: reportsOnly, grants: []string{grantedReportGroup}},
+		// Submitter must precede Admin: TestRouteRegistryComplete asserts the LAST
+		// persona is Admin (the is-admin-reaches-everything reachability check).
+		{name: "Submitter", user: submitter},
 		{name: "Admin", user: admin},
 	}
 }
@@ -279,6 +299,10 @@ func TestDecidePolicy(t *testing.T) {
 	readOnly := &store.CurrentUser{TxnPerm: "read"}
 	bookkeeper := &store.CurrentUser{TxnPerm: "write"}
 	reportsOnly := &store.CurrentUser{TxnPerm: "none"}
+	// A PURE expense submitter (p20.1): the standalone capability set, txn_perm=none,
+	// no grants. It must pass ExpenseSubmit yet fail every ledger/report perm -- the
+	// decoupling that keeps submission independent of book-editing.
+	submitter := &store.CurrentUser{TxnPerm: "none", CanSubmitExpenses: true}
 	admin := &store.CurrentUser{IsAdmin: true}
 
 	grantsOf := map[*store.CurrentUser][]string{reportsOnly: {"placeholder"}}
@@ -329,6 +353,21 @@ func TestDecidePolicy(t *testing.T) {
 		{ReportGroup(grp), reportsOnly, outcomeAllow},
 		{ReportGroup("other"), reportsOnly, outcomeForbid}, // granted a DIFFERENT group
 		{ReportGroup(grp), admin, outcomeAllow},            // is_admin implies everything
+
+		// ExpenseSubmit (p20.1): can_submit_expenses OR admin; else forbid; anon -> login.
+		// INDEPENDENT of txn_perm -- the submitter (txn_perm=none) passes; a bookkeeper
+		// (txn_perm=write, no flag) does NOT.
+		{ExpenseSubmit, anon, outcomeRedirectLogin},
+		{ExpenseSubmit, noAccess, outcomeForbid},
+		{ExpenseSubmit, bookkeeper, outcomeForbid}, // txn_perm=write does NOT imply submit
+		{ExpenseSubmit, submitter, outcomeAllow},
+		{ExpenseSubmit, admin, outcomeAllow},
+
+		// The submitter is FORBIDDEN on the ledger/report perms -- the capability is
+		// standalone (a submitter has NO ledger access).
+		{TxnRead, submitter, outcomeForbid},
+		{TxnWrite, submitter, outcomeForbid},
+		{ReportGroup(grp), submitter, outcomeForbid},
 
 		// Admin: is_admin only; else forbid; anon -> login.
 		{Admin, anon, outcomeRedirectLogin},

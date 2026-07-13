@@ -225,6 +225,32 @@ func (s *Store) SetUserTxnPerm(ctx context.Context, userID int64, perm string) e
 	return nil
 }
 
+// SetUserCanSubmitExpenses toggles a user's standalone expense-submit capability on
+// the live row and appends an op='update' users_versions row under ONE change (p20.1;
+// the admin UI wires it in p13.2). can_submit_expenses IS part of the users_versions
+// snapshot, so the audit trail names the acting admin (changes.actor_id). The
+// capability is INDEPENDENT of txn_perm -- a submitter may have txn_perm='none'. The
+// system user (id 1) is refused (ErrSystemUser): its capabilities are irrelevant
+// machinery and must not be audited as an operator change.
+func (s *Store) SetUserCanSubmitExpenses(ctx context.Context, userID int64, can bool) error {
+	if userID == systemUserID {
+		return ErrSystemUser
+	}
+	_, err := s.write(ctx, "user.can_submit_expenses", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			if err := q.SetUserCanSubmitExpenses(ctx, sqlc.SetUserCanSubmitExpensesParams{
+				CanSubmitExpenses: boolToInt(can), ID: userID,
+			}); err != nil {
+				return fmt.Errorf("set can_submit_expenses: %w", err)
+			}
+			return insertUserVersion(ctx, q, changeID, "update", userID)
+		})
+	if err != nil {
+		return fmt.Errorf("set user can_submit_expenses (id %d): %w", userID, err)
+	}
+	return nil
+}
+
 // AdminUser is one row of the admin user list (p13.2 /admin/users): the fields the
 // list and per-user editor read. Excludes the system user by construction (the
 // ListUsers query filters id <> 1). A read projection, not a live entity.
@@ -334,6 +360,10 @@ type CurrentUser struct {
 	// DefaultSubsidiaryID is the user's preferred subsidiary for new transactions
 	// (p12.2); nil = unset, so the editor falls back to the sole/root subsidiary.
 	DefaultSubsidiaryID *int64
+	// CanSubmitExpenses is the standalone expense-submit capability (p20.1),
+	// INDEPENDENT of txn_perm: a pure submitter has txn_perm='none' yet may submit
+	// expense reports. decide() (web) reads this to gate the ExpenseSubmit perm.
+	CanSubmitExpenses bool
 }
 
 // CredentialsByUsername returns the login credentials for username. A username
@@ -380,6 +410,7 @@ func (s *Store) UserByID(ctx context.Context, id int64) (CurrentUser, error) {
 		v := row.DefaultSubsidiaryID.Int64
 		cu.DefaultSubsidiaryID = &v
 	}
+	cu.CanSubmitExpenses = row.CanSubmitExpenses != 0
 	return cu, nil
 }
 

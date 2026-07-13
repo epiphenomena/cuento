@@ -189,6 +189,54 @@ type ExchangeRate struct {
 	ChangeID int64
 }
 
+type ExpenseReport struct {
+	ID                  int64
+	SubmitterID         int64
+	SubsidiaryID        int64
+	Status              string
+	ReviewNotes         string
+	PostedTransactionID sql.NullInt64
+	CreatedAt           string
+}
+
+type ExpenseReportLine struct {
+	ID        int64
+	ReportID  int64
+	AccountID int64
+	Amount    int64
+	FundID    sql.NullInt64
+	ProgramID sql.NullInt64
+	Memo      string
+}
+
+type ExpenseReportLinesVersion struct {
+	ID        int64
+	EntityID  int64
+	ChangeID  int64
+	ValidFrom string
+	Op        string
+	ReportID  int64
+	AccountID int64
+	Amount    int64
+	FundID    sql.NullInt64
+	ProgramID sql.NullInt64
+	Memo      string
+}
+
+type ExpenseReportsVersion struct {
+	ID                  int64
+	EntityID            int64
+	ChangeID            int64
+	ValidFrom           string
+	Op                  string
+	SubmitterID         int64
+	SubsidiaryID        int64
+	Status              string
+	ReviewNotes         string
+	PostedTransactionID sql.NullInt64
+	CreatedAt           string
+}
+
 type Form990Line struct {
 	Code         string
 	Part         string
@@ -439,6 +487,7 @@ type User struct {
 	NegStyle            string
 	Theme               string
 	DefaultSubsidiaryID sql.NullInt64
+	CanSubmitExpenses   int64
 }
 
 type UserReportGrant struct {
@@ -474,4 +523,5 @@ type UsersVersion struct {
 	NegStyle            string
 	Theme               string
 	DefaultSubsidiaryID sql.NullInt64
+	CanSubmitExpenses   int64
 }
