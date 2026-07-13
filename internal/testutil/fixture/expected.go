@@ -69,6 +69,28 @@ type Expected struct {
 	// in). It captures the deterministic monthly USD->MXN schedule and the
 	// hand-computed CONVERTED aggregates p15 will assert against.
 	Rates RatesExpected
+
+	// Reconciliation is the p16 seam, populated ONLY after
+	// (*Fixture).ExtendReconciliation(t) is called; the zero value (ID 0) means the
+	// seam has not been applied and no reconciliation exists. It captures the
+	// finalized 2026-05-31 Checking US (USD) reconciliation's expected state.
+	Reconciliation ReconciliationExpected
+}
+
+// ReconciliationExpected holds the p16 reconciliation seam's expectations: the
+// finalized 2026-05-31 Checking US (USD) reconciliation. Opening is 0 (first
+// finalized recon on the pair); StatementBalance == Opening + the net-debit sum of
+// the ClearedCount cleared splits (the Finalize gate / Z9). UnclearedTxns are the
+// two transactions deliberately left uncleared.
+type ReconciliationExpected struct {
+	ID               int64
+	Account          int64
+	Currency         string
+	StatementDate    string
+	StatementBalance int64
+	Opening          int64
+	ClearedCount     int
+	UnclearedTxns    []int64
 }
 
 // RatesExpected holds the p14 exchange-rate seam's expectations: the schedule

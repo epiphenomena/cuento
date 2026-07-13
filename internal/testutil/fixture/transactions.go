@@ -316,15 +316,16 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 		sp{acct: ids.CashMXN, amount: -150_000},
 	)
 	// 2026 occupancy (US, USD): Occupancy +1,550.00 (management); Checking US
-	// -1,550.00. (An uncleared item after the 2026-05-31 reconciliation.)
-	post(
+	// -1,550.00. (An uncleared item after the 2026-05-31 reconciliation -- captured
+	// so ExtendReconciliation leaves exactly this + June donation uncleared.)
+	ids.MayRentTxn = post(
 		t, ctx, s, "2026-05-25", ids.US, "USD", "May 2026 rent", nil,
 		sp{acct: ids.Occupancy, amount: 155_000},
 		sp{acct: ids.CheckingUS, amount: -155_000},
 	)
 	// 2026 contribution (US, USD): Checking US +750.00; Contributions -750.00
 	// (General). A second uncleared item after the reconciliation.
-	post(
+	ids.JuneDonationTxn = post(
 		t, ctx, s, "2026-06-10", ids.US, "USD", "June donation", nil,
 		sp{acct: ids.CheckingUS, amount: 75_000},
 		sp{acct: ids.Contributions, amount: -75_000},

@@ -1,0 +1,122 @@
+-- p16.2: reconciliation-lifecycle SQL (D13/D20). All SQL for the store's
+-- reconciliation methods lives here (rule 6). This copies the version-append
+-- convention subsidiaries.sql (p04.2) / funds.sql (p07.3) established: the entity
+-- op does the live write inside the funnel's fn, then appends a snapshot-from-live
+-- version row, so each version row is byte-identical to its live row (Z3 can never
+-- diverge) and valid_from == changes.at BY CONSTRUCTION.
+--
+-- A reconciliation is LIVE-ONLY on splits (splits.reconciliation_id is NOT
+-- versioned, 00014), so clearing/unclearing a split UPDATES that one column and
+-- mints NO split version -- the audited reconciliation event is finalization,
+-- recorded on reconciliations (+ its versions twin). SetSplitReconciled still runs
+-- through the funnel (rule 2): a changes row IS emitted for the tx boundary/actor;
+-- only the split-VERSION append is skipped (00014's live-only decision).
+--
+-- Finalize's zero-difference gate MIRRORS ledger Z9 (checks.go sqlZ9) exactly --
+-- same opening lookup (prior FINALIZED recon, same account+currency, ordered
+-- statement_date DESC then id DESC, COALESCE 0) and same cleared-sum (SUM(amount)
+-- of splits joined to NON-DELETED transactions). Keeping them byte-identical is the
+-- tie: if Finalize succeeds, Z9 passes on that finalized recon.
+--
+-- NOTE: keep every comment and identifier in this file PURE ASCII. sqlc v1.31.1
+-- miscounts byte offsets when a query file contains multi-byte UTF-8, corrupting
+-- the generated SQL for the WHOLE file (see docs/DECISIONS.md p04.2).
+
+-- name: InsertReconciliation :one
+-- Live insert of an OPEN reconciliation (status defaults 'open', notes ''). Per
+-- (account, currency) across all funds (D13). Returns the new id for the store to
+-- snapshot + return.
+INSERT INTO reconciliations (account_id, statement_date, statement_balance, currency)
+VALUES (?, ?, ?, ?)
+RETURNING id;
+
+-- name: GetReconciliation :one
+SELECT id, account_id, statement_date, statement_balance, currency, status, notes
+FROM reconciliations
+WHERE id = ?;
+
+-- name: CountOpenReconciliations :one
+-- How many OPEN reconciliations already exist for an (account, currency). The
+-- store rejects a second concurrent open recon on the same pair (one open recon
+-- per (account, currency), D13) BEFORE inserting.
+SELECT COUNT(*) FROM reconciliations
+WHERE account_id = ? AND currency = ? AND status = 'open';
+
+-- name: SetReconciliationStatus :exec
+-- Flip a reconciliation's status (open <-> finalized). The store reads the current
+-- row, sets the target status, and writes it here; the version append reflects the
+-- new status (runs AFTER this live write).
+UPDATE reconciliations SET status = ? WHERE id = ?;
+
+-- name: InsertReconciliationVersion :exec
+-- Snapshot-from-live version append for reconciliations (STANDARD single-column
+-- entity, entity_id = reconciliations.id). Reads the CURRENT live row (so it MUST
+-- run AFTER the live write) and copies every business column, so the version row is
+-- byte-identical to the live row; valid_from is taken from the change's own `at`.
+-- Snapshot column set matches 00014_reconciliations.sql exactly. Params (plain
+-- positional, each used once): op, change_id, entity_id -> generated fields Op,
+-- ID (change_id), ID_2 (entity_id).
+INSERT INTO reconciliations_versions
+  (entity_id, change_id, valid_from, op, account_id, statement_date,
+   statement_balance, currency, status, notes)
+SELECT r.id, c.id, c.at, ?, r.account_id, r.statement_date,
+       r.statement_balance, r.currency, r.status, r.notes
+FROM reconciliations r, changes c
+WHERE c.id = ? AND r.id = ?;
+
+-- name: GetSplitForReconcile :one
+-- One split plus its transaction's currency and deleted flag -- what
+-- SetSplitReconciled validates against (split account == recon account, split
+-- currency (from its txn, D3) == recon currency). transaction_id is returned so a
+-- caller can locate the parent txn.
+SELECT s.id, s.account_id, s.reconciliation_id, s.transaction_id,
+       t.currency, t.deleted
+FROM splits s
+JOIN transactions t ON t.id = s.transaction_id
+WHERE s.id = ?;
+
+-- name: SetSplitReconciliation :exec
+-- Set (clear) or NULL (unclear) a split's reconciliation_id. LIVE-ONLY column
+-- (00014): NO split-version row is appended -- the reconciliation state of a split
+-- is operational metadata, not audited business content. Guarded by
+-- trg_split_locked_when_finalized only when a FINALIZED recon is involved; the
+-- store confines this to OPEN recons, so the trigger never fires on the happy path.
+UPDATE splits SET reconciliation_id = ? WHERE id = ?;
+
+-- name: ReconciliationClearedSum :one
+-- The net-debit sum (minor units, no sign flip) of the splits cleared against a
+-- reconciliation, excluding splits on soft-deleted transactions (out of the
+-- ledger). COALESCE 0 when nothing is cleared. This is the cleared term of
+-- Finalize's zero-difference gate -- byte-identical to Z9's inner SUM. The recon
+-- id param is CAST so sqlc types it int64 (the reconciliation_id column is
+-- nullable); the SUM is CAST so sqlc pins the static return type to int64.
+SELECT CAST(COALESCE(SUM(s.amount), 0) AS INTEGER)
+FROM splits s
+JOIN transactions t ON t.id = s.transaction_id
+WHERE s.reconciliation_id = CAST(? AS INTEGER) AND t.deleted = 0;
+
+-- name: PriorFinalizedStatementBalance :one
+-- The opening balance for a reconciliation: the statement_balance of the prior
+-- FINALIZED recon for the SAME (account, currency), by (statement_date, id) order,
+-- strictly before this one. COALESCE 0 when this is the first. Byte-identical to
+-- Z9's opening subquery. Params: account_id, currency, statement_date, id (the
+-- statement_date and id of the recon being finalized, to bound "prior").
+SELECT CAST(COALESCE((
+  SELECT p.statement_balance FROM reconciliations p
+  WHERE p.status = 'finalized' AND p.account_id = ?
+    AND p.currency = ?
+    AND (p.statement_date < ?
+         OR (p.statement_date = ? AND p.id < ?))
+  ORDER BY p.statement_date DESC, p.id DESC LIMIT 1
+), 0) AS INTEGER);
+
+-- name: FinalizedReconciledSplitIDs :many
+-- The ids of splits on a given transaction that are cleared against a FINALIZED
+-- reconciliation. UpdateTransaction uses this to reject financial edits (amount/
+-- account/fund on a changed split, split deletion, header date/currency change)
+-- BEFORE the split-lock trigger fires -- a clean typed error instead of a raw
+-- ABORT. NULL reconciliation_id (uncleared) and open-recon splits are excluded.
+SELECT s.id
+FROM splits s
+JOIN reconciliations r ON r.id = s.reconciliation_id
+WHERE s.transaction_id = ? AND r.status = 'finalized';

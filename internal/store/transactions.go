@@ -187,6 +187,56 @@ func (s *Store) UpdateTransaction(ctx context.Context, id int64, in PostTransact
 				liveByID[sp.ID] = sp
 			}
 
+			// STORE-LEVEL split lock (D13, TestEditReconciledTxnBlocked). A split
+			// cleared in a FINALIZED reconciliation is frozen: the store refuses any
+			// financial edit touching it -- BEFORE the DB trigger fires -- with a
+			// clean typed ErrSplitReconciled. The trigger is a BEFORE UPDATE backstop
+			// on splits and cannot see a header date/currency change or a split
+			// DELETE, so the store must cover those too:
+			//   - header DATE change -> blocked (D13's "date" lock lives on the txn);
+			//   - header CURRENCY change -> blocked (would break Z8 on a cleared split);
+			//   - DELETE of a locked split -> blocked (would silently drop it from the
+			//     Z9 statement sum);
+			//   - amount/account/fund change of a locked split -> blocked (the trigger's
+			//     guarded set); memo/payee/position/program stay editable.
+			// Reopen the recon first to make any of these edits.
+			locked, err := q.FinalizedReconciledSplitIDs(ctx, id)
+			if err != nil {
+				return fmt.Errorf("locked splits of %d: %w", id, err)
+			}
+			if len(locked) > 0 {
+				lockedSet := make(map[int64]bool, len(locked))
+				for _, sid := range locked {
+					lockedSet[sid] = true
+				}
+				// Header date / currency touch every split's statement provability.
+				if in.Date != cur.Date || in.Currency != cur.Currency {
+					return ErrSplitReconciled
+				}
+				// A locked split absent from the input would be deleted below.
+				inputIDs := make(map[int64]bool, len(resolved))
+				for _, r := range resolved {
+					if r.id != nil {
+						inputIDs[*r.id] = true
+					}
+				}
+				for sid := range lockedSet {
+					if !inputIDs[sid] {
+						return ErrSplitReconciled
+					}
+				}
+				// A locked split with a changed financial field (amount/account/fund).
+				for _, r := range resolved {
+					if r.id == nil || !lockedSet[*r.id] {
+						continue
+					}
+					sp := liveByID[*r.id]
+					if sp.Amount != r.amount || sp.AccountID != r.accountID || !nullInt64Eq(sp.FundID, r.fundID) {
+						return ErrSplitReconciled
+					}
+				}
+			}
+
 			// Track which existing split ids the input keeps, so we can delete the
 			// rest. An input split id that is not on this txn is an error.
 			kept := make(map[int64]bool, len(resolved))

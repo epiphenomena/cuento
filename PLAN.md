@@ -287,7 +287,7 @@ Browser-based functional tests that drive the **real** `cuento serve -dev`. Test
 - [x] **p16.1 db: reconciliations + split lock.**
   Tests (direct SQL): updating amount/account/transaction/fund of a split in a *finalized* recon is rejected by trigger; allowed while the recon is open; `reconciliation_id` FK valid.
   Build: migration — `reconciliations(id, account_id, statement_date, statement_balance, currency, status CHECK(open/finalized), notes, ...)` + versions; `ALTER TABLE splits ADD COLUMN reconciliation_id REFERENCES reconciliations(id)`; trigger `trg_split_locked_when_finalized`.
-- [ ] **p16.2 store: reconciliation lifecycle.**
+- [x] **p16.2 store: reconciliation lifecycle.**
   Tests: full lifecycle with AssertVersioned; `TestFinalizeRequiresZeroDifference` (opening = prior finalized statement balance; opening + Σ this recon's splits must equal the new statement balance); `TestReconSpansFunds` (**the D13/D20 payoff**: restricted and unrestricted splits reconcile against one statement); `TestToggleValidatesAccountAndCurrency`; `TestReopenAudited`; `TestEditReconciledTxnBlocked` (store refuses date/amount/account/fund edits touching finalized-reconciled splits; memo/payee allowed).
   Build: `StartReconciliation`, `SetSplitReconciled(on/off)`, `Finalize`, `Reopen`; recon is per account **and** currency, across all funds and regardless of subsidiary badge.
 - [ ] **p16.3 web: reconciliation workspace.**

@@ -97,6 +97,18 @@ type IDs struct {
 	// Transactions of special interest to as-of / audit tests.
 	EditedTxn  int64 // edited twice
 	DeletedTxn int64 // soft-deleted
+
+	// The two Checking US (USD) transactions deliberately LEFT UNCLEARED by the
+	// p16 reconciliation seam (ExtendReconciliation): the 2026-05-25 May rent and
+	// the 2026-06-10 June donation. Captured so the seam clears the complement
+	// deterministically (no id/amount hardcoding) and tests can assert them
+	// uncleared.
+	MayRentTxn      int64
+	JuneDonationTxn int64
+
+	// CheckingUSRecon is the finalized 2026-05-31 Checking US (USD) reconciliation
+	// the seam creates -- zero until ExtendReconciliation is called (opt-in seam).
+	CheckingUSRecon int64
 }
 
 // Fixture is the built synthetic dataset: the db, a store over it, the entity
@@ -268,8 +280,89 @@ func (f *Fixture) ExtendRates(t *testing.T) {
 	}
 }
 
-// ExtendReconciliation is the p16 seam. Today a no-op: reconciliations /
-// splits.reconciliation_id do not exist. p16 fills it (finalize the 2026-05-31
-// Checking US reconciliation over the restricted + unrestricted splits, leaving
-// two uncleared) without renumbering transactions.
-func (f *Fixture) ExtendReconciliation(_ *testing.T) {}
+// reconStatementBalance is the 2026-05-31 Checking US (USD) statement balance the
+// seam finalizes to. It equals the Checking US USD live balance (Expected
+// AccountBalances CheckingUS = 3,593,500) with the two UNCLEARED items backed out:
+// + 155,000 (May rent, a credit left out) - 75,000 (June donation, a debit left
+// out) = 3,673,500. Opening is 0 (this is the first finalized recon on the pair),
+// so Finalize requires opening(0) + Sigma(cleared) == 3,673,500. Kept as a named
+// constant so the seam and TestExtendReconciliation agree on one number.
+const reconStatementBalance int64 = 3_673_500
+
+// ExtendReconciliation is the p16 seam: it finalizes the 2026-05-31 Checking US
+// (USD) reconciliation over the account's restricted AND unrestricted splits (the
+// D13/D20 payoff -- one statement spans all funds), leaving EXACTLY the two
+// 2026-05-25 / 2026-06-10 items uncleared, WITHOUT renumbering any transaction. It
+// is OPT-IN: New does not call it, so the default fixture carries no recon and
+// every native-currency expectation is untouched.
+//
+// It uses the store lifecycle end to end: StartReconciliation on Checking US/USD,
+// SetSplitReconciled(on) for every live non-deleted Checking US USD split EXCEPT
+// the two on the captured uncleared txns, then Finalize at reconStatementBalance.
+// Clearing runs while the recon is OPEN (the split-lock trigger only bites after
+// finalize). Live split ids are QUERIED (not hardcoded): the edited txn's Checking
+// US split is a 3rd-generation id, so a live query is the only deterministic source.
+func (f *Fixture) ExtendReconciliation(t *testing.T) {
+	t.Helper()
+	ctx := store.WithActor(context.Background(), systemActor)
+
+	reconID, err := f.Store.StartReconciliation(ctx, f.IDs.CheckingUS, "USD", "2026-05-31", reconStatementBalance)
+	if err != nil {
+		t.Fatalf("fixture: StartReconciliation: %v", err)
+	}
+	f.IDs.CheckingUSRecon = reconID
+
+	// Every live, non-deleted Checking US split on a USD transaction, plus the id of
+	// its transaction (so we can skip the two uncleared ones). Read directly (this is
+	// fixture wiring, not the app query path).
+	rows, err := f.DB.QueryContext(ctx, `
+		SELECT s.id, s.transaction_id
+		FROM splits s
+		JOIN transactions t ON t.id = s.transaction_id
+		WHERE s.account_id = ? AND t.currency = 'USD' AND t.deleted = 0`, f.IDs.CheckingUS)
+	if err != nil {
+		t.Fatalf("fixture: load Checking US splits: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	skip := map[int64]bool{f.IDs.MayRentTxn: true, f.IDs.JuneDonationTxn: true}
+	var toClear []int64
+	for rows.Next() {
+		var splitID, txnID int64
+		if err := rows.Scan(&splitID, &txnID); err != nil {
+			t.Fatalf("fixture: scan Checking US split: %v", err)
+		}
+		if skip[txnID] {
+			continue
+		}
+		toClear = append(toClear, splitID)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("fixture: iterate Checking US splits: %v", err)
+	}
+	// Close before further store writes so the read connection is released.
+	if err := rows.Close(); err != nil {
+		t.Fatalf("fixture: close Checking US splits: %v", err)
+	}
+
+	for _, splitID := range toClear {
+		if err := f.Store.SetSplitReconciled(ctx, reconID, splitID, true); err != nil {
+			t.Fatalf("fixture: clear split %d: %v", splitID, err)
+		}
+	}
+
+	if err := f.Store.Finalize(ctx, reconID); err != nil {
+		t.Fatalf("fixture: Finalize reconciliation: %v", err)
+	}
+
+	f.Expected.Reconciliation = ReconciliationExpected{
+		ID:               reconID,
+		Account:          f.IDs.CheckingUS,
+		Currency:         "USD",
+		StatementDate:    "2026-05-31",
+		StatementBalance: reconStatementBalance,
+		Opening:          0,
+		ClearedCount:     len(toClear),
+		UnclearedTxns:    []int64{f.IDs.MayRentTxn, f.IDs.JuneDonationTxn},
+	}
+}
