@@ -1,0 +1,45 @@
+{{/*
+  p19.3 budget LIST (/budgets, TxnRead view / TxnWrite manage). Each budget is a name
+  + period bounds; the inline create form fetches into #budget-form via htmx. A link
+  to the schedule LIBRARY sits alongside. Every string via {{t}} (rule 9); dates via
+  the money formatter (rule 10); no inline script (rule 12).
+*/ -}}
+{{define "budgets.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "budget.list.title"))}}
+  {{- with .Page}}
+  <h1>{{t "budget.list.title"}}</h1>
+  <p class="hint">{{t "budget.list.intro"}}</p>
+  <p><a class="btn btn-ghost" href="/schedules">{{t "budget.list.schedules_link"}}</a></p>
+
+  <div id="budget-form" class="budget-form-region">
+    <button type="button" class="btn btn-primary"
+            hx-get="/budgets/new" hx-target="#budget-form" hx-swap="outerHTML">
+      {{t "budget.list.new"}}
+    </button>
+  </div>
+
+  <table class="budgets-table">
+    <thead>
+      <tr>
+        <th>{{t "budget.list.col.name"}}</th>
+        <th>{{t "budget.list.col.period"}}</th>
+        <th>{{t "budget.list.col.actions"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="budget-row" id="budget-row-{{.ID}}">
+        <td class="budget-name"><a href="/budgets/{{.ID}}">{{.Name}}</a></td>
+        <td class="budget-period">{{.PeriodStart}} – {{.PeriodEnd}}</td>
+        <td class="budget-actions">
+          <a class="btn btn-ghost" href="/budgets/{{.ID}}">{{t "budget.list.open"}}</a>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="3">{{t "budget.list.empty"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

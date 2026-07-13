@@ -160,6 +160,28 @@ func (s *Store) GetSchedule(ctx context.Context, id int64) (sqlc.BudgetSchedule,
 	return row, nil
 }
 
+// ListSchedules returns every named schedule, id-ordered (read; sqlc). The schedule
+// LIBRARY list (p19.3) and the budget-line editor's schedule picker both source
+// their options here. A thin wrapper over the ListBudgetSchedules query so the web
+// handler renders what the store returns.
+func (s *Store) ListSchedules(ctx context.Context) ([]sqlc.BudgetSchedule, error) {
+	rows, err := s.q.ListBudgetSchedules(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("store: list schedules: %w", err)
+	}
+	return rows, nil
+}
+
+// ListBudgets returns every budget, id-ordered (read; sqlc). The budget LIST page
+// (p19.3) sources its rows here.
+func (s *Store) ListBudgets(ctx context.Context) ([]sqlc.Budget, error) {
+	rows, err := s.q.ListBudgets(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("store: list budgets: %w", err)
+	}
+	return rows, nil
+}
+
 // ScheduleDates returns a schedule's imported custom date list, sorted (read).
 func (s *Store) ScheduleDates(ctx context.Context, id int64) ([]string, error) {
 	rows, err := s.q.BudgetScheduleDates(ctx, id)

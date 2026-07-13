@@ -1,0 +1,52 @@
+{{/*
+  p19.3 budget create/edit form partial ("budget-form"). SINGLE SOURCE of the form
+  region: the list renders the "New budget" trigger inside #budget-form; GET
+  /budgets/new and /budgets/{id}/edit swap THIS partial in, and a failed POST
+  re-renders it at 422 (stable ids across swaps, Appendix C). The dot is always a
+  budgetFormModel.
+
+  hx-post targets /budgets (create) when .ID is 0, else /budgets/{id} (edit). Field
+  errors come from .Errors (formErrors), i18n KEYS via {{t}} (rule 9). Period dates
+  are entered in the user's date format (rule 10); the store validates. No inline
+  script/style (strict CSP, rule 12).
+*/ -}}
+{{define "budget-form" -}}
+<form id="budget-form" class="budget-form"
+      hx-post="{{if .ID}}/budgets/{{.ID}}{{else}}/budgets{{end}}"
+      hx-target="#budget-form" hx-swap="outerHTML">
+
+  <h2>{{if .ID}}{{t "budget.form.edit_title"}}{{else}}{{t "budget.form.new_title"}}{{end}}</h2>
+
+  <div class="field">
+    <label for="bf-name">{{t "budget.form.name"}}</label>
+    <input id="bf-name" name="name" type="text" value="{{.Name}}"
+      {{- if .Errors.ErrorKey "name"}} aria-invalid="true" aria-describedby="bf-name-err"{{end}}
+      {{- if eq .Errors.FirstInvalid "name"}} autofocus{{end}}>
+    {{with .Errors.ErrorKey "name"}}<p id="bf-name-err" class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+
+  <div class="field">
+    <label for="bf-start">{{t "budget.form.period_start"}}</label>
+    <input id="bf-start" name="period_start" type="text" value="{{.PeriodStart}}"
+           placeholder="{{t "budget.schedule.form.date_placeholder"}}"
+      {{- if eq .Errors.FirstInvalid "period_start"}} autofocus{{end}}>
+    {{with .Errors.ErrorKey "period_start"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+
+  <div class="field">
+    <label for="bf-end">{{t "budget.form.period_end"}}</label>
+    <input id="bf-end" name="period_end" type="text" value="{{.PeriodEnd}}"
+           placeholder="{{t "budget.schedule.form.date_placeholder"}}">
+  </div>
+
+  <div class="field">
+    <label for="bf-notes">{{t "budget.form.notes"}}</label>
+    <input id="bf-notes" name="notes" type="text" value="{{.Notes}}">
+  </div>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">{{t "common.save"}}</button>
+    <a class="btn btn-ghost" href="/budgets">{{t "common.cancel"}}</a>
+  </div>
+</form>
+{{- end}}

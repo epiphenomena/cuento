@@ -339,7 +339,7 @@ Budget lines keyed by **(subsidiary, account [revenue/expense], fund, program)**
 - [x] **p19.2 toolkit: occurrences, actuals-vs-budget, projections.**
   Tests: a line expands (via its schedule) to the right dated occurrences within the budget period; bucketed sums to week/month/quarter/year are just occurrence sums (assert no pro-rata); `ActualsVsBudget` over a period per (sub,account,fund,program) — budgeted = Σ occurrences in bucket, actual = p15.2 `Activity`; `CashflowProjection` starts from CURRENT actual net-asset fund balances and adds budgeted occurrence flows forward to period end, per fund; hand-computed on the fixture.
   Build: toolkit budget methods over p19.1 + the p15.2 actuals toolkit; deterministic bucketing; no clock (period is a param).
-- [ ] **p19.3 web: schedules + budget management.**
+- [x] **p19.3 web: schedules + budget management.**
   Tests: create/edit/delete named schedules (incl. import a custom date list) and budget lines (sub/account/fund/program/amount/schedule); perms (manage = TxnWrite or Admin — decide; view feeds reports).
   Build: schedule library (kind-specific pickers: day-of-month, ordinal-weekday, semimonthly, biweekly/weekly anchor, custom import; weekend policy) + budget list + line editor; fund/program selectors scoped to the sub.
 - [ ] **p19.4 [P] reports: forecast + actuals-vs-budget + cashflow projection** (weekly/monthly/annual buckets = summed occurrences, no pro-rata; per-fund; actuals vs budgeted variance; cashflow projection of net-asset fund balances start→end; drill-down on the actuals columns) + goldens.

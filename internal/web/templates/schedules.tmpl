@@ -1,0 +1,57 @@
+{{/*
+  p19.3 schedule LIBRARY (/schedules, TxnRead view / TxnWrite manage). Named,
+  reusable recurrences the budget-line editor picks from. The inline create/edit form
+  fetches into #schedule-form via htmx (GET .../new or .../{id}/edit). Every string
+  via {{t}} (rule 9); no inline script (rule 12).
+*/ -}}
+{{define "schedules.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "budget.schedules.title"))}}
+  {{- with .Page}}
+  <h1>{{t "budget.schedules.title"}}</h1>
+  <p class="hint">{{t "budget.schedules.intro"}}</p>
+  <p><a class="btn btn-ghost" href="/budgets">{{t "budget.schedules.back_to_budgets"}}</a></p>
+
+  <div id="schedule-form" class="schedule-form-region">
+    <button type="button" class="btn btn-primary"
+            hx-get="/schedules/new" hx-target="#schedule-form" hx-swap="outerHTML">
+      {{t "budget.schedules.new"}}
+    </button>
+  </div>
+
+  <table class="schedules-table">
+    <thead>
+      <tr>
+        <th>{{t "budget.schedules.col.name"}}</th>
+        <th>{{t "budget.schedules.col.kind"}}</th>
+        <th>{{t "budget.schedules.col.summary"}}</th>
+        <th>{{t "budget.schedules.col.actions"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="schedule-row" id="schedule-row-{{.ID}}">
+        <td class="schedule-name">{{.Name}}</td>
+        <td class="schedule-kind">{{t .KindKey}}</td>
+        <td class="schedule-summary">{{if .Summary}}{{.Summary}}{{else}}<span class="muted">—</span>{{end}}</td>
+        <td class="schedule-actions">
+          <button type="button" class="btn btn-ghost"
+                  hx-get="/schedules/{{.ID}}/edit" hx-target="#schedule-form" hx-swap="outerHTML">
+            {{t "common.edit"}}
+          </button>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="4">{{t "budget.schedules.empty"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{/* The kind picker's show/hide module (rule 12: external ES module, no inline
+       script). Loaded on the LIBRARY PAGE (not the swapped-in schedule-form partial:
+       a <script> injected via htmx innerHTML does not execute), so it self-initializes
+       on DOMContentLoaded AND re-runs on htmx:afterSwap when the create/edit form is
+       swapped into #schedule-form -- revealing the block(s) for the chosen kind and
+       hiding the rest on a kind change, with no server round-trip. */}}
+  <script type="module" src="{{asset "budgetkind.js"}}"></script>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

@@ -41,6 +41,7 @@ func mustParseTemplates() *template.Template {
 		"txnTitleKey":     txnTitleKey,         // p12.2 editor: new vs edit head/heading key
 		"reconRowCtx":     makeReconRowCtx,     // p16.3 recon: pair a split row with the toggle base + finalized gate
 		"reconSummaryCtx": makeReconSummaryCtx, // p16.3 recon: wrap the sticky summary (OOB flag + finalize path)
+		"ordKey":          ordKey,              // p19.3 schedule form: ordinal value -> i18n sub-key
 	}
 	t, err := template.New("").Funcs(stub).ParseFS(templatesFS, "templates/*.tmpl")
 	if err != nil {
@@ -72,6 +73,7 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name
 		"asset":      s.assetURL, // hashed URL in prod, unhashed in -dev (p10.1)
 		"shellTitle": shellTitle, // pairs a shellPage with a localized head title
 		"strs":       strs,       // literal []string for ranging over static enums
+		"ordKey":     ordKey,     // p19.3 schedule form: ordinal value -> i18n sub-key
 	})
 
 	// Render into a buffer first so a template error becomes a clean 500 rather

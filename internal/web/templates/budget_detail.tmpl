@@ -1,0 +1,71 @@
+{{/*
+  p19.3 budget DETAIL (/budgets/{id}, TxnRead view / TxnWrite manage). The budget
+  header (name, period) + its LINES, each showing the resolved sub/account/fund/
+  program/schedule names + formatted amount-per-occurrence. The inline line editor
+  fetches into #line-form via htmx (GET /budgets/{id}/lines/new or .../lines/{lid}/
+  edit); delete is an inline POST action. Account/sub/fund/program names are stored
+  proper nouns rendered verbatim; every other string via {{t}} (rule 9); amounts via
+  the money formatter (rule 10); no inline script (rule 12).
+*/ -}}
+{{define "budget_detail.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "budget.detail.title"))}}
+  {{- with .Page}}
+  <p><a class="btn btn-ghost" href="/budgets">{{t "budget.detail.back"}}</a></p>
+  <h1>{{.Name}}</h1>
+  <p class="hint">{{t "budget.detail.period"}}: {{.PeriodStart}} – {{.PeriodEnd}}
+    <button type="button" class="btn btn-ghost"
+            hx-get="/budgets/{{.ID}}/edit" hx-target="#budget-edit" hx-swap="outerHTML">
+      {{t "common.edit"}}
+    </button>
+  </p>
+  <div id="budget-edit"></div>
+  {{if .Notes}}<p class="budget-notes">{{.Notes}}</p>{{end}}
+
+  <h2>{{t "budget.detail.lines"}}</h2>
+  <div id="line-form" class="line-form-region">
+    <button type="button" class="btn btn-primary"
+            hx-get="/budgets/{{.ID}}/lines/new" hx-target="#line-form" hx-swap="outerHTML">
+      {{t "budget.detail.new_line"}}
+    </button>
+  </div>
+
+  <table class="budget-lines-table">
+    <thead>
+      <tr>
+        <th>{{t "budget.line.col.subsidiary"}}</th>
+        <th>{{t "budget.line.col.account"}}</th>
+        <th>{{t "budget.line.col.fund"}}</th>
+        <th>{{t "budget.line.col.program"}}</th>
+        <th>{{t "budget.line.col.amount"}}</th>
+        <th>{{t "budget.line.col.schedule"}}</th>
+        <th>{{t "budget.line.col.actions"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{$bid := .ID}}
+      {{range .Lines}}
+      <tr class="budget-line-row" id="budget-line-row-{{.ID}}">
+        <td class="bl-sub">{{.SubName}}</td>
+        <td class="bl-account">{{.AcctName}}</td>
+        <td class="bl-fund">{{if .FundName}}{{.FundName}}{{else}}<span class="muted">{{t "budget.line.unrestricted"}}</span>{{end}}</td>
+        <td class="bl-program">{{.ProgName}}</td>
+        <td class="bl-amount amount">{{.AmountFmt}}</td>
+        <td class="bl-schedule">{{.SchedName}}</td>
+        <td class="bl-actions">
+          <button type="button" class="btn btn-ghost"
+                  hx-get="/budgets/{{$bid}}/lines/{{.ID}}/edit" hx-target="#line-form" hx-swap="outerHTML">
+            {{t "common.edit"}}
+          </button>
+          <form method="post" action="/budgets/{{$bid}}/lines/{{.ID}}/delete" class="inline">
+            <button type="submit" class="btn btn-ghost">{{t "common.delete"}}</button>
+          </form>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="7">{{t "budget.detail.no_lines"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

@@ -54,6 +54,7 @@ func navSections() []navEntry {
 		{"nav.funds", "/funds", TxnRead},
 		{"nav.programs", "/programs", TxnRead},
 		{"nav.reconciliations", "/reconciliations", TxnRead},
+		{"nav.budgets", "/budgets", TxnRead},
 		{"nav.import", "/import", TxnWrite},
 		{"nav.reports", "/reports", ReportGroup("")},
 		{"nav.settings", "/settings", AnyUser},
