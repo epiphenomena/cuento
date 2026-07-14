@@ -129,4 +129,68 @@ test.describe('transaction editor', () => {
     await expect(page.locator('#txn-class-1')).toHaveValue('management');
     await expect(page.locator('#txn-program-1')).toBeVisible();
   });
+
+  // p26.2: the account select is enhanced into a fuzzy-filter combobox (combobox.js +
+  // combofilter.js). The native <select> stays the value sink (the two tests above still
+  // drive it via selectOption / arrow keys). This test drives the OVERLAY input: typing
+  // filters the listbox, a pick sets the underlying select + fires gating, and the
+  // cloned trailing row's combobox filters + picks correctly too.
+  test('account combobox filters + picks by typing, and the cloned row does too', async ({ page, server }) => {
+    await login(page, server);
+
+    // A checking account and an expense account (whose pick must fire the class gating).
+    await createAsset(page, 'Combo Checking');
+    await page.goto('/accounts');
+    await page.getByRole('button', { name: /new account/i }).click();
+    await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+    await page.locator('#af-type').selectOption('expense');
+    await expect(page.locator('#af-func')).toBeVisible();
+    await page.locator('#af-name-en').fill('Combo Rent');
+    const rootSub = page.locator('input[name="sub_1"]');
+    if (!(await rootSub.isChecked())) await rootSub.check();
+    await page.locator('#af-func').selectOption('management');
+    await saveAndReload(page, { reloadPath: '/accounts' });
+    await expect(page.locator('tr.acct-row', { hasText: 'Combo Rent' })).toBeVisible();
+
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+
+    // Row 0's account cell has a .combo overlay (the enhancement ran on load).
+    const cell0 = page.locator('.txn-row[data-row="0"] .txn-account-cell');
+    const input0 = cell0.locator('.combo-text');
+    await expect(input0).toBeVisible();
+
+    // Type a fuzzy leaf query -> the listbox filters to matching options only. "rent"
+    // matches "Combo Rent" and excludes "Combo Checking".
+    await input0.click();
+    await input0.fill('rent');
+    const list0 = cell0.locator('.combo-list');
+    await expect(list0).toBeVisible();
+    await expect(list0.locator('.combo-option', { hasText: 'Combo Rent' })).toBeVisible();
+    await expect(list0.locator('.combo-option', { hasText: 'Combo Checking' })).toHaveCount(0);
+
+    // Pick it -> the native select value is set AND the expense gating fires (class cell
+    // shows, prefilled from the account default). This proves change bubbled + datasets
+    // survived the enhancement.
+    await list0.locator('.combo-option', { hasText: 'Combo Rent' }).click();
+    await expect(page.locator('#txn-account-0')).toHaveValue(/\d+/);
+    await expect(input0).toHaveValue(/Combo Rent/);
+    await expect(page.locator('#txn-class-0')).toBeVisible();
+    await expect(page.locator('#txn-class-0')).toHaveValue('management');
+
+    // Picking in the last row grew a fresh trailing row (auto-append via the bubbled
+    // change). Its account cell is ALSO an enhanced combobox (the clone contract).
+    const cell1 = page.locator('.txn-row[data-row="1"] .txn-account-cell');
+    const input1 = cell1.locator('.combo-text');
+    await expect(input1).toBeVisible();
+    await input1.click();
+    await input1.fill('check');
+    const list1 = cell1.locator('.combo-list');
+    await expect(list1.locator('.combo-option', { hasText: 'Combo Checking' })).toBeVisible();
+    await list1.locator('.combo-option', { hasText: 'Combo Checking' }).click();
+    await expect(page.locator('#txn-account-1')).toHaveValue(/\d+/);
+    await expect(input1).toHaveValue(/Combo Checking/);
+    // Asset pick -> class cell hidden (gating fired on the CLONED row's select).
+    await expect(page.locator('#txn-class-1')).toBeHidden();
+  });
 });

@@ -655,6 +655,58 @@ input[aria-invalid="true"] {
 .txn-row.sub-conflict td.txn-cell { background: var(--color-danger-bg); }
 .txn-row-error .field-error { padding: 0 var(--space-3); display: inline-block; }
 
+/* p26.2 fuzzy-filter combobox (combobox.js). The native <select class="combo-input">
+   stays the value sink + no-JS fallback and stays laid out; the overlay text input sits
+   ON TOP of it (never display:none -- keyboard + Playwright drive the select underneath).
+   In a .txn-cell the wrapper fills the cell so the account input aligns edge-to-edge like
+   the other spreadsheet cells (this also fixes the account-cell overlap: the input is
+   contained by the cell, not floating over neighbours). */
+.combo { position: relative; display: block; }
+/* The overlay input covers the select's box. It carries the cell's own padding so its
+   text lines up with the sibling cells; the select underneath keeps its intrinsic size so
+   the cell reserves the right height. */
+.combo > .combo-text {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  z-index: 1;
+  border: 0;
+  border-radius: 0;
+  background: var(--color-surface);
+}
+.txn-grid td.txn-cell .combo > .combo-text { padding: var(--space-2) var(--space-3); }
+.combo > .combo-text:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+.combo > .combo-text:focus { background: var(--color-surface-alt); }
+/* The listbox popover: anchored under the cell, above everything, scrollable. */
+.combo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: var(--color-surface);
+  border: var(--border);
+  border-radius: var(--radius);
+  max-height: 14rem;
+  overflow-y: auto;
+  min-width: max-content;
+}
+.combo-list[hidden] { display: none; }
+.combo-option {
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.combo-option:hover,
+.combo-option.active { background: var(--color-primary); color: var(--color-on-primary, #fff); }
+
 .txn-actions { margin: var(--space-3) 0; }
 
 /* Totals bar: sticks to the bottom of the viewport so the running imbalance is

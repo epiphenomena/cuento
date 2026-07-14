@@ -179,7 +179,7 @@
            autocomplete below, keeping the select as the id value sink. A TYPED new name
            posts via payee_name (below); the handler prefers the id, else find-or-creates
            by name (create-on-save, DECISIONS p12.3). No-JS degrades to pick-existing. */}}
-      <select name="payee" id="txn-payee" class="txn-payee combo-input">
+      <select name="payee" id="txn-payee" class="txn-payee">
         <option value="0">{{t "txn.payee_none"}}</option>
         {{range .Payees}}<option value="{{.ID}}"{{if eq .ID $.Page.Payee}} selected{{end}}>{{.Name}}</option>
         {{end}}

@@ -20,6 +20,7 @@ import { parseAmountMinor, drcrToSigned, formatSignedMinor } from './txnamount.j
 import { fundImbalances, applyFundToAll } from './txnfund.js';
 import { nextCell, invalidRowsForSubsidiary } from './txngrid.js';
 import { allRowsEmpty, isRowEmpty } from './txnpayee.js';
+import { initCombos, stripCombo } from './combobox.js';
 
 function initEditor(form) {
   const exp = 2; // currency exponent; USD/MXN are 2. Amounts are display-only here.
@@ -193,6 +194,11 @@ function initEditor(form) {
     clone.dataset.row = String(idx);
     clone.classList.remove('sub-conflict');
     clone.removeAttribute('data-row-error');
+    // Combobox clone contract (p26.2): the template's account cell carries an enhanced
+    // combobox whose overlay listeners cloneNode does NOT copy (a dead wrapper). Strip it
+    // back to a clean native <select> BEFORE the id/name rewrite so the overlay's own
+    // nodes aren't re-indexed; initCombos(clone) below re-enhances the fresh select.
+    stripCombo(clone);
     // Rewrite every id/name suffix to the new index; clear values.
     clone.querySelectorAll('[id],[name]').forEach((el) => {
       if (el.id) el.id = el.id.replace(/-\d+$/, `-${idx}`);
@@ -204,6 +210,7 @@ function initEditor(form) {
     if (errCell) errCell.textContent = '';
     tbody.appendChild(clone);
     form.querySelector('#txn-rows-count').value = String(form.querySelectorAll('.txn-row').length);
+    initCombos(clone); // enhance the clone's clean account select
     wireRow(clone);
     gateRow(clone);
   }
@@ -464,7 +471,8 @@ function initEditor(form) {
       tbody.textContent = '';
       newRows.forEach((r) => tbody.appendChild(r));
       form.querySelector('#txn-rows-count').value = String(newRows.length);
-      // Re-wire + re-gate the swapped-in rows (they are fresh nodes).
+      // Re-wire + re-gate + re-enhance the swapped-in rows (they are fresh, unenhanced).
+      initCombos(form);
       form.querySelectorAll('.txn-row').forEach(wireRow);
       gateAll();
       markSubsidiaryConflicts();
@@ -524,6 +532,10 @@ function initEditor(form) {
 
   form.querySelectorAll('.txn-row').forEach(wireRow);
   if (subSel) subSel.addEventListener('change', markSubsidiaryConflicts);
+
+  // p26.2: enhance the account combo on every row present on initial render / after a
+  // whole-form htmx swap (subsidiary re-filter, 422 re-render). Idempotent.
+  initCombos(form);
 
   gateAll();
   markSubsidiaryConflicts();
