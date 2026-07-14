@@ -154,9 +154,10 @@ func (e *regEnv) post2(t *testing.T, ctx context.Context, date string, amount in
 
 // -- registerRows: paging, ordering, running balance, filters --------------
 
-// TestRegisterKeysetPaging: rows come back in (date, split_id) order, page
-// boundaries follow the cursor, the last page terminates (hasMore=false, no
-// infinite loop), and the concatenation of pages equals the full single page.
+// TestRegisterKeysetPaging: rows come back in DESCENDING (date, split_id) display
+// order (newest first, p26.9), page boundaries follow the cursor, the last page
+// terminates (hasMore=false, no infinite loop), and the concatenation of pages
+// equals the full single page.
 func TestRegisterKeysetPaging(t *testing.T) {
 	e := newRegEnv(t)
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
@@ -190,11 +191,12 @@ func TestRegisterKeysetPaging(t *testing.T) {
 	if len(got) != len(dates) {
 		t.Fatalf("paged rows = %d, want %d", len(got), len(dates))
 	}
-	// Ascending (date, split_id) order across page boundaries.
+	// DESCENDING (date, split_id) display order across page boundaries: newest first
+	// (p26.9), each page appending strictly-older rows below.
 	for i := 1; i < len(got); i++ {
-		if got[i-1].DateISO > got[i].DateISO ||
-			(got[i-1].DateISO == got[i].DateISO && got[i-1].SplitID > got[i].SplitID) {
-			t.Fatalf("rows not in (date, split_id) order at %d: %+v then %+v", i, got[i-1], got[i])
+		if got[i-1].DateISO < got[i].DateISO ||
+			(got[i-1].DateISO == got[i].DateISO && got[i-1].SplitID < got[i].SplitID) {
+			t.Fatalf("rows not in DESC (date, split_id) order at %d: %+v then %+v", i, got[i-1], got[i])
 		}
 	}
 
@@ -364,13 +366,14 @@ func TestRegisterCounterAccount(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("rows=%d want 2", len(rows))
 	}
-	// Row 0 (Jan, 2-split) -> counter is "Supplies".
-	if rows[0].CounterAccount != "Supplies" {
-		t.Errorf("2-split counter = %q, want %q", rows[0].CounterAccount, "Supplies")
+	// Newest-first display (p26.9): row 0 is Feb (3-split), row 1 is Jan (2-split).
+	// Row 0 (Feb, 3-split) -> "Split" (the catalog word, rendered via IsSplit flag).
+	if !rows[0].IsSplit {
+		t.Errorf("3-split row should be flagged IsSplit; got counter=%q", rows[0].CounterAccount)
 	}
-	// Row 1 (Feb, 3-split) -> "Split" (the catalog word, rendered via IsSplit flag).
-	if !rows[1].IsSplit {
-		t.Errorf("3-split row should be flagged IsSplit; got counter=%q", rows[1].CounterAccount)
+	// Row 1 (Jan, 2-split) -> counter is "Supplies".
+	if rows[1].CounterAccount != "Supplies" {
+		t.Errorf("2-split counter = %q, want %q", rows[1].CounterAccount, "Supplies")
 	}
 
 	// A >2-split txn whose non-self splits COLLAPSE to one account (common under a
@@ -393,9 +396,10 @@ func TestRegisterCounterAccount(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registerRows: %v", err)
 	}
-	last := rows2[len(rows2)-1]
-	if !last.IsSplit {
-		t.Errorf("collapsed 3-split (both non-self on one account) should be IsSplit; got counter=%q", last.CounterAccount)
+	// Newest-first (p26.9): the Mar collapsed-3-split is now the TOP row.
+	newest := rows2[0]
+	if !newest.IsSplit {
+		t.Errorf("collapsed 3-split (both non-self on one account) should be IsSplit; got counter=%q", newest.CounterAccount)
 	}
 }
 
@@ -489,11 +493,12 @@ func TestRegisterFundChip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registerRows: %v", err)
 	}
-	if rows[0].FundName != "" {
-		t.Errorf("unrestricted row FundName = %q, want empty", rows[0].FundName)
+	// Newest-first (p26.9): Feb (restricted) on top, Jan (unrestricted) below.
+	if rows[0].FundName != "Beca 2025" {
+		t.Errorf("restricted row FundName = %q, want %q", rows[0].FundName, "Beca 2025")
 	}
-	if rows[1].FundName != "Beca 2025" {
-		t.Errorf("restricted row FundName = %q, want %q", rows[1].FundName, "Beca 2025")
+	if rows[1].FundName != "" {
+		t.Errorf("unrestricted row FundName = %q, want empty", rows[1].FundName)
 	}
 }
 

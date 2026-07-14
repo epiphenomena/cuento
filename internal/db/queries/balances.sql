@@ -164,10 +164,13 @@ ORDER BY t.subsidiary_id, sp.account_id, fund_id, sp.program_id, t.currency, t.d
 -- descendant accounts (p26.6 parent-account rollup), after filters, with a RUNNING
 -- BALANCE per currency computed by a window function over the WHOLE filtered set (a
 -- single account is usually one currency, but FX Clearing is multi -- partition by
--- currency), ordered ascending by the total order (date, split_id). split_id is
--- globally unique + monotonic, so (date, split_id) is a total order needing no
--- txn-id tiebreak; the same tuple is the window ORDER, the final ORDER BY, and the
--- keyset cursor tuple.
+-- currency). The WINDOW that computes the running balance stays ASCENDING (date,
+-- split_id) so each row's running_balance is the cumulative total from the OLDEST
+-- split up to that row; only the terminal display ORDER BY is DESCENDING so the
+-- register shows the NEWEST transaction on top (p26.9), the top row carrying the
+-- latest balance. split_id is globally unique + monotonic, so (date, split_id) is a
+-- total order needing no txn-id tiebreak; the same tuple is the window ORDER (asc),
+-- the final display ORDER BY (desc), and the keyset cursor tuple.
 --
 -- ROLLUP (p26.6): the account_id predicate is a recursive descendant closure over
 -- the account tree (des CTE, base = the requested account itself, mirroring
@@ -233,7 +236,7 @@ SELECT split_id, txn_id, date, subsidiary_id, currency, account_id, amount, fund
        program_id, functional_class, split_memo, txn_memo, payee_id,
        running_balance
 FROM filtered
-ORDER BY date, split_id;
+ORDER BY date DESC, split_id DESC;
 
 -- name: DrillSplits :many
 -- The report DRILL-DOWN (p15.3d): every non-deleted split contributing to ONE

@@ -124,6 +124,66 @@ test.describe('account register', () => {
     // present in the running-balance column of the last merged row.
     await expect(table).toContainText('0.00');
   });
+
+  // p26.9: transaction listings show the MOST RECENT transaction on TOP (reverse
+  // chronological). Post two dated transactions on one account, then confirm the
+  // FIRST register data row is the newer one and the running balance still reads
+  // correctly (top row = latest cumulative balance).
+  test('register lists newest transaction first', async ({ page, server }) => {
+    await login(page, server);
+
+    // Two plain asset accounts (a transfer avoids the required program/class on R/E
+    // splits; the ordering behavior is identical).
+    await createAccount(page, { name: 'Cash P269', type: 'asset' });
+    await createAccount(page, { name: 'Savings P269', type: 'asset' });
+
+    // Helper: post a Cash -> Savings transfer (Cash -amount / Savings +amount) with a
+    // memo/date, entered from the Cash register.
+    const postSpend = async (date, amount, memo) => {
+      await page.goto('/accounts');
+      await page.locator('tr.acct-row', { hasText: 'Cash P269' })
+        .getByRole('link', { name: 'Cash P269' }).click();
+      await page.waitForURL('**/register');
+      await page.getByRole('link', { name: /new transaction/i }).click();
+      await page.waitForURL('**/transactions/new');
+      await expect(page.locator('form#txn-form')).toBeVisible();
+      await page.locator('#txn-date').fill(date);
+      // Filling row 0 auto-appends row 1 (p25.2), so select account 0 first.
+      await page.locator('#txn-account-0').selectOption({ label: 'Cash P269' });
+      await expect(page.locator('#txn-account-1')).toBeVisible();
+      await page.locator('#txn-amount-0').fill('-' + amount);
+      await page.locator('#txn-account-1').selectOption({ label: 'Savings P269' });
+      await page.locator('#txn-amount-1').fill(amount);
+      await page.locator('#txn-memo').fill(memo);
+      await page.getByRole('button', { name: /^save$/i }).click();
+      await page.waitForURL('**/register**');
+    };
+
+    // Post the OLDER one first, then the NEWER one, so insertion order (split id)
+    // differs from date order -- the display must sort by date DESC regardless.
+    await postSpend('2025-01-10', '10.00', 'older spend P269');
+    await postSpend('2025-06-20', '25.00', 'newer spend P269');
+
+    // Open the Cash register and read the data rows in DOM order.
+    await page.goto('/accounts');
+    await page.locator('tr.acct-row', { hasText: 'Cash P269' })
+      .getByRole('link', { name: 'Cash P269' }).click();
+    await page.waitForURL('**/register');
+    await expect(page.locator('tr.reg-row')).toHaveCount(2);
+
+    // The FIRST (top) data row is the NEWER transaction (reverse chronological).
+    await expect(page.locator('tr.reg-row').first().locator('.reg-memo'))
+      .toHaveText('newer spend P269');
+    // The LAST (bottom) row is the older transaction.
+    await expect(page.locator('tr.reg-row').last().locator('.reg-memo'))
+      .toHaveText('older spend P269');
+    // Running balance is the ascending cumulative (oldest->this-row), so the TOP row
+    // shows the latest balance (-35.00) and the bottom the earliest (-10.00).
+    await expect(page.locator('tr.reg-row').first().locator('.reg-running'))
+      .toContainText('35.00');
+    await expect(page.locator('tr.reg-row').last().locator('.reg-running'))
+      .toContainText('10.00');
+  });
 });
 
 // createAccount opens the inline chart-of-accounts form and creates one account,

@@ -501,7 +501,7 @@ SELECT split_id, txn_id, date, subsidiary_id, currency, account_id, amount, fund
        program_id, functional_class, split_memo, txn_memo, payee_id,
        running_balance
 FROM filtered
-ORDER BY date, split_id
+ORDER BY date DESC, split_id DESC
 `
 
 type RegisterPageParams struct {
@@ -542,10 +542,12 @@ type RegisterPageRow struct {
 // The account register: every non-deleted split on account_id (after filters),
 // with a RUNNING BALANCE per currency computed by a window function over the WHOLE
 // filtered set (a single account is usually one currency, but FX Clearing is
-// multi -- partition by currency), ordered ascending by the total order
-// (date, split_id). split_id is globally unique + monotonic, so (date, split_id)
-// is a total order needing no txn-id tiebreak; the same tuple is the window ORDER,
-// the final ORDER BY, and the keyset cursor tuple.
+// multi -- partition by currency). The window that computes the running balance
+// stays ascending (date, split_id); only the terminal display ORDER BY is
+// descending so the register shows the newest transaction on top (p26.9).
+// split_id is globally unique + monotonic, so (date, split_id) is a total order
+// needing no txn-id tiebreak; the same tuple is the window ORDER (asc), the final
+// display ORDER BY (desc), and the keyset cursor tuple.
 //
 // KEYSET PAGING IS APPLIED IN GO, not in SQL: the running balance must be computed
 // by the window over the ENTIRE filtered set BEFORE the cursor cuts a page (or

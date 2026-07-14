@@ -264,10 +264,12 @@ type RegisterRow struct {
 	RunningBalance  int64 // cumulative to this row within its currency
 }
 
-// RegisterPage returns one page of the register for accountID, ascending by the
-// total order (Date, SplitID), with a per-currency running balance computed by a
-// window function over the WHOLE filtered set (so the running balance continues
-// correctly across pages, never restarting). When accountID is a PLACEHOLDER
+// RegisterPage returns one page of the register for accountID in REVERSE
+// chronological order -- descending by the total order (Date, SplitID), NEWEST on top
+// (p26.9) -- with a per-currency running balance computed by an ASCENDING window over
+// the WHOLE filtered set (so each row's running balance is the cumulative total from
+// the oldest split up to that row, continuing correctly across pages, never
+// restarting; the top/newest row shows the latest balance). When accountID is a PLACEHOLDER
 // (parent) account the query rolls up the splits of ALL its descendant leaf
 // accounts (p26.6): the SQL closes a recursive descendant set over the account tree
 // (base = accountID itself, so a LEAF sees only its own splits -- unchanged) and the
@@ -322,14 +324,17 @@ func (s *Store) RegisterPage(
 		return nil, RegisterCursor{}, false, fmt.Errorf("store: register page (account %d): %w", accountID, err)
 	}
 
-	// Keyset seek in Go: skip rows up to and including the cursor, using the same
-	// (Date, SplitID) total order the SQL orders by. The zero cursor (empty Date)
-	// starts at the top.
+	// Keyset seek in Go, matching the SQL's DESCENDING display order (date DESC,
+	// split_id DESC, p26.9): rows arrive newest-first. The cursor is the LAST row of
+	// the previous page -- the OLDEST row already shown -- so the next page wants rows
+	// STRICTLY OLDER than it, which sit further down the descending array. Skip rows up
+	// to and including the cursor (those NEWER-or-equal), then break at the first
+	// strictly-older row. The zero cursor (empty Date) starts at the top (newest).
 	start := 0
 	if cursor.Date != "" || cursor.SplitID != 0 {
 		for start < len(rows) {
 			r := rows[start]
-			if r.Date > cursor.Date || (r.Date == cursor.Date && r.SplitID > cursor.SplitID) {
+			if r.Date < cursor.Date || (r.Date == cursor.Date && r.SplitID < cursor.SplitID) {
 				break
 			}
 			start++

@@ -501,18 +501,21 @@ func TestRegisterRunningBalance(t *testing.T) {
 	if more {
 		t.Errorf("more = true, want false (limit 0 = single page)")
 	}
-	// Order (date, split_id): T1(01-05), T2(01-15), T5(01-15), T3(02-10), T6(03-05).
-	// T2 before T5 on the same date because T2's split id is smaller (posted first).
+	// Display order is DESCENDING (date DESC, split_id DESC), NEWEST on top (p26.9):
+	// T6(03-05), T3(02-10), T5(01-15), T2(01-15), T1(01-05). T5 before T2 on the same
+	// date because T5's split id is larger. The running balance stays the ASCENDING
+	// cumulative (oldest->this-row), so the TOP row carries the latest balance (9000)
+	// and it decreases downward to the oldest split.
 	wantRun := []struct {
 		splitID int64
 		amount  int64
 		running int64
 	}{
-		{e.t1check, 20000, 20000},
-		{e.t2check, -10000, 10000},
-		{e.t5check, -3000, 7000},
-		{e.t3check, -6000, 1000},
 		{e.t6check, 8000, 9000},
+		{e.t3check, -6000, 1000},
+		{e.t5check, -3000, 7000},
+		{e.t2check, -10000, 10000},
+		{e.t1check, 20000, 20000},
 	}
 	if len(page) != len(wantRun) {
 		t.Fatalf("checking page = %d rows, want %d: %+v", len(page), len(wantRun), page)
@@ -552,7 +555,11 @@ func TestRegisterMultiCurrencyRunningBalance(t *testing.T) {
 func TestRegisterKeysetPaging(t *testing.T) {
 	e := newBalEnv(t)
 
-	// Page size 2 over the 5-row checking register.
+	// Page size 2 over the 5-row checking register. Display order is DESCENDING
+	// (newest first, p26.9): [t6check, t3check, t5check, t2check, t1check]. Each page
+	// walks OLDER as it appends below; the running balance is the ascending cumulative
+	// (oldest->this-row), so it DECREASES down the descending sequence but each row's
+	// value is unchanged from the single-page view.
 	p1, c1, more1, err := e.s.RegisterPage(e.ctx, e.checking, firstPage, noFilter, 2)
 	if err != nil {
 		t.Fatalf("page1: %v", err)
@@ -560,17 +567,18 @@ func TestRegisterKeysetPaging(t *testing.T) {
 	if !more1 {
 		t.Errorf("page1 more = false, want true")
 	}
-	if len(p1) != 2 || p1[0].SplitID != e.t1check || p1[1].SplitID != e.t2check {
-		t.Fatalf("page1 = %+v, want [t1check, t2check]", p1)
+	if len(p1) != 2 || p1[0].SplitID != e.t6check || p1[1].SplitID != e.t3check {
+		t.Fatalf("page1 = %+v, want [t6check, t3check]", p1)
 	}
-	// Cursor is the last row of page1 (same-date boundary: t2check on 2025-01-15).
-	if c1.Date != "2025-01-15" || c1.SplitID != e.t2check {
-		t.Fatalf("cursor1 = %+v, want {2025-01-15, %d}", c1, e.t2check)
+	// Cursor is the last (oldest-shown) row of page1: t3check on 2025-02-10.
+	if c1.Date != "2025-02-10" || c1.SplitID != e.t3check {
+		t.Fatalf("cursor1 = %+v, want {2025-02-10, %d}", c1, e.t3check)
 	}
 
-	// Page 2 seeks past the cursor -- t5check shares the date but has a larger split
-	// id, so it is the first row (the same-date boundary case). Running balance
-	// CONTINUES from page1's last (10000 -> 7000), not restart.
+	// Page 2 seeks past the cursor to STRICTLY OLDER rows -- t5check and t2check share
+	// the date 2025-01-15, with t5check's larger split id sorting first under DESC.
+	// Running balances are the same ascending cumulative values (7000, 10000): no
+	// restart, no dup of the boundary row.
 	p2, c2, more2, err := e.s.RegisterPage(e.ctx, e.checking, c1, noFilter, 2)
 	if err != nil {
 		t.Fatalf("page2: %v", err)
@@ -578,14 +586,14 @@ func TestRegisterKeysetPaging(t *testing.T) {
 	if !more2 {
 		t.Errorf("page2 more = false, want true")
 	}
-	if len(p2) != 2 || p2[0].SplitID != e.t5check || p2[1].SplitID != e.t3check {
-		t.Fatalf("page2 = %+v, want [t5check, t3check]", p2)
+	if len(p2) != 2 || p2[0].SplitID != e.t5check || p2[1].SplitID != e.t2check {
+		t.Fatalf("page2 = %+v, want [t5check, t2check]", p2)
 	}
-	if p2[0].RunningBalance != 7000 {
-		t.Errorf("page2 first running = %d, want 7000 (continues from page1's 10000)", p2[0].RunningBalance)
+	if p2[0].RunningBalance != 7000 || p2[1].RunningBalance != 10000 {
+		t.Errorf("page2 running = [%d,%d], want [7000,10000]", p2[0].RunningBalance, p2[1].RunningBalance)
 	}
 
-	// Page 3: the last row, no more.
+	// Page 3: the last (oldest) row, no more.
 	p3, _, more3, err := e.s.RegisterPage(e.ctx, e.checking, c2, noFilter, 2)
 	if err != nil {
 		t.Fatalf("page3: %v", err)
@@ -593,8 +601,8 @@ func TestRegisterKeysetPaging(t *testing.T) {
 	if more3 {
 		t.Errorf("page3 more = true, want false (last page)")
 	}
-	if len(p3) != 1 || p3[0].SplitID != e.t6check || p3[0].RunningBalance != 9000 {
-		t.Fatalf("page3 = %+v, want [t6check run 9000]", p3)
+	if len(p3) != 1 || p3[0].SplitID != e.t1check || p3[0].RunningBalance != 20000 {
+		t.Fatalf("page3 = %+v, want [t1check run 20000]", p3)
 	}
 
 	// Page 4: past the end -- empty.
@@ -613,16 +621,18 @@ func TestRegisterFilters(t *testing.T) {
 	root := rootProgramID
 
 	// Fund filter: checking splits tagged the grant -- T1 (+20000), T3 (-6000).
+	// Displayed newest-first (p26.9): T3 on top, then T1. Running balances stay the
+	// ascending cumulative (T1=20000, then T3=14000), so the top row shows 14000.
 	grantID := e.grant
 	fp, _, _, err := e.s.RegisterPage(e.ctx, e.checking, firstPage, RegisterFilters{FundID: &grantID}, 0)
 	if err != nil {
 		t.Fatalf("fund filter: %v", err)
 	}
-	if len(fp) != 2 || fp[0].SplitID != e.t1check || fp[1].SplitID != e.t3check {
-		t.Fatalf("fund page = %+v, want [t1check, t3check]", fp)
+	if len(fp) != 2 || fp[0].SplitID != e.t3check || fp[1].SplitID != e.t1check {
+		t.Fatalf("fund page = %+v, want [t3check, t1check]", fp)
 	}
-	if fp[0].RunningBalance != 20000 || fp[1].RunningBalance != 14000 {
-		t.Errorf("fund running = [%d,%d], want [20000,14000]", fp[0].RunningBalance, fp[1].RunningBalance)
+	if fp[0].RunningBalance != 14000 || fp[1].RunningBalance != 20000 {
+		t.Errorf("fund running = [%d,%d], want [14000,20000]", fp[0].RunningBalance, fp[1].RunningBalance)
 	}
 
 	// Subsidiary filter: checking in subCA -- only T6 (+8000).
@@ -635,16 +645,18 @@ func TestRegisterFilters(t *testing.T) {
 		t.Fatalf("sub page = %+v, want [t6check run 8000]", sp)
 	}
 
-	// Date filter: checking from 2025-02-01 -- T3 (-6000), T6 (+8000).
+	// Date filter: checking from 2025-02-01 -- T3 (-6000), T6 (+8000). Displayed
+	// newest-first (p26.9): T6 on top, then T3. The window still runs over only the
+	// filtered set (opening at T3), so running = [T6=2000, T3=-6000].
 	dp, _, _, err := e.s.RegisterPage(e.ctx, e.checking, firstPage, RegisterFilters{From: "2025-02-01"}, 0)
 	if err != nil {
 		t.Fatalf("date filter: %v", err)
 	}
-	if len(dp) != 2 || dp[0].SplitID != e.t3check || dp[1].SplitID != e.t6check {
-		t.Fatalf("date page = %+v, want [t3check, t6check]", dp)
+	if len(dp) != 2 || dp[0].SplitID != e.t6check || dp[1].SplitID != e.t3check {
+		t.Fatalf("date page = %+v, want [t6check, t3check]", dp)
 	}
-	if dp[0].RunningBalance != -6000 || dp[1].RunningBalance != 2000 {
-		t.Errorf("date running = [%d,%d], want [-6000,2000]", dp[0].RunningBalance, dp[1].RunningBalance)
+	if dp[0].RunningBalance != 2000 || dp[1].RunningBalance != -6000 {
+		t.Errorf("date running = [%d,%d], want [2000,-6000]", dp[0].RunningBalance, dp[1].RunningBalance)
 	}
 
 	// Text filter: T3's memo is "rent payment" -- only T3 checking matches.
@@ -737,16 +749,18 @@ func TestRegisterParentRollup(t *testing.T) {
 	if more {
 		t.Errorf("more = true, want false")
 	}
-	// Merged order by (date, split_id): boa1(01-05), wf1(02-10), boa2(03-01), wf2(03-01).
-	// boa2 before wf2 on the same date (smaller split id). Running balance accumulates
-	// across the merged descendant sequence, not per-account.
+	// Display order is DESCENDING (newest first, p26.9): wf2(03-01), boa2(03-01),
+	// wf1(02-10), boa1(01-05). wf2 before boa2 on the same date (larger split id sorts
+	// first under DESC). The running balance is still the ASCENDING cumulative across
+	// the merged descendant sequence (each row's value unchanged), so the top row shows
+	// the latest combined balance (15000).
 	want := []struct {
 		split, amount, running, acct int64
 	}{
-		{boa1, 10000, 10000, boa},
-		{wf1, 5000, 15000, wf},
-		{boa2, -3000, 12000, boa},
 		{wf2, 3000, 15000, wf},
+		{boa2, -3000, 12000, boa},
+		{wf1, 5000, 15000, wf},
+		{boa1, 10000, 10000, boa},
 	}
 	if len(page) != len(want) {
 		t.Fatalf("parent page = %d rows, want %d: %+v", len(page), len(want), page)
@@ -769,16 +783,18 @@ func TestRegisterParentRollup(t *testing.T) {
 		t.Fatalf("parent fund page = %+v, want [boa1 run 10000]", fp)
 	}
 
-	// A LEAF register is unchanged: BOA alone sees only its own two splits.
+	// A LEAF register still rolls up only BOA's own two splits, now displayed
+	// newest-first (p26.9): boa2 on top, then boa1. Running balances stay ascending
+	// cumulative (boa1=10000, boa2=7000), so the top row shows 7000.
 	lp, _, _, err := s.RegisterPage(ctx, boa, firstPage, noFilter, 0)
 	if err != nil {
 		t.Fatalf("leaf RegisterPage: %v", err)
 	}
-	if len(lp) != 2 || lp[0].SplitID != boa1 || lp[1].SplitID != boa2 {
-		t.Fatalf("leaf page = %+v, want [boa1, boa2]", lp)
+	if len(lp) != 2 || lp[0].SplitID != boa2 || lp[1].SplitID != boa1 {
+		t.Fatalf("leaf page = %+v, want [boa2, boa1]", lp)
 	}
-	if lp[0].RunningBalance != 10000 || lp[1].RunningBalance != 7000 {
-		t.Errorf("leaf running = [%d,%d], want [10000,7000]", lp[0].RunningBalance, lp[1].RunningBalance)
+	if lp[0].RunningBalance != 7000 || lp[1].RunningBalance != 10000 {
+		t.Errorf("leaf running = [%d,%d], want [7000,10000]", lp[0].RunningBalance, lp[1].RunningBalance)
 	}
 	if lp[0].AccountID != boa || lp[1].AccountID != boa {
 		t.Errorf("leaf rows account = [%d,%d], want both %d", lp[0].AccountID, lp[1].AccountID, boa)
