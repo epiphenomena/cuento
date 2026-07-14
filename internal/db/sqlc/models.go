@@ -490,6 +490,7 @@ type User struct {
 	Theme               string
 	DefaultSubsidiaryID sql.NullInt64
 	CanSubmitExpenses   int64
+	DefaultProgramID    sql.NullInt64
 }
 
 type UserReportGrant struct {
@@ -526,4 +527,5 @@ type UsersVersion struct {
 	Theme               string
 	DefaultSubsidiaryID sql.NullInt64
 	CanSubmitExpenses   int64
+	DefaultProgramID    sql.NullInt64
 }

@@ -109,10 +109,16 @@ function initEditor(form) {
     if (classCell) classCell.style.visibility = isExpense ? 'visible' : 'hidden';
 
     // Prefill defaults from the account data-* (server re-defaults authoritatively).
+    // Precedence (p26.5): the account's own default_program wins; else the user's
+    // default_program (data-user-program); else the root program fallback (D24).
     if (isRE && progSel && opt) {
       const def = opt.dataset.defaultProgram;
-      if ((!progSel.value || progSel.value === '0') && def && def !== '0') progSel.value = def;
-      else if (!progSel.value || progSel.value === '0') progSel.value = form.dataset.rootProgram || '';
+      const userDef = form.dataset.userProgram;
+      if (!progSel.value || progSel.value === '0') {
+        if (def && def !== '0') progSel.value = def;
+        else if (userDef && userDef !== '0') progSel.value = userDef;
+        else progSel.value = form.dataset.rootProgram || '';
+      }
     }
     if (isExpense && classSel && opt) {
       const def = opt.dataset.defaultClass;

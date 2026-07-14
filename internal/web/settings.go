@@ -44,13 +44,14 @@ type settingOption struct {
 // and the ordered field errors (for a crafted-invalid POST). It follows the form
 // model shape -- its own value fields plus an embedded formErrors named Errors.
 type settingsForm struct {
-	Locale       string
-	DateFormat   string
-	NumberFormat string
-	DisplayMode  string
-	NegStyle     string
-	Theme        string
-	DefaultSub   int64 // 0 == unset (the "none" option)
+	Locale         string
+	DateFormat     string
+	NumberFormat   string
+	DisplayMode    string
+	NegStyle       string
+	Theme          string
+	DefaultSub     int64 // 0 == unset (the "none" option)
+	DefaultProgram int64 // 0 == unset (the "none" option) (p26.5)
 
 	Langs        []langOption
 	DateFormats  []settingOption
@@ -59,6 +60,7 @@ type settingsForm struct {
 	NegStyles    []settingOption
 	Themes       []settingOption
 	Subs         []subOption
+	Programs     []programOption
 
 	Saved  bool
 	Errors formErrors
@@ -114,13 +116,14 @@ func (s *server) settingsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form, err := s.buildSettingsForm(r, settingsForm{
-		Locale:       u.Locale,
-		DateFormat:   u.DateFormat,
-		NumberFormat: u.NumberFormat,
-		DisplayMode:  u.DisplayMode,
-		NegStyle:     u.NegStyle,
-		Theme:        u.Theme,
-		DefaultSub:   derefID(u.DefaultSubsidiaryID),
+		Locale:         u.Locale,
+		DateFormat:     u.DateFormat,
+		NumberFormat:   u.NumberFormat,
+		DisplayMode:    u.DisplayMode,
+		NegStyle:       u.NegStyle,
+		Theme:          u.Theme,
+		DefaultSub:     derefID(u.DefaultSubsidiaryID),
+		DefaultProgram: derefID(u.DefaultProgramID),
 	})
 	if err != nil {
 		s.serverError(w)
@@ -142,6 +145,19 @@ func (s *server) buildSettingsForm(r *http.Request, form settingsForm) (settings
 	form.Subs = make([]subOption, 0, len(subs))
 	for _, sub := range subs {
 		form.Subs = append(form.Subs, subOption{ID: sub.ID, Name: sub.Name})
+	}
+	// Default-program options (p26.5): the ACTIVE programs in tree order, mirroring the
+	// txn editor's program select (an inactive program is not offered as a new default).
+	progs, err := s.store.ProgramTree(r.Context())
+	if err != nil {
+		return settingsForm{}, err
+	}
+	form.Programs = make([]programOption, 0, len(progs))
+	for _, p := range progs {
+		if p.Active == 0 {
+			continue
+		}
+		form.Programs = append(form.Programs, programOption{ID: p.ID, Name: p.Name})
 	}
 	form.Langs = langOptions(form.Locale)
 	form.DateFormats = dateFormatOptions()
@@ -190,6 +206,19 @@ func (s *server) settingsUpdate(w http.ResponseWriter, r *http.Request) {
 		form.DefaultSub = id
 	}
 
+	// default_program: "" (the "none" option) clears it; a non-empty value must parse
+	// to a positive id (existence is checked in the store). Mirrors default_subsidiary.
+	var defaultProgram *int64
+	if v := r.PostFormValue("default_program"); v != "" {
+		id, perr := strconv.ParseInt(v, 10, 64)
+		if perr != nil || id <= 0 {
+			s.renderSettingsError(w, r, form, "default_program")
+			return
+		}
+		defaultProgram = &id
+		form.DefaultProgram = id
+	}
+
 	err := s.store.UpdateUserSettings(
 		store.WithActor(r.Context(), store.Actor{ID: u.ID}),
 		u.ID,
@@ -201,6 +230,7 @@ func (s *server) settingsUpdate(w http.ResponseWriter, r *http.Request) {
 			NegStyle:            form.NegStyle,
 			Theme:               form.Theme,
 			DefaultSubsidiaryID: defaultSub,
+			DefaultProgramID:    defaultProgram,
 		},
 		known, // i18n.Langs membership (middleware.go)
 	)

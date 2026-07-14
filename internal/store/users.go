@@ -364,6 +364,10 @@ type CurrentUser struct {
 	// DefaultSubsidiaryID is the user's preferred subsidiary for new transactions
 	// (p12.2); nil = unset, so the editor falls back to the sole/root subsidiary.
 	DefaultSubsidiaryID *int64
+	// DefaultProgramID is the user's preferred program for new revenue/expense splits
+	// (p26.5); nil = unset. It is the program-prefill fallback tier BELOW the account's
+	// own default_program (account default wins) and ABOVE the root program.
+	DefaultProgramID *int64
 	// CanSubmitExpenses is the standalone expense-submit capability (p20.1),
 	// INDEPENDENT of txn_perm: a pure submitter has txn_perm='none' yet may submit
 	// expense reports. decide() (web) reads this to gate the ExpenseSubmit perm.
@@ -413,6 +417,10 @@ func (s *Store) UserByID(ctx context.Context, id int64) (CurrentUser, error) {
 	if row.DefaultSubsidiaryID.Valid {
 		v := row.DefaultSubsidiaryID.Int64
 		cu.DefaultSubsidiaryID = &v
+	}
+	if row.DefaultProgramID.Valid {
+		v := row.DefaultProgramID.Int64
+		cu.DefaultProgramID = &v
 	}
 	cu.CanSubmitExpenses = row.CanSubmitExpenses != 0
 	return cu, nil
@@ -467,6 +475,9 @@ type UserSettingsInput struct {
 	NegStyle            string
 	Theme               string
 	DefaultSubsidiaryID *int64
+	// DefaultProgramID is nil to CLEAR the preference; a non-nil id must reference an
+	// existing program (p26.5). Validated exactly like DefaultSubsidiaryID.
+	DefaultProgramID *int64
 }
 
 // UpdateUserSettings persists a user's personal preferences on the live row and
@@ -476,9 +487,9 @@ type UserSettingsInput struct {
 // ErrInvalidSetting) since the columns carry no DB CHECK; localeOK is the caller's
 // i18n.Langs membership test (keeping the store i18n-free). A non-nil
 // DefaultSubsidiaryID must reference an existing subsidiary (existence-checked so a
-// bad id is a clean 422, not an FK-triggered 500); nil clears it (NULL). The
-// version append is the same snapshot-from-live query CreateUser uses, so all seven
-// columns are captured.
+// bad id is a clean 422, not an FK-triggered 500); nil clears it (NULL). A non-nil
+// DefaultProgramID is existence-checked the same way (p26.5). The version append is
+// the same snapshot-from-live query CreateUser uses, so every column is captured.
 func (s *Store) UpdateUserSettings(ctx context.Context, userID int64, in UserSettingsInput, localeOK func(string) bool) error {
 	if !localeOK(in.Locale) ||
 		!validDateFormat(in.DateFormat) ||
@@ -498,6 +509,15 @@ func (s *Store) UpdateUserSettings(ctx context.Context, userID int64, in UserSet
 		}
 	}
 
+	if in.DefaultProgramID != nil {
+		if _, err := s.q.GetProgram(ctx, *in.DefaultProgramID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrInvalidSetting
+			}
+			return fmt.Errorf("verify default program %d: %w", *in.DefaultProgramID, err)
+		}
+	}
+
 	_, err := s.write(ctx, "user.settings", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			if err := q.UpdateUserSettings(ctx, sqlc.UpdateUserSettingsParams{
@@ -508,6 +528,7 @@ func (s *Store) UpdateUserSettings(ctx context.Context, userID int64, in UserSet
 				NegStyle:            in.NegStyle,
 				Theme:               in.Theme,
 				DefaultSubsidiaryID: nullInt64Ptr(in.DefaultSubsidiaryID),
+				DefaultProgramID:    nullInt64Ptr(in.DefaultProgramID),
 				ID:                  userID,
 			}); err != nil {
 				return fmt.Errorf("update settings: %w", err)

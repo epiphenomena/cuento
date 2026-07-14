@@ -32,6 +32,22 @@ function enhance(form) {
 
   const exp = 2; // expense amounts are 2-dp (like the txn grid); the server is authoritative.
 
+  // userProgram is the submitter's default_program (p26.5); '' / '0' = unset. Unlike the
+  // txn editor there is NO per-account default tier here, so it is the program prefill for
+  // every NEW/empty row. applyUserProgram sets a row's program select to it (when set and
+  // the row's program is still unset), then resyncs the combo overlay so the visible label
+  // matches. Never overrides a server-rendered existing-line program.
+  const userProgram = form.dataset.userProgram || '';
+  function applyUserProgram(rowEl) {
+    if (!userProgram || userProgram === '0') return;
+    const sel = rowEl.querySelector('.el-program');
+    if (!sel) return;
+    if (!sel.value || sel.value === '0') {
+      sel.value = userProgram;
+      resyncCombos(rowEl);
+    }
+  }
+
   // rowFieldValues reads the emptiness-relevant fields of a row (account/amount/memo);
   // fund/program defaults alone do NOT make a row non-empty (isRowEmpty's contract).
   function rowFieldValues(rowEl) {
@@ -85,6 +101,7 @@ function enhance(form) {
     tbody.appendChild(clone);
     syncCount();
     initCombos(clone); // enhance the clone's clean selects
+    applyUserProgram(clone); // p26.5: prefill the user's default program on the fresh row
   }
 
   // resetRow clears one row in place (values, selects, hidden line_id, error), then
@@ -101,6 +118,7 @@ function enhance(form) {
     const errCell = rowEl.querySelector('.el-row-error');
     if (errCell) errCell.textContent = '';
     resyncCombos(rowEl); // the selects were set directly -> refresh their overlay text
+    applyUserProgram(rowEl); // p26.5: re-seed the user's default program on the cleared row
   }
 
   // deleteRow removes the row (or resets it in place when it is the only row), then
@@ -152,6 +170,13 @@ function enhance(form) {
   // Enhance every combo select present on initial render / after a whole-form htmx swap
   // (subsidiary re-scope, 422 re-render). Idempotent.
   initCombos(form);
+
+  // p26.5: seed the user's default program on any EMPTY row present on load (the server's
+  // starter empty row) so a fresh grid opens with the preferred program. Non-empty existing
+  // lines keep their stored program (applyUserProgram only fills an unset program select).
+  tbody.querySelectorAll('.el-row').forEach((rowEl) => {
+    if (isRowEmpty(rowFieldValues(rowEl))) applyUserProgram(rowEl);
+  });
 
   // Guarantee the one-trailing-empty-row invariant on load (and after a 422 re-render
   // where the server dropped empties).

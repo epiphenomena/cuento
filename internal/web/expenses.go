@@ -243,6 +243,12 @@ type expenseDetailModel struct {
 	Funds    []txnOption
 	Programs []txnOption
 
+	// UserProgram is the submitter's default_program (p26.5); 0 = unset. The grid
+	// prefills it as the program on a NEW/empty row (there is no per-account default
+	// tier here, unlike the txn editor, so the user default applies unconditionally to
+	// fresh rows). Server-rendered existing lines keep their stored program.
+	UserProgram int64
+
 	// ErrorKey is a pre-localized page-level error (the zero-line submit case), "" =
 	// none. It is already run through {{t}} in the handler so the template renders it
 	// verbatim (like admin_user_detail's page-level error).
@@ -342,6 +348,17 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 			return expenseDetailModel{}, false
 		}
 		model.Accounts, model.Funds, model.Programs = accts, funds, progs
+		// p26.5: prefill the submitter's default program on new/empty rows, but only when
+		// it is one of the offered (active) program options -- a stale/inactive default
+		// must not select a non-existent <option>.
+		if up := derefID(userDefaultProgram(u)); up != 0 {
+			for _, p := range progs {
+				if p.ID == up {
+					model.UserProgram = up
+					break
+				}
+			}
+		}
 	}
 	for _, l := range lines {
 		row := expenseLineRow{

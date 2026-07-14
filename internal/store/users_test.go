@@ -172,12 +172,15 @@ func TestUpdateUserSettingsVersioned(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
-	// Root subsidiary is seeded id 1; use it as a valid default.
+	// Root subsidiary is seeded id 1; use it as a valid default. The seeded root
+	// program (id 1) is a valid default program.
 	rootSub := int64(1)
+	rootProg := int64(1)
 	in := UserSettingsInput{
 		Locale: "es", DateFormat: "EU", NumberFormat: "EU",
 		DisplayMode: "dr_cr", NegStyle: "parens", Theme: "dark",
 		DefaultSubsidiaryID: &rootSub,
+		DefaultProgramID:    &rootProg,
 	}
 	if err := s.UpdateUserSettings(ctx, id, in, okLocale); err != nil {
 		t.Fatalf("UpdateUserSettings: %v", err)
@@ -194,6 +197,9 @@ func TestUpdateUserSettingsVersioned(t *testing.T) {
 	}
 	if got.DefaultSubsidiaryID == nil || *got.DefaultSubsidiaryID != rootSub {
 		t.Fatalf("default subsidiary = %v, want %d", got.DefaultSubsidiaryID, rootSub)
+	}
+	if got.DefaultProgramID == nil || *got.DefaultProgramID != rootProg {
+		t.Fatalf("default program = %v, want %d", got.DefaultProgramID, rootProg)
 	}
 
 	// An op='update' version snapshot exists, tied to the acting actor (id 1).
@@ -216,8 +222,9 @@ func TestUpdateUserSettingsVersioned(t *testing.T) {
 		t.Errorf("version snapshot = (%q,%q), want (es,dr_cr)", vLocale, vDisplayMode)
 	}
 
-	// Clearing the default subsidiary (nil) persists a NULL.
+	// Clearing the default subsidiary + program (nil) persists a NULL.
 	in.DefaultSubsidiaryID = nil
+	in.DefaultProgramID = nil
 	if err := s.UpdateUserSettings(ctx, id, in, okLocale); err != nil {
 		t.Fatalf("UpdateUserSettings clear: %v", err)
 	}
@@ -227,6 +234,9 @@ func TestUpdateUserSettingsVersioned(t *testing.T) {
 	}
 	if got.DefaultSubsidiaryID != nil {
 		t.Errorf("default subsidiary = %v, want nil after clear", got.DefaultSubsidiaryID)
+	}
+	if got.DefaultProgramID != nil {
+		t.Errorf("default program = %v, want nil after clear", got.DefaultProgramID)
 	}
 }
 
@@ -258,6 +268,7 @@ func TestUpdateUserSettingsRejectsInvalid(t *testing.T) {
 		"neg_style":     func(i UserSettingsInput) UserSettingsInput { i.NegStyle = "XX"; return i },
 		"theme":         func(i UserSettingsInput) UserSettingsInput { i.Theme = "XX"; return i },
 		"default_sub":   func(i UserSettingsInput) UserSettingsInput { i.DefaultSubsidiaryID = &bad; return i },
+		"default_prog":  func(i UserSettingsInput) UserSettingsInput { i.DefaultProgramID = &bad; return i },
 	}
 	for name, mut := range cases {
 		if err := s.UpdateUserSettings(ctx, id, mut(base), okLocale); !errors.Is(err, ErrInvalidSetting) {

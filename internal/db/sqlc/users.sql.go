@@ -154,11 +154,11 @@ INSERT INTO users_versions
   (entity_id, change_id, valid_from, op,
    username, display_name, created_at, disabled_at, is_admin, txn_perm,
    locale, date_format, number_format, display_mode, neg_style, theme,
-   default_subsidiary_id, can_submit_expenses)
+   default_subsidiary_id, can_submit_expenses, default_program_id)
 SELECT u.id, c.id, c.at, ?,
        u.username, u.display_name, u.created_at, u.disabled_at, u.is_admin, u.txn_perm,
        u.locale, u.date_format, u.number_format, u.display_mode, u.neg_style, u.theme,
-       u.default_subsidiary_id, u.can_submit_expenses
+       u.default_subsidiary_id, u.can_submit_expenses, u.default_program_id
 FROM users u, changes c
 WHERE c.id = ? AND u.id = ?
 `
@@ -326,7 +326,7 @@ func (q *Queries) SetUserTxnPerm(ctx context.Context, arg SetUserTxnPermParams) 
 const updateUserSettings = `-- name: UpdateUserSettings :exec
 UPDATE users
 SET locale = ?, date_format = ?, number_format = ?, display_mode = ?,
-    neg_style = ?, theme = ?, default_subsidiary_id = ?
+    neg_style = ?, theme = ?, default_subsidiary_id = ?, default_program_id = ?
 WHERE id = ?
 `
 
@@ -338,6 +338,7 @@ type UpdateUserSettingsParams struct {
 	NegStyle            string
 	Theme               string
 	DefaultSubsidiaryID sql.NullInt64
+	DefaultProgramID    sql.NullInt64
 	ID                  int64
 }
 
@@ -357,6 +358,7 @@ func (q *Queries) UpdateUserSettings(ctx context.Context, arg UpdateUserSettings
 		arg.NegStyle,
 		arg.Theme,
 		arg.DefaultSubsidiaryID,
+		arg.DefaultProgramID,
 		arg.ID,
 	)
 	return err
@@ -365,7 +367,7 @@ func (q *Queries) UpdateUserSettings(ctx context.Context, arg UpdateUserSettings
 const userByID = `-- name: UserByID :one
 SELECT id, username, disabled_at, txn_perm, is_admin, locale, theme,
        date_format, number_format, display_mode, neg_style,
-       default_subsidiary_id, can_submit_expenses
+       default_subsidiary_id, can_submit_expenses, default_program_id
 FROM users
 WHERE id = ?
 `
@@ -384,6 +386,7 @@ type UserByIDRow struct {
 	NegStyle            string
 	DefaultSubsidiaryID sql.NullInt64
 	CanSubmitExpenses   int64
+	DefaultProgramID    sql.NullInt64
 }
 
 // Session-resolution lookup (p06.2): the middleware turns a stored user id back
@@ -416,6 +419,7 @@ func (q *Queries) UserByID(ctx context.Context, id int64) (UserByIDRow, error) {
 		&i.NegStyle,
 		&i.DefaultSubsidiaryID,
 		&i.CanSubmitExpenses,
+		&i.DefaultProgramID,
 	)
 	return i, err
 }

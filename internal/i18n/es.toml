@@ -147,6 +147,12 @@ other = "Subsidiaria predeterminada"
 other = "Ninguna"
 [settings.default_subsidiary_hint]
 other = "Se preselecciona como subsidiaria al iniciar una transaccion nueva."
+[settings.default_program]
+other = "Programa predeterminado"
+[settings.default_program_none]
+other = "Ninguno"
+[settings.default_program_hint]
+other = "Se rellena como programa en una linea nueva de ingreso o gasto, salvo que la cuenta tenga su propio programa predeterminado."
 [settings.date.iso]
 other = "ISO (2025-03-15)"
 [settings.date.us]

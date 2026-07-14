@@ -1,0 +1,22 @@
+-- +goose Up
+-- p26.5: per-user default program for new transactions. Forward-only; never edit an
+-- applied migration; no Down (AGENTS rule 4).
+--
+-- A personal preference mirroring default_subsidiary_id (00006): when set, the
+-- transaction editor (and expense grid) prefills the program on a NEW revenue/expense
+-- row from it, but ONLY when the chosen account has no default_program of its own
+-- (account default wins). It is a NULLABLE FK to programs -- nil = unset, so the
+-- fallback stays the fund/root program (D24).
+--
+-- This migration ALTERs users + users_versions to add default_program_id, following
+-- default_subsidiary_id EXACTLY: a nullable INTEGER, no NOT NULL, no default. Because
+-- both the live system-user row (id 1) and its pre-existing backfill version row
+-- (00006, change_id=2) take NULL by construction, NULL == NULL keeps Z3 clean without
+-- a new backfill row. The versions twin carries the column WITHOUT the FK REFERENCES
+-- (mirroring default_subsidiary_id in users_versions: an audit snapshot is not a live
+-- reference, 00006 line 68).
+--
+-- Keep this file PURE ASCII (sqlc reads migrations as its schema; the byte-offset
+-- quirk in docs/DECISIONS.md p04.2 applies here too).
+ALTER TABLE users ADD COLUMN default_program_id INTEGER REFERENCES programs(id);  -- nullable, no default
+ALTER TABLE users_versions ADD COLUMN default_program_id INTEGER;                 -- audited (rule 5); plain INTEGER, no FK, no default -> NULL keeps the 00006 backfill Z3-clean

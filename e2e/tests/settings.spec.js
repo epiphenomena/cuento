@@ -74,4 +74,41 @@ test.describe('my settings', () => {
     await page.waitForURL('**/settings?**');
     await expect(page.locator('main#main h1')).toHaveText('Settings');
   });
+
+  // p26.5: the default-program setting round-trips AND reaches the txn editor form as
+  // the data-user-program attribute (the client fallback tier gateRow uses to prefill a
+  // new R/E row's program when the account has no default_program of its own). The e2e
+  // db has only the seeded root program ("General", id 1). We pick it, save, assert the
+  // reloaded select keeps it, and assert the txn form carries data-user-program="1".
+  // Then restore to "none" (the seeded default) so the shared worker-scoped admin is
+  // left as found (a durable change would poison sibling tests in this worker).
+  test('default program round-trips and reaches the txn editor form', async ({ page, server }) => {
+    await login(page, server);
+
+    await page.goto('/settings');
+    await expect(page.locator('main#main h1')).toHaveText('Settings');
+
+    // Pick the seeded root program (value 1) as the default and save.
+    await page.locator('#setting-program').selectOption('1');
+    await page.locator('form.settings-form button[type="submit"]').click();
+    await page.waitForURL('**/settings?**');
+
+    // The reloaded select keeps the choice (persisted + echoed).
+    await expect(page.locator('#setting-program')).toHaveValue('1');
+
+    // The user default reaches the txn editor as data-user-program (gateRow's fallback
+    // tier). A fresh -dev db has no accounts, so we assert the plumbing (the attribute)
+    // rather than driving a full R/E row; the account-default -> user-default -> root
+    // prefill precedence itself is covered by the R/E-prefill txn-editor spec plus this
+    // attribute check (gateRow is DOM glue, exercised in-browser, not in the node suite).
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toHaveAttribute('data-user-program', '1');
+
+    // Restore: clear the default program back to "none" (seeded default) for siblings.
+    await page.goto('/settings');
+    await page.locator('#setting-program').selectOption('');
+    await page.locator('form.settings-form button[type="submit"]').click();
+    await page.waitForURL('**/settings?**');
+    await expect(page.locator('#setting-program')).toHaveValue('');
+  });
 });

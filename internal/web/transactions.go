@@ -118,6 +118,7 @@ type txnEditorModel struct {
 	Classes      []string // program|management|fundraising
 
 	RootProgram int64 // the program-defaulting fallback (D24)
+	UserProgram int64 // the user's default_program (p26.5); 0 = unset. Prefill tier BELOW an account's own default_program and ABOVE RootProgram.
 
 	// AutofillNotice is the i18n key shown when a payee template (p12.3) had splits
 	// dropped because their account is outside the selected subsidiary; "" = none.
@@ -680,6 +681,7 @@ func (s *server) newEditorModel(ctx context.Context, u *store.CurrentUser, sub i
 		DateFormat:    dateFormatCode(u),
 		Classes:       []string{"program", "management", "fundraising"},
 		FirstErrorRow: -1,
+		UserProgram:   derefID(userDefaultProgram(u)),
 	}
 
 	// Subsidiary select (all subs, tree order). The editor's currency defaults to the
@@ -749,6 +751,16 @@ func (s *server) newEditorModel(ctx context.Context, u *store.CurrentUser, sub i
 	}
 
 	return model, nil
+}
+
+// userDefaultProgram returns the user's default_program_id (p26.5), nil-safe: nil for
+// an anonymous request or an unset preference. Threaded to the client as data-user-program
+// so gateRow can use it as a program-prefill tier below the account's own default_program.
+func userDefaultProgram(u *store.CurrentUser) *int64 {
+	if u == nil {
+		return nil
+	}
+	return u.DefaultProgramID
 }
 
 // defaultSubsidiary resolves the editor's default header subsidiary: the user's

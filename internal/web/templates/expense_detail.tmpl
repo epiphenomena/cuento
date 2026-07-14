@@ -62,7 +62,7 @@
        fresh trailing empty row as the last row is edited; the server drops the trailing
        empty on save. This grid form is a SIBLING of the submit/discard forms below (no
        nested forms). */}}
-  <form method="post" action="/expenses/{{.ID}}/lines" id="expense-grid-form">
+  <form method="post" action="/expenses/{{.ID}}/lines" id="expense-grid-form" data-user-program="{{.UserProgram}}">
     <table class="expense-lines-table txn-grid">
       <thead>
         <tr>

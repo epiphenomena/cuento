@@ -153,6 +153,12 @@ other = "Default subsidiary"
 other = "None"
 [settings.default_subsidiary_hint]
 other = "Preselected as the subsidiary when you start a new transaction."
+[settings.default_program]
+other = "Default program"
+[settings.default_program_none]
+other = "None"
+[settings.default_program_hint]
+other = "Prefilled as the program on a new revenue or expense line, unless the account has its own default program."
 [settings.date.iso]
 other = "ISO (2025-03-15)"
 [settings.date.us]

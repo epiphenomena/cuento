@@ -165,6 +165,7 @@ func TestSettingsSavePersistsAndTakesEffect(t *testing.T) {
 		"neg_style":          {"parens"},
 		"theme":              {"dark"},
 		"default_subsidiary": {"1"}, // seeded root subsidiary
+		"default_program":    {"1"}, // seeded root program
 	}
 	rec := asUser(t, h, sm, uid, http.MethodPost, "/settings", form)
 	if rec.Code != http.StatusSeeOther {
@@ -188,6 +189,9 @@ func TestSettingsSavePersistsAndTakesEffect(t *testing.T) {
 	}
 	if cu.DefaultSubsidiaryID == nil || *cu.DefaultSubsidiaryID != 1 {
 		t.Errorf("default subsidiary not persisted: %v", cu.DefaultSubsidiaryID)
+	}
+	if cu.DefaultProgramID == nil || *cu.DefaultProgramID != 1 {
+		t.Errorf("default program not persisted: %v", cu.DefaultProgramID)
 	}
 
 	// The subsequent GET renders es chrome (locale took effect).
@@ -222,6 +226,35 @@ func TestSettingsRejectsCraftedInvalid(t *testing.T) {
 	}
 	if cu.NumberFormat != "US" {
 		t.Errorf("number_format = %q, want unchanged US (invalid POST must not persist)", cu.NumberFormat)
+	}
+}
+
+// TestSettingsRejectsInvalidProgram: a POST naming a non-existent default program is
+// answered 422 (the store's existence check maps to ErrInvalidSetting) and NOTHING is
+// persisted -- mirroring the default_subsidiary reject.
+func TestSettingsRejectsInvalidProgram(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	uid := mkUser(t, st, "progcrafter", "read", false)
+
+	form := url.Values{
+		"locale":          {"en"},
+		"date_format":     {"ISO"},
+		"number_format":   {"US"},
+		"display_mode":    {"signed"},
+		"neg_style":       {"minus"},
+		"theme":           {"auto"},
+		"default_program": {"999999"}, // no such program
+	}
+	rec := asUser(t, h, sm, uid, http.MethodPost, "/settings", form)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid-program POST status = %d, want 422", rec.Code)
+	}
+	cu, err := st.UserByID(context.Background(), uid)
+	if err != nil {
+		t.Fatalf("UserByID: %v", err)
+	}
+	if cu.DefaultProgramID != nil {
+		t.Errorf("default program = %v, want nil (invalid POST must not persist)", cu.DefaultProgramID)
 	}
 }
 
