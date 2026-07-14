@@ -198,6 +198,18 @@ button, input, select, textarea { font: inherit; color: inherit; }
 }
 .subnav-filters label { font-weight: 600; font-size: 0.9rem; }
 .subnav-filters .check { display: inline-flex; align-items: center; gap: var(--space-1); font-weight: 400; }
+/* p26.8: the date filters carry a fixed short character count — size them to a
+   10-char ISO date + padding so the whole bar collapses onto one line. Target
+   the input, not the .datefield-wrap datefield.js appends around it (widthing the
+   wrapper would squash the pick button). The text search is capped a touch, and
+   the selects size to their content. flex-wrap stays as the narrow-width fallback. */
+.subnav-filters .js-datefield { width: 8rem; }
+.subnav-filters #reg-text { width: 9rem; }
+/* Cap the fund/sub/program selects so a long option label can't blow the bar to a
+   second line; the chosen value truncates within the box. */
+.subnav-filters select { width: auto; max-width: 9rem; }
+/* Tighten the inter-control gap so the whole bar fits one desktop line. */
+.subnav-filters { gap: var(--space-1) var(--space-2); }
 .subnav-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
 .app-subnav-controls .btn { padding: var(--space-1) var(--space-3); font-size: 0.9rem; }
 .app-subnav ul {
@@ -536,6 +548,71 @@ input[aria-invalid="true"] {
 .recon-diff.is-zero dd { color: var(--color-success, green); }
 .recon-diff-hint { margin-top: var(--space-2); }
 .recon-finalize-form { margin-top: var(--space-3); }
+
+/* ------------------------------------------------------------------ *
+ * p26.8 account register readability. The register table had no styling of
+ * its own (it fell back to raw browser defaults), so it read poorly: no cell
+ * padding, no zebra, and the flexible text columns pushed the fixed-width
+ * date/amount/balance columns into multi-line wraps.
+ *
+ * Auto table-layout (NOT fixed): the sub/fund/recon columns are conditionally
+ * rendered and the <thead> cells carry no width classes, so any positional
+ * width scheme is fragile — everything is driven by the per-td classes instead.
+ * Strict-CSP-safe: all styles here, none inline (rule 12).
+ * ------------------------------------------------------------------ */
+.register-table { width: 100%; border-collapse: collapse; margin-top: var(--space-4); }
+.register-table th, .register-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border);
+  text-align: left;
+}
+/* Amounts right-aligned with tabular figures (extend the shared .amount rule to
+   this table — the .report-table/.recon-table rules don't reach here). */
+.register-table th.amount, .register-table td.amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Compact columns: fixed, tabular, or badge/action content that never needs to
+   wrap. width:1% + nowrap pins each to its content width under auto layout. */
+.register-table .reg-date,
+.register-table .reg-amount,
+.register-table .reg-running,
+.register-table .reg-sub,
+.register-table .reg-fund,
+.register-table .reg-recon,
+.register-table .reg-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+/* Keep the per-row action links from wrapping into a tall stack. */
+.register-table .reg-actions { display: flex; gap: var(--space-3); }
+
+/* Flexible text columns: take the remaining width, truncate with ellipsis
+   rather than wrap. The max-width is the bound the ellipsis needs to trigger. */
+.register-table .reg-payee,
+.register-table .reg-memo,
+.register-table .reg-counter {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Zebra striping on data rows only (the sentinel + empty rows aren't .reg-row,
+   so they're excluded). Hover rule follows the zebra rule so it wins on even
+   rows (equal specificity — source order decides). */
+.register-table .reg-row:nth-child(even) { background: var(--color-surface-alt); }
+/* Hover: a saturated left-accent (inset shadow, no reflow) plus a surface tint.
+   The neutral surface tokens are all near-white / near-navy by design, so a
+   neutral bg swap alone reads as almost-invisible on odd rows in light mode and
+   runs backwards on even rows in dark mode; the accent bar is distinct against
+   every neutral background in both themes. Rule follows the zebra rule so it
+   wins on even rows (equal specificity — source order decides). */
+.register-table .reg-row:hover {
+  background: var(--color-surface);
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
 
 /* ------------------------------------------------------------------ *
  * p23.2 transaction editor — the high-traffic data-entry screen.
