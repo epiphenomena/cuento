@@ -295,6 +295,16 @@ func (s *server) routes() []Route {
 		// 8). (p26.3 removed /payees/suggest: the header payee is now a client-side combo
 		// filtering the full payee list, so the server suggest fragment is dead code.)
 		{http.MethodGet, "/payees/{id}/template", TxnWrite, http.HandlerFunc(s.payeeTemplate)},
+		// p26.18 per-split description autofill (step 4a of the payee->description
+		// migration). Two TxnWrite routes feeding the ENTRY grids (matching the editor
+		// GET forms -- they exist only to author an entry): GET /descriptions/suggest?q=
+		// &sub= renders the ranked distinct-description listbox fragment; GET
+		// /descriptions/prefill?q=<exact>&sub= renders one matched split's fields as
+		// data-* for per-ROW prefill (replacing the whole-grid payee template). The 4b UI
+		// step wires the grids to these. The permission-matrix test picks them up
+		// automatically (rule 8); both answer 2xx on a blank/no-match query.
+		{http.MethodGet, "/descriptions/suggest", TxnWrite, http.HandlerFunc(s.descriptionsSuggest)},
+		{http.MethodGet, "/descriptions/prefill", TxnWrite, http.HandlerFunc(s.descriptionsPrefill)},
 		// p12.5 funds workspace (Appendix B/F). Fund GRANTS are BOOKKEEPING data
 		// (D20, managed like programs), so GET (list + statement) is TxnRead and the
 		// create/edit/close/reopen mutations are TxnWrite -- subsidiaries/users stay

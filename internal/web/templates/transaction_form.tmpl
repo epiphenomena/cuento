@@ -121,6 +121,37 @@
 <span id="txn-autofill-notice" hx-swap-oob="true" class="txn-autofill-notice"{{if not .AutofillNotice}} hidden{{end}}>{{if .AutofillNotice}}{{t .AutofillNotice}}{{end}}</span>
 {{- end}}
 
+{{/* desc-suggest: the p26.18 per-split description autocomplete fragment. A list of
+     ranked DISTINCT descriptions (GET /descriptions/suggest?q=&sub=), most-recently
+     -used first, sub-preferred. Each <li class="desc-suggestion" role="option"
+     data-description> carries the full description on data-description (the visible
+     text mirrors it). Empty/blank q -> no <li> children (an empty listbox). The 4b
+     UI step targets this from BOTH the txn grid and the expense grid, so it is
+     self-contained (no editor-model chrome). Model: descSuggestModel (.Suggestions
+     []string). Mirrors the old payee-suggest shape so the client glue is familiar. */ -}}
+{{define "desc-suggest" -}}
+<ul class="desc-suggestions" role="listbox">{{range .Suggestions}}
+<li class="desc-suggestion" role="option" data-description="{{.}}">{{.}}</li>{{end}}
+</ul>
+{{- end}}
+
+{{/* desc-prefill: the p26.18 per-ROW prefill fragment (GET /descriptions/prefill?q=
+     &sub=). A single element carrying the most-recent matching split's fields as
+     data-* attributes: account, amount (signed, user's number format, the matched
+     split's currency), fund, program, functional class, memo. The 4b UI step reads
+     these and fills the row's inputs when the row is otherwise empty. No match ->
+     the SAME element with NO data-* attributes (data-found="0"), which the client
+     detects as "nothing to prefill". Model: descPrefillModel. account/fund/program
+     ids may be inactive / out-of-sub -- returned regardless (the editor's p26.10
+     injection + save guard handle display/validation). */ -}}
+{{define "desc-prefill" -}}
+{{if .Found -}}
+<div id="desc-prefill" data-found="1" data-account="{{.AccountID}}" data-amount="{{.AmountInput}}" data-fund="{{.FundID}}" data-program="{{.ProgramID}}" data-class="{{.Class}}" data-memo="{{.Memo}}"></div>
+{{- else -}}
+<div id="desc-prefill" data-found="0"></div>
+{{- end}}
+{{- end}}
+
 {{/* transaction-form: the single-sourced form region. Rendered inside the full page
      AND written alone at 422 on a validation error (the p10.3 convention). The model
      is a shellPage whose .Page is the txnEditorModel. */ -}}
