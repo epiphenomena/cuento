@@ -399,6 +399,83 @@ func TestRegisterCounterAccount(t *testing.T) {
 	}
 }
 
+// TestRegisterParentRollupCounterAccount proves the p26.6 rollup path at the WEB
+// layer: a PLACEHOLDER (parent) register lists its descendant leaves' splits, and
+// each row's COUNTER-ACCOUNT names the actual OTHER leaf -- resolved against the
+// row's OWN account, NOT the parent. An intra-parent transfer surfaces one txn as
+// two rows whose counters differ (each names the sibling leaf); a counter cache
+// keyed on txn alone would collapse them to one wrong value.
+func TestRegisterParentRollupCounterAccount(t *testing.T) {
+	e := newRegEnv(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// Parent "Cash" (placeholder) with two leaf children BOA + WF, all in subA.
+	parent, err := e.st.CreateAccount(ctx, store.CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{e.subA},
+	})
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	boa, err := e.st.CreateAccount(ctx, store.CreateAccountInput{
+		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "BOA"}, Subsidiaries: []int64{e.subA},
+	})
+	if err != nil {
+		t.Fatalf("create BOA: %v", err)
+	}
+	wf, err := e.st.CreateAccount(ctx, store.CreateAccountInput{
+		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "WF"}, Subsidiaries: []int64{e.subA},
+	})
+	if err != nil {
+		t.Fatalf("create WF: %v", err)
+	}
+
+	// An intra-parent transfer BOA -> WF (both children of the parent): DR WF, CR BOA.
+	txn, err := e.st.PostTransaction(ctx, store.PostTransactionInput{
+		Date: "2025-01-05", SubsidiaryID: e.subA, Currency: "USD",
+		Splits: []store.SplitInput{
+			{AccountID: wf, Amount: 300, Position: 0},
+			{AccountID: boa, Amount: -300, Position: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("post transfer: %v", err)
+	}
+	splits, err := e.st.TransactionSplits(ctx, txn)
+	if err != nil {
+		t.Fatalf("splits: %v", err)
+	}
+	var boaSplit, wfSplit int64
+	for _, sp := range splits {
+		switch sp.AccountID {
+		case boa:
+			boaSplit = sp.ID
+		case wf:
+			wfSplit = sp.ID
+		}
+	}
+
+	rows, _, _, err := registerRows(ctx, e.st, parent, store.RegisterCursor{}, store.RegisterFilters{}, 0, "en", formatOptsFor(nil))
+	if err != nil {
+		t.Fatalf("registerRows(parent): %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("parent rows=%d want 2 (both descendant leaf splits): %+v", len(rows), rows)
+	}
+	bySplit := map[int64]regRow{}
+	for _, r := range rows {
+		bySplit[r.SplitID] = r
+	}
+	// The BOA row's counter is the OTHER leaf, WF (not "Cash", not "BOA").
+	if r := bySplit[boaSplit]; r.CounterAccount != "WF" || r.IsSplit {
+		t.Errorf("BOA row counter = %q (isSplit %v), want %q", r.CounterAccount, r.IsSplit, "WF")
+	}
+	// The WF row's counter is the OTHER leaf, BOA -- proving the counter is resolved
+	// per-row-account (a txn-only cache would collapse both to one wrong value).
+	if r := bySplit[wfSplit]; r.CounterAccount != "BOA" || r.IsSplit {
+		t.Errorf("WF row counter = %q (isSplit %v), want %q", r.CounterAccount, r.IsSplit, "BOA")
+	}
+}
+
 // TestRegisterFundChip: a restricted (non-NULL fund) split names the fund; an
 // unrestricted split has no fund name (no chip).
 func TestRegisterFundChip(t *testing.T) {

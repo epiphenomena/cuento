@@ -675,6 +675,116 @@ func TestRegisterFilters(t *testing.T) {
 	}
 }
 
+// TestRegisterParentRollup proves p26.6: a PLACEHOLDER (parent) account's register
+// rolls up ALL its descendant leaf splits into one merged, date-ordered sequence
+// with a single combined running balance per currency. A parent cannot hold its own
+// splits (ErrPlaceholderAccount + ledger Z2), so its register is otherwise empty.
+func TestRegisterParentRollup(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	ctx := mutCtx()
+
+	sub := newSub(t, s, rootID, "US")
+	grant := mkFund(t, s, "Grant A", []int64{sub}, nil)
+
+	// Parent "Cash" with two leaf children BOA + WF, all mapped to sub. The children
+	// hold the splits; the parent is a placeholder.
+	parent, err := s.CreateAccount(ctx, CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Cash"), Subsidiaries: []int64{sub},
+	})
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	boa, err := s.CreateAccount(ctx, CreateAccountInput{
+		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: enName("BOA"), Subsidiaries: []int64{sub},
+	})
+	if err != nil {
+		t.Fatalf("create BOA: %v", err)
+	}
+	wf, err := s.CreateAccount(ctx, CreateAccountInput{
+		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: enName("WF"), Subsidiaries: []int64{sub},
+	})
+	if err != nil {
+		t.Fatalf("create WF: %v", err)
+	}
+	// An unrelated revenue leaf (the counter side of receipts).
+	contrib := mkAcct(t, s, "revenue", "Contributions", []int64{sub}, nil, nil)
+	root := rootProgramID
+
+	e := balEnv{t: t, s: s, d: d, ctx: ctx}
+
+	// R1 2025-01-05: BOA +10000 (grant), contrib -10000.
+	_, boa1 := e.post(t, "2025-01-05", sub, "USD", "",
+		split{boa, 10000, &grant, nil, nil},
+		split{contrib, -10000, &grant, &root, nil})
+	// R2 2025-02-10: WF +5000, contrib -5000.
+	_, wf1 := e.post(t, "2025-02-10", sub, "USD", "",
+		split{wf, 5000, nil, nil, nil},
+		split{contrib, -5000, nil, &root, nil})
+	// R3 2025-03-01: an intra-parent transfer BOA -> WF (both children of the parent),
+	// same txn. In the parent register this txn appears as TWO rows (one per child) whose
+	// counter-accounts differ (each names the OTHER leaf). BOA -3000, WF +3000.
+	_, r3 := e.postN(t, "2025-03-01", sub, "USD", "",
+		split{boa, -3000, nil, nil, nil},
+		split{wf, 3000, nil, nil, nil})
+	boa2, wf2 := r3[0], r3[1]
+
+	// Parent register: merged, date-ordered, single running balance per currency.
+	page, _, more, err := s.RegisterPage(ctx, parent, firstPage, noFilter, 0)
+	if err != nil {
+		t.Fatalf("parent RegisterPage: %v", err)
+	}
+	if more {
+		t.Errorf("more = true, want false")
+	}
+	// Merged order by (date, split_id): boa1(01-05), wf1(02-10), boa2(03-01), wf2(03-01).
+	// boa2 before wf2 on the same date (smaller split id). Running balance accumulates
+	// across the merged descendant sequence, not per-account.
+	want := []struct {
+		split, amount, running, acct int64
+	}{
+		{boa1, 10000, 10000, boa},
+		{wf1, 5000, 15000, wf},
+		{boa2, -3000, 12000, boa},
+		{wf2, 3000, 15000, wf},
+	}
+	if len(page) != len(want) {
+		t.Fatalf("parent page = %d rows, want %d: %+v", len(page), len(want), page)
+	}
+	for i, w := range want {
+		r := page[i]
+		if r.SplitID != w.split || r.Amount != w.amount || r.RunningBalance != w.running || r.AccountID != w.acct {
+			t.Errorf("row %d = {split %d amt %d run %d acct %d}, want {split %d amt %d run %d acct %d}",
+				i, r.SplitID, r.Amount, r.RunningBalance, r.AccountID,
+				w.split, w.amount, w.running, w.acct)
+		}
+	}
+
+	// A fund filter still narrows: only the grant-tagged BOA split (R1) remains.
+	fp, _, _, err := s.RegisterPage(ctx, parent, firstPage, RegisterFilters{FundID: &grant}, 0)
+	if err != nil {
+		t.Fatalf("parent fund filter: %v", err)
+	}
+	if len(fp) != 1 || fp[0].SplitID != boa1 || fp[0].RunningBalance != 10000 {
+		t.Fatalf("parent fund page = %+v, want [boa1 run 10000]", fp)
+	}
+
+	// A LEAF register is unchanged: BOA alone sees only its own two splits.
+	lp, _, _, err := s.RegisterPage(ctx, boa, firstPage, noFilter, 0)
+	if err != nil {
+		t.Fatalf("leaf RegisterPage: %v", err)
+	}
+	if len(lp) != 2 || lp[0].SplitID != boa1 || lp[1].SplitID != boa2 {
+		t.Fatalf("leaf page = %+v, want [boa1, boa2]", lp)
+	}
+	if lp[0].RunningBalance != 10000 || lp[1].RunningBalance != 7000 {
+		t.Errorf("leaf running = [%d,%d], want [10000,7000]", lp[0].RunningBalance, lp[1].RunningBalance)
+	}
+	if lp[0].AccountID != boa || lp[1].AccountID != boa {
+		t.Errorf("leaf rows account = [%d,%d], want both %d", lp[0].AccountID, lp[1].AccountID, boa)
+	}
+}
+
 // ============================ deleted exclusion ==========================
 
 // TestDeletedTransactionExcluded proves T7 (soft-deleted) is absent from EVERY

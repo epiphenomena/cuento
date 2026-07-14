@@ -73,4 +73,78 @@ test.describe('account register', () => {
     await expect(page).toHaveURL(registerUrl);
     await expect(page.locator('#register-results table.register-table')).toBeVisible();
   });
+
+  // p26.6: a PLACEHOLDER (parent) account's register rolls up the transactions of
+  // its descendant leaf accounts, with a single combined running balance. Build a
+  // parent "Cash P26" with two leaf children, post a transfer between the children,
+  // then open the PARENT register and see both child rows + the running balance.
+  test('parent-account register rolls up descendant transactions', async ({ page, server }) => {
+    await login(page, server);
+
+    // The parent placeholder (an asset with no parent, mapped to the root sub).
+    await createAccount(page, { name: 'Cash P26', type: 'asset' });
+    // Two leaf children under it (selecting the parent makes Cash P26 a placeholder).
+    await createAccount(page, { name: 'BOA P26', type: 'asset', parent: 'Cash P26' });
+    await createAccount(page, { name: 'WF P26', type: 'asset', parent: 'Cash P26' });
+
+    // Post a balanced transfer BOA P26 -> WF P26 (DR WF 12.00 / CR BOA 12.00) via the
+    // real editor, opened from the WF leaf register.
+    await page.goto('/accounts');
+    await page.locator('tr.acct-row', { hasText: 'WF P26' })
+      .getByRole('link', { name: 'WF P26' }).click();
+    await page.waitForURL('**/register');
+    await page.getByRole('link', { name: /new transaction/i }).click();
+    await page.waitForURL('**/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    // p26.1: the split <option> label is the dotted ancestor path (Parent.Leaf), so a
+    // child account is selected by its full path, not its bare name.
+    await page.locator('#txn-account-0').selectOption({ label: 'Cash P26.WF P26' });
+    await page.locator('#txn-amount-0').fill('12.00');
+    await page.locator('#txn-account-1').selectOption({ label: 'Cash P26.BOA P26' });
+    await page.locator('#txn-amount-1').fill('-12.00');
+    await page.locator('#txn-memo').fill('rollup transfer');
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL('**/register**');
+
+    // Open the PARENT register. A leaf holds the splits; the parent register must show
+    // BOTH descendant rows (one per child) rolled up, even though the parent itself
+    // holds no splits.
+    await page.goto('/accounts');
+    await page.locator('tr.acct-row', { hasText: 'Cash P26' })
+      .getByRole('link', { name: 'Cash P26' }).click();
+    await page.waitForURL('**/register');
+
+    const table = page.locator('table.register-table');
+    await expect(table).toBeVisible();
+    // Two rolled-up rows (the transfer appears once per child leaf).
+    await expect(page.locator('tr.reg-row')).toHaveCount(2);
+    // The transfer memo and both amounts are present.
+    await expect(table).toContainText('rollup transfer');
+    await expect(table).toContainText('12.00');
+    // The combined running balance reaches 0.00 (BOA -12 then WF +12 net to zero) --
+    // present in the running-balance column of the last merged row.
+    await expect(table).toContainText('0.00');
+  });
 });
+
+// createAccount opens the inline chart-of-accounts form and creates one account,
+// optionally under a named parent (the #af-parent select), then reloads /accounts.
+// Mirrors the p25.1 flow used across the register/txn specs.
+async function createAccount(page, { name, type, parent }) {
+  await page.goto('/accounts');
+  await page.getByRole('button', { name: /new account/i }).click();
+  await expect(page.locator('#af-name-en')).toBeVisible();
+  await page.locator('#af-name-en').fill(name);
+  if (type) {
+    await page.locator('#af-type').selectOption(type);
+  }
+  if (parent) {
+    await page.locator('#af-parent').selectOption({ label: parent });
+  }
+  const rootSub = page.locator('input[name="sub_1"]');
+  if (!(await rootSub.isChecked())) {
+    await rootSub.check();
+  }
+  await saveAndReload(page, { reloadPath: '/accounts' });
+  await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
+}

@@ -41,8 +41,10 @@ async function createAsset(page, name) {
 // postTransfer opens the editor from the source account's register and posts a
 // balanced 2-split transfer (DR dst amt / CR src amt), landing back on a register.
 async function postTransfer(page, srcName, dstName, amt) {
+  // p25.1: the account NAME is the register link (the dedicated "Register" link was
+  // removed). Click the name link scoped to this account's row.
   const row = page.locator('tr.acct-row', { hasText: srcName });
-  await row.getByRole('link', { name: /^register$/i }).click();
+  await row.getByRole('link', { name: srcName }).click();
   await page.waitForURL('**/register');
   await page.getByRole('link', { name: /new transaction/i }).click();
   await page.waitForURL('**/transactions/new');
@@ -66,7 +68,7 @@ test.describe('transaction history / void / duplicate', () => {
     // Go to the source register and edit the transaction via the row action.
     await page.goto('/accounts');
     await page.locator('tr.acct-row', { hasText: 'Hist Checking' })
-      .getByRole('link', { name: /^register$/i }).click();
+      .getByRole('link', { name: 'Hist Checking' }).click();
     await page.waitForURL('**/register');
     await page.locator('tr.reg-row').first()
       .getByRole('link', { name: /^edit$/i }).click();
@@ -82,7 +84,7 @@ test.describe('transaction history / void / duplicate', () => {
     // edited memo value.
     await page.goto('/accounts');
     await page.locator('tr.acct-row', { hasText: 'Hist Checking' })
-      .getByRole('link', { name: /^register$/i }).click();
+      .getByRole('link', { name: 'Hist Checking' }).click();
     await page.waitForURL('**/register');
     await page.locator('tr.reg-row').first()
       .getByRole('link', { name: /^history$/i }).click();
@@ -104,7 +106,7 @@ test.describe('transaction history / void / duplicate', () => {
     // The transfer is in the source register.
     await page.goto('/accounts');
     await page.locator('tr.acct-row', { hasText: 'Void Checking' })
-      .getByRole('link', { name: /^register$/i }).click();
+      .getByRole('link', { name: 'Void Checking' }).click();
     await page.waitForURL('**/register');
     await expect(page.locator('table.register-table')).toContainText('40.00');
 
@@ -118,7 +120,7 @@ test.describe('transaction history / void / duplicate', () => {
     // Back on the chart of accounts; the source register no longer shows the txn.
     await page.waitForURL('**/accounts');
     await page.locator('tr.acct-row', { hasText: 'Void Checking' })
-      .getByRole('link', { name: /^register$/i }).click();
+      .getByRole('link', { name: 'Void Checking' }).click();
     await page.waitForURL('**/register');
     await expect(page.locator('table.register-table')).not.toContainText('40.00');
   });
@@ -131,7 +133,7 @@ test.describe('transaction history / void / duplicate', () => {
 
     await page.goto('/accounts');
     await page.locator('tr.acct-row', { hasText: 'Dup Checking' })
-      .getByRole('link', { name: /^register$/i }).click();
+      .getByRole('link', { name: 'Dup Checking' }).click();
     await page.waitForURL('**/register');
     await page.locator('tr.reg-row').first()
       .getByRole('link', { name: /^duplicate$/i }).click();

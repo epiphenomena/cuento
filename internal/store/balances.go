@@ -253,6 +253,7 @@ type RegisterRow struct {
 	Date            string
 	SubsidiaryID    int64
 	Currency        string
+	AccountID       int64 // the split's OWN account (a descendant leaf for a parent rollup)
 	Amount          int64 // signed minor units (net-debit, D2)
 	FundID          *int64
 	ProgramID       *int64
@@ -266,7 +267,14 @@ type RegisterRow struct {
 // RegisterPage returns one page of the register for accountID, ascending by the
 // total order (Date, SplitID), with a per-currency running balance computed by a
 // window function over the WHOLE filtered set (so the running balance continues
-// correctly across pages, never restarting). Keyset paging is applied here in Go
+// correctly across pages, never restarting). When accountID is a PLACEHOLDER
+// (parent) account the query rolls up the splits of ALL its descendant leaf
+// accounts (p26.6): the SQL closes a recursive descendant set over the account tree
+// (base = accountID itself, so a LEAF sees only its own splits -- unchanged) and the
+// window then accumulates ONE combined running balance across the merged, date-
+// ordered descendant sequence. Each row carries its own AccountID so the caller
+// resolves the counter-account against the actual leaf, not the parent. Keyset
+// paging is applied here in Go
 // (see balances.sql RegisterPage for why it cannot live in SQL over the windowed
 // CTE): the query returns the full filtered/windowed/ordered set; this method
 // seeks past cursor and returns up to limit rows plus the next cursor.
@@ -343,6 +351,7 @@ func (s *Store) RegisterPage(
 			Date:            r.Date,
 			SubsidiaryID:    r.SubsidiaryID,
 			Currency:        r.Currency,
+			AccountID:       r.AccountID,
 			Amount:          r.Amount,
 			FundID:          nullInt64ToPtr(r.FundID),
 			ProgramID:       nullInt64ToPtr(r.ProgramID),

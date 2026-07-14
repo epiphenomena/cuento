@@ -471,10 +471,15 @@ func (q *Queries) ProgramActivity(ctx context.Context, arg ProgramActivityParams
 }
 
 const registerPage = `-- name: RegisterPage :many
-WITH filtered AS (
+WITH RECURSIVE des(id) AS (
+  SELECT a.id FROM accounts a WHERE a.id = ?
+  UNION ALL
+  SELECT a.id FROM accounts a JOIN des ON a.parent_id = des.id
+),
+filtered AS (
   SELECT sp.id AS split_id, t.id AS txn_id, t.date, t.subsidiary_id,
-         t.currency, sp.amount, sp.fund_id, sp.program_id, sp.functional_class,
-         sp.memo AS split_memo, t.memo AS txn_memo, t.payee_id,
+         t.currency, sp.account_id, sp.amount, sp.fund_id, sp.program_id,
+         sp.functional_class, sp.memo AS split_memo, t.memo AS txn_memo, t.payee_id,
          CAST(SUM(sp.amount) OVER (
            PARTITION BY t.currency
            ORDER BY t.date, sp.id
@@ -483,7 +488,7 @@ WITH filtered AS (
   FROM splits sp
   JOIN transactions t ON t.id = sp.transaction_id
   LEFT JOIN payees py ON py.id = t.payee_id
-  WHERE sp.account_id = ?
+  WHERE sp.account_id IN (SELECT id FROM des)
     AND t.deleted = 0
     AND (? = 0 OR t.date >= ?)
     AND (? = 0 OR t.date <= ?)
@@ -492,7 +497,7 @@ WITH filtered AS (
     AND (? = 0 OR t.subsidiary_id = ?)
     AND (? = 0 OR sp.program_id = ?)
 )
-SELECT split_id, txn_id, date, subsidiary_id, currency, amount, fund_id,
+SELECT split_id, txn_id, date, subsidiary_id, currency, account_id, amount, fund_id,
        program_id, functional_class, split_memo, txn_memo, payee_id,
        running_balance
 FROM filtered
@@ -523,6 +528,7 @@ type RegisterPageRow struct {
 	Date            string
 	SubsidiaryID    int64
 	Currency        string
+	AccountID       int64
 	Amount          int64
 	FundID          sql.NullInt64
 	ProgramID       sql.NullInt64
@@ -595,6 +601,7 @@ func (q *Queries) RegisterPage(ctx context.Context, arg RegisterPageParams) ([]R
 			&i.Date,
 			&i.SubsidiaryID,
 			&i.Currency,
+			&i.AccountID,
 			&i.Amount,
 			&i.FundID,
 			&i.ProgramID,

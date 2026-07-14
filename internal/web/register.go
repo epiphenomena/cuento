@@ -102,18 +102,28 @@ func registerRows(
 	}
 	df := dateFormatForLang(ctx)
 
-	// Counter-accounts: resolved per distinct txn on the page (bounded by page size).
-	counters := make(map[int64]counterAccount, len(page))
+	// Counter-accounts: resolved per (txn, row-account) on the page (bounded by page
+	// size). For a parent-account rollup (p26.6) one txn can appear as several rows --
+	// e.g. an intra-parent transfer between two descendant leaves -- whose counter-
+	// accounts differ (each names the OTHER leaf), so the cache key is the row's OWN
+	// account, not the txn alone. For a leaf register the row account is constant, so
+	// this degrades to the previous per-txn behavior.
+	type counterKey struct {
+		txnID int64
+		acct  int64
+	}
+	counters := make(map[counterKey]counterAccount, len(page))
 
 	rows = make([]regRow, 0, len(page))
 	for _, r := range page {
-		ca, ok := counters[r.TxnID]
+		ck := counterKey{txnID: r.TxnID, acct: r.AccountID}
+		ca, ok := counters[ck]
 		if !ok {
-			ca, err = resolveCounterAccount(ctx, st, r.TxnID, accountID, names)
+			ca, err = resolveCounterAccount(ctx, st, r.TxnID, r.AccountID, names)
 			if err != nil {
 				return nil, store.RegisterCursor{}, false, err
 			}
-			counters[r.TxnID] = ca
+			counters[ck] = ca
 		}
 
 		memo := r.SplitMemo
