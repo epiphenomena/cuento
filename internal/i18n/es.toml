@@ -814,6 +814,8 @@ other = "Nota"
 other = "Observaciones"
 [txn.account.choose]
 other = "Elija una cuenta"
+[txn.account.unavailable_suffix]
+other = "(no disponible)"
 [txn.fund.unrestricted]
 other = "Fondo General sin restriccion"
 [txn.fund.apply_all]

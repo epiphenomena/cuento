@@ -142,6 +142,89 @@ func TestAccountEditorOptionsPath(t *testing.T) {
 	}
 }
 
+// TestAccountEditorOptionsIncludeInactive: an inactive leaf is normally SKIPPED by
+// AccountEditorOptions, but AccountEditorOptionsWith(include=[id]) appends it as an
+// Unavailable option (marked) carrying its real name/path/type so the editor can
+// display a split whose account was deactivated after the split was posted (the
+// display-only "missing accounts" bug, p26.10). The normal call (no include) still
+// omits it, so a NEW transaction's option set is unchanged.
+func TestAccountEditorOptionsIncludeInactive(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	// A top-level leaf, then deactivate it.
+	acct, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Old Cash"), Subsidiaries: []int64{rootID},
+	})
+	if err != nil {
+		t.Fatalf("create acct: %v", err)
+	}
+	if err := s.DeactivateAccount(mutCtx(), acct); err != nil {
+		t.Fatalf("deactivate acct: %v", err)
+	}
+
+	// Normal call: the inactive leaf is NOT offered.
+	plain, err := s.AccountEditorOptions(mutCtx(), "en", rootID)
+	if err != nil {
+		t.Fatalf("AccountEditorOptions: %v", err)
+	}
+	for _, o := range plain {
+		if o.ID == acct {
+			t.Fatalf("inactive account %d offered in the plain option set", acct)
+		}
+	}
+
+	// Include the inactive account: it appears, marked Unavailable, with real metadata.
+	withInc, err := s.AccountEditorOptionsWith(mutCtx(), "en", rootID, []int64{acct})
+	if err != nil {
+		t.Fatalf("AccountEditorOptionsWith: %v", err)
+	}
+	var found *AccountEditorOption
+	for i := range withInc {
+		if withInc[i].ID == acct {
+			found = &withInc[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("included inactive account %d missing from the option set", acct)
+	}
+	if !found.Unavailable {
+		t.Errorf("included inactive account %d not marked Unavailable", acct)
+	}
+	if found.Name != "Old Cash" || found.Path != "Old Cash" {
+		t.Errorf("included account name/path = %q/%q, want %q/%q", found.Name, found.Path, "Old Cash", "Old Cash")
+	}
+	if found.Type != "asset" {
+		t.Errorf("included account type = %q, want asset", found.Type)
+	}
+
+	// Including an id ALREADY in the set (an active leaf) does not duplicate it and
+	// does not mark it Unavailable.
+	active, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Live Cash"), Subsidiaries: []int64{rootID},
+	})
+	if err != nil {
+		t.Fatalf("create active: %v", err)
+	}
+	withActive, err := s.AccountEditorOptionsWith(mutCtx(), "en", rootID, []int64{active})
+	if err != nil {
+		t.Fatalf("AccountEditorOptionsWith(active): %v", err)
+	}
+	n := 0
+	for _, o := range withActive {
+		if o.ID == active {
+			n++
+			if o.Unavailable {
+				t.Errorf("active account %d wrongly marked Unavailable", active)
+			}
+		}
+	}
+	if n != 1 {
+		t.Errorf("active included account appears %d times, want exactly 1", n)
+	}
+}
+
 // TestSubsidiaryFilter: Tree(lang, &sub) returns only accounts mapped to the
 // selected subsidiary -- the chart-of-accounts subsidiary filter. An account
 // mapped only to a different sub is dropped; one mapped to the selected sub is

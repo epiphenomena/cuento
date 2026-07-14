@@ -820,6 +820,8 @@ other = "Memo"
 other = "Notes"
 [txn.account.choose]
 other = "Choose an account"
+[txn.account.unavailable_suffix]
+other = "(unavailable)"
 [txn.fund.unrestricted]
 other = "Unrestricted General"
 [txn.fund.apply_all]

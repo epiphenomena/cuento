@@ -167,6 +167,41 @@ function enhance(form) {
     if (rowEl) deleteRow(rowEl);
   });
 
+  // Client guard (p26.10): a content-bearing row (amount or memo) with NO account must
+  // not post silently -- the server rejects it (account_not_offered), but flagging it
+  // client-side gives immediate per-row feedback. Only the trailing EMPTY row may lack
+  // an account. The form is a plain (non-htmx) POST, so a native preventDefault blocks
+  // it. Uses the SAME emptiness predicate (isRowEmpty) as the auto-append.
+  function flagAccountlessRows() {
+    const msg = form.dataset.accountMissingMsg || '';
+    let flagged = false;
+    [...tbody.querySelectorAll('.el-row')].forEach((rowEl) => {
+      const i = rowEl.dataset.row;
+      const acctSel = form.querySelector(`#el-account-${i}`);
+      const errCell = rowEl.querySelector('.el-row-error');
+      const acct = acctSel ? acctSel.value : '';
+      const empty = isRowEmpty(rowFieldValues(rowEl));
+      const accountless = acct === '' || acct === '0';
+      if (!empty && accountless) {
+        if (errCell) {
+          errCell.textContent = '';
+          const span = document.createElement('span');
+          span.className = 'field-error';
+          span.setAttribute('role', 'alert');
+          span.textContent = msg;
+          errCell.appendChild(span);
+        }
+        flagged = true;
+      } else if (errCell && errCell.querySelector('.field-error')) {
+        errCell.textContent = ''; // clear a stale client-set error
+      }
+    });
+    return flagged;
+  }
+  form.addEventListener('submit', (evt) => {
+    if (flagAccountlessRows()) evt.preventDefault();
+  });
+
   // Enhance every combo select present on initial render / after a whole-form htmx swap
   // (subsidiary re-scope, 422 re-render). Idempotent.
   initCombos(form);

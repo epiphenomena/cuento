@@ -62,7 +62,7 @@
        fresh trailing empty row as the last row is edited; the server drops the trailing
        empty on save. This grid form is a SIBLING of the submit/discard forms below (no
        nested forms). */}}
-  <form method="post" action="/expenses/{{.ID}}/lines" id="expense-grid-form" data-user-program="{{.UserProgram}}">
+  <form method="post" action="/expenses/{{.ID}}/lines" id="expense-grid-form" data-user-program="{{.UserProgram}}" data-account-missing-msg="{{t "error.expense.account_not_offered"}}">
     <table class="expense-lines-table txn-grid">
       <thead>
         <tr>
@@ -83,7 +83,7 @@
           <td class="txn-cell el-account-cell">
             <select name="account_{{$i}}" id="el-account-{{$i}}" class="el-account combo-input">
               <option value="0">{{t "expense.line.form.account_none"}}</option>
-              {{range $page.Accounts}}<option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $l.AccountID}} selected{{end}}>{{.Path}}</option>
+              {{range $page.Accounts}}<option value="{{.ID}}" {{if .Unavailable}}data-unavailable="1" data-path="{{.Path}} {{t "txn.account.unavailable_suffix"}}"{{else}}data-path="{{.Path}}"{{end}}{{if eq .ID $l.AccountID}} selected{{end}}>{{.Path}}{{if .Unavailable}} {{t "txn.account.unavailable_suffix"}}{{end}}</option>
               {{end}}
             </select>
           </td>

@@ -175,6 +175,13 @@ type AccountEditorOption struct {
 	DefaultProgram *int64
 	DefaultClass   string // "" = none
 	SubsidiaryIDs  []int64
+	// Unavailable marks an option that would NOT normally be offered (it is inactive,
+	// a placeholder, or outside the editor's subsidiary) but was force-included because
+	// an existing split references it (p26.10). The web layer marks it visibly (an
+	// i18n suffix + a data-* attribute) so the user sees WHY the row's account is
+	// special, while its value stays the real account id and it renders SELECTED. A
+	// normally-offered option is never Unavailable.
+	Unavailable bool
 }
 
 // AccountEditorOptions returns the leaf+active accounts mapped to subID, in tree
@@ -183,6 +190,19 @@ type AccountEditorOption struct {
 // set, active via the row) so the offered options can never disagree with what
 // PostTransaction accepts. The chart is small; per-account metadata is read once.
 func (s *Store) AccountEditorOptions(ctx context.Context, lang string, subID int64) ([]AccountEditorOption, error) {
+	return s.AccountEditorOptionsWith(ctx, lang, subID, nil)
+}
+
+// AccountEditorOptionsWith is AccountEditorOptions plus a "must-appear" set: any id
+// in include that is NOT already offered (because it is inactive / a placeholder /
+// out-of-subsidiary) is APPENDED as an Unavailable option carrying its real
+// name/path/type/defaults, so the transaction editor can always display -- SELECTED --
+// the account a live split references, even one deactivated after the split was
+// posted (the display-only "missing accounts" bug, p26.10). With include=nil the
+// result is byte-for-byte the normal offered set (the NEW-transaction case is
+// unchanged). All names/paths come from the SAME lang-resolved full tree, so an
+// injected option's label matches a normal one's.
+func (s *Store) AccountEditorOptionsWith(ctx context.Context, lang string, subID int64, include []int64) ([]AccountEditorOption, error) {
 	// Full tree (unfiltered) -> which ids are placeholders (have children).
 	full, err := s.Tree(ctx, lang, nil)
 	if err != nil {
@@ -251,6 +271,51 @@ func (s *Store) AccountEditorOptions(ctx context.Context, lang string, subID int
 			opt.DefaultClass = acct.FunctionalClass.String
 		}
 		out = append(out, opt)
+	}
+
+	// Force-include any referenced account not already offered (p26.10). These are the
+	// ids used by an existing transaction's splits: an inactive / placeholder /
+	// out-of-subsidiary account has no normal <option>, so the editor's select would
+	// render blank (the "missing accounts" bug). Append each such id as an Unavailable
+	// option with its real metadata, so the row can render it SELECTED and marked.
+	if len(include) > 0 {
+		offered := make(map[int64]bool, len(out))
+		for _, o := range out {
+			offered[o.ID] = true
+		}
+		for _, id := range include {
+			if id <= 0 || offered[id] {
+				continue
+			}
+			offered[id] = true // dedup repeated include ids
+			if _, ok := nameOf[id]; !ok {
+				continue // an id not in the chart at all (should not happen); skip silently
+			}
+			acct, err := s.GetAccount(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			subs, err := s.AccountSubsidiaryIDs(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			opt := AccountEditorOption{
+				ID:            id,
+				Name:          nameOf[id],
+				Path:          pathOf(id),
+				Type:          acct.Type,
+				SubsidiaryIDs: subs,
+				Unavailable:   true,
+			}
+			if acct.DefaultProgramID.Valid {
+				v := acct.DefaultProgramID.Int64
+				opt.DefaultProgram = &v
+			}
+			if acct.FunctionalClass.Valid {
+				opt.DefaultClass = acct.FunctionalClass.String
+			}
+			out = append(out, opt)
+		}
 	}
 	return out, nil
 }

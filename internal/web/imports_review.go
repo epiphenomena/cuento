@@ -180,6 +180,10 @@ func (s *server) importRowEditForm(w http.ResponseWriter, r *http.Request) {
 	model.PayeeName = row.Payee
 
 	model.Rows = s.prefillImportRows(ctx, u, model, row, payeeID)
+	if err := s.injectRowAccounts(ctx, &model); err != nil { // p26.10: never blank a referenced account
+		s.serverError(w)
+		return
+	}
 	s.renderEditor(w, r, model)
 }
 
@@ -334,6 +338,7 @@ func (s *server) importRowPost(w http.ResponseWriter, r *http.Request) {
 
 	rows, splits := s.parseSplitForms(r, s.currencyExponent(ctx, currency))
 	model.Rows = rows
+	_ = s.injectRowAccounts(ctx, &model) // p26.10: keep a referenced account SELECTED on 422
 
 	if !dateOK {
 		model.TotalsError = "error.txn.bad_date"

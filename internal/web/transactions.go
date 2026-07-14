@@ -70,6 +70,11 @@ type txnAccountOption struct {
 	DefaultProgram int64  // 0 = none
 	DefaultClass   string // "" = none
 	SubsCSV        string // comma-separated subsidiary ids (data-subsidiaries)
+	// Unavailable marks an account force-included because an existing split references
+	// it though it is inactive / a placeholder / out-of-subsidiary (p26.10). The
+	// template appends a marker suffix and a data-unavailable attribute so the user
+	// sees why the row's account is special; the value stays the real id, SELECTED.
+	Unavailable bool
 }
 
 // txnOption is a plain id/name option (funds, programs, payees, subsidiaries).
@@ -301,6 +306,12 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 		}
 		model.Rows = append(model.Rows, row)
 	}
+	// Ensure every split's account (even a now-inactive / out-of-sub one) renders as a
+	// SELECTED option rather than a blank select (p26.10).
+	if err := s.injectRowAccounts(ctx, &model); err != nil {
+		s.serverError(w)
+		return
+	}
 	s.renderEditor(w, r, model)
 }
 
@@ -376,6 +387,11 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 
 	rows, splits := s.parseSplitForms(r, s.currencyExponent(ctx, currency))
 	model.Rows = rows
+	// A submitted row may reference an inactive / out-of-sub account (e.g. editing a
+	// pre-existing split whose account was deactivated); a 422 re-render must keep it
+	// SELECTED, not re-blank it (p26.10). Best-effort: on a lookup failure the row keeps
+	// its raw value and the store stays the authoritative validator.
+	_ = s.injectRowAccounts(ctx, &model)
 
 	if !dateOK {
 		model.TotalsError = "error.txn.bad_date"
@@ -464,7 +480,13 @@ func (s *server) attributeRowError(model *txnEditorModel, err error, splits []st
 	inSub := make(map[int64]bool, len(model.Accounts))
 	acctType := make(map[int64]string, len(model.Accounts))
 	for _, a := range model.Accounts {
-		inSub[a.ID] = true
+		// An Unavailable option was force-included only so the row can DISPLAY its account
+		// (p26.10); it is NOT a normally-offered (leaf+active+in-sub) account, so it must
+		// NOT count as in-sub here -- otherwise an ErrInactiveAccount / not-in-sub error
+		// would fail to attribute to the offending row.
+		if !a.Unavailable {
+			inSub[a.ID] = true
+		}
 		acctType[a.ID] = a.Type
 	}
 
@@ -614,8 +636,13 @@ func (s *server) parseSplitForms(r *http.Request, exp int) ([]txnRowModel, []sto
 		}
 		rows = append(rows, row)
 
-		// Skip fully-empty rows (no account and blank amount): a trailing scaffold row.
-		if acct == 0 && amountStr == "" {
+		// Skip ONLY a fully-empty scaffold row (no account, no amount of any kind, no
+		// memo). A row that carries content but no account is NOT dropped silently
+		// (p26.10): it is submitted with account 0 so the store returns ErrAccountMissing,
+		// which surfaces as a visible per-row error. This matches the client's isRowEmpty
+		// predicate (memo / DR / CR count as content), so client and server agree on which
+		// row is the droppable trailing empty.
+		if acct == 0 && amountStr == "" && row.AmountDR == "" && row.AmountCR == "" && memo == "" {
 			continue
 		}
 
@@ -705,13 +732,7 @@ func (s *server) newEditorModel(ctx context.Context, u *store.CurrentUser, sub i
 	if err != nil {
 		return model, err
 	}
-	for _, a := range accts {
-		opt := txnAccountOption{ID: a.ID, Name: a.Name, Path: a.Path, Type: a.Type, DefaultClass: a.DefaultClass, SubsCSV: idsCSV(a.SubsidiaryIDs)}
-		if a.DefaultProgram != nil {
-			opt.DefaultProgram = *a.DefaultProgram
-		}
-		model.Accounts = append(model.Accounts, opt)
-	}
+	model.Accounts = toTxnAccountOptions(accts)
 
 	// Fund select: funds scoped to `sub` (D20/Q1).
 	funds, err := s.store.ActiveFunds(ctx, sub)
@@ -751,6 +772,62 @@ func (s *server) newEditorModel(ctx context.Context, u *store.CurrentUser, sub i
 	}
 
 	return model, nil
+}
+
+// toTxnAccountOptions maps store account options into the editor's option model,
+// carrying the Unavailable flag (p26.10) through to the template.
+func toTxnAccountOptions(accts []store.AccountEditorOption) []txnAccountOption {
+	out := make([]txnAccountOption, 0, len(accts))
+	for _, a := range accts {
+		opt := txnAccountOption{
+			ID: a.ID, Name: a.Name, Path: a.Path, Type: a.Type,
+			DefaultClass: a.DefaultClass, SubsCSV: idsCSV(a.SubsidiaryIDs),
+			Unavailable: a.Unavailable,
+		}
+		if a.DefaultProgram != nil {
+			opt.DefaultProgram = *a.DefaultProgram
+		}
+		out = append(out, opt)
+	}
+	return out
+}
+
+// injectRowAccounts re-builds model.Accounts so EVERY account id referenced by a
+// current row appears as a selectable option (p26.10). A prefilled/edited split may
+// reference an account that is now inactive / a placeholder / out-of-subsidiary and so
+// is not in the normal offered set; without this the row's select renders blank ("the
+// missing accounts" bug) and a naive save would try to blank it. The referenced ids
+// are force-included via AccountEditorOptionsWith (marked Unavailable). It is a no-op
+// when no row references an off-list account (NEW transactions are unchanged), and MUST
+// be called at every render site that prefills rows -- the edit GET, the create/update
+// 422 re-render, and the import / expense-review prefill + their error re-renders --
+// so the account never re-blanks on a save that fails validation.
+func (s *server) injectRowAccounts(ctx context.Context, model *txnEditorModel) error {
+	if len(model.Rows) == 0 {
+		return nil
+	}
+	offered := make(map[int64]bool, len(model.Accounts))
+	for _, a := range model.Accounts {
+		offered[a.ID] = true
+	}
+	var include []int64
+	seen := make(map[int64]bool)
+	for _, row := range model.Rows {
+		if row.Account == 0 || offered[row.Account] || seen[row.Account] {
+			continue
+		}
+		seen[row.Account] = true
+		include = append(include, row.Account)
+	}
+	if len(include) == 0 {
+		return nil
+	}
+	accts, err := s.store.AccountEditorOptionsWith(ctx, langOf(ctx), model.Subsidiary, include)
+	if err != nil {
+		return err
+	}
+	model.Accounts = toTxnAccountOptions(accts)
+	return nil
 }
 
 // userDefaultProgram returns the user's default_program_id (p26.5), nil-safe: nil for

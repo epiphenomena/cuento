@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -152,6 +153,75 @@ func TestTxnCreateRoundTrip(t *testing.T) {
 	}
 	if byAcct[e.salaries] != 10000 || byAcct[e.checking] != -10000 {
 		t.Fatalf("amounts wrong: %v", byAcct)
+	}
+}
+
+// TestTxnEditShowsInactiveSplitAccount (p26.10): editing a transaction whose split
+// references a now-INACTIVE account must still DISPLAY that account as a SELECTED,
+// marked option -- not a blank "Choose account" select (the reported "missing accounts"
+// bug). Mirrors the dev-db repro: post a txn on checking, deactivate checking, reopen
+// the editor.
+func TestTxnEditShowsInactiveSplitAccount(t *testing.T) {
+	e := newTxnWebEnv(t)
+
+	// Post a balanced txn using checking, then deactivate checking.
+	f := e.balancedForm("100.00", "-100.00")
+	if rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions", f); rec.Code != http.StatusSeeOther {
+		t.Fatalf("create: status=%d, body=%s", rec.Code, rec.Body.String())
+	}
+	id := latestTxnID(t, e)
+
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	if err := e.st.DeactivateAccount(ctx, e.checking); err != nil {
+		t.Fatalf("DeactivateAccount: %v", err)
+	}
+
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(id)+"/edit", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("edit GET: status=%d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The inactive checking account must appear as a SINGLE option node that is BOTH
+	// data-unavailable and SELECTED (so the combobox overlay shows it, not a blank box).
+	// Attribute order in the option is value ... data-unavailable ... selected, so match
+	// the whole node loosely.
+	re := regexp.MustCompile(`(?s)<option[^>]*value="` + itoa(e.checking) + `"[^>]*data-unavailable="1"[^>]*\bselected\b[^>]*>`)
+	if !re.MatchString(body) {
+		t.Fatalf("inactive checking account option is not present, marked, and SELECTED; body:\n%s", body)
+	}
+	// The user-visible marker suffix is present (rule 9: via the i18n catalog).
+	if !strings.Contains(body, "(unavailable)") {
+		t.Fatalf("edit form missing the unavailable marker suffix; body:\n%s", body)
+	}
+}
+
+// TestTxnDuplicateShowsInactiveSplitAccount (p26.10): DUPLICATE clones an old entry, so
+// it must also display a split whose account is now inactive as a SELECTED, marked
+// option (same fix as the edit path; duplicate is the likeliest place to hit a stale
+// account).
+func TestTxnDuplicateShowsInactiveSplitAccount(t *testing.T) {
+	e := newTxnWebEnv(t)
+
+	f := e.balancedForm("100.00", "-100.00")
+	if rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions", f); rec.Code != http.StatusSeeOther {
+		t.Fatalf("create: status=%d, body=%s", rec.Code, rec.Body.String())
+	}
+	id := latestTxnID(t, e)
+
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	if err := e.st.DeactivateAccount(ctx, e.checking); err != nil {
+		t.Fatalf("DeactivateAccount: %v", err)
+	}
+
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(id)+"/duplicate", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("duplicate GET: status=%d", rec.Code)
+	}
+	body := rec.Body.String()
+	re := regexp.MustCompile(`(?s)<option[^>]*value="` + itoa(e.checking) + `"[^>]*data-unavailable="1"[^>]*\bselected\b[^>]*>`)
+	if !re.MatchString(body) {
+		t.Fatalf("duplicate form: inactive checking account is not present, marked, and SELECTED; body:\n%s", body)
 	}
 }
 

@@ -335,6 +335,65 @@ function initEditor(form) {
   const submitBtn = form.querySelector('.txn-submit button[type="submit"]');
   const cancelLink = form.querySelector('.txn-submit a');
 
+  // --- client guard: a content-bearing row must have an account (trap 2) --------
+  // A row that carries an amount / DR / CR / memo but no account (value "0") must NOT
+  // post silently -- the server would reject it with ErrAccountMissing, but flagging it
+  // client-side gives an immediate per-row error. Only the trailing EMPTY row is allowed
+  // to have no account (it is dropped server-side). Returns true when at least one row
+  // was flagged (submit should be blocked). Uses the SAME emptiness predicate as the
+  // auto-append (isRowEmpty), so client and server agree on which row is droppable.
+  function flagAccountlessRows() {
+    const msg = form.dataset.accountMissingMsg || '';
+    let flagged = false;
+    let firstBad = -1;
+    [...form.querySelectorAll('.txn-row')].forEach((row) => {
+      const i = row.dataset.row;
+      const acctSel = form.querySelector(`#txn-account-${i}`);
+      const errCell = row.querySelector('.txn-row-error');
+      const acct = acctSel ? acctSel.value : '';
+      const empty = isRowEmpty(rowFieldValues(row));
+      const accountless = (acct === '' || acct === '0');
+      if (!empty && accountless) {
+        row.setAttribute('data-row-error', i);
+        if (errCell) {
+          errCell.textContent = '';
+          const span = document.createElement('span');
+          span.className = 'field-error';
+          span.setAttribute('role', 'alert');
+          span.textContent = msg;
+          errCell.appendChild(span);
+        }
+        if (firstBad < 0) firstBad = Number(i);
+        flagged = true;
+      } else if (row.getAttribute('data-row-error') === i && errCell && errCell.querySelector('.field-error')) {
+        // Clear a stale client-set account error once the row gains an account or empties.
+        row.removeAttribute('data-row-error');
+        errCell.textContent = '';
+      }
+    });
+    if (firstBad >= 0) {
+      const cell = cellInput(firstBad, 0);
+      if (cell && typeof cell.focus === 'function') cell.focus();
+    }
+    return flagged;
+  }
+
+  // Native submit guard (no-JS / non-htmx path).
+  form.addEventListener('submit', (evt) => {
+    if (flagAccountlessRows()) evt.preventDefault();
+  });
+  // htmx submit guard: htmx fires its XHR from its OWN submit listener and does NOT
+  // consult defaultPrevented, so a plain preventDefault above does not stop it. The
+  // cancelable htmx:beforeRequest is the hook. Filter to THIS form's POST so the
+  // subsidiary re-filter hx-get and the payee-template fetch are untouched.
+  form.addEventListener('htmx:beforeRequest', (evt) => {
+    const cfg = evt.detail && evt.detail.requestConfig;
+    const verb = cfg && cfg.verb ? String(cfg.verb).toLowerCase() : '';
+    if (verb !== 'get' && flagAccountlessRows()) {
+      evt.preventDefault(); // stops the request; the per-row error span stays visible
+    }
+  });
+
   const grid = form.querySelector('.txn-grid');
   if (grid) {
     grid.addEventListener('keydown', (evt) => {

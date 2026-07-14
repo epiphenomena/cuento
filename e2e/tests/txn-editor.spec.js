@@ -254,4 +254,86 @@ test.describe('transaction editor', () => {
     await expect(page.locator('#txn-program-0')).toHaveValue(/\d+/);
     await expect(progInput).toHaveValue(/General/);
   });
+
+  // p26.10: editing a transaction whose split references a now-INACTIVE account must
+  // still DISPLAY that account (the real name, marked "(unavailable)") in the row's
+  // account cell -- NOT a blank "Choose account" select (the reported "missing accounts"
+  // bug). We post a transfer, deactivate one leg's account, then reopen the editor.
+  test('edit shows a split whose account was deactivated (not a blank cell)', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'Gone Checking');
+    await createAsset(page, 'Live Savings');
+
+    // Post a balanced transfer using both accounts.
+    await page.goto('/accounts');
+    const row = page.locator('tr.acct-row', { hasText: 'Live Savings' });
+    await row.getByRole('link', { name: 'Live Savings' }).click();
+    await page.waitForURL('**/register');
+    await page.getByRole('link', { name: /new transaction/i }).click();
+    await page.waitForURL('**/transactions/new');
+    await page.locator('#txn-account-0').selectOption({ label: 'Live Savings' });
+    await expect(page.locator('#txn-account-1')).toBeVisible();
+    await page.locator('#txn-amount-0').fill('40.00');
+    await page.locator('#txn-account-1').selectOption({ label: 'Gone Checking' });
+    await page.locator('#txn-amount-1').fill('-40.00');
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL('**/register**');
+
+    // Deactivate Gone Checking from the accounts list (a plain POST form).
+    await page.goto('/accounts');
+    const goneRow = page.locator('tr.acct-row', { hasText: 'Gone Checking' });
+    await goneRow.getByRole('button', { name: /deactivate/i }).click();
+    await expect(page.locator('tr.acct-row', { hasText: 'Gone Checking' }).locator('.badge')).toBeVisible();
+
+    // Reopen the transaction editor from Live Savings' register (the edit link).
+    await page.goto('/accounts');
+    await page.locator('tr.acct-row', { hasText: 'Live Savings' }).getByRole('link', { name: 'Live Savings' }).click();
+    await page.waitForURL('**/register');
+    await page.getByRole('link', { name: /edit/i }).first().click();
+    await page.waitForURL('**/transactions/*/edit');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+
+    // Every row's account select carries the full option list, so the injected
+    // "(unavailable)" option appears in each. The point is that it is SELECTED in the
+    // row whose split references it -- not left on the "Choose account" placeholder.
+    const marked = page.locator('#txn-form option[data-unavailable="1"]', { hasText: 'Gone Checking' });
+    await expect(marked.first()).toContainText('(unavailable)');
+
+    // Exactly one row has that option SELECTED (the deactivated split's row).
+    const goneCell = page.locator('.txn-account-cell', { has: page.locator('option[data-unavailable="1"]:checked') });
+    await expect(goneCell).toHaveCount(1);
+
+    // The combobox overlay for that row shows the real account label (not blank -- the
+    // reported symptom). optionLabel reads data-path, into which the marker was appended.
+    const overlay = goneCell.locator('.combo-text');
+    await expect(overlay).toHaveValue(/Gone Checking.*unavailable/);
+  });
+
+  // p26.10 (client guard): a row that carries content (an amount) but NO account must
+  // not silently post -- the save is blocked and a per-row error is shown. The htmx POST
+  // must NOT fire (the transaction is not created).
+  test('a content row with no account is blocked with an error, not posted', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'Guard Cash');
+
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+
+    // Row 0: an amount but leave the account on the "Choose account" placeholder (0).
+    await page.locator('#txn-amount-0').fill('12.00');
+
+    // Assert NO POST /transactions fires when we click Save.
+    let posted = false;
+    page.on('request', (req) => {
+      if (req.method() === 'POST' && /\/transactions(\?|$)/.test(req.url())) posted = true;
+    });
+    await page.getByRole('button', { name: /^save$/i }).click();
+
+    // A per-row error appears in the row's error cell, and we stay on the editor.
+    await expect(page.locator('.txn-row[data-row="0"] .txn-row-error .field-error')).toBeVisible();
+    await expect(page).toHaveURL(/\/transactions\/new/);
+    // Give any (erroneous) request a beat to have fired, then assert none did.
+    await page.waitForTimeout(300);
+    expect(posted).toBe(false);
+  });
 });

@@ -217,6 +217,11 @@ type expenseAccountOption struct {
 	ID   int64
 	Name string
 	Path string
+	// Unavailable marks an account force-included because an existing line references
+	// it though it is inactive / a placeholder / out-of-subsidiary (p26.10); the
+	// template appends a marker suffix + data-unavailable so the user sees why the
+	// row's account is special. Value stays the real id, SELECTED.
+	Unavailable bool
 }
 
 // expenseDetailModel is the GET /expenses/{id} model: the report header (its sub +
@@ -342,7 +347,13 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 	// p25.4: when editable, load the sub-scoped account/fund/program option lists the
 	// grid selects offer (the SAME set reportAccountType gates on).
 	if model.Editable {
-		accts, funds, progs, err := s.expenseLineOptions(ctx, rep.SubsidiaryID)
+		// Force-include every account a live line references (p26.10) so a line whose
+		// account is now inactive / out-of-sub still renders as a SELECTED option.
+		var include []int64
+		for _, l := range lines {
+			include = append(include, l.AccountID)
+		}
+		accts, funds, progs, err := s.expenseLineOptions(ctx, rep.SubsidiaryID, include...)
 		if err != nil {
 			s.serverError(w)
 			return expenseDetailModel{}, false
@@ -422,18 +433,21 @@ func (s *server) reportExponent(ctx context.Context, rep sqlc.ExpenseReport) int
 // out of band); funds = ActiveFunds(sub); programs = all active (not sub-scoped, like
 // the txn/budget editors). It is shared by the detail render and the 422 re-render so
 // the options always match the report's subsidiary.
-func (s *server) expenseLineOptions(ctx context.Context, sub int64) (accounts []expenseAccountOption, funds, programs []txnOption, err error) {
+func (s *server) expenseLineOptions(ctx context.Context, sub int64, include ...int64) (accounts []expenseAccountOption, funds, programs []txnOption, err error) {
 	lang := langOf(ctx)
 
-	accts, err := s.store.AccountEditorOptions(ctx, lang, sub)
+	accts, err := s.store.AccountEditorOptionsWith(ctx, lang, sub, include)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	for _, a := range accts {
-		if a.Type != "revenue" && a.Type != "expense" {
+		// A normally-offered account must be an R/E leaf; a force-included one (p26.10)
+		// is kept regardless so a line whose account is now inactive/out-of-sub still
+		// renders SELECTED rather than blank.
+		if !a.Unavailable && a.Type != "revenue" && a.Type != "expense" {
 			continue
 		}
-		accounts = append(accounts, expenseAccountOption{ID: a.ID, Name: a.Name, Path: a.Path})
+		accounts = append(accounts, expenseAccountOption{ID: a.ID, Name: a.Name, Path: a.Path, Unavailable: a.Unavailable})
 	}
 
 	fs, err := s.store.ActiveFunds(ctx, sub)

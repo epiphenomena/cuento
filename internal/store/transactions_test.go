@@ -834,6 +834,74 @@ func mkAcctDefProg(t *testing.T, s *Store, typ, name string, subs []int64, defPr
 	return id
 }
 
+// TestAccountMissingRejectedEveryPath proves the double-entry invariant "a split MUST
+// name an account" is enforced on EVERY server entry path (p26.10 / AGENTS rule 7): a
+// split with AccountID 0 is rejected with ErrAccountMissing (GetAccount(0) -> no rows)
+// on PostTransaction, UpdateTransaction, PostImportRow, and PostAndConvertExpenseReport
+// -- all of which funnel through validateAndResolve/resolveSplit. The web layer maps
+// this to a visible per-row error; here we prove the store never lets an accountless
+// split through, so the display fix cannot become a data-integrity hole.
+func TestAccountMissingRejectedEveryPath(t *testing.T) {
+	// Post + Update share the txnEnv chart.
+	e := newTxnEnv(t)
+
+	postIn := e.balancedInput(10_000)
+	postIn.Splits[0].AccountID = 0 // content-bearing split with no account
+	if _, err := e.s.PostTransaction(mutCtx(), postIn); !errors.Is(err, ErrAccountMissing) {
+		t.Fatalf("PostTransaction(account 0) = %v, want ErrAccountMissing", err)
+	}
+
+	// A valid txn to then update with an accountless split.
+	id, err := e.s.PostTransaction(mutCtx(), e.balancedInput(10_000))
+	if err != nil {
+		t.Fatalf("seed txn for update: %v", err)
+	}
+	updIn := e.balancedInput(10_000)
+	updIn.Splits[1].AccountID = 0
+	if err := e.s.UpdateTransaction(mutCtx(), id, updIn); !errors.Is(err, ErrAccountMissing) {
+		t.Fatalf("UpdateTransaction(account 0) = %v, want ErrAccountMissing", err)
+	}
+
+	// PostImportRow.
+	env := newImportEnv(t)
+	rowID := stageOnePending(t, env, "2025-01-15", 10000, "Acme", "Invoice")
+	importIn := PostTransactionInput{
+		Date: "2025-01-15", SubsidiaryID: env.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: env.checking, Amount: 10000, Position: 0},
+			{AccountID: 0, Amount: -10000, Position: 1}, // no account
+		},
+	}
+	if _, err := env.s.PostImportRow(mutCtx(), rowID, importIn); !errors.Is(err, ErrAccountMissing) {
+		t.Fatalf("PostImportRow(account 0) = %v, want ErrAccountMissing", err)
+	}
+
+	// PostAndConvertExpenseReport.
+	s, _, ctx, submitterID, expenseAcct := seedExpenseReportEnv(t)
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	if err != nil {
+		t.Fatalf("CreateExpenseReport: %v", err)
+	}
+	if _, err := s.AddExpenseReportLine(ctx, reportID, ExpenseReportLineInput{AccountID: expenseAcct, Amount: 2000, Memo: "taxi"}); err != nil {
+		t.Fatalf("AddExpenseReportLine: %v", err)
+	}
+	if err := s.SubmitExpenseReport(ctx, reportID); err != nil {
+		t.Fatalf("SubmitExpenseReport: %v", err)
+	}
+	prog := int64(1)
+	fc := "program"
+	expIn := PostTransactionInput{
+		Date: "2025-06-01", SubsidiaryID: 1, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: expenseAcct, Amount: 2000, Position: 0, ProgramID: &prog, FunctionalClass: &fc},
+			{AccountID: 0, Amount: -2000, Position: 1}, // no account
+		},
+	}
+	if _, err := s.PostAndConvertExpenseReport(ctx, reportID, expIn); !errors.Is(err, ErrAccountMissing) {
+		t.Fatalf("PostAndConvertExpenseReport(account 0) = %v, want ErrAccountMissing", err)
+	}
+}
+
 // mkAcctFull creates a leaf expense account with an explicit default functional
 // class and default program.
 func mkAcctFull(t *testing.T, s *Store, typ, name string, subs []int64, fClass string, defProg int64) int64 {
