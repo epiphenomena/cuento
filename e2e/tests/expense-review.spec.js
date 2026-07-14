@@ -108,14 +108,15 @@ async function submitReport(page, acctName, amount) {
   const reportID = Number(new URL(page.url()).pathname.split('/').pop());
   expect(reportID).toBeGreaterThan(0);
 
-  await page.getByRole('button', { name: /new line/i }).click();
-  await expect(page.locator('form#expense-line-form.e2e-settled')).toBeVisible();
-  await page.locator('#elf-account').selectOption({ label: acctName });
-  await page.locator('#elf-amount').fill(amount);
+  // Fill row 0 of the auto-row grid, then bulk-save the line set.
+  await expect(page.locator('form#expense-grid-form')).toBeVisible();
+  await page.locator('#el-account-0').selectOption({ label: acctName });
+  await page.locator('#el-amount-0').fill(amount);
+  await expect(page.locator('#el-account-1')).toBeVisible();
   const detailReloaded = page.waitForResponse(
     (r) => new URL(r.url()).pathname === `/expenses/${reportID}` && r.request().method() === 'GET',
   );
-  await page.locator('form#expense-line-form button[type="submit"]').click();
+  await page.locator('#expense-save-lines').click();
   await detailReloaded;
 
   await page.locator('#expense-submit').click();

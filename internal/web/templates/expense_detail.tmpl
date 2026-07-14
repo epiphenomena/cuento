@@ -1,14 +1,17 @@
 {{/*
-  p20.2 expense-report editor / detail (GET /expenses/{id}, Perm ExpenseSubmit;
+  p20.2 / p25.4 expense-report editor / detail (GET /expenses/{id}, Perm ExpenseSubmit;
   ownership-enforced -> not-owned/missing is a 404). The report header (subsidiary +
-  status), the reviewer's REJECTION REASON when rejected, the lines table, and -- when
-  the report is EDITABLE (draft|rejected) -- the inline add/edit-line form (swapped via
-  htmx into #expense-line-form, exactly like the budget-line editor) and the Submit /
-  Resubmit action. NO balancing requirement: an unbalanced report submits fine (the
-  reviewer balances it at convert, p20.3). A submitted/converted report renders
-  READ-ONLY (no form, no submit). .Page is an expenseDetailModel. Account/fund/program/
-  subsidiary names are stored proper nouns; every other string via {{t}} (rule 9);
-  amounts via the money formatter (rule 10); no inline script (rule 12).
+  status), the reviewer's REJECTION REASON when rejected, and the lines. When the report
+  is EDITABLE (draft|rejected) the lines render as an AUTO-ROW GRID (p25.4): a single
+  bulk-submit form (POST /expenses/{id}/lines) of account/amount/fund/program/memo rows
+  that saves the whole set under ONE change (replace-set diff-by-line-id). The grid
+  starts with one empty row and the client (expensegrid.js) auto-appends a fresh trailing
+  row as the last row is edited; the server drops the trailing empty on save. NO balancing
+  requirement, NO min-2, NO DR/CR, NO functional-class -- just a line-id round-trip. A
+  submitted/converted report renders the lines READ-ONLY (no grid, no submit). .Page is an
+  expenseDetailModel. Account/fund/program/subsidiary names are stored proper nouns; every
+  other string via {{t}} (rule 9); amounts via the money formatter (rule 10); the grid's
+  auto-append is an external ES module (rule 12: no inline script).
 */ -}}
 {{define "expense_detail.tmpl" -}}
 {{template "shell-open" (shellTitle . (t "expense.detail.title"))}}
@@ -46,17 +49,69 @@
   </div>
   {{end}}
 
-  {{if .Editable}}
-  <h2>{{t "expense.detail.add_line"}}</h2>
-  <div id="expense-line-form" class="expense-line-form-region">
-    <button type="button" class="btn btn-primary"
-            hx-get="/expenses/{{.ID}}/lines/new" hx-target="#expense-line-form" hx-swap="outerHTML">
-      {{t "expense.detail.new_line"}}
-    </button>
-  </div>
-  {{end}}
-
   <h2>{{t "expense.detail.lines"}}</h2>
+  {{if .Editable}}
+  {{/* p25.4 auto-row grid: ONE bulk-submit form. Each row round-trips its line_id (0 =
+       a new line to insert; >0 = an existing line to update); the client auto-appends a
+       fresh trailing empty row as the last row is edited; the server drops the trailing
+       empty on save. This grid form is a SIBLING of the submit/discard forms below (no
+       nested forms). */}}
+  <form method="post" action="/expenses/{{.ID}}/lines" id="expense-grid-form">
+    <table class="expense-lines-table txn-grid">
+      <thead>
+        <tr>
+          <th>{{t "expense.line.col.account"}}</th>
+          <th>{{t "expense.line.col.amount"}}</th>
+          <th>{{t "expense.line.col.fund"}}</th>
+          <th>{{t "expense.line.col.program"}}</th>
+          <th>{{t "expense.line.col.memo"}}</th>
+          <th>{{t "txn.col.error"}}</th>
+        </tr>
+      </thead>
+      <tbody id="expense-rows">
+        {{$page := .}}
+        {{range $i, $l := .Lines}}
+        <tr class="expense-line-row el-row" data-row="{{$i}}">
+          <input type="hidden" name="line_id_{{$i}}" id="el-lineid-{{$i}}" value="{{if $l.ID}}{{$l.ID}}{{end}}">
+          <td class="el-account-cell">
+            <select name="account_{{$i}}" id="el-account-{{$i}}" class="el-account combo-input">
+              <option value="0">{{t "expense.line.form.account_none"}}</option>
+              {{range $page.Accounts}}<option value="{{.ID}}"{{if eq .ID $l.AccountID}} selected{{end}}>{{.Name}}</option>
+              {{end}}
+            </select>
+          </td>
+          <td class="el-amount-cell">
+            <input type="text" name="amount_{{$i}}" id="el-amount-{{$i}}" class="el-amount amount" value="{{$l.AmountInput}}" inputmode="decimal">
+          </td>
+          <td class="el-fund-cell">
+            <select name="fund_{{$i}}" id="el-fund-{{$i}}" class="el-fund">
+              <option value="0">{{t "expense.line.unrestricted"}}</option>
+              {{range $page.Funds}}<option value="{{.ID}}"{{if eq .ID $l.FundID}} selected{{end}}>{{.Name}}</option>
+              {{end}}
+            </select>
+          </td>
+          <td class="el-program-cell">
+            <select name="program_{{$i}}" id="el-program-{{$i}}" class="el-program">
+              <option value="0">{{t "expense.line.form.program_none"}}</option>
+              {{range $page.Programs}}<option value="{{.ID}}"{{if eq .ID $l.ProgramID}} selected{{end}}>{{.Name}}</option>
+              {{end}}
+            </select>
+          </td>
+          <td class="el-memo-cell">
+            <input type="text" name="memo_{{$i}}" id="el-memo-{{$i}}" class="el-memo" value="{{$l.Memo}}">
+          </td>
+          <td class="el-row-error">{{if $l.ErrorKey}}<span class="field-error" role="alert">{{t $l.ErrorKey}}</span>{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    <input type="hidden" name="rows" id="expense-rows-count" value="{{len .Lines}}">
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" id="expense-save-lines">{{t "expense.detail.save_lines"}}</button>
+    </div>
+  </form>
+  {{else}}
+  {{/* Read-only lines (submitted/converted): the resolved-name display fields. */}}
   <table class="expense-lines-table txn-grid">
     <thead>
       <tr>
@@ -65,12 +120,9 @@
         <th>{{t "expense.line.col.fund"}}</th>
         <th>{{t "expense.line.col.program"}}</th>
         <th>{{t "expense.line.col.memo"}}</th>
-        {{if .Editable}}<th>{{t "expense.line.col.actions"}}</th>{{end}}
       </tr>
     </thead>
     <tbody>
-      {{$rid := .ID}}
-      {{$editable := .Editable}}
       {{range .Lines}}
       <tr class="expense-line-row" id="expense-line-row-{{.ID}}">
         <td class="el-account">{{.AcctName}}</td>
@@ -78,23 +130,13 @@
         <td class="el-fund">{{if .FundName}}{{.FundName}}{{else}}<span class="muted">{{t "expense.line.unrestricted"}}</span>{{end}}</td>
         <td class="el-program">{{if .ProgName}}{{.ProgName}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
         <td class="el-memo">{{.Memo}}</td>
-        {{if $editable}}
-        <td class="el-actions">
-          <button type="button" class="btn btn-ghost"
-                  hx-get="/expenses/{{$rid}}/lines/{{.ID}}/edit" hx-target="#expense-line-form" hx-swap="outerHTML">
-            {{t "common.edit"}}
-          </button>
-          <form method="post" action="/expenses/{{$rid}}/lines/{{.ID}}/delete" class="inline">
-            <button type="submit" class="btn btn-ghost">{{t "common.delete"}}</button>
-          </form>
-        </td>
-        {{end}}
       </tr>
       {{else}}
-      <tr><td colspan="{{if .Editable}}6{{else}}5{{end}}">{{t "expense.detail.no_lines"}}</td></tr>
+      <tr><td colspan="5">{{t "expense.detail.no_lines"}}</td></tr>
       {{end}}
     </tbody>
   </table>
+  {{end}}
 
   {{if .Editable}}
   <div class="expense-submit">
@@ -115,6 +157,11 @@
   </div>
   {{else}}
   <p class="hint" id="expense-readonly">{{t "expense.detail.readonly"}}</p>
+  {{end}}
+  {{if .Editable}}
+  {{/* p25.4 grid auto-append (rule 12: external ES module, no inline script). Reuses the
+       tested isRowEmpty predicate; mirrors txneditor.js's trailing-empty-row behavior. */}}
+  <script type="module" src="{{asset "expensegrid.js"}}"></script>
   {{end}}
   {{- end}}
 {{template "shell-close" .}}

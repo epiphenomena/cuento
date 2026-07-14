@@ -22,7 +22,10 @@ import (
 // live write happens FIRST, then the snapshot-from-live version append; validation
 // (including the STATE MACHINE) lives inside fn so a rejected op rolls the change row
 // back and leaves NO audit trace. A report line can be op='delete' -- it HARD-deletes
-// with a delete version (rule 14: soft-delete is transactions-only).
+// with a delete version (rule 14: soft-delete is transactions-only). Lines are edited
+// either one at a time (Add/Update/RemoveExpenseReportLine) OR in a BULK REPLACE-SET
+// (ReplaceExpenseReportLines, p25.4: the auto-row grid saves the whole line set under
+// ONE change, diffing by line id like UpdateTransaction's split diff).
 //
 // State machine (store-enforced; the schema CHECK is only a backstop):
 //
@@ -291,6 +294,97 @@ func (s *Store) RemoveExpenseReportLine(ctx context.Context, lineID int64) error
 		})
 	if err != nil {
 		return fmt.Errorf("remove expense report line %d: %w", lineID, err)
+	}
+	return nil
+}
+
+// ExpenseReportLineDesired is one line in a bulk replace-set save: ID 0 = a new line
+// to insert; ID > 0 = an existing line of this report to update. Lines of the report
+// NOT present in the desired set are deleted.
+type ExpenseReportLineDesired struct {
+	ID int64
+	ExpenseReportLineInput
+}
+
+// ReplaceExpenseReportLines saves a report's whole line set in ONE change (p25.4: the
+// auto-row grid's bulk submit), diffing by line id -- the MIRROR of UpdateTransaction's
+// split replace-set. Allowed only while draft|rejected (requireEditable). A desired
+// line with ID>0 must belong to THIS report (else ErrExpenseReportLineNotFound) and is
+// UPDATEd (version 'update'); ID==0 is INSERTed (version 'create'); an existing line
+// absent from the desired set is DELETEd (version 'delete' BEFORE the live delete,
+// rule 14). Each desired line is validated (validateExpenseReportLine) inside fn so a
+// rejection rolls the whole change back and leaves no audit trace.
+func (s *Store) ReplaceExpenseReportLines(ctx context.Context, reportID int64, desired []ExpenseReportLineDesired) error {
+	_, err := s.write(ctx, "expense_report.replace_lines", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			if err := requireEditable(ctx, q, reportID); err != nil {
+				return err
+			}
+			existing, err := q.ListExpenseReportLines(ctx, reportID)
+			if err != nil {
+				return fmt.Errorf("list lines: %w", err)
+			}
+			existingIDs := make(map[int64]bool, len(existing))
+			for _, l := range existing {
+				existingIDs[l.ID] = true
+			}
+			kept := make(map[int64]bool, len(desired))
+			for _, d := range desired {
+				if err := validateExpenseReportLine(ctx, q, d.ExpenseReportLineInput); err != nil {
+					return err
+				}
+				if d.ID > 0 {
+					if !existingIDs[d.ID] {
+						return ErrExpenseReportLineNotFound
+					}
+					kept[d.ID] = true
+					if err := q.UpdateExpenseReportLine(ctx, sqlc.UpdateExpenseReportLineParams{
+						AccountID: d.AccountID,
+						Amount:    d.Amount,
+						FundID:    nullInt64Ptr(d.FundID),
+						ProgramID: nullInt64Ptr(d.ProgramID),
+						Memo:      d.Memo,
+						ID:        d.ID,
+					}); err != nil {
+						return fmt.Errorf("update expense report line %d: %w", d.ID, err)
+					}
+					if err := insertExpenseReportLineVersion(ctx, q, changeID, "update", d.ID); err != nil {
+						return err
+					}
+					continue
+				}
+				id, err := q.InsertExpenseReportLine(ctx, sqlc.InsertExpenseReportLineParams{
+					ReportID:  reportID,
+					AccountID: d.AccountID,
+					Amount:    d.Amount,
+					FundID:    nullInt64Ptr(d.FundID),
+					ProgramID: nullInt64Ptr(d.ProgramID),
+					Memo:      d.Memo,
+				})
+				if err != nil {
+					return fmt.Errorf("insert expense report line: %w", err)
+				}
+				if err := insertExpenseReportLineVersion(ctx, q, changeID, "create", id); err != nil {
+					return err
+				}
+			}
+			// Delete existing lines not present in the desired set (version BEFORE the
+			// live delete: the row must still exist to snapshot, rule 14).
+			for _, l := range existing {
+				if kept[l.ID] {
+					continue
+				}
+				if err := insertExpenseReportLineVersion(ctx, q, changeID, "delete", l.ID); err != nil {
+					return err
+				}
+				if err := q.DeleteExpenseReportLine(ctx, l.ID); err != nil {
+					return fmt.Errorf("delete expense report line %d: %w", l.ID, err)
+				}
+			}
+			return nil
+		})
+	if err != nil {
+		return fmt.Errorf("replace expense report %d lines: %w", reportID, err)
 	}
 	return nil
 }

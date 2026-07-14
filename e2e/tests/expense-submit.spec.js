@@ -113,18 +113,23 @@ test('expenses: submitter drafts an unbalanced report, submits, sees a rejection
   const reportID = Number(new URL(reportURL).pathname.split('/').pop());
   expect(reportID).toBeGreaterThan(0);
 
-  // Add an UNBALANCED line: a single revenue line (nothing offsets it).
-  await page.getByRole('button', { name: /new line/i }).click();
-  await expect(page.locator('form#expense-line-form.e2e-settled')).toBeVisible();
-  await page.locator('#elf-account').selectOption({ label: revName });
-  await page.locator('#elf-amount').fill('123.45');
+  // Add an UNBALANCED line via the auto-row grid: fill row 0 (a single revenue line,
+  // nothing offsets it). The grid auto-appends a fresh trailing empty row.
+  await expect(page.locator('form#expense-grid-form')).toBeVisible();
+  await page.locator('#el-account-0').selectOption({ label: revName });
+  await page.locator('#el-amount-0').fill('123.45');
+  // The client auto-appends row 1 once row 0 is edited.
+  await expect(page.locator('#el-account-1')).toBeVisible();
+
+  // Save the whole grid (bulk replace-set) -> a redirect back to the detail page.
   const detailReloaded = page.waitForResponse(
     (r) => new URL(r.url()).pathname === `/expenses/${reportID}` && r.request().method() === 'GET',
   );
-  await page.locator('form#expense-line-form button[type="submit"]').click();
+  await page.locator('#expense-save-lines').click();
   await detailReloaded;
 
-  // The line shows in the table.
+  // The line shows in the grid (its account is selected in row 0).
+  await expect(page.locator('#el-account-0')).toHaveValue(/\d+/);
   await expect(page.locator('table.expense-lines-table')).toContainText(revName);
 
   // Submit -- the report need NOT balance.

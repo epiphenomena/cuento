@@ -1918,12 +1918,10 @@ other = "Subsidiary"
 other = "This report was returned for changes."
 [expense.detail.rejected_hint]
 other = "Edit the lines below, then resubmit."
-[expense.detail.add_line]
-other = "Add a line"
-[expense.detail.new_line]
-other = "New line"
 [expense.detail.lines]
 other = "Lines"
+[expense.detail.save_lines]
+other = "Save lines"
 [expense.detail.no_lines]
 other = "No lines yet."
 [expense.detail.submit]
@@ -1944,32 +1942,12 @@ other = "Fund"
 other = "Program"
 [expense.line.col.memo]
 other = "Memo"
-[expense.line.col.actions]
-other = "Actions"
 [expense.line.unrestricted]
 other = "Unrestricted"
-[expense.line.form.new_title]
-other = "New line"
-[expense.line.form.edit_title]
-other = "Edit line"
-[expense.line.form.account]
-other = "Account"
 [expense.line.form.account_none]
 other = "Choose an account"
-[expense.line.form.account_hint]
-other = "A revenue or expense account in this report's subsidiary."
-[expense.line.form.amount]
-other = "Amount"
-[expense.line.form.amount_hint]
-other = "Enter a positive amount."
-[expense.line.form.fund]
-other = "Fund"
-[expense.line.form.program]
-other = "Program"
 [expense.line.form.program_none]
 other = "None"
-[expense.line.form.memo]
-other = "Memo"
 [error.expense.account_not_offered]
 other = "Choose a revenue or expense account in this report's subsidiary."
 [error.expense.amount]

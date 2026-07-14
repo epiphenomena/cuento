@@ -95,7 +95,7 @@ func TestExpenseSubsidiaryAndDiscard(t *testing.T) {
 	}
 
 	// Add a line -> the sub is now locked, so the picker disappears.
-	addLine(t, h, sm, sub, repID, rev, "50.00")
+	addLine(t, h, st, sm, sub, repID, rev, "50.00")
 	body = asUser(t, h, sm, sub, http.MethodGet, "/expenses/"+itoa(repID), nil).Body.String()
 	if strings.Contains(body, pickerAction) {
 		t.Errorf("subsidiary picker should be gone once a line exists:\n%s", body)
@@ -126,8 +126,8 @@ func TestExpenseUnbalancedSubmitOK(t *testing.T) {
 	repID := reportIDFromRedirect(t, rec)
 
 	// Add two UNBALANCED lines: revenue 100.00 + expense 30.00 (net != 0).
-	addLine(t, h, sm, sub, repID, rev, "100.00")
-	addLine(t, h, sm, sub, repID, exp, "30.00")
+	addLine(t, h, st, sm, sub, repID, rev, "100.00")
+	addLine(t, h, st, sm, sub, repID, exp, "30.00")
 
 	// Confirm the store sees an unbalanced set (sanity: the sum is non-zero).
 	lines, err := st.ExpenseReportLines(context.Background(), repID)
@@ -180,7 +180,7 @@ func TestExpenseRejectShowsReasonAndResubmit(t *testing.T) {
 
 	rec := asUser(t, h, sm, sub, http.MethodPost, "/expenses", url.Values{"subsidiary_id": {"1"}})
 	repID := reportIDFromRedirect(t, rec)
-	addLine(t, h, sm, sub, repID, exp, "50.00")
+	addLine(t, h, st, sm, sub, repID, exp, "50.00")
 	if rec := asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+itoa(repID)+"/submit", url.Values{}); rec.Code >= 400 {
 		t.Fatalf("submit: status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -231,10 +231,10 @@ func TestExpenseOwnershipBoundary(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("A opening B's report: status=%d, want 404", rec.Code)
 	}
-	// A tries to open the line editor of B's report -> 404.
-	rec = asUser(t, h, sm, subA, http.MethodGet, "/expenses/"+itoa(repB)+"/lines/new", nil)
+	// A tries to save lines to B's report (the bulk grid save) -> 404.
+	rec = asUser(t, h, sm, subA, http.MethodPost, "/expenses/"+itoa(repB)+"/lines", url.Values{"rows": {"0"}})
 	if rec.Code != http.StatusNotFound {
-		t.Errorf("A opening B's line editor: status=%d, want 404", rec.Code)
+		t.Errorf("A saving lines to B's report: status=%d, want 404", rec.Code)
 	}
 	// A tries to submit B's report -> 404.
 	rec = asUser(t, h, sm, subA, http.MethodPost, "/expenses/"+itoa(repB)+"/submit", url.Values{})
@@ -329,22 +329,37 @@ func TestExpenseLineBadAccountFieldError(t *testing.T) {
 	rec := asUser(t, h, sm, sub, http.MethodPost, "/expenses", url.Values{"subsidiary_id": {"1"}})
 	repID := itoa(reportIDFromRedirect(t, rec))
 
-	// A non-existent account id -> field error (422).
+	// A non-existent account id in a grid row -> per-row error (422).
 	rec = asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+repID+"/lines", url.Values{
-		"account_id": {"88888"}, "amount": {"10.00"},
+		"rows": {"1"}, "account_0": {"88888"}, "amount_0": {"10.00"},
 	})
 	if rec.Code != http.StatusUnprocessableEntity {
-		t.Errorf("nonexistent-account line: status=%d, want 422; body: %s", rec.Code, rec.Body.String())
+		t.Errorf("nonexistent-account row: status=%d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
-	// A non-R/E (asset) account -> field error (422).
+	// A non-R/E (asset) account in a grid row -> per-row error (422).
 	rec = asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+repID+"/lines", url.Values{
-		"account_id": {itoa(asset)}, "amount": {"10.00"},
+		"rows": {"1"}, "account_0": {itoa(asset)}, "amount_0": {"10.00"},
 	})
 	if rec.Code != http.StatusUnprocessableEntity {
-		t.Errorf("non-R/E account line: status=%d, want 422; body: %s", rec.Code, rec.Body.String())
+		t.Errorf("non-R/E account row: status=%d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
 	if !strings.Contains(rec.Body.String(), "field-error") {
-		t.Errorf("expected a field-error in the re-rendered form; body: %s", rec.Body.String())
+		t.Errorf("expected a field-error in the re-rendered grid; body: %s", rec.Body.String())
+	}
+
+	// The 422 re-render ECHOES the user's typed input (it does not reload the persisted
+	// set): a valid revenue row's distinctive amount survives alongside the bad row.
+	rev := seedREAccount(t, st, "revenue", "Grants Rev Echo")
+	rec = asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+repID+"/lines", url.Values{
+		"rows":      {"2"},
+		"account_0": {itoa(rev)}, "amount_0": {"77.77"},
+		"account_1": {itoa(asset)}, "amount_1": {"5.00"}, // asset -> row error
+	})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("mixed valid/invalid grid: status=%d, want 422; body: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "77.77") {
+		t.Errorf("422 re-render dropped the user's typed amount (77.77); body: %s", rec.Body.String())
 	}
 }
 
@@ -406,13 +421,79 @@ func reportIDFromRedirect(t *testing.T, rec *httptest.ResponseRecorder) int64 {
 	return id
 }
 
-// addLine POSTs a line (positive magnitude) to a report and fails on a non-redirect.
-func addLine(t *testing.T, h http.Handler, sm *scs.SessionManager, submitter, reportID, account int64, amount string) {
+// addLine APPENDS a line (positive magnitude) to a report via the p25.4 bulk grid save.
+// Because /expenses/{id}/lines is a REPLACE-SET (the whole line set posts at once), the
+// helper first reads the report's current lines and re-posts them (round-tripping each
+// line_id + its positive display magnitude) alongside the new row, so calling addLine
+// repeatedly accumulates lines like the old one-at-a-time form did. Fails on a non-redirect.
+func addLine(t *testing.T, h http.Handler, st *store.Store, sm *scs.SessionManager, submitter, reportID, account int64, amount string) {
 	t.Helper()
-	rec := asUser(t, h, sm, submitter, http.MethodPost, "/expenses/"+itoa(reportID)+"/lines", url.Values{
-		"account_id": {itoa(account)}, "amount": {amount},
-	})
+	form := gridFormFromLines(t, st, reportID)
+	idx := existingRowCount(t, st, reportID)
+	si := itoa64(idx)
+	form.Set("account_"+si, itoa(account))
+	form.Set("amount_"+si, amount)
+	form.Set("rows", itoa64(idx+1))
+	rec := asUser(t, h, sm, submitter, http.MethodPost, "/expenses/"+itoa(reportID)+"/lines", form)
 	if rec.Code >= 400 {
 		t.Fatalf("add line (acct %d, amt %s): status=%d body=%s", account, amount, rec.Code, rec.Body.String())
 	}
+}
+
+// gridFormFromLines builds the bulk-grid POST body echoing a report's CURRENT lines
+// (each line_id round-tripped + its positive display magnitude), so a subsequent append
+// preserves them. Row order == store order; the returned form has `rows` set to the
+// existing count (callers bump it when appending).
+func gridFormFromLines(t *testing.T, st *store.Store, reportID int64) url.Values {
+	t.Helper()
+	lines, err := st.ExpenseReportLines(context.Background(), reportID)
+	if err != nil {
+		t.Fatalf("gridFormFromLines: %v", err)
+	}
+	form := url.Values{}
+	for i, l := range lines {
+		si := itoa64(int64(i))
+		form.Set("line_id_"+si, itoa64(l.ID))
+		form.Set("account_"+si, itoa64(l.AccountID))
+		mag := l.Amount
+		if mag < 0 {
+			mag = -mag
+		}
+		// The seed/tests use 2-exponent USD amounts; format the positive magnitude plainly.
+		form.Set("amount_"+si, minorToPlain(mag))
+		if l.FundID.Valid {
+			form.Set("fund_"+si, itoa64(l.FundID.Int64))
+		}
+		if l.ProgramID.Valid {
+			form.Set("program_"+si, itoa64(l.ProgramID.Int64))
+		}
+		form.Set("memo_"+si, l.Memo)
+	}
+	form.Set("rows", itoa64(int64(len(lines))))
+	return form
+}
+
+func existingRowCount(t *testing.T, st *store.Store, reportID int64) int64 {
+	t.Helper()
+	lines, err := st.ExpenseReportLines(context.Background(), reportID)
+	if err != nil {
+		t.Fatalf("existingRowCount: %v", err)
+	}
+	return int64(len(lines))
+}
+
+func itoa64(v int64) string { return strconv.FormatInt(v, 10) }
+
+// minorToPlain formats a non-negative 2-exponent minor amount as a plain decimal string
+// (e.g. 10000 -> "100.00") for the test grid POST bodies.
+func minorToPlain(minor int64) string {
+	return strconv.FormatInt(minor/100, 10) + "." +
+		leftPad2(strconv.FormatInt(minor%100, 10))
+}
+
+func leftPad2(s string) string {
+	if len(s) < 2 {
+		return "0" + s
+	}
+	return s
 }

@@ -204,16 +204,19 @@ func buildPersonas(t *testing.T, st *store.Store, db *sql.DB) []persona {
 	}
 
 	// Seed one expense report (id 1) OWNED BY THE ADMIN persona, in draft state, with
-	// one line (id 1), so p20.2's /expenses/{id}, /expenses/{id}/lines/new,
-	// /expenses/{id}/lines/{lid}/edit, /expenses/{id}/lines/{lid}, /expenses/{id}/lines/
-	// {lid}/delete, /expenses/{id}/submit, /expenses/{id}/resubmit resolve to a REAL,
-	// OWNED resource when the reachability check substitutes {id}/{lid} -> 1 (the
-	// handlers enforce OWNERSHIP -> a not-owned/missing id is a 404, so the report MUST
-	// belong to the reachability persona, Admin). A draft report keeps the line editor
-	// reachable (a submitted report freezes lines -> 404 on the line routes). The line
-	// needs an R/E account; the "Seed Revenue" account (rev, id created in newMatrixApp)
-	// is one, resolved here by name. The routes only need the rows to exist so an
-	// authorized persona reaches the handler (non-404).
+	// one line, so p20.2/p25.4's /expenses/{id}, /expenses/{id}/subsidiary, /expenses/
+	// {id}/lines (the bulk grid save), /expenses/{id}/submit, /expenses/{id}/resubmit,
+	// /expenses/{id}/discard resolve to a REAL, OWNED resource when the reachability
+	// check substitutes {id} -> 1 (the handlers enforce OWNERSHIP -> a not-owned/missing
+	// id is a 404, so the report MUST belong to the reachability persona, Admin). A draft
+	// report keeps the grid save reachable (a submitted report freezes lines -> 404). The
+	// line needs an R/E account; the "Seed Revenue" account (rev, id created in
+	// newMatrixApp) is one, resolved here by name. The routes only need the report/line
+	// to exist so an authorized persona reaches the handler (non-404). NOTE: the
+	// reachability sweep POSTs /expenses/1/lines with an EMPTY body -> the bulk save
+	// parses 0 rows -> ReplaceExpenseReportLines DELETES the seeded line (but NOT the
+	// report), which is fine: no later route needs the line, and /expenses/1/submit still
+	// reaches the handler (then a clean 422 on the now-empty report -- non-404).
 	repID, err := st.CreateExpenseReport(ctx, admin.ID, 1)
 	if err != nil {
 		t.Fatalf("seed expense report: %v", err)

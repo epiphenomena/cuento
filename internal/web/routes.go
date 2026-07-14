@@ -388,21 +388,17 @@ func (s *server) routes() []Route {
 		// each id-taking handler (a missing OR not-owned report id -> 404, uniform, no
 		// enumeration) -- the perm gate alone is not enough. GET /expenses is the "my
 		// reports" list (lighting up the nav.myexpenses entry, shell.go); POST /expenses
-		// creates a draft; GET /expenses/{id} is the editor; the line CRUD (line-at-a-time,
-		// reusing the phase-12 sub-scoped selector row -- DECISIONS p20.2) and submit/
-		// resubmit follow. The literal ".../lines/new" is more specific than the
-		// ".../lines/{lid}" wildcard, so the Go 1.22+ mux routes them precisely; likewise
-		// ".../submit"/".../resubmit" vs the ".../{id}" GET. The permission-matrix test
-		// picks these up automatically (rule 8).
+		// creates a draft; GET /expenses/{id} is the editor; POST /expenses/{id}/lines is
+		// the p25.4 auto-row grid's BULK save (replace-set diff-by-line-id under ONE
+		// change, replacing the old line-at-a-time CRUD); submit/resubmit follow. The
+		// literal ".../submit"/".../resubmit" beat the ".../{id}" GET wildcard, so the Go
+		// 1.22+ mux routes them precisely. The permission-matrix test picks these up
+		// automatically (rule 8).
 		{http.MethodGet, "/expenses", ExpenseSubmit, http.HandlerFunc(s.expensesPage)},
 		{http.MethodPost, "/expenses", ExpenseSubmit, http.HandlerFunc(s.expenseCreate)},
 		{http.MethodGet, "/expenses/{id}", ExpenseSubmit, http.HandlerFunc(s.expenseDetail)},
 		{http.MethodPost, "/expenses/{id}/subsidiary", ExpenseSubmit, http.HandlerFunc(s.expenseSetSubsidiary)},
-		{http.MethodGet, "/expenses/{id}/lines/new", ExpenseSubmit, http.HandlerFunc(s.expenseLineNewForm)},
-		{http.MethodGet, "/expenses/{id}/lines/{lid}/edit", ExpenseSubmit, http.HandlerFunc(s.expenseLineEditForm)},
-		{http.MethodPost, "/expenses/{id}/lines", ExpenseSubmit, http.HandlerFunc(s.expenseLineCreate)},
-		{http.MethodPost, "/expenses/{id}/lines/{lid}", ExpenseSubmit, http.HandlerFunc(s.expenseLineUpdate)},
-		{http.MethodPost, "/expenses/{id}/lines/{lid}/delete", ExpenseSubmit, http.HandlerFunc(s.expenseLineDelete)},
+		{http.MethodPost, "/expenses/{id}/lines", ExpenseSubmit, http.HandlerFunc(s.expenseLinesSave)},
 		{http.MethodPost, "/expenses/{id}/submit", ExpenseSubmit, http.HandlerFunc(s.expenseSubmit)},
 		{http.MethodPost, "/expenses/{id}/resubmit", ExpenseSubmit, http.HandlerFunc(s.expenseResubmit)},
 		// p20.3 reviewer queue -> convert / reject (Phase 20, COMPLETES it). ALL TxnWrite

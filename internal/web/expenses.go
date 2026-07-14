@@ -22,20 +22,23 @@ import (
 // and a submitter may see/edit ONLY THEIR OWN reports (ownership enforced in every
 // id-taking handler -> 404 for a missing OR not-owned id, uniform, no enumeration).
 //
-// REUSE of the phase-12 grid pieces, honestly scoped (DECISIONS p20.2): the LINE
-// editor is the LINE-AT-A-TIME shape of the budget-line editor (p19.3) -- a report
-// detail = header + a lines table + one inline add/edit-line form + Submit. The
-// per-line CRUD (Add/Update/RemoveExpenseReportLine, each its OWN change) is the
-// store seam; there is NO bulk-save grid, so NO p12 trap-1 reconcile-by-id and NO
-// new ES module. What IS reused: the sub-scoped account/fund/program selector row
-// (accounts = R/E leaves in the report's sub, funds = ActiveFunds(sub), programs =
-// all active -- exactly buildLineForm), the form-error convention (422 + partial +
-// autofocus, p10.3), the .txn-grid CSS, and the money formatters (rule 10). NO
-// balancing requirement: an unbalanced report submits fine (the reviewer balances it
-// at convert, p20.3). Amounts are entered as a POSITIVE magnitude; the stored sign is
-// derived from the account TYPE (expense positive, revenue negative) so the display
-// reads naturally -- the reviewer re-resolves sign at convert, so correctness does
-// not hinge here (DECISIONS p20.2).
+// REUSE of the phase-12 grid pieces (p25.4 OVERTURNS the p20.2 "NO bulk-save grid / NO
+// new ES module" note): the LINE editor is now the SAME auto-row grid as the transaction
+// editor -- a report detail = header + a bulk-submit line grid (account/amount/fund/
+// program/memo) + Submit. The whole line set saves under ONE change via the store's
+// ReplaceExpenseReportLines replace-set (diff-by-line-id, the p12 trap-1 reconcile
+// mirrored from UpdateTransaction), replacing the old per-line Add/Update/Remove CRUD.
+// The grid starts with one empty row; expensegrid.js auto-appends a fresh trailing empty
+// row as the last row is edited (reusing the tested isRowEmpty predicate), and the server
+// drops the trailing empty on save. Still honestly scoped vs the txn grid: NO balancing,
+// NO min-2, NO DR/CR, NO functional-class. What IS reused: the sub-scoped account/fund/
+// program option lists (accounts = R/E leaves in the report's sub, funds = ActiveFunds
+// (sub), programs = all active -- expenseLineOptions), the per-row error convention (422
+// re-render, p10.3), the .txn-grid CSS, and the money formatters (rule 10). NO balancing
+// requirement: an unbalanced report submits fine (the reviewer balances it at convert,
+// p20.3). Amounts are entered as a POSITIVE magnitude; the stored sign is derived from the
+// account TYPE (expense positive, revenue negative) so the display reads naturally -- the
+// reviewer re-resolves sign at convert, so correctness does not hinge here.
 //
 // Every string via {{t}} (rule 9); amounts/dates through the money formatters (rule
 // 10); account/fund/program/subsidiary names are stored proper nouns; no inline
@@ -182,15 +185,28 @@ func (s *server) expenseDiscard(w http.ResponseWriter, r *http.Request) {
 // REPORT DETAIL / EDITOR
 // ===========================================================================
 
-// expenseLineRow is one rendered line on the report detail: resolved account/fund/
-// program names + the formatted (positive-magnitude) amount + memo.
+// expenseLineRow is one line on the report detail. When the report is EDITABLE it is
+// rendered as a GRID ROW (the ids + positive-magnitude AmountInput prefill the account/
+// amount/fund/program/memo controls, p25.4); when NOT editable it renders READ-ONLY from
+// the resolved-name display fields.
 type expenseLineRow struct {
-	ID        int64
+	ID int64
+	// Grid-edit prefill (Editable render): the chosen ids + the positive magnitude in
+	// the user's number format.
+	AccountID   int64
+	FundID      int64 // 0 = unrestricted
+	ProgramID   int64 // 0 = none
+	AmountInput string
+	// Read-only display (non-editable render): resolved proper-noun names + formatted
+	// (positive-magnitude) amount.
 	AcctName  string
 	FundName  string // "" = unrestricted
 	ProgName  string // "" = none
 	AmountFmt string
 	Memo      string
+	// ErrorKey is this row's per-row error i18n key on a 422 grid re-render (p25.4);
+	// "" = none. Rendered in the row's error cell via {{t}}.
+	ErrorKey string
 }
 
 // expenseDetailModel is the GET /expenses/{id} model: the report header (its sub +
@@ -209,6 +225,13 @@ type expenseDetailModel struct {
 	ReviewNotes string // the reviewer's rejection reason (rejected only)
 	Lines       []expenseLineRow
 
+	// Sub-scoped option lists for the editable grid (p25.4), loaded only when
+	// .Editable: accounts = R/E leaves in the report's sub, funds = ActiveFunds(sub),
+	// programs = all active. Empty on a read-only render.
+	Accounts []txnOption
+	Funds    []txnOption
+	Programs []txnOption
+
 	// ErrorKey is a pre-localized page-level error (the zero-line submit case), "" =
 	// none. It is already run through {{t}} in the handler so the template renders it
 	// verbatim (like admin_user_detail's page-level error).
@@ -218,39 +241,56 @@ type expenseDetailModel struct {
 // expenseDetail handles GET /expenses/{id} (ExpenseSubmit): the report editor. It
 // ENFORCES OWNERSHIP -- a missing OR not-owned id is a 404 (uniform, no enumeration).
 func (s *server) expenseDetail(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	u := currentUser(ctx)
-	lang := langOf(ctx)
 	id := parseID(r.PathValue("id"))
-
 	rep, ok := s.loadOwnedReport(w, r, id)
 	if !ok {
 		return
 	}
+	model, ok := s.buildExpenseDetailModel(w, r, rep)
+	if !ok {
+		return
+	}
+	s.render(w, r, http.StatusOK, "expense_detail.tmpl", s.newShellPage(r, model))
+}
+
+// buildExpenseDetailModel assembles the report-detail model shared by expenseDetail and
+// the 422 re-render paths (renderReportError / the grid-save error re-render). It loads
+// the header + status, the reviewer reason, the read-only line display fields AND -- when
+// the report is EDITABLE -- the sub-scoped account/fund/program option lists plus each
+// line's grid-edit prefill (ids + positive-magnitude AmountInput). When editable with NO
+// lines it seeds ONE empty starter row so {{len .Lines}} == rendered rows (the client
+// auto-appends further trailing rows, the server drops the trailing empty on save). ok=
+// false means a 500 was already written.
+func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request, rep sqlc.ExpenseReport) (expenseDetailModel, bool) {
+	ctx := r.Context()
+	u := currentUser(ctx)
+	lang := langOf(ctx)
+	id := rep.ID
+
 	lines, err := s.store.ExpenseReportLines(ctx, id)
 	if err != nil {
 		s.serverError(w)
-		return
+		return expenseDetailModel{}, false
 	}
 	acctNames, err := accountNameMap(ctx, s.store, lang)
 	if err != nil {
 		s.serverError(w)
-		return
+		return expenseDetailModel{}, false
 	}
 	subNames, err := subNameMap(ctx, s.store)
 	if err != nil {
 		s.serverError(w)
-		return
+		return expenseDetailModel{}, false
 	}
 	progNames, err := s.programNameMap(ctx)
 	if err != nil {
 		s.serverError(w)
-		return
+		return expenseDetailModel{}, false
 	}
 	fundNames, err := s.fundNameMap(ctx)
 	if err != nil {
 		s.serverError(w)
-		return
+		return expenseDetailModel{}, false
 	}
 	opts := formatOptsFor(u)
 	exp := s.reportExponent(ctx, rep)
@@ -276,28 +316,49 @@ func (s *server) expenseDetail(w http.ResponseWriter, r *http.Request) {
 		subs, err := s.store.AllSubsidiaries(ctx)
 		if err != nil {
 			s.serverError(w)
-			return
+			return expenseDetailModel{}, false
 		}
 		for _, sb := range subs {
 			model.Subs = append(model.Subs, subOption{ID: sb.ID, Name: sb.Name})
 		}
 	}
+	// p25.4: when editable, load the sub-scoped account/fund/program option lists the
+	// grid selects offer (the SAME set reportAccountType gates on).
+	if model.Editable {
+		accts, funds, progs, err := s.expenseLineOptions(ctx, rep.SubsidiaryID)
+		if err != nil {
+			s.serverError(w)
+			return expenseDetailModel{}, false
+		}
+		model.Accounts, model.Funds, model.Programs = accts, funds, progs
+	}
 	for _, l := range lines {
 		row := expenseLineRow{
 			ID:        l.ID,
+			AccountID: l.AccountID,
 			AcctName:  acctNames[l.AccountID],
 			AmountFmt: money.Format(displayAmount(l.Amount), exp, opts),
 			Memo:      l.Memo,
 		}
+		if model.Editable {
+			row.AmountInput = money.Format(displayAmount(l.Amount), exp, opts)
+		}
 		if l.FundID.Valid {
+			row.FundID = l.FundID.Int64
 			row.FundName = fundNames[l.FundID.Int64]
 		}
 		if l.ProgramID.Valid {
+			row.ProgramID = l.ProgramID.Int64
 			row.ProgName = progNames[l.ProgramID.Int64]
 		}
 		model.Lines = append(model.Lines, row)
 	}
-	s.render(w, r, http.StatusOK, "expense_detail.tmpl", s.newShellPage(r, model))
+	// Editable + no lines: seed ONE empty starter row so the rows-count matches the
+	// rendered rows (the client auto-appends more; the server drops the trailing empty).
+	if model.Editable && len(model.Lines) == 0 {
+		model.Lines = []expenseLineRow{{}}
+	}
+	return model, true
 }
 
 // displayAmount returns the positive magnitude of a signed stored amount (the UI
@@ -327,186 +388,50 @@ func (s *server) reportExponent(ctx context.Context, rep sqlc.ExpenseReport) int
 // LINE EDITOR (sub-scoped account/fund/program selectors)
 // ===========================================================================
 
-// expenseLineFormModel is the add/edit-line form. The account/fund options are
-// SCOPED to the report's subsidiary (accounts = R/E leaves in the sub, funds =
-// ActiveFunds(sub)); programs are all active -- exactly buildLineForm (p19.3). ID 0
-// = create. The report's sub is FIXED (one sub per report), so there is NO sub picker
-// and NO sub-change re-filter -- the report already bound its subsidiary at creation.
-type expenseLineFormModel struct {
-	ReportID  int64
-	ID        int64
-	AccountID int64
-	FundID    int64 // 0 = unrestricted
-	ProgramID int64 // 0 = none
-	Amount    string
-	Memo      string
-
-	Accounts []txnOption // R/E leaves scoped to the report's sub
-	Funds    []txnOption // ActiveFunds(sub)
-	Programs []txnOption
-
-	Errors formErrors
-}
-
-// buildExpenseLineForm assembles the sub-scoped option lists for a report's line
-// form. Accounts are the revenue/expense LEAVES in the report's sub (a report is of
-// R/E flows -- a balance-sheet account is never offered, and the handler rejects one
-// out of band); funds are ActiveFunds(sub); programs are all active (not sub-scoped,
-// like the txn/budget editors). It is shared by the new/edit forms and the 422
-// re-render so the options always match the report's subsidiary.
-func (s *server) buildExpenseLineForm(ctx context.Context, reportID, sub int64) (expenseLineFormModel, error) {
+// expenseLineOptions assembles the sub-scoped option lists the grid selects offer for
+// a report's subsidiary: accounts = the revenue/expense LEAVES in the sub (a report is
+// of R/E flows -- a balance-sheet account is never offered, and the handler rejects one
+// out of band); funds = ActiveFunds(sub); programs = all active (not sub-scoped, like
+// the txn/budget editors). It is shared by the detail render and the 422 re-render so
+// the options always match the report's subsidiary.
+func (s *server) expenseLineOptions(ctx context.Context, sub int64) (accounts, funds, programs []txnOption, err error) {
 	lang := langOf(ctx)
-	form := expenseLineFormModel{ReportID: reportID}
 
 	accts, err := s.store.AccountEditorOptions(ctx, lang, sub)
 	if err != nil {
-		return form, err
+		return nil, nil, nil, err
 	}
 	for _, a := range accts {
 		if a.Type != "revenue" && a.Type != "expense" {
 			continue
 		}
-		form.Accounts = append(form.Accounts, txnOption{ID: a.ID, Name: a.Name})
+		accounts = append(accounts, txnOption{ID: a.ID, Name: a.Name})
 	}
 
-	funds, err := s.store.ActiveFunds(ctx, sub)
+	fs, err := s.store.ActiveFunds(ctx, sub)
 	if err != nil {
-		return form, err
+		return nil, nil, nil, err
 	}
-	for _, f := range funds {
-		form.Funds = append(form.Funds, txnOption{ID: f.ID, Name: f.Name})
+	for _, f := range fs {
+		funds = append(funds, txnOption{ID: f.ID, Name: f.Name})
 	}
 
 	progs, err := s.store.ProgramTree(ctx)
 	if err != nil {
-		return form, err
+		return nil, nil, nil, err
 	}
 	for _, p := range progs {
 		if p.Active == 0 {
 			continue
 		}
-		form.Programs = append(form.Programs, txnOption{ID: p.ID, Name: p.Name})
+		programs = append(programs, txnOption{ID: p.ID, Name: p.Name})
 	}
-	return form, nil
-}
-
-// expenseLineNewForm handles GET /expenses/{id}/lines/new (ExpenseSubmit): a blank
-// line form for the report (ownership enforced). Only a draft|rejected report is
-// editable; a submitted/converted report's editor renders read-only (no form), so
-// this GET should not be reachable for those -- but we guard anyway (404 on a
-// non-editable report keeps the surface honest).
-func (s *server) expenseLineNewForm(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
-	rep, ok := s.loadEditableReport(w, r, id)
-	if !ok {
-		return
-	}
-	form, err := s.buildExpenseLineForm(ctx, id, rep.SubsidiaryID)
-	if err != nil {
-		s.serverError(w)
-		return
-	}
-	s.render(w, r, http.StatusOK, "expense-line-form", form)
-}
-
-// expenseLineEditForm handles GET /expenses/{id}/lines/{lid}/edit (ExpenseSubmit):
-// the line form prefilled (ownership + editability enforced).
-func (s *server) expenseLineEditForm(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	u := currentUser(ctx)
-	id := parseID(r.PathValue("id"))
-	lineID := parseID(r.PathValue("lid"))
-	rep, ok := s.loadEditableReport(w, r, id)
-	if !ok {
-		return
-	}
-	line, ok := s.loadReportLine(w, r, id, lineID)
-	if !ok {
-		return
-	}
-	form, err := s.buildExpenseLineForm(ctx, id, rep.SubsidiaryID)
-	if err != nil {
-		s.serverError(w)
-		return
-	}
-	form.ID = lineID
-	form.AccountID = line.AccountID
-	if line.FundID.Valid {
-		form.FundID = line.FundID.Int64
-	}
-	if line.ProgramID.Valid {
-		form.ProgramID = line.ProgramID.Int64
-	}
-	form.Amount = money.Format(displayAmount(line.Amount), s.reportExponent(ctx, rep), formatOptsFor(u))
-	form.Memo = line.Memo
-	s.render(w, r, http.StatusOK, "expense-line-form", form)
-}
-
-// parseExpenseLineForm reads the POST form into an expenseLineFormModel (echo for a
-// 422 re-render) and resolves the SIGNED store amount from the entered positive
-// magnitude + the chosen account's type (expense positive, revenue negative). It
-// validates the account is in the report's sub-scoped R/E option set (the store does
-// NOT check subsidiary/type on a report line, p20.1 -- that gate lives here); an
-// out-of-sub / non-R/E account is flagged as a field error. A bad amount is left 0.
-func (s *server) parseExpenseLineForm(r *http.Request, rep sqlc.ExpenseReport, lineID int64) (expenseLineFormModel, store.ExpenseReportLineInput, string) {
-	ctx := r.Context()
-	u := currentUser(ctx)
-	_ = r.ParseForm()
-
-	form, err := s.buildExpenseLineForm(ctx, rep.ID, rep.SubsidiaryID)
-	if err != nil {
-		// A build failure is a server fault; signal via a generic key so the caller 500s.
-		return expenseLineFormModel{ReportID: rep.ID, ID: lineID}, store.ExpenseReportLineInput{}, "__server__"
-	}
-	form.ID = lineID
-	form.AccountID = parseID(r.PostFormValue("account_id"))
-	form.FundID = parseID(r.PostFormValue("fund_id"))
-	form.ProgramID = parseID(r.PostFormValue("program_id"))
-	form.Amount = strings.TrimSpace(r.PostFormValue("amount"))
-	form.Memo = strings.TrimSpace(r.PostFormValue("memo"))
-
-	// The account must be one of the offered R/E leaves in the report's sub (the store
-	// does not enforce this for a report line, so it is the web edge's job).
-	acctType, offered := s.reportAccountType(ctx, rep.SubsidiaryID, form.AccountID)
-	if form.AccountID == 0 || !offered {
-		return form, store.ExpenseReportLineInput{}, "account_id"
-	}
-
-	// Amount: entered as a POSITIVE magnitude in the user's number format; a parse
-	// failure yields 0 -> the balance-free store accepts it, but a 0 line is pointless,
-	// so flag an empty/zero magnitude as an amount error.
-	mag, perr := money.Parse(form.Amount, s.reportExponent(ctx, rep), numberFormatFor(u))
-	if perr != nil || mag <= 0 {
-		return form, store.ExpenseReportLineInput{}, "amount"
-	}
-	// Derive the stored sign from the account type: an expense is a positive outflow;
-	// revenue is a negative (credit) magnitude. The reviewer re-resolves at convert, so
-	// this is a display convention, not a correctness constraint (DECISIONS p20.2).
-	amount := mag
-	if acctType == "revenue" {
-		amount = -mag
-	}
-
-	in := store.ExpenseReportLineInput{
-		AccountID: form.AccountID,
-		Amount:    amount,
-		Memo:      form.Memo,
-	}
-	if form.FundID > 0 {
-		fid := form.FundID
-		in.FundID = &fid
-	}
-	if form.ProgramID > 0 {
-		pid := form.ProgramID
-		in.ProgramID = &pid
-	}
-	return form, in, ""
+	return accounts, funds, programs, nil
 }
 
 // reportAccountType returns an account's type and whether it is one of the R/E leaves
 // offered for the report's subsidiary. Reuses AccountEditorOptions (the SAME set the
-// form offers), so the gate can never disagree with what the picker showed.
+// grid offers), so the gate can never disagree with what the picker showed.
 func (s *server) reportAccountType(ctx context.Context, sub, acctID int64) (string, bool) {
 	if acctID == 0 {
 		return "", false
@@ -523,100 +448,150 @@ func (s *server) reportAccountType(ctx context.Context, sub, acctID int64) (stri
 	return "", false
 }
 
-// expenseLineCreate handles POST /expenses/{id}/lines (ExpenseSubmit).
-func (s *server) expenseLineCreate(w http.ResponseWriter, r *http.Request) {
+// expenseLinesSave handles POST /expenses/{id}/lines (ExpenseSubmit, p25.4): the
+// auto-row grid's BULK submit. It parses the per-row fields (account_i, amount_i,
+// fund_i, program_i, memo_i, line_id_i) up to the `rows` count -- like parseSplitForms
+// -- SKIPPING fully-empty rows (which drops the trailing scaffold row). Each non-empty
+// row's account must be an offered R/E leaf (reportAccountType, the web-edge gate the
+// store does not enforce); its amount is a POSITIVE magnitude, and the stored sign is
+// derived from the account type (revenue negative, expense positive -- the reviewer
+// re-resolves at convert, so this is a display convention, DECISIONS p20.2). A bad row
+// is a per-row error and a 422 grid re-render; all-valid rows go to
+// ReplaceExpenseReportLines under ONE change, then a PRG redirect to the detail page.
+func (s *server) expenseLinesSave(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	u := currentUser(ctx)
 	id := parseID(r.PathValue("id"))
 	rep, ok := s.loadEditableReport(w, r, id)
 	if !ok {
 		return
 	}
-	form, in, field := s.parseExpenseLineForm(r, rep, 0)
-	if field != "" {
-		s.renderExpenseLineError(w, r, form, field)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	if _, err := s.store.AddExpenseReportLine(s.actorCtx(ctx), id, in); err != nil {
-		s.renderExpenseLineStoreError(w, r, form, err)
+
+	exp := s.reportExponent(ctx, rep)
+	numFmt := numberFormatFor(u)
+	n := int(parseID(r.PostFormValue("rows")))
+
+	desired := make([]store.ExpenseReportLineDesired, 0, n)
+	// echo holds every NON-EMPTY row as the user typed it (order preserved), so a 422
+	// re-render shows the user's input, not a reload of the persisted set (mirrors the
+	// txn grid's parseSplitForms echo). badRow indexes into echo; -1 = no row error.
+	var echo []expenseLineRow
+	rowErr := "" // i18n key of the first row error; "" = all rows valid
+	badRow := -1
+	for i := 0; i < n; i++ {
+		si := strconv.Itoa(i)
+		acct := parseID(r.PostFormValue("account_" + si))
+		amountStr := strings.TrimSpace(r.PostFormValue("amount_" + si))
+		// Skip fully-empty rows (no account AND blank amount): the trailing scaffold row.
+		if acct == 0 && amountStr == "" {
+			continue
+		}
+
+		lineID := parseID(r.PostFormValue("line_id_" + si))
+		fund := parseID(r.PostFormValue("fund_" + si))
+		prog := parseID(r.PostFormValue("program_" + si))
+		memo := strings.TrimSpace(r.PostFormValue("memo_" + si))
+
+		// Echo the row exactly as typed (the ids + the raw amount text) so the re-render
+		// re-enters the user's input.
+		echoIdx := len(echo)
+		echo = append(echo, expenseLineRow{
+			ID:          lineID,
+			AccountID:   acct,
+			FundID:      fund,
+			ProgramID:   prog,
+			AmountInput: amountStr,
+			Memo:        memo,
+		})
+
+		acctType, offered := s.reportAccountType(ctx, rep.SubsidiaryID, acct)
+		if acct == 0 || !offered {
+			if rowErr == "" {
+				rowErr, badRow = "error.expense.account_not_offered", echoIdx
+			}
+			continue
+		}
+		mag, perr := money.Parse(amountStr, exp, numFmt)
+		if perr != nil || mag <= 0 {
+			if rowErr == "" {
+				rowErr, badRow = "error.expense.amount", echoIdx
+			}
+			continue
+		}
+		amount := mag
+		if acctType == "revenue" {
+			amount = -mag
+		}
+		d := store.ExpenseReportLineDesired{
+			ID: lineID,
+			ExpenseReportLineInput: store.ExpenseReportLineInput{
+				AccountID: acct,
+				Amount:    amount,
+				Memo:      memo,
+			},
+		}
+		if fund > 0 {
+			f := fund
+			d.FundID = &f
+		}
+		if prog > 0 {
+			p := prog
+			d.ProgramID = &p
+		}
+		desired = append(desired, d)
+	}
+
+	if rowErr != "" {
+		s.renderExpenseGridError(w, r, rep, echo, badRow, rowErr)
 		return
+	}
+
+	if err := s.store.ReplaceExpenseReportLines(s.actorCtx(ctx), id, desired); err != nil {
+		switch {
+		case errors.Is(err, store.ErrExpenseReportState),
+			errors.Is(err, store.ErrExpenseReportImmutable):
+			// The report left the editable state under us -> back to the detail page.
+			redirectAfterForm(w, r, "/expenses/"+strconv.FormatInt(id, 10))
+			return
+		case errors.Is(err, store.ErrExpenseReportRefMissing),
+			errors.Is(err, store.ErrExpenseReportLineNotFound):
+			// A race deleted a referenced account/line -> a page-level grid error.
+			s.renderExpenseGridError(w, r, rep, echo, -1, "error.expense.account_not_offered")
+			return
+		default:
+			s.serverError(w)
+			return
+		}
 	}
 	redirectAfterForm(w, r, "/expenses/"+strconv.FormatInt(id, 10))
 }
 
-// expenseLineUpdate handles POST /expenses/{id}/lines/{lid} (ExpenseSubmit).
-func (s *server) expenseLineUpdate(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
-	lineID := parseID(r.PathValue("lid"))
-	rep, ok := s.loadEditableReport(w, r, id)
+// renderExpenseGridError re-renders the report detail (with its editable grid) at 422,
+// ECHOING the user's typed rows (not a reload of the persisted set -- a bad save is
+// all-or-nothing, so re-rendering the last-good persisted lines would discard the
+// user's edits). rows is the parsed non-empty rows in submit order; badRow is the index
+// (into rows) the error attaches to, or -1 for a page-level error. It reuses the shared
+// builder ONLY for the sub-scoped option lists + header, then substitutes the echoed
+// rows. A trailing empty starter row is appended so the client's auto-append has one to
+// grow from (and {{len .Lines}} == rendered rows).
+func (s *server) renderExpenseGridError(w http.ResponseWriter, r *http.Request, rep sqlc.ExpenseReport, rows []expenseLineRow, badRow int, key string) {
+	model, ok := s.buildExpenseDetailModel(w, r, rep)
 	if !ok {
 		return
 	}
-	if _, ok := s.loadReportLine(w, r, id, lineID); !ok {
-		return
+	lang := langOf(r.Context())
+	if badRow >= 0 && badRow < len(rows) {
+		rows[badRow].ErrorKey = key
+	} else {
+		model.ErrorKey = i18n.T(lang, key)
 	}
-	form, in, field := s.parseExpenseLineForm(r, rep, lineID)
-	if field != "" {
-		s.renderExpenseLineError(w, r, form, field)
-		return
-	}
-	if err := s.store.UpdateExpenseReportLine(s.actorCtx(ctx), lineID, in); err != nil {
-		s.renderExpenseLineStoreError(w, r, form, err)
-		return
-	}
-	redirectAfterForm(w, r, "/expenses/"+strconv.FormatInt(id, 10))
-}
-
-// expenseLineDelete handles POST /expenses/{id}/lines/{lid}/delete (ExpenseSubmit): a
-// hard delete with an audit version (rule 14). Ownership + editability enforced.
-func (s *server) expenseLineDelete(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
-	lineID := parseID(r.PathValue("lid"))
-	if _, ok := s.loadEditableReport(w, r, id); !ok {
-		return
-	}
-	if _, ok := s.loadReportLine(w, r, id, lineID); !ok {
-		return
-	}
-	if err := s.store.RemoveExpenseReportLine(s.actorCtx(ctx), lineID); err != nil {
-		s.serverError(w)
-		return
-	}
-	http.Redirect(w, r, "/expenses/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
-}
-
-// renderExpenseLineError re-renders the line form at 422 with a field error (the
-// p10.3 convention). A "__server__" field is a build fault -> 500.
-func (s *server) renderExpenseLineError(w http.ResponseWriter, r *http.Request, form expenseLineFormModel, field string) {
-	if field == "__server__" {
-		s.serverError(w)
-		return
-	}
-	key := "error.expense.account_not_offered"
-	if field == "amount" {
-		key = "error.expense.amount"
-	}
-	form.Errors.add(field, key)
-	s.renderFormError(w, r, "expense-line-form", form)
-}
-
-// renderExpenseLineStoreError maps a store typed error to a field error (the store
-// re-validates ref existence; a race that deleted the account surfaces here).
-func (s *server) renderExpenseLineStoreError(w http.ResponseWriter, r *http.Request, form expenseLineFormModel, err error) {
-	switch {
-	case errors.Is(err, store.ErrExpenseReportRefMissing):
-		form.Errors.add("account_id", "error.expense.account_not_offered")
-	case errors.Is(err, store.ErrExpenseReportState),
-		errors.Is(err, store.ErrExpenseReportImmutable):
-		// The report left the editable state under us -> back to the detail page.
-		redirectAfterForm(w, r, "/expenses/"+strconv.FormatInt(form.ReportID, 10))
-		return
-	default:
-		s.serverError(w)
-		return
-	}
-	s.renderFormError(w, r, "expense-line-form", form)
+	// Substitute the echoed rows for the persisted ones + a trailing empty starter row.
+	model.Lines = append(rows, expenseLineRow{})
+	s.render(w, r, http.StatusUnprocessableEntity, "expense_detail.tmpl", s.newShellPage(r, model))
 }
 
 // ===========================================================================
@@ -672,48 +647,16 @@ func (s *server) transitionReport(w http.ResponseWriter, r *http.Request, resubm
 }
 
 // renderReportError re-renders the report detail page at 422 with a page-level error
-// (the zero-line submit case). It reloads the lines so the page is intact.
+// (the zero-line submit case). It rebuilds the model via the shared builder so the
+// editable grid (its options + starter row) is intact on the re-render.
 func (s *server) renderReportError(w http.ResponseWriter, r *http.Request, rep sqlc.ExpenseReport, key string) {
-	ctx := r.Context()
-	u := currentUser(ctx)
-	lang := langOf(ctx)
-	subNames, _ := subNameMap(ctx, s.store)
-	acctNames, _ := accountNameMap(ctx, s.store, lang)
-	progNames, _ := s.programNameMap(ctx)
-	fundNames, _ := s.fundNameMap(ctx)
-	lines, _ := s.store.ExpenseReportLines(ctx, rep.ID)
-	opts := formatOptsFor(u)
-	exp := s.reportExponent(ctx, rep)
-
-	model := expenseDetailModel{
-		ID:        rep.ID,
-		SubName:   subNames[rep.SubsidiaryID],
-		Status:    rep.Status,
-		StatusKey: "expense.status." + rep.Status,
-		Editable:  rep.Status == "draft" || rep.Status == "rejected",
-		Rejected:  rep.Status == "rejected",
+	model, ok := s.buildExpenseDetailModel(w, r, rep)
+	if !ok {
+		return
 	}
-	if model.Rejected {
-		model.ReviewNotes = rep.ReviewNotes
-	}
-	for _, l := range lines {
-		row := expenseLineRow{
-			ID:        l.ID,
-			AcctName:  acctNames[l.AccountID],
-			AmountFmt: money.Format(displayAmount(l.Amount), exp, opts),
-			Memo:      l.Memo,
-		}
-		if l.FundID.Valid {
-			row.FundName = fundNames[l.FundID.Int64]
-		}
-		if l.ProgramID.Valid {
-			row.ProgName = progNames[l.ProgramID.Int64]
-		}
-		model.Lines = append(model.Lines, row)
-	}
-	// A page-level error above the form: reuse the detail template, with the error key
-	// stamped so it renders. We surface it via a dedicated field on the model.
-	model.ErrorKey = i18n.T(lang, key)
+	// A page-level error above the grid: reuse the detail template, with the error key
+	// stamped (already localized) so it renders verbatim.
+	model.ErrorKey = i18n.T(langOf(r.Context()), key)
 	s.render(w, r, http.StatusUnprocessableEntity, "expense_detail.tmpl", s.newShellPage(r, model))
 }
 
@@ -759,22 +702,4 @@ func (s *server) loadEditableReport(w http.ResponseWriter, r *http.Request, id i
 		return sqlc.ExpenseReport{}, false
 	}
 	return rep, true
-}
-
-// loadReportLine loads a line and confirms it belongs to reportID (a submitter must
-// not edit a line of another report via a mismatched path). Missing / mismatched -> 404.
-func (s *server) loadReportLine(w http.ResponseWriter, r *http.Request, reportID, lineID int64) (sqlc.ExpenseReportLine, bool) {
-	ctx := r.Context()
-	lines, err := s.store.ExpenseReportLines(ctx, reportID)
-	if err != nil {
-		s.serverError(w)
-		return sqlc.ExpenseReportLine{}, false
-	}
-	for _, l := range lines {
-		if l.ID == lineID {
-			return l, true
-		}
-	}
-	http.NotFound(w, r)
-	return sqlc.ExpenseReportLine{}, false
 }

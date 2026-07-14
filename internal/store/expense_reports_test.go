@@ -181,6 +181,89 @@ func TestRemoveExpenseReportLineVersioned(t *testing.T) {
 	assertLedgerClean(t, d)
 }
 
+// TestReplaceExpenseReportLines (p25.4): the bulk replace-set diffs by line id under
+// ONE change -- new lines insert (version 'create'), kept lines update (version
+// 'update'), dropped lines delete (version 'delete'), mirroring UpdateTransaction. It
+// is refused once the report leaves draft|rejected (ErrExpenseReportState).
+func TestReplaceExpenseReportLines(t *testing.T) {
+	s, d, ctx, submitterID, acctID := seedExpenseReportEnv(t)
+
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	if err != nil {
+		t.Fatalf("CreateExpenseReport: %v", err)
+	}
+
+	// Replace an empty report with TWO new lines (ID 0 -> insert). Both go live +
+	// versioned 'create'.
+	if err := s.ReplaceExpenseReportLines(ctx, reportID, []ExpenseReportLineDesired{
+		{ExpenseReportLineInput: ExpenseReportLineInput{AccountID: acctID, Amount: 1000, Memo: "A"}},
+		{ExpenseReportLineInput: ExpenseReportLineInput{AccountID: acctID, Amount: 2000, Memo: "B"}},
+	}); err != nil {
+		t.Fatalf("ReplaceExpenseReportLines (initial): %v", err)
+	}
+	lines, err := s.ExpenseReportLines(ctx, reportID)
+	if err != nil {
+		t.Fatalf("ExpenseReportLines: %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("live lines after initial replace = %d, want 2", len(lines))
+	}
+	lineA, lineB := lines[0].ID, lines[1].ID
+	testutil.AssertVersioned(t, d, "expense_report_lines", lineA, "create")
+	testutil.AssertVersioned(t, d, "expense_report_lines", lineB, "create")
+
+	// Replace again: KEEP A (updated memo), DROP B, ADD a new line C. The final live
+	// set is {A(updated), C}; B is gone with a 'delete' version; A has an 'update'.
+	if err := s.ReplaceExpenseReportLines(ctx, reportID, []ExpenseReportLineDesired{
+		{ID: lineA, ExpenseReportLineInput: ExpenseReportLineInput{AccountID: acctID, Amount: 1500, Memo: "A2"}},
+		{ExpenseReportLineInput: ExpenseReportLineInput{AccountID: acctID, Amount: 3000, Memo: "C"}},
+	}); err != nil {
+		t.Fatalf("ReplaceExpenseReportLines (diff): %v", err)
+	}
+	lines, err = s.ExpenseReportLines(ctx, reportID)
+	if err != nil {
+		t.Fatalf("ExpenseReportLines (after diff): %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("live lines after diff replace = %d, want 2", len(lines))
+	}
+	byID := map[int64]sqlcExpenseLine{}
+	for _, l := range lines {
+		byID[l.ID] = sqlcExpenseLine{Amount: l.Amount, Memo: l.Memo}
+	}
+	a, ok := byID[lineA]
+	if !ok {
+		t.Fatalf("line A (%d) missing from final set", lineA)
+	}
+	if a.Amount != 1500 || a.Memo != "A2" {
+		t.Fatalf("line A after update = {%d,%q}, want {1500,\"A2\"}", a.Amount, a.Memo)
+	}
+	if _, gone := byID[lineB]; gone {
+		t.Fatalf("line B (%d) still live, want deleted", lineB)
+	}
+	testutil.AssertVersioned(t, d, "expense_report_lines", lineA, "update")
+	testutil.AssertVersioned(t, d, "expense_report_lines", lineB, "delete")
+
+	// Once submitted, the bulk replace is refused (requireEditable's submitted branch).
+	if err := s.SubmitExpenseReport(ctx, reportID); err != nil {
+		t.Fatalf("SubmitExpenseReport: %v", err)
+	}
+	if err := s.ReplaceExpenseReportLines(ctx, reportID, []ExpenseReportLineDesired{
+		{ExpenseReportLineInput: ExpenseReportLineInput{AccountID: acctID, Amount: 100}},
+	}); !errors.Is(err, ErrExpenseReportState) {
+		t.Fatalf("replace while submitted = %v, want ErrExpenseReportState", err)
+	}
+
+	assertLedgerClean(t, d)
+}
+
+// sqlcExpenseLine is a tiny value holder for the final-set assertion in
+// TestReplaceExpenseReportLines (avoids importing the sqlc row type by name).
+type sqlcExpenseLine struct {
+	Amount int64
+	Memo   string
+}
+
 // TestUpdateExpenseReportSubsidiary (p25.3): the subsidiary is editable on a draft
 // with no lines, versioned; and LOCKED once a line exists (ErrExpenseReportHasLines) or
 // the report leaves draft/rejected (ErrExpenseReportState). A bad sub is rejected.

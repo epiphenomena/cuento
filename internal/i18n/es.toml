@@ -1912,12 +1912,10 @@ other = "Filial"
 other = "Este informe fue devuelto para cambios."
 [expense.detail.rejected_hint]
 other = "Edite las líneas de abajo y vuelva a enviarlo."
-[expense.detail.add_line]
-other = "Agregar una línea"
-[expense.detail.new_line]
-other = "Nueva línea"
 [expense.detail.lines]
 other = "Líneas"
+[expense.detail.save_lines]
+other = "Guardar líneas"
 [expense.detail.no_lines]
 other = "Aún no hay líneas."
 [expense.detail.submit]
@@ -1938,32 +1936,12 @@ other = "Fondo"
 other = "Programa"
 [expense.line.col.memo]
 other = "Nota"
-[expense.line.col.actions]
-other = "Acciones"
 [expense.line.unrestricted]
 other = "Sin restricción"
-[expense.line.form.new_title]
-other = "Nueva línea"
-[expense.line.form.edit_title]
-other = "Editar línea"
-[expense.line.form.account]
-other = "Cuenta"
 [expense.line.form.account_none]
 other = "Elija una cuenta"
-[expense.line.form.account_hint]
-other = "Una cuenta de ingresos o gastos en la filial de este informe."
-[expense.line.form.amount]
-other = "Importe"
-[expense.line.form.amount_hint]
-other = "Ingrese un importe positivo."
-[expense.line.form.fund]
-other = "Fondo"
-[expense.line.form.program]
-other = "Programa"
 [expense.line.form.program_none]
 other = "Ninguno"
-[expense.line.form.memo]
-other = "Nota"
 [error.expense.account_not_offered]
 other = "Elija una cuenta de ingresos o gastos en la filial de este informe."
 [error.expense.amount]
