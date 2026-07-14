@@ -202,6 +202,25 @@ test.describe('transaction editor', () => {
     await expect(input1).toHaveValue(/Combo Checking/);
     // Asset pick -> class cell hidden (gating fired on the CLONED row's select).
     await expect(page.locator('#txn-class-1')).toBeHidden();
+
+    // p26.11: FOCUS RING on the account combo. The native <select> is the Tab stop but the
+    // opaque overlay covers its native ring, so the ring is painted on the overlay via
+    // `.combo:focus-within > .combo-text`. Focus the account cell and assert a real focus
+    // outline is present (not "none"/"0px"). This guards the reported "no visible focus when
+    // tabbing to the account cell" regression.
+    const focusCell = page.locator('.txn-row[data-row="0"] .txn-account-cell');
+    await expect(focusCell.locator('.combo')).toHaveClass(/combo/); // wrapper present
+    // Focus the REAL Tab stop (the native <select>, which the overlay covers) -- this is the
+    // exact reported scenario (tab onto the account cell) -- and assert the overlay carries a
+    // real focus outline via `.combo:focus-within > .combo-text` (not "none"/"0px"). Focusing
+    // the overlay alone would only prove the overlay-focus path, not the covered-select path.
+    await page.locator('#txn-account-0').focus();
+    const overlayOutline = await focusCell.locator('.combo-text').evaluate((el) => {
+      const s = getComputedStyle(el);
+      return { style: s.outlineStyle, width: s.outlineWidth };
+    });
+    expect(overlayOutline.style).not.toBe('none');
+    expect(overlayOutline.width).not.toBe('0px');
   });
 
   // p26.3: the fund and program selects are ALSO enhanced into comboboxes. This drives

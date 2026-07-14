@@ -71,8 +71,9 @@
           <th>{{t "expense.line.col.fund"}}</th>
           <th>{{t "expense.line.col.program"}}</th>
           <th>{{t "expense.line.col.memo"}}</th>
-          <th class="el-delete-col" aria-hidden="true"></th>
           <th>{{t "txn.col.error"}}</th>
+          {{/* p26.11: the delete-× action column is the LAST column, AFTER the error column. */}}
+          <th class="el-delete-col" aria-hidden="true"></th>
         </tr>
       </thead>
       <tbody id="expense-rows">
@@ -107,13 +108,14 @@
           <td class="txn-cell el-memo-cell">
             <input type="text" name="memo_{{$i}}" id="el-memo-{{$i}}" class="el-memo" value="{{$l.Memo}}">
           </td>
-          {{/* p26.4: a per-row delete control. type="button" so it never submits the grid;
-               expensegrid.js re-indexes the surviving rows (contiguous _i) on click, and
-               deleting the only/last row resets it in place (the grid never drops to zero). */}}
-          <td class="txn-cell el-delete-cell">
+          <td class="el-row-error">{{if $l.ErrorKey}}<span class="field-error" role="alert">{{t $l.ErrorKey}}</span>{{end}}</td>
+          {{/* p26.4/p26.11: a per-row delete control, now the LAST cell (after the error
+               column). type="button" so it never submits the grid; expensegrid.js re-indexes
+               the surviving rows (contiguous _i) on click, and deleting the only/last row
+               resets it in place (the grid never drops to zero). */}}
+          <td class="el-delete-cell">
             <button type="button" class="btn btn-ghost el-delete" aria-label="{{t "common.delete_row"}}" title="{{t "common.delete_row"}}">&times;</button>
           </td>
-          <td class="txn-cell el-row-error">{{if $l.ErrorKey}}<span class="field-error" role="alert">{{t $l.ErrorKey}}</span>{{end}}</td>
         </tr>
         {{end}}
       </tbody>

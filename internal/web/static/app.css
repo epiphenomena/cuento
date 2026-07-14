@@ -211,7 +211,19 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* Tighten the inter-control gap so the whole bar fits one desktop line. */
 .subnav-filters { gap: var(--space-1) var(--space-2); }
 .subnav-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
-.app-subnav-controls .btn { padding: var(--space-1) var(--space-3); font-size: 0.9rem; }
+/* p26.11: after p26.7 the New/Merge/Reconcile triggers in the section bar are anchors
+   (<a class="btn ...">). The generic nav-link rule `.app-subnav a` (specificity 0,1,1)
+   sets color:var(--color-text-muted) and out-specifies the `.btn`/`.btn-primary` color
+   (0,1,0), so a link-as-button rendered muted gray text -- unreadable on the primary blue
+   in DARK mode (and off on the ghost buttons too). Set the button text color in the
+   controls scope (0,2,0, which beats the nav-link rule); the -primary rule follows so
+   equal-specificity source order lands the on-primary color. */
+.app-subnav-controls .btn {
+  padding: var(--space-1) var(--space-3);
+  font-size: 0.9rem;
+  color: var(--color-text);
+}
+.app-subnav-controls .btn-primary { color: var(--color-primary-text); }
 .app-subnav ul {
   display: flex;
   flex-wrap: wrap;
@@ -720,8 +732,14 @@ input[aria-invalid="true"] {
 .el-memo-cell { width: auto; }
 .el-delete-col, .el-delete-cell { width: 2.5rem; text-align: center; }
 .el-row-error { width: 12rem; }
-/* The delete control is a compact borderless × that inherits the cell's spreadsheet feel. */
-.txn-grid td.el-delete-cell { text-align: center; }
+/* The delete control is a compact borderless × that inherits the cell's spreadsheet feel.
+   p26.11: the delete cell is now the trailing column (after the error column) and dropped
+   txn-cell, so it re-declares the ruled border + centering here. */
+.txn-grid td.el-delete-cell {
+  text-align: center;
+  border: var(--border);
+  vertical-align: middle;
+}
 .el-delete {
   padding: var(--space-1) var(--space-2);
   line-height: 1;
@@ -734,7 +752,22 @@ input[aria-invalid="true"] {
    both tint danger so the eye lands on the problem. */
 .txn-row[data-row-error] td.txn-cell { background: var(--color-danger-bg); }
 .txn-row.sub-conflict td.txn-cell { background: var(--color-danger-bg); }
-.txn-row-error .field-error { padding: 0 var(--space-3); display: inline-block; }
+.txn-row-error .field-error,
+.el-row-error .field-error { padding: 0; display: inline-block; }
+/* p26.11: the trailing error cell is a STATUS/message strip, not an editable field. An
+   empty error cell (borderless input in a bordered cell is the editable look) otherwise
+   reads as a fillable input. Give it the page background (not the input --color-surface)
+   and message padding so it is visibly a non-input cell. Applies to both grids' error
+   columns (.txn-row-error on the txn grid, .el-row-error on the expense grid). */
+.txn-grid td.txn-row-error,
+.txn-grid td.el-row-error {
+  background: var(--color-bg);
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-danger);
+  font-size: 0.85rem;
+  border: var(--border);
+  vertical-align: middle;
+}
 
 /* p26.2 fuzzy-filter combobox (combobox.js). The native <select class="combo-input">
    stays the value sink + no-JS fallback and stays laid out; the overlay text input sits
@@ -768,6 +801,18 @@ input[aria-invalid="true"] {
   outline-offset: -2px;
 }
 .combo > .combo-text:focus { background: var(--color-surface-alt); }
+/* p26.11: account/fund/program combos keep the native <select> as the Tab stop, but the
+   opaque overlay input (.combo-text, z-index:1, inset:0) COVERS the select's native focus
+   ring -- so tabbing to the cell showed no focus at all. Paint the ring on the TOPMOST
+   element (the overlay) whenever focus lands anywhere inside the wrapper -- the covered
+   select OR the overlay input -- so every editable grid cell (combo, amount, memo) shows a
+   visible ring, in both light and dark themes. This is the same focus token the sibling
+   cells use, so the treatment matches. */
+.combo:focus-within > .combo-text {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+  background: var(--color-surface-alt);
+}
 /* The listbox popover: anchored under the cell, above everything, scrollable. */
 .combo-list {
   list-style: none;

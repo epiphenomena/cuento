@@ -303,6 +303,24 @@ test('expenses: subsidiary auto-set, account/fund/program combos, amount blur, d
   await page.locator('#el-memo-2').fill('row-two-memo');
   await expect(page.locator('#el-account-3')).toBeVisible();
 
+  // (p26.11) COLUMN ORDER: the delete-× cell is now the LAST cell in the row, AFTER the
+  // error column. Assert both header and row cell order so a regression that moves it back
+  // ahead of the error column is caught. Headers: account, amount, fund, program, memo,
+  // error, then the (empty, aria-hidden) delete-action header.
+  const headerCells = page.locator('#expense-grid-form thead th');
+  await expect(headerCells).toHaveCount(7);
+  await expect(headerCells.nth(5)).toHaveText(/error/i);
+  await expect(headerCells.last()).toHaveClass(/el-delete-col/);
+  // In a data row the error cell precedes the delete cell (the delete is the last td).
+  const row0Cells = page.locator('.el-row[data-row="0"] > td, .el-row[data-row="0"] > th');
+  await expect(row0Cells.last()).toHaveClass(/el-delete-cell/);
+  await expect(page.locator('.el-row[data-row="0"] .el-row-error'))
+    .not.toHaveClass(/el-delete-cell/);
+  // The delete cell comes right after the error cell in DOM order.
+  await expect(
+    page.locator('.el-row[data-row="0"] .el-row-error + .el-delete-cell'),
+  ).toHaveCount(1);
+
   // (d) DELETE A MIDDLE ROW: delete row 1 (memo "row-one-memo"). The survivors re-index to
   // contiguous 0..n-1, so row-two-memo shifts up to index 1 and the memo text follows.
   await page.locator('.el-row[data-row="1"] .el-delete').click();

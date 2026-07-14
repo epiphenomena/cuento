@@ -91,7 +91,10 @@
     <input type="text" name="memo_{{.Index}}" id="txn-memo-{{.Index}}" class="txn-memo" value="{{.Memo}}">
   </td>
 
-  {{if .ErrorKey}}<td class="txn-cell txn-row-error"><span class="field-error" role="alert">{{t .ErrorKey}}</span></td>{{else}}<td class="txn-cell txn-row-error"></td>{{end}}
+  {{/* p26.11: the trailing error cell is a status/message strip, not an editable field --
+       drop txn-cell so it loses the borderless-input-in-a-bordered-cell look; the
+       .txn-row-error rule styles it as a non-input message cell. */}}
+  {{if .ErrorKey}}<td class="txn-row-error"><span class="field-error" role="alert">{{t .ErrorKey}}</span></td>{{else}}<td class="txn-row-error"></td>{{end}}
 </tr>
 {{- end}}
 {{- end}}
