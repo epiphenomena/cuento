@@ -209,6 +209,16 @@ type expenseLineRow struct {
 	ErrorKey string
 }
 
+// expenseAccountOption is one account offered in the line grid's account combobox.
+// Like the txn editor's txnAccountOption it carries a dotted Path (ancestor chain
+// ending in Name, p26.1) so the combobox can display and fuzzy-match the account
+// with its parent chain; value stays the account id.
+type expenseAccountOption struct {
+	ID   int64
+	Name string
+	Path string
+}
+
 // expenseDetailModel is the GET /expenses/{id} model: the report header (its sub +
 // status + editability + the reviewer's reason when rejected) and its lines.
 type expenseDetailModel struct {
@@ -226,9 +236,10 @@ type expenseDetailModel struct {
 	Lines       []expenseLineRow
 
 	// Sub-scoped option lists for the editable grid (p25.4), loaded only when
-	// .Editable: accounts = R/E leaves in the report's sub, funds = ActiveFunds(sub),
-	// programs = all active. Empty on a read-only render.
-	Accounts []txnOption
+	// .Editable: accounts = R/E leaves in the report's sub (each with a dotted Path,
+	// p26.1), funds = ActiveFunds(sub), programs = all active. Empty on a read-only
+	// render.
+	Accounts []expenseAccountOption
 	Funds    []txnOption
 	Programs []txnOption
 
@@ -394,7 +405,7 @@ func (s *server) reportExponent(ctx context.Context, rep sqlc.ExpenseReport) int
 // out of band); funds = ActiveFunds(sub); programs = all active (not sub-scoped, like
 // the txn/budget editors). It is shared by the detail render and the 422 re-render so
 // the options always match the report's subsidiary.
-func (s *server) expenseLineOptions(ctx context.Context, sub int64) (accounts, funds, programs []txnOption, err error) {
+func (s *server) expenseLineOptions(ctx context.Context, sub int64) (accounts []expenseAccountOption, funds, programs []txnOption, err error) {
 	lang := langOf(ctx)
 
 	accts, err := s.store.AccountEditorOptions(ctx, lang, sub)
@@ -405,7 +416,7 @@ func (s *server) expenseLineOptions(ctx context.Context, sub int64) (accounts, f
 		if a.Type != "revenue" && a.Type != "expense" {
 			continue
 		}
-		accounts = append(accounts, txnOption{ID: a.ID, Name: a.Name})
+		accounts = append(accounts, expenseAccountOption{ID: a.ID, Name: a.Name, Path: a.Path})
 	}
 
 	fs, err := s.store.ActiveFunds(ctx, sub)

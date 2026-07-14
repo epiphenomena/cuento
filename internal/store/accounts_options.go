@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -163,8 +164,13 @@ func (s *Store) ListFunds(ctx context.Context) ([]sqlc.Fund, error) {
 // pure re-filter (txngrid.js) can flag rows that go out of scope when the header
 // subsidiary changes (Appendix C: never silent-clear).
 type AccountEditorOption struct {
-	ID             int64
-	Name           string
+	ID   int64
+	Name string
+	// Path is the account's dotted ancestor chain ending in its own name (e.g.
+	// "Cash.BOA"; a top-level account's Path is just its name). It is joined from
+	// the same lang-resolved tree names, so the last segment always equals Name.
+	// The combobox (p26.2) displays it and fuzzy-matches on it; it is never stored.
+	Path           string
 	Type           string
 	DefaultProgram *int64
 	DefaultClass   string // "" = none
@@ -183,10 +189,32 @@ func (s *Store) AccountEditorOptions(ctx context.Context, lang string, subID int
 		return nil, err
 	}
 	hasChild := make(map[int64]bool, len(full))
+	parentOf := make(map[int64]sql.NullInt64, len(full))
+	nameOf := make(map[int64]string, len(full))
 	for _, r := range full {
 		if r.ParentID.Valid {
 			hasChild[r.ParentID.Int64] = true
 		}
+		parentOf[r.ID] = r.ParentID
+		nameOf[r.ID] = r.Name
+	}
+	// pathOf walks id -> parent -> ... to the root and joins the resolved names
+	// with "." (root first). A top-level account's path is just its name. All
+	// ancestors are in `full` (the unfiltered tree), so every segment resolves.
+	pathOf := func(id int64) string {
+		var seg []string
+		for n, valid := id, true; valid; {
+			seg = append(seg, nameOf[n])
+			p := parentOf[n]
+			if !p.Valid || p.Int64 == n {
+				break
+			}
+			n = p.Int64
+		}
+		for i, j := 0, len(seg)-1; i < j; i, j = i+1, j-1 {
+			seg[i], seg[j] = seg[j], seg[i]
+		}
+		return strings.Join(seg, ".")
 	}
 
 	// Sub-filtered tree -> the candidate accounts in tree order.
@@ -211,6 +239,7 @@ func (s *Store) AccountEditorOptions(ctx context.Context, lang string, subID int
 		opt := AccountEditorOption{
 			ID:            r.ID,
 			Name:          r.Name,
+			Path:          pathOf(r.ID),
 			Type:          r.Type,
 			SubsidiaryIDs: subs,
 		}

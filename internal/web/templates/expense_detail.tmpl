@@ -76,7 +76,7 @@
           <td class="el-account-cell">
             <select name="account_{{$i}}" id="el-account-{{$i}}" class="el-account combo-input">
               <option value="0">{{t "expense.line.form.account_none"}}</option>
-              {{range $page.Accounts}}<option value="{{.ID}}"{{if eq .ID $l.AccountID}} selected{{end}}>{{.Name}}</option>
+              {{range $page.Accounts}}<option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $l.AccountID}} selected{{end}}>{{.Path}}</option>
               {{end}}
             </select>
           </td>

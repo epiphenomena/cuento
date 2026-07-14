@@ -37,7 +37,8 @@
       {{range $.Page.Accounts}}<option data-account-option value="{{.ID}}"
         data-type="{{.Type}}" data-default-program="{{.DefaultProgram}}"
         data-default-class="{{.DefaultClass}}" data-subsidiaries="{{.SubsCSV}}"
-        {{if eq .ID $.Row.Account}} selected{{end}}>{{.Name}}</option>
+        data-path="{{.Path}}"
+        {{if eq .ID $.Row.Account}} selected{{end}}>{{.Path}}</option>
       {{end}}
     </select>
   </td>

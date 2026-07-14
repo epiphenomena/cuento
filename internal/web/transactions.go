@@ -65,6 +65,7 @@ type txnRowModel struct {
 type txnAccountOption struct {
 	ID             int64
 	Name           string
+	Path           string // dotted ancestor chain ending in Name (combobox label, p26.1)
 	Type           string
 	DefaultProgram int64  // 0 = none
 	DefaultClass   string // "" = none
@@ -703,7 +704,7 @@ func (s *server) newEditorModel(ctx context.Context, u *store.CurrentUser, sub i
 		return model, err
 	}
 	for _, a := range accts {
-		opt := txnAccountOption{ID: a.ID, Name: a.Name, Type: a.Type, DefaultClass: a.DefaultClass, SubsCSV: idsCSV(a.SubsidiaryIDs)}
+		opt := txnAccountOption{ID: a.ID, Name: a.Name, Path: a.Path, Type: a.Type, DefaultClass: a.DefaultClass, SubsCSV: idsCSV(a.SubsidiaryIDs)}
 		if a.DefaultProgram != nil {
 			opt.DefaultProgram = *a.DefaultProgram
 		}

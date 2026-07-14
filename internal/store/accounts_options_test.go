@@ -90,6 +90,58 @@ func TestParentOptionsExcludeDescendantsAndWrongClass(t *testing.T) {
 	}
 }
 
+// TestAccountEditorOptionsPath: each option carries a dotted ancestor path ending
+// in the account's own name -- a nested leaf under a placeholder renders
+// "Parent.Child", while a top-level leaf's Path is just its own name (no dot). The
+// last path segment always equals the option's Name (both come from the same
+// lang-resolved tree). p26.1 adds this field for the combobox display/fuzzy match.
+func TestAccountEditorOptionsPath(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	// Cash(placeholder) > BOA(leaf) ; Petty(top-level leaf).
+	cash, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Cash"), Subsidiaries: []int64{rootID},
+	})
+	if err != nil {
+		t.Fatalf("create cash: %v", err)
+	}
+	boa, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		ParentID: &cash, Type: "asset", DefaultCurrency: "USD", Names: enName("BOA"), Subsidiaries: []int64{rootID},
+	})
+	if err != nil {
+		t.Fatalf("create boa: %v", err)
+	}
+	petty, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Petty"), Subsidiaries: []int64{rootID},
+	})
+	if err != nil {
+		t.Fatalf("create petty: %v", err)
+	}
+
+	opts, err := s.AccountEditorOptions(mutCtx(), "en", rootID)
+	if err != nil {
+		t.Fatalf("AccountEditorOptions: %v", err)
+	}
+	paths := map[int64]string{}
+	for _, o := range opts {
+		paths[o.ID] = o.Path
+		if o.Path == "" || o.Path[len(o.Path)-len(o.Name):] != o.Name {
+			t.Errorf("option %d (%q): Path %q does not end in its Name", o.ID, o.Name, o.Path)
+		}
+	}
+	// Cash is a placeholder (has a child) -> not offered; only leaves appear.
+	if _, ok := paths[cash]; ok {
+		t.Errorf("placeholder Cash (%d) should not be an editor option", cash)
+	}
+	if got := paths[boa]; got != "Cash.BOA" {
+		t.Errorf("nested leaf BOA Path = %q, want %q", got, "Cash.BOA")
+	}
+	if got := paths[petty]; got != "Petty" {
+		t.Errorf("top-level leaf Petty Path = %q, want %q (no dot)", got, "Petty")
+	}
+}
+
 // TestSubsidiaryFilter: Tree(lang, &sub) returns only accounts mapped to the
 // selected subsidiary -- the chart-of-accounts subsidiary filter. An account
 // mapped only to a different sub is dropped; one mapped to the selected sub is
