@@ -20,7 +20,6 @@ func (b *builder) transactions(ctx context.Context, recs []Record) error {
 	if err := b.loadExponents(ctx); err != nil {
 		return err
 	}
-	b.payeeID = map[string]int64{}
 
 	// Group by tid in first-seen order (deterministic; keeps large compound
 	// entries intact -- up to ~188 splits, hazard #5).
@@ -77,16 +76,12 @@ func (b *builder) postGroup(ctx context.Context, tid string, recs []Record) erro
 	var curOrder []string
 	date := ""
 	desc := ""
-	payeeSrc := ""
 	for _, r := range recs {
 		if date == "" {
 			date = r.Dt
 		}
 		if desc == "" {
 			desc = r.Desc
-		}
-		if payeeSrc == "" {
-			payeeSrc = b.payeeSource(r)
 		}
 		p, err := b.resolveSplit(r)
 		if errors.Is(err, errSkip) {
@@ -125,7 +120,7 @@ func (b *builder) postGroup(ctx context.Context, tid string, recs []Record) erro
 				continue
 			}
 		}
-		if err := b.postBucket(ctx, tid, cur, date, desc, payeeSrc, bucket, multi, opening); err != nil {
+		if err := b.postBucket(ctx, tid, cur, date, desc, bucket, multi, opening); err != nil {
 			return err
 		}
 	}
@@ -140,7 +135,7 @@ func (b *builder) postGroup(ctx context.Context, tid string, recs []Record) erro
 //     and the store lets it through only if it actually balances (else rejects).
 func (b *builder) postBucket(
 	ctx context.Context,
-	tid, currency, date, desc, payeeSrc string,
+	tid, currency, date, desc string,
 	bucket []pending,
 	multi, opening bool,
 ) error {
@@ -221,19 +216,17 @@ func (b *builder) postBucket(
 		return nil
 	}
 
-	payeeID, err := b.payee(ctx, payeeSrc)
-	if err != nil {
-		return err
-	}
 	memo := desc
 	if b.anonymize {
 		memo = hashText(desc)
 	}
 
+	// PayeeID is left unset (nil): the importer no longer mints payees (p26.16, the
+	// payee->per-split-description migration). Row descriptions ride on each split's
+	// Description (set in resolveSplit) instead.
 	txnID, err := b.st.PostTransaction(ctx, store.PostTransactionInput{
 		Date:         date,
 		SubsidiaryID: subID,
-		PayeeID:      payeeID,
 		Memo:         memo,
 		Currency:     currency,
 		Splits:       splits,
@@ -312,11 +305,16 @@ func (b *builder) resolveSplit(r Record) (pending, error) {
 		}
 	}
 
+	// desc feeds both the (legacy) split memo AND the per-split description (p26.16,
+	// the payee->description migration): a split's description is the description of
+	// the ledger row that produced it. Synthesized counter-legs (FX Clearing /
+	// Opening Balances) have no source row, so they carry an empty description.
 	memo := r.Desc
 	if b.anonymize {
 		memo = hashText(r.Desc)
 	}
 	s.Memo = memo
+	s.Description = memo
 
 	return pending{currency: r.Currency, country: r.Country, split: s}, nil
 }
@@ -341,48 +339,4 @@ func (b *builder) countryToSub(country string) (string, error) {
 	}
 	// Fall back to the root subsidiary for a country with no explicit child.
 	return b.cfg.RootSubsidiaryName, nil
-}
-
-// payeeSource returns the raw payee name for a record from the configured
-// source column (Config.PayeeColumn). The default ("") yields no payee -- on real
-// data the `desc` memo is long/multi-line and would mint thousands of junk
-// payees, so which column is the payee is a p09.4 tuning knob, not a hardcoded
-// default.
-func (b *builder) payeeSource(r Record) string {
-	switch b.cfg.PayeeColumn {
-	case "typ":
-		return r.Typ
-	case "klass":
-		return r.Klass
-	case "desc":
-		return r.Desc
-	default:
-		return ""
-	}
-}
-
-// payee finds-or-creates a payee from the configured payee source string. Under
-// --anonymize the stored name is hashed so a shareable sample db carries no real
-// names. A blank source yields no payee (nil).
-func (b *builder) payee(ctx context.Context, src string) (*int64, error) {
-	if src == "" {
-		return nil, nil
-	}
-	name := src
-	if b.anonymize {
-		name = hashText(src)
-	}
-	if id, ok := b.payeeID[name]; ok {
-		return &id, nil
-	}
-	// EnsurePayee (find-or-create, case-insensitive UNIQUE) rather than CreatePayee:
-	// a per-subsidiary run starts with an empty b.payeeID cache, so a payee shared
-	// across subsidiaries would otherwise be re-created (duplicate) on the second
-	// run. Find-or-create makes per-sub payee creation idempotent and additive.
-	id, err := b.st.EnsurePayee(ctx, name)
-	if err != nil {
-		return nil, fmt.Errorf("ensure payee: %w", err)
-	}
-	b.payeeID[name] = id
-	return &id, nil
 }

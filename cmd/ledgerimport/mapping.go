@@ -248,13 +248,6 @@ type Config struct {
 	// opening-balance / single-split source groups.
 	OpeningBalanceAccount string `json:"opening_balance_account"`
 
-	// PayeeColumn selects which source column supplies the payee name (the task's
-	// "payee-ish source column as configured"). Values: "typ", "klass", "desc", or
-	// "" (no payees). Default "" avoids minting thousands of junk payees from the
-	// long/multi-line `desc` memo on real data (a p09.4 tuning knob); memos always
-	// come from `desc` regardless.
-	PayeeColumn string `json:"payee_column"`
-
 	// SkipCountries lists source `country` markers to drop entirely (the
 	// consolidation-marker rows, docs hazard #3).
 	SkipCountries []string `json:"skip_countries"`

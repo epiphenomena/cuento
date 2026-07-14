@@ -192,9 +192,12 @@ no real names/values.
    `fixtures/source/mapping-notes.md`) to confirm each is a genuine opening
    balance or adjustment and not a data error worth fixing at source.
 
-10. **Payees = none (GUESS).** `payee_column` is empty, so no payees are created
-    (the source's memo column is long/multi-line and would mint thousands of junk
-    payees). If a cleaner payee-ish source column exists, set it in the config.
+10. **Payees = none.** The importer no longer mints payees at all (p26.16, the
+    payee→per-split-`description` migration): each source row's `desc` becomes that
+    split's per-split `description` (as well as its memo). **Remove any
+    `"payee_column"` key from your `mapping.json`** — the config decoder rejects
+    unknown fields (`DisallowUnknownFields`), so a stale `payee_column` now fails the
+    build loudly. Nothing replaces it; the desc-on-every-split behavior is automatic.
 
 ### Needs human decision (blocks `--strict`, not the non-strict goal)
 

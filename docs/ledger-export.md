@@ -54,7 +54,7 @@ Order: `country, stmt, typ, acct, kat, dt, v, ndb, fndb, kls, klass, tid, desc, 
 | `donor` | **Fund / restriction** | text, ~1968 distinct | ~41% populated → a present donor marks restricted activity (a fund, D20); blank = unrestricted. Values → mapping.yaml. |
 | `currency` | Split currency | 3-letter ISO 4217, 2 real codes | the org's functional currency plus one local currency; blank on consolidation rows. |
 | `tid` | **Transaction group id** | integer, ~42k distinct | groups splits into one posting. |
-| `desc` | Memo | free text, up to ~540 chars, may be multi-line | ~75% populated. Values (may contain PII) → never copied; map to split/txn memo at import. |
+| `desc` | Memo / **split description** | free text, up to ~540 chars, may be multi-line | ~75% populated. Values (may contain PII) → never copied; each source row's `desc` becomes THAT split's per-split `description` (p26.16, payee→description migration) as well as its memo. No payees are minted. |
 | `clr` | **Reconciliation** flag | single char (R / C / blank) | R = reconciled, C = cleared, blank = uncleared. Feeds the p16 reconciliation import. |
 | `xrt` | Exchange rate | decimal (1.0 or ~6 dp) | relates the base and native amount pairs; 1.0 when the split is in the base currency. |
 
@@ -94,7 +94,7 @@ Order: `country, stmt, typ, acct, kat, dt, v, ndb, fndb, kls, klass, tid, desc, 
 | `currency` | transaction currency (D3) |
 | `db`/`cr` (+ `fdb`/`fcr`, `xrt`) | split amount in minor units (D1) |
 | `dt` | transaction date |
-| `desc` | memo |
+| `desc` | per-split `description` + memo (p26.16; no payees minted) |
 | `clr` | reconciliation state (imported in the p16 pass) |
 
 ## Account tree derivation (`stmt` + `typ`, p26.12)
@@ -177,8 +177,9 @@ review either way).
 
 - **p09.3** builds `cmd/ledgerimport`: `accounts` emits a reviewable `mapping.yaml` skeleton from
   the distinct `acct`/`parent`/`country`/`kat`/`donor`/`kls` values; `build` converts rows →
-  subsidiaries, programs, funds, accounts, opening balances, payees, and transactions (single- and
-  multi-currency-via-FX-clearing) per the mapping. Parsers are unit-tested against **synthetic**
+  subsidiaries, programs, funds, accounts, opening balances, and transactions (single- and
+  multi-currency-via-FX-clearing) per the mapping — each split carries its source row's `desc` as
+  its per-split `description` (p26.16); no payees are minted. Parsers are unit-tested against **synthetic**
   lines shaped like this spec — never against real values.
 - **p09.4** iterates `fixtures/source/mapping.yaml` (gitignored, beside the data) with the human
   until `ledgerimport build → cuento check --strict` is clean and spot-checked balances match the

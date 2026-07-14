@@ -228,7 +228,6 @@ type builder struct {
 	anonymize bool
 
 	exponent map[string]int // currency code -> minor-unit exponent (D1)
-	payeeID  map[string]int64
 
 	// importSub is the subsidiary NAME a per-subsidiary import targets: postGroup
 	// posts only the currency buckets resolving to it (empty = all subsidiaries,

@@ -35,7 +35,6 @@ func testConfig() string {
   "base_currency": "USD",
   "fx_clearing_account": "FX Clearing",
   "opening_balance_account": "Opening Balances",
-  "payee_column": "desc",
   "skip_countries": ["CONSOL"],
   "opening_balance_typs": ["opening"]
 }`
@@ -91,8 +90,11 @@ func testSource() string {
 		// goes to Opening Balances. US, USD.
 		row("US", "A", "opening", "Checking", "", "2025-01-01", "", "1", "opening", "", "USD", "1.0", "1000.00", "1000.00", "0", "0", "Assets"),
 		// tid 2: plain expense, US, USD, unrestricted. Supplies (expense, program).
-		row("US", "E", "spend", "Supplies", "", "2025-02-01", "PRG", "2", "office", "", "USD", "1.0", "40.00", "40.00", "0", "0", "Expenses"),
-		row("US", "A", "spend", "Checking", "", "2025-02-01", "", "2", "office", "", "USD", "1.0", "0", "0", "40.00", "40.00", "Assets"),
+		// The two source rows carry DISTINCT desc values so a per-SPLIT description
+		// mapping (vs. a per-transaction one) is observable: each split must carry its
+		// own row's desc.
+		row("US", "E", "spend", "Supplies", "", "2025-02-01", "PRG", "2", "office supplies", "", "USD", "1.0", "40.00", "40.00", "0", "0", "Expenses"),
+		row("US", "A", "spend", "Checking", "", "2025-02-01", "", "2", "paid from checking", "", "USD", "1.0", "0", "0", "40.00", "40.00", "Assets"),
 		// tid 3: restricted grant receipt, MX, MXN, fund GRANT1, program EDU.
 		row("MX", "A", "receipt", "Cash MX", "", "2025-03-01", "", "3", "grant in", "GRANT1", "MXN", "1.0", "500.00", "500.00", "0", "0", "Assets"),
 		row("MX", "I", "receipt", "Grant Revenue", "EDU", "2025-03-01", "", "3", "grant in", "GRANT1", "MXN", "1.0", "0", "0", "500.00", "500.00", "Revenue"),
@@ -261,7 +263,7 @@ func TestProgramTreeFromKlass(t *testing.T) {
   "program_parents": {"Summer Camp": "Education"},
   "funds": {}, "functional_classes": {"PRG": "program", "MGT": "management"},
   "base_currency": "USD", "fx_clearing_account": "FX Clearing",
-  "opening_balance_account": "Opening Balances", "payee_column": "desc",
+  "opening_balance_account": "Opening Balances",
   "skip_countries": ["CONSOL"], "opening_balance_typs": ["opening"]
 }`))
 	if err != nil {
@@ -305,7 +307,7 @@ func TestProgramTreeFromKlass(t *testing.T) {
 }
 
 // buildInto runs the build core into a fresh migrated temp db and returns the
-// result. anonymize toggles the payee/memo hashing.
+// result. anonymize toggles the memo/description hashing.
 func buildInto(t *testing.T, anonymize bool) (*sql.DB, *store.Store, *BuildResult) {
 	t.Helper()
 	sqldb := testutil.NewDB(t)
@@ -712,31 +714,77 @@ func TestSourceDimensionsGatedByAccountType(t *testing.T) {
 	}
 }
 
-func TestAnonymizeHashesPayeesAndMemos(t *testing.T) {
+// TestAnonymizeHashesMemosAndDescriptions: with --anonymize, no produced split
+// memo NOR split description may equal a synthetic source original. The importer no
+// longer mints payees (p26.16), so there are none to hash -- the payee table is
+// asserted empty here too.
+func TestAnonymizeHashesMemosAndDescriptions(t *testing.T) {
 	sqldb, _, res := buildInto(t, true)
 
-	// The synthetic source used payee-ish desc "office"/"grant in" and memos. With
-	// --anonymize, NO produced payee name nor memo may equal a synthetic original.
-	originals := []string{"office", "grant in", "fx transfer", "opening"}
-	names := allPayeeNames(t, sqldb)
+	// The synthetic source used desc "office supplies"/"grant in" etc. as both memo
+	// and description. With --anonymize, none of those originals may survive verbatim.
+	originals := []string{"office supplies", "paid from checking", "grant in", "fx transfer", "opening", "donation"}
 	memos := allMemos(t, sqldb)
+	descs := allDescriptions(t, sqldb)
 	for _, o := range originals {
-		for _, n := range names {
-			if n == o {
-				t.Errorf("payee %q was not anonymized", o)
-			}
-		}
 		for _, m := range memos {
 			if m == o {
 				t.Errorf("memo %q was not anonymized", o)
 			}
 		}
+		for _, d := range descs {
+			if d == o {
+				t.Errorf("description %q was not anonymized", o)
+			}
+		}
 	}
 	// Sanity: anonymization actually produced hashed (hex) content, not empties.
-	if len(names) == 0 {
-		t.Errorf("no payees produced")
+	if len(descs) == 0 {
+		t.Errorf("no split descriptions produced")
+	}
+	// No payees are minted by the importer any more.
+	if names := allPayeeNames(t, sqldb); len(names) != 0 {
+		t.Errorf("importer minted %d payees; want 0 (payee minting removed p26.16)", len(names))
 	}
 	_ = res
+}
+
+// TestSplitDescriptionFromSourceRow: each posted split carries the DESCRIPTION of
+// the ledger row that produced it (per-split, not per-transaction). tid 2's two
+// source rows carry distinct desc, so the expense split and the checking split must
+// carry their own row's desc. Synthesized counter-legs (FX Clearing / Opening
+// Balances) come from no source row and carry an EMPTY description. And no payees
+// are minted (p26.16 removed payee minting; PayeeID is left unset).
+func TestSplitDescriptionFromSourceRow(t *testing.T) {
+	sqldb, _, res := buildInto(t, false)
+
+	// tid 2: expense split (Supplies) desc "office supplies"; asset split (Checking)
+	// desc "paid from checking". Each split carries its own row's desc.
+	assertAcctDescription(t, sqldb, res, "Supplies", "office supplies")
+
+	// Checking carries splits from several tids; assert the tid-2 desc is present on
+	// at least one of its splits (the tid-2 leg).
+	if !acctHasDescription(t, sqldb, res, "Checking", "paid from checking") {
+		t.Errorf("checking split for tid 2 missing its own row description")
+	}
+
+	// The synthesized Opening Balances counter-leg (tid 1) has no source row -> empty
+	// description.
+	assertAcctDescription(t, sqldb, res, "Opening Balances", "")
+	// The synthesized FX Clearing counter-leg (tid 4/5) likewise.
+	assertAcctDescription(t, sqldb, res, "FX Clearing", "")
+
+	// The importer mints NO payees, and every posted transaction has a NULL payee.
+	if names := allPayeeNames(t, sqldb); len(names) != 0 {
+		t.Errorf("importer minted %d payees; want 0", len(names))
+	}
+	var withPayee int
+	if err := sqldb.QueryRow(`SELECT COUNT(*) FROM transactions WHERE payee_id IS NOT NULL`).Scan(&withPayee); err != nil {
+		t.Fatalf("count txns with payee: %v", err)
+	}
+	if withPayee != 0 {
+		t.Errorf("%d transactions carry a payee_id; want 0 (payee unset)", withPayee)
+	}
 }
 
 // ---- small raw-read helpers (reads outside the store are fine via sqlc/raw) --
@@ -815,6 +863,50 @@ func allMemos(t *testing.T, sqldb *sql.DB) []string {
 	out := scanStrings(t, sqldb, `SELECT memo FROM transactions WHERE memo <> ''`)
 	out = append(out, scanStrings(t, sqldb, `SELECT memo FROM splits WHERE memo <> ''`)...)
 	return out
+}
+
+func allDescriptions(t *testing.T, sqldb *sql.DB) []string {
+	t.Helper()
+	return scanStrings(t, sqldb, `SELECT description FROM splits WHERE description <> ''`)
+}
+
+// assertAcctDescription requires EVERY split on the given source account to carry
+// exactly want as its description (use "" for the synthesized counter-leg accounts).
+func assertAcctDescription(t *testing.T, sqldb *sql.DB, res *BuildResult, srcAcct, want string) {
+	t.Helper()
+	acctID := res.AccountIDs[srcAcct]
+	rows, err := sqldb.Query(`SELECT description FROM splits WHERE account_id = ?`, acctID)
+	if err != nil {
+		t.Fatalf("query descriptions on %s: %v", srcAcct, err)
+	}
+	defer func() { _ = rows.Close() }()
+	found := false
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			t.Fatal(err)
+		}
+		found = true
+		if d != want {
+			t.Errorf("split on %s description = %q, want %q", srcAcct, d, want)
+		}
+	}
+	if !found {
+		t.Errorf("no split found on account %s", srcAcct)
+	}
+}
+
+// acctHasDescription reports whether at least one split on the account carries want.
+func acctHasDescription(t *testing.T, sqldb *sql.DB, res *BuildResult, srcAcct, want string) bool {
+	t.Helper()
+	acctID := res.AccountIDs[srcAcct]
+	var n int
+	if err := sqldb.QueryRow(
+		`SELECT COUNT(*) FROM splits WHERE account_id = ? AND description = ?`, acctID, want,
+	).Scan(&n); err != nil {
+		t.Fatalf("count descriptions on %s: %v", srcAcct, err)
+	}
+	return n > 0
 }
 
 func scanStrings(t *testing.T, sqldb *sql.DB, q string) []string {
