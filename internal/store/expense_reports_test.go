@@ -264,6 +264,65 @@ type sqlcExpenseLine struct {
 	Memo   string
 }
 
+// TestExpenseReportLineDescriptionRoundTrip (p26.15): a per-line free-text
+// description survives the bulk replace-set save, the line READ (ExpenseReportLines),
+// and an edit; and the expense_report_lines_versions snapshot carries it (rule 5).
+// INERT: no read OUTPUT consumes it yet.
+func TestExpenseReportLineDescriptionRoundTrip(t *testing.T) {
+	s, d, ctx, submitterID, acctID := seedExpenseReportEnv(t)
+
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	if err != nil {
+		t.Fatalf("CreateExpenseReport: %v", err)
+	}
+
+	if err := s.ReplaceExpenseReportLines(ctx, reportID, []ExpenseReportLineDesired{
+		{ExpenseReportLineInput: ExpenseReportLineInput{AccountID: acctID, Amount: -1500, Memo: "taxi", Description: "Airport transfer, Mon"}},
+	}); err != nil {
+		t.Fatalf("ReplaceExpenseReportLines: %v", err)
+	}
+
+	lines, err := s.ExpenseReportLines(ctx, reportID)
+	if err != nil {
+		t.Fatalf("ExpenseReportLines: %v", err)
+	}
+	if len(lines) != 1 {
+		t.Fatalf("lines = %d, want 1", len(lines))
+	}
+	if lines[0].Description != "Airport transfer, Mon" {
+		t.Errorf("line description = %q, want %q", lines[0].Description, "Airport transfer, Mon")
+	}
+	lineID := lines[0].ID
+
+	// The versions snapshot carries the description (rule 5).
+	testutil.AssertVersioned(t, d, "expense_report_lines", lineID, "create")
+	var snapDesc string
+	if err := d.QueryRow(
+		`SELECT description FROM expense_report_lines_versions WHERE entity_id = ? ORDER BY id DESC LIMIT 1`,
+		lineID,
+	).Scan(&snapDesc); err != nil {
+		t.Fatalf("read expense_report_lines_versions description: %v", err)
+	}
+	if snapDesc != "Airport transfer, Mon" {
+		t.Errorf("snapshot description = %q, want %q", snapDesc, "Airport transfer, Mon")
+	}
+
+	// Editing the description updates the live line + appends an 'update' version.
+	if err := s.ReplaceExpenseReportLines(ctx, reportID, []ExpenseReportLineDesired{
+		{ID: lineID, ExpenseReportLineInput: ExpenseReportLineInput{AccountID: acctID, Amount: -1500, Memo: "taxi", Description: "Airport transfer, corrected"}},
+	}); err != nil {
+		t.Fatalf("ReplaceExpenseReportLines (edit): %v", err)
+	}
+	lines2, err := s.ExpenseReportLines(ctx, reportID)
+	if err != nil {
+		t.Fatalf("ExpenseReportLines (post-edit): %v", err)
+	}
+	if lines2[0].Description != "Airport transfer, corrected" {
+		t.Errorf("edited line description = %q, want %q", lines2[0].Description, "Airport transfer, corrected")
+	}
+	testutil.AssertVersioned(t, d, "expense_report_lines", lineID, "update")
+}
+
 // TestUpdateExpenseReportSubsidiary (p25.3): the subsidiary is editable on a draft
 // with no lines, versioned; and LOCKED once a line exists (ErrExpenseReportHasLines) or
 // the report leaves draft/rejected (ErrExpenseReportState). A bad sub is rejected.

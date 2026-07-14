@@ -71,7 +71,7 @@ func (q *Queries) GetExpenseReport(ctx context.Context, id int64) (ExpenseReport
 }
 
 const getExpenseReportLine = `-- name: GetExpenseReportLine :one
-SELECT id, report_id, account_id, amount, fund_id, program_id, memo
+SELECT id, report_id, account_id, amount, fund_id, program_id, memo, description
 FROM expense_report_lines
 WHERE id = ?
 `
@@ -87,6 +87,7 @@ func (q *Queries) GetExpenseReportLine(ctx context.Context, id int64) (ExpenseRe
 		&i.FundID,
 		&i.ProgramID,
 		&i.Memo,
+		&i.Description,
 	)
 	return i, err
 }
@@ -134,18 +135,19 @@ func (q *Queries) InsertExpenseReport(ctx context.Context, arg InsertExpenseRepo
 
 const insertExpenseReportLine = `-- name: InsertExpenseReportLine :one
 
-INSERT INTO expense_report_lines (report_id, account_id, amount, fund_id, program_id, memo)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO expense_report_lines (report_id, account_id, amount, fund_id, program_id, memo, description)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
 type InsertExpenseReportLineParams struct {
-	ReportID  int64
-	AccountID int64
-	Amount    int64
-	FundID    sql.NullInt64
-	ProgramID sql.NullInt64
-	Memo      string
+	ReportID    int64
+	AccountID   int64
+	Amount      int64
+	FundID      sql.NullInt64
+	ProgramID   sql.NullInt64
+	Memo        string
+	Description string
 }
 
 // ===========================================================================
@@ -162,6 +164,7 @@ func (q *Queries) InsertExpenseReportLine(ctx context.Context, arg InsertExpense
 		arg.FundID,
 		arg.ProgramID,
 		arg.Memo,
+		arg.Description,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -171,9 +174,9 @@ func (q *Queries) InsertExpenseReportLine(ctx context.Context, arg InsertExpense
 const insertExpenseReportLineVersion = `-- name: InsertExpenseReportLineVersion :exec
 INSERT INTO expense_report_lines_versions
   (entity_id, change_id, valid_from, op, report_id, account_id, amount, fund_id,
-   program_id, memo)
+   program_id, memo, description)
 SELECT erl.id, c.id, c.at, ?, erl.report_id, erl.account_id, erl.amount,
-       erl.fund_id, erl.program_id, erl.memo
+       erl.fund_id, erl.program_id, erl.memo, erl.description
 FROM expense_report_lines erl, changes c
 WHERE c.id = ? AND erl.id = ?
 `
@@ -219,7 +222,7 @@ func (q *Queries) InsertExpenseReportVersion(ctx context.Context, arg InsertExpe
 }
 
 const listExpenseReportLines = `-- name: ListExpenseReportLines :many
-SELECT id, report_id, account_id, amount, fund_id, program_id, memo
+SELECT id, report_id, account_id, amount, fund_id, program_id, memo, description
 FROM expense_report_lines
 WHERE report_id = ?
 ORDER BY id
@@ -243,6 +246,7 @@ func (q *Queries) ListExpenseReportLines(ctx context.Context, reportID int64) ([
 			&i.FundID,
 			&i.ProgramID,
 			&i.Memo,
+			&i.Description,
 		); err != nil {
 			return nil, err
 		}
@@ -398,17 +402,18 @@ func (q *Queries) SetExpenseReportSubsidiary(ctx context.Context, arg SetExpense
 
 const updateExpenseReportLine = `-- name: UpdateExpenseReportLine :exec
 UPDATE expense_report_lines
-SET account_id = ?, amount = ?, fund_id = ?, program_id = ?, memo = ?
+SET account_id = ?, amount = ?, fund_id = ?, program_id = ?, memo = ?, description = ?
 WHERE id = ?
 `
 
 type UpdateExpenseReportLineParams struct {
-	AccountID int64
-	Amount    int64
-	FundID    sql.NullInt64
-	ProgramID sql.NullInt64
-	Memo      string
-	ID        int64
+	AccountID   int64
+	Amount      int64
+	FundID      sql.NullInt64
+	ProgramID   sql.NullInt64
+	Memo        string
+	Description string
+	ID          int64
 }
 
 func (q *Queries) UpdateExpenseReportLine(ctx context.Context, arg UpdateExpenseReportLineParams) error {
@@ -418,6 +423,7 @@ func (q *Queries) UpdateExpenseReportLine(ctx context.Context, arg UpdateExpense
 		arg.FundID,
 		arg.ProgramID,
 		arg.Memo,
+		arg.Description,
 		arg.ID,
 	)
 	return err

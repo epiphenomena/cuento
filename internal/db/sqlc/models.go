@@ -200,27 +200,29 @@ type ExpenseReport struct {
 }
 
 type ExpenseReportLine struct {
-	ID        int64
-	ReportID  int64
-	AccountID int64
-	Amount    int64
-	FundID    sql.NullInt64
-	ProgramID sql.NullInt64
-	Memo      string
+	ID          int64
+	ReportID    int64
+	AccountID   int64
+	Amount      int64
+	FundID      sql.NullInt64
+	ProgramID   sql.NullInt64
+	Memo        string
+	Description string
 }
 
 type ExpenseReportLinesVersion struct {
-	ID        int64
-	EntityID  int64
-	ChangeID  int64
-	ValidFrom string
-	Op        string
-	ReportID  int64
-	AccountID int64
-	Amount    int64
-	FundID    sql.NullInt64
-	ProgramID sql.NullInt64
-	Memo      string
+	ID          int64
+	EntityID    int64
+	ChangeID    int64
+	ValidFrom   string
+	Op          string
+	ReportID    int64
+	AccountID   int64
+	Amount      int64
+	FundID      sql.NullInt64
+	ProgramID   sql.NullInt64
+	Memo        string
+	Description string
 }
 
 type ExpenseReportsVersion struct {
@@ -407,6 +409,7 @@ type Split struct {
 	Memo             string
 	Position         int64
 	ReconciliationID sql.NullInt64
+	Description      string
 }
 
 type SplitsVersion struct {
@@ -423,6 +426,7 @@ type SplitsVersion struct {
 	FunctionalClass sql.NullString
 	Memo            string
 	Position        int64
+	Description     string
 }
 
 type SubsidiariesVersion struct {

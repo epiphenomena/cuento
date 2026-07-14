@@ -87,6 +87,7 @@ type SplitInput struct {
 	ProgramID       *int64
 	FunctionalClass *string
 	Memo            string
+	Description     string // per-split free-text (p26.15; payee->description migration, INERT this step)
 	Position        int64
 }
 
@@ -112,6 +113,7 @@ type resolvedSplit struct {
 	programID       sql.NullInt64
 	functionalClass sql.NullString
 	memo            string
+	description     string
 	position        int64
 }
 
@@ -285,6 +287,7 @@ func (s *Store) UpdateTransaction(ctx context.Context, id int64, in PostTransact
 					ProgramID:       r.programID,
 					FunctionalClass: r.functionalClass,
 					Memo:            r.memo,
+					Description:     r.description,
 					Position:        r.position,
 					ID:              *r.id,
 				}); err != nil {
@@ -752,6 +755,7 @@ func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID int64, 
 		programID:       programID,
 		functionalClass: functionalClass,
 		memo:            in.Memo,
+		description:     in.Description,
 		position:        in.Position,
 	}, nil
 }
@@ -792,6 +796,7 @@ func insertSplit(ctx context.Context, q *sqlc.Queries, changeID, txnID int64, r 
 		ProgramID:       r.programID,
 		FunctionalClass: r.functionalClass,
 		Memo:            r.memo,
+		Description:     r.description,
 		Position:        r.position,
 	})
 	if err != nil {
@@ -810,6 +815,7 @@ func splitUnchanged(live sqlc.Split, r resolvedSplit) bool {
 		nullInt64Eq(live.ProgramID, r.programID) &&
 		nullStringEq(live.FunctionalClass, r.functionalClass) &&
 		live.Memo == r.memo &&
+		live.Description == r.description &&
 		live.Position == r.position
 }
 

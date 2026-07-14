@@ -224,8 +224,8 @@ func (q *Queries) InsertPayeeVersion(ctx context.Context, arg InsertPayeeVersion
 const insertSplit = `-- name: InsertSplit :one
 
 INSERT INTO splits
-  (transaction_id, account_id, amount, fund_id, program_id, functional_class, memo, position)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  (transaction_id, account_id, amount, fund_id, program_id, functional_class, memo, description, position)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
@@ -237,6 +237,7 @@ type InsertSplitParams struct {
 	ProgramID       sql.NullInt64
 	FunctionalClass sql.NullString
 	Memo            string
+	Description     string
 	Position        int64
 }
 
@@ -257,6 +258,7 @@ func (q *Queries) InsertSplit(ctx context.Context, arg InsertSplitParams) (int64
 		arg.ProgramID,
 		arg.FunctionalClass,
 		arg.Memo,
+		arg.Description,
 		arg.Position,
 	)
 	var id int64
@@ -267,9 +269,9 @@ func (q *Queries) InsertSplit(ctx context.Context, arg InsertSplitParams) (int64
 const insertSplitVersion = `-- name: InsertSplitVersion :exec
 INSERT INTO splits_versions
   (entity_id, change_id, valid_from, op, transaction_id, account_id, amount,
-   fund_id, program_id, functional_class, memo, position)
+   fund_id, program_id, functional_class, memo, description, position)
 SELECT s.id, c.id, c.at, ?, s.transaction_id, s.account_id, s.amount,
-       s.fund_id, s.program_id, s.functional_class, s.memo, s.position
+       s.fund_id, s.program_id, s.functional_class, s.memo, s.description, s.position
 FROM splits s, changes c
 WHERE c.id = ? AND s.id = ?
 `
@@ -583,7 +585,7 @@ func (q *Queries) SplitUsesFundInSubsidiary(ctx context.Context, arg SplitUsesFu
 const splitVersionHistory = `-- name: SplitVersionHistory :many
 SELECT sv.entity_id, sv.change_id, sv.op, sv.valid_from,
        sv.account_id, sv.amount, sv.fund_id, sv.program_id,
-       sv.functional_class, sv.memo, sv.position,
+       sv.functional_class, sv.memo, sv.description, sv.position,
        c.actor_id, u.display_name AS actor_name, c.at
 FROM splits_versions sv
 JOIN changes c ON c.id = sv.change_id
@@ -603,6 +605,7 @@ type SplitVersionHistoryRow struct {
 	ProgramID       sql.NullInt64
 	FunctionalClass sql.NullString
 	Memo            string
+	Description     string
 	Position        int64
 	ActorID         int64
 	ActorName       string
@@ -633,6 +636,7 @@ func (q *Queries) SplitVersionHistory(ctx context.Context, transactionID int64) 
 			&i.ProgramID,
 			&i.FunctionalClass,
 			&i.Memo,
+			&i.Description,
 			&i.Position,
 			&i.ActorID,
 			&i.ActorName,
@@ -653,7 +657,7 @@ func (q *Queries) SplitVersionHistory(ctx context.Context, transactionID int64) 
 
 const splitVersionsAsOf = `-- name: SplitVersionsAsOf :many
 SELECT entity_id, op, transaction_id, account_id, amount, fund_id, program_id,
-       functional_class, memo, position
+       functional_class, memo, description, position
 FROM splits_versions
 WHERE transaction_id = ? AND valid_from <= ?
 ORDER BY entity_id, valid_from DESC, id DESC
@@ -674,6 +678,7 @@ type SplitVersionsAsOfRow struct {
 	ProgramID       sql.NullInt64
 	FunctionalClass sql.NullString
 	Memo            string
+	Description     string
 	Position        int64
 }
 
@@ -700,6 +705,7 @@ func (q *Queries) SplitVersionsAsOf(ctx context.Context, arg SplitVersionsAsOfPa
 			&i.ProgramID,
 			&i.FunctionalClass,
 			&i.Memo,
+			&i.Description,
 			&i.Position,
 		); err != nil {
 			return nil, err
@@ -717,7 +723,7 @@ func (q *Queries) SplitVersionsAsOf(ctx context.Context, arg SplitVersionsAsOfPa
 
 const splitsByTransaction = `-- name: SplitsByTransaction :many
 SELECT id, transaction_id, account_id, amount, fund_id, program_id,
-       functional_class, memo, position, reconciliation_id
+       functional_class, memo, position, reconciliation_id, description
 FROM splits
 WHERE transaction_id = ?
 ORDER BY position, id
@@ -746,6 +752,7 @@ func (q *Queries) SplitsByTransaction(ctx context.Context, transactionID int64) 
 			&i.Memo,
 			&i.Position,
 			&i.ReconciliationID,
+			&i.Description,
 		); err != nil {
 			return nil, err
 		}
@@ -983,7 +990,7 @@ func (q *Queries) TransactionVersionHistory(ctx context.Context, entityID int64)
 const updateSplit = `-- name: UpdateSplit :exec
 UPDATE splits
 SET account_id = ?, amount = ?, fund_id = ?, program_id = ?,
-    functional_class = ?, memo = ?, position = ?
+    functional_class = ?, memo = ?, description = ?, position = ?
 WHERE id = ?
 `
 
@@ -994,6 +1001,7 @@ type UpdateSplitParams struct {
 	ProgramID       sql.NullInt64
 	FunctionalClass sql.NullString
 	Memo            string
+	Description     string
 	Position        int64
 	ID              int64
 }
@@ -1008,6 +1016,7 @@ func (q *Queries) UpdateSplit(ctx context.Context, arg UpdateSplitParams) error 
 		arg.ProgramID,
 		arg.FunctionalClass,
 		arg.Memo,
+		arg.Description,
 		arg.Position,
 		arg.ID,
 	)

@@ -101,18 +101,18 @@ WHERE c.id = ? AND er.id = ?;
 -- Live insert of a report line. amount is minor units, SIGNED (rule 3; the report
 -- need not balance). fund_id/program_id may be NULL (the reviewer resolves them at
 -- convert). Returns the new id.
-INSERT INTO expense_report_lines (report_id, account_id, amount, fund_id, program_id, memo)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO expense_report_lines (report_id, account_id, amount, fund_id, program_id, memo, description)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 RETURNING id;
 
 -- name: GetExpenseReportLine :one
-SELECT id, report_id, account_id, amount, fund_id, program_id, memo
+SELECT id, report_id, account_id, amount, fund_id, program_id, memo, description
 FROM expense_report_lines
 WHERE id = ?;
 
 -- name: ListExpenseReportLines :many
 -- The lines of one report, id-ordered (the editor + the p20.3 convert prefill).
-SELECT id, report_id, account_id, amount, fund_id, program_id, memo
+SELECT id, report_id, account_id, amount, fund_id, program_id, memo, description
 FROM expense_report_lines
 WHERE report_id = ?
 ORDER BY id;
@@ -123,7 +123,7 @@ SELECT COUNT(*) FROM expense_report_lines WHERE report_id = ?;
 
 -- name: UpdateExpenseReportLine :exec
 UPDATE expense_report_lines
-SET account_id = ?, amount = ?, fund_id = ?, program_id = ?, memo = ?
+SET account_id = ?, amount = ?, fund_id = ?, program_id = ?, memo = ?, description = ?
 WHERE id = ?;
 
 -- name: DeleteExpenseReportLine :exec
@@ -139,8 +139,8 @@ WHERE id = ?;
 -- BEFORE the live delete. Params (positional): op, change_id, entity_id.
 INSERT INTO expense_report_lines_versions
   (entity_id, change_id, valid_from, op, report_id, account_id, amount, fund_id,
-   program_id, memo)
+   program_id, memo, description)
 SELECT erl.id, c.id, c.at, ?, erl.report_id, erl.account_id, erl.amount,
-       erl.fund_id, erl.program_id, erl.memo
+       erl.fund_id, erl.program_id, erl.memo, erl.description
 FROM expense_report_lines erl, changes c
 WHERE c.id = ? AND erl.id = ?;

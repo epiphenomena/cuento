@@ -231,6 +231,68 @@ func TestTransactionNotesRoundTrip(t *testing.T) {
 	}
 }
 
+// TestSplitDescriptionRoundTrip (p26.15): a per-split free-text description survives
+// post, the editor-state read (TransactionSplits), and an edit; and the
+// splits_versions snapshot carries it (rule 5). INERT: no read OUTPUT consumes it yet.
+func TestSplitDescriptionRoundTrip(t *testing.T) {
+	e := newTxnEnv(t)
+
+	in := e.balancedInput(10_000)
+	in.Splits[0].Description = "Q1 airfare to the field office"
+	id, err := e.s.PostTransaction(mutCtx(), in)
+	if err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+
+	// The editor-state read (TransactionSplits -> sqlc.Split) round-trips it.
+	splits, err := e.s.TransactionSplits(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("TransactionSplits: %v", err)
+	}
+	if len(splits) != 2 {
+		t.Fatalf("splits = %d, want 2", len(splits))
+	}
+	if splits[0].Description != in.Splits[0].Description {
+		t.Errorf("split[0] description = %q, want %q", splits[0].Description, in.Splits[0].Description)
+	}
+	if splits[1].Description != "" {
+		t.Errorf("split[1] description = %q, want empty", splits[1].Description)
+	}
+
+	// The splits_versions snapshot for split[0] carries the description (rule 5).
+	testutil.AssertVersioned(t, e.d, "splits", splits[0].ID, "create")
+	var snapDesc string
+	if err := e.d.QueryRow(
+		`SELECT description FROM splits_versions WHERE entity_id = ? ORDER BY id DESC LIMIT 1`,
+		splits[0].ID,
+	).Scan(&snapDesc); err != nil {
+		t.Fatalf("read splits_versions description: %v", err)
+	}
+	if snapDesc != in.Splits[0].Description {
+		t.Errorf("snapshot description = %q, want %q", snapDesc, in.Splits[0].Description)
+	}
+
+	// Editing the description updates the live split + appends an 'update' version.
+	upd := e.balancedInput(10_000)
+	upd.Splits[0].ID = &splits[0].ID
+	upd.Splits[0].Description = "Corrected: Q1 airfare, coach"
+	upd.Splits[1].ID = &splits[1].ID
+	if err := e.s.UpdateTransaction(mutCtx(), id, upd); err != nil {
+		t.Fatalf("UpdateTransaction: %v", err)
+	}
+	splits2, err := e.s.TransactionSplits(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("TransactionSplits (post-update): %v", err)
+	}
+	if splits2[0].Description != upd.Splits[0].Description {
+		t.Errorf("updated split[0] description = %q, want %q", splits2[0].Description, upd.Splits[0].Description)
+	}
+	testutil.AssertVersioned(t, e.d, "splits", splits[0].ID, "update")
+
+	// Z3 stays clean with a POPULATED description (current live row == latest snapshot).
+	assertLedgerClean(t, e.d)
+}
+
 // --- Post: zero-sum rejections (two distinct errors) ---------------------
 
 func TestPostUnbalancedRejected(t *testing.T) {

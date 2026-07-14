@@ -191,11 +191,12 @@ func (s *Store) DiscardExpenseReport(ctx context.Context, reportID int64) error 
 // SIGNED minor-unit amount (the report need not balance), and optional fund/program
 // (nil = the reviewer resolves at convert) + a free-text memo.
 type ExpenseReportLineInput struct {
-	AccountID int64
-	Amount    int64
-	FundID    *int64
-	ProgramID *int64
-	Memo      string
+	AccountID   int64
+	Amount      int64
+	FundID      *int64
+	ProgramID   *int64
+	Memo        string
+	Description string // per-line free-text (p26.15; payee->description migration, INERT this step)
 }
 
 // AddExpenseReportLine adds a line to a report (allowed only while draft|rejected)
@@ -212,12 +213,13 @@ func (s *Store) AddExpenseReportLine(ctx context.Context, reportID int64, in Exp
 				return err
 			}
 			id, err := q.InsertExpenseReportLine(ctx, sqlc.InsertExpenseReportLineParams{
-				ReportID:  reportID,
-				AccountID: in.AccountID,
-				Amount:    in.Amount,
-				FundID:    nullInt64Ptr(in.FundID),
-				ProgramID: nullInt64Ptr(in.ProgramID),
-				Memo:      in.Memo,
+				ReportID:    reportID,
+				AccountID:   in.AccountID,
+				Amount:      in.Amount,
+				FundID:      nullInt64Ptr(in.FundID),
+				ProgramID:   nullInt64Ptr(in.ProgramID),
+				Memo:        in.Memo,
+				Description: in.Description,
 			})
 			if err != nil {
 				return fmt.Errorf("insert expense report line: %w", err)
@@ -250,12 +252,13 @@ func (s *Store) UpdateExpenseReportLine(ctx context.Context, lineID int64, in Ex
 				return err
 			}
 			if err := q.UpdateExpenseReportLine(ctx, sqlc.UpdateExpenseReportLineParams{
-				AccountID: in.AccountID,
-				Amount:    in.Amount,
-				FundID:    nullInt64Ptr(in.FundID),
-				ProgramID: nullInt64Ptr(in.ProgramID),
-				Memo:      in.Memo,
-				ID:        lineID,
+				AccountID:   in.AccountID,
+				Amount:      in.Amount,
+				FundID:      nullInt64Ptr(in.FundID),
+				ProgramID:   nullInt64Ptr(in.ProgramID),
+				Memo:        in.Memo,
+				Description: in.Description,
+				ID:          lineID,
 			}); err != nil {
 				return fmt.Errorf("update expense report line %d: %w", lineID, err)
 			}
@@ -339,12 +342,13 @@ func (s *Store) ReplaceExpenseReportLines(ctx context.Context, reportID int64, d
 					}
 					kept[d.ID] = true
 					if err := q.UpdateExpenseReportLine(ctx, sqlc.UpdateExpenseReportLineParams{
-						AccountID: d.AccountID,
-						Amount:    d.Amount,
-						FundID:    nullInt64Ptr(d.FundID),
-						ProgramID: nullInt64Ptr(d.ProgramID),
-						Memo:      d.Memo,
-						ID:        d.ID,
+						AccountID:   d.AccountID,
+						Amount:      d.Amount,
+						FundID:      nullInt64Ptr(d.FundID),
+						ProgramID:   nullInt64Ptr(d.ProgramID),
+						Memo:        d.Memo,
+						Description: d.Description,
+						ID:          d.ID,
 					}); err != nil {
 						return fmt.Errorf("update expense report line %d: %w", d.ID, err)
 					}
@@ -354,12 +358,13 @@ func (s *Store) ReplaceExpenseReportLines(ctx context.Context, reportID int64, d
 					continue
 				}
 				id, err := q.InsertExpenseReportLine(ctx, sqlc.InsertExpenseReportLineParams{
-					ReportID:  reportID,
-					AccountID: d.AccountID,
-					Amount:    d.Amount,
-					FundID:    nullInt64Ptr(d.FundID),
-					ProgramID: nullInt64Ptr(d.ProgramID),
-					Memo:      d.Memo,
+					ReportID:    reportID,
+					AccountID:   d.AccountID,
+					Amount:      d.Amount,
+					FundID:      nullInt64Ptr(d.FundID),
+					ProgramID:   nullInt64Ptr(d.ProgramID),
+					Memo:        d.Memo,
+					Description: d.Description,
 				})
 				if err != nil {
 					return fmt.Errorf("insert expense report line: %w", err)

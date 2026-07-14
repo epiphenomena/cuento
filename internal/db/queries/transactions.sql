@@ -139,8 +139,8 @@ WHERE c.id = ? AND t.id = ?;
 -- expense account (trigger backstop); the store DEFAULTS both before insert so the
 -- triggers never fire on the happy path. Returns the new id.
 INSERT INTO splits
-  (transaction_id, account_id, amount, fund_id, program_id, functional_class, memo, position)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  (transaction_id, account_id, amount, fund_id, program_id, functional_class, memo, description, position)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id;
 
 -- name: UpdateSplit :exec
@@ -148,7 +148,7 @@ RETURNING id;
 -- actually changed reach this). id last.
 UPDATE splits
 SET account_id = ?, amount = ?, fund_id = ?, program_id = ?,
-    functional_class = ?, memo = ?, position = ?
+    functional_class = ?, memo = ?, description = ?, position = ?
 WHERE id = ?;
 
 -- name: DeleteSplit :exec
@@ -162,7 +162,7 @@ DELETE FROM splits WHERE id = ?;
 -- full splits row (incl. reconciliation_id, added p16.1) so this maps to the
 -- sqlc.Split model; consumers that ignore reconciliation_id are unaffected.
 SELECT id, transaction_id, account_id, amount, fund_id, program_id,
-       functional_class, memo, position, reconciliation_id
+       functional_class, memo, position, reconciliation_id, description
 FROM splits
 WHERE transaction_id = ?
 ORDER BY position, id;
@@ -175,9 +175,9 @@ ORDER BY position, id;
 -- change_id, entity_id -> generated Op, ID (change_id), ID_2.
 INSERT INTO splits_versions
   (entity_id, change_id, valid_from, op, transaction_id, account_id, amount,
-   fund_id, program_id, functional_class, memo, position)
+   fund_id, program_id, functional_class, memo, description, position)
 SELECT s.id, c.id, c.at, ?, s.transaction_id, s.account_id, s.amount,
-       s.fund_id, s.program_id, s.functional_class, s.memo, s.position
+       s.fund_id, s.program_id, s.functional_class, s.memo, s.description, s.position
 FROM splits s, changes c
 WHERE c.id = ? AND s.id = ?;
 
@@ -248,7 +248,7 @@ LIMIT 1;
 -- and drop op='delete'. transaction_id filters to this txn's splits. Tiebreak
 -- matches AssertVersioned.
 SELECT entity_id, op, transaction_id, account_id, amount, fund_id, program_id,
-       functional_class, memo, position
+       functional_class, memo, description, position
 FROM splits_versions
 WHERE transaction_id = ? AND valid_from <= ?
 ORDER BY entity_id, valid_from DESC, id DESC;
@@ -284,7 +284,7 @@ ORDER BY tv.valid_from, tv.id;
 -- entry. Params (positional): transaction_id.
 SELECT sv.entity_id, sv.change_id, sv.op, sv.valid_from,
        sv.account_id, sv.amount, sv.fund_id, sv.program_id,
-       sv.functional_class, sv.memo, sv.position,
+       sv.functional_class, sv.memo, sv.description, sv.position,
        c.actor_id, u.display_name AS actor_name, c.at
 FROM splits_versions sv
 JOIN changes c ON c.id = sv.change_id

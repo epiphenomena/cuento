@@ -238,7 +238,8 @@ WHERE v.id IS NULL OR v.op = 'delete'
    OR v.amount IS NOT c.amount OR v.fund_id IS NOT c.fund_id
    OR v.program_id IS NOT c.program_id
    OR v.functional_class IS NOT c.functional_class
-   OR v.memo IS NOT c.memo OR v.position IS NOT c.position
+   OR v.memo IS NOT c.memo OR v.description IS NOT c.description
+   OR v.position IS NOT c.position
 UNION ALL
 -- users (password_hash is NEVER in the version snapshot, rule 5 -- excluded here).
 SELECT 'users:' || CAST(c.id AS TEXT)
@@ -281,6 +282,7 @@ WHERE v.id IS NULL OR v.op = 'delete'
    OR v.report_id IS NOT c.report_id OR v.account_id IS NOT c.account_id
    OR v.amount IS NOT c.amount OR v.fund_id IS NOT c.fund_id
    OR v.program_id IS NOT c.program_id OR v.memo IS NOT c.memo
+   OR v.description IS NOT c.description
 UNION ALL
 -- reconciliations (p16.1 single-id twin; status flips open<->finalized, op='update'
 -- on finalize/reopen -- never hard-deleted, so a missing/'delete' latest version is
