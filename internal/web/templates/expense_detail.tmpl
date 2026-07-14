@@ -15,9 +15,24 @@
   {{- with .Page}}
   <p><a class="btn btn-ghost" href="/expenses">{{t "expense.detail.back"}}</a></p>
   <h1>{{t "expense.detail.title"}} #{{.ID}}</h1>
+  {{if .SubEditable}}
+  {{/* p25.3: pick the subsidiary in-page, editable until the first line is added (the
+       line accounts/funds are sub-scoped; the store locks it once lines exist). */}}
+  {{$curSub := .SubID}}
+  <form method="post" action="/expenses/{{.ID}}/subsidiary" class="expense-sub-form">
+    <label for="er-sub">{{t "expense.detail.subsidiary"}}</label>
+    <select id="er-sub" name="subsidiary_id">
+      {{range .Subs}}<option value="{{.ID}}"{{if eq .ID $curSub}} selected{{end}}>{{.Name}}</option>
+      {{end}}
+    </select>
+    <button type="submit" class="btn btn-ghost">{{t "expense.detail.set_subsidiary"}}</button>
+    <span class="badge er-status-{{.StatusKey}}">{{t .StatusKey}}</span>
+  </form>
+  {{else}}
   <p class="hint">{{t "expense.detail.subsidiary"}}: {{.SubName}} &middot;
     <span class="badge er-status-{{.StatusKey}}">{{t .StatusKey}}</span>
   </p>
+  {{end}}
 
   {{if .ErrorKey}}
   <p class="error" role="alert" id="expense-error">{{.ErrorKey}}</p>
@@ -90,6 +105,10 @@
     {{else}}
     <form method="post" action="/expenses/{{.ID}}/submit" class="inline">
       <button type="submit" class="btn btn-primary" id="expense-submit">{{t "expense.detail.submit"}}</button>
+    </form>
+    {{/* p25.3: discard the draft (hard-deletes it + any lines). Draft-only. */}}
+    <form method="post" action="/expenses/{{.ID}}/discard" class="inline">
+      <button type="submit" class="btn btn-ghost" id="expense-discard">{{t "expense.discard"}}</button>
     </form>
     {{end}}
     <p class="hint">{{t "expense.detail.submit_hint"}}</p>

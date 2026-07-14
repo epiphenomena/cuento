@@ -56,6 +56,21 @@ UPDATE expense_reports
 SET status = ?, review_notes = ?
 WHERE id = ?;
 
+-- name: SetExpenseReportSubsidiary :exec
+-- Live update of a draft report's subsidiary (p25.3: the submitter picks the sub on
+-- the report page, editable ONLY while the report has no lines -- the store guards the
+-- line-count precondition so a change can't orphan sub-scoped line accounts).
+UPDATE expense_reports
+SET subsidiary_id = ?
+WHERE id = ?;
+
+-- name: DeleteExpenseReport :exec
+-- Hard delete of a DRAFT report (p25.3 discard). Its lines are deleted first (each with
+-- an op=delete version); for op=delete the report's own version row is captured BEFORE
+-- this runs (rule 14: the live row must still exist to snapshot).
+DELETE FROM expense_reports
+WHERE id = ?;
+
 -- name: SetExpenseReportConverted :exec
 -- Live update flipping a report to 'converted' and LINKING the posted transaction.
 -- posted_transaction_id is set ONLY here (convert is its sole writer). The store

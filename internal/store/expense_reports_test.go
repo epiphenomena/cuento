@@ -181,6 +181,98 @@ func TestRemoveExpenseReportLineVersioned(t *testing.T) {
 	assertLedgerClean(t, d)
 }
 
+// TestUpdateExpenseReportSubsidiary (p25.3): the subsidiary is editable on a draft
+// with no lines, versioned; and LOCKED once a line exists (ErrExpenseReportHasLines) or
+// the report leaves draft/rejected (ErrExpenseReportState). A bad sub is rejected.
+func TestUpdateExpenseReportSubsidiary(t *testing.T) {
+	s, d, ctx, submitterID, acctID := seedExpenseReportEnv(t)
+
+	sub2, err := s.CreateSubsidiary(ctx, CreateSubsidiaryInput{ParentID: 1, Name: "Branch", BaseCurrency: "USD"})
+	if err != nil {
+		t.Fatalf("CreateSubsidiary: %v", err)
+	}
+
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	if err != nil {
+		t.Fatalf("CreateExpenseReport: %v", err)
+	}
+
+	// Draft, no lines: the sub changes and the change is versioned op='update'.
+	if err := s.UpdateExpenseReportSubsidiary(ctx, reportID, sub2); err != nil {
+		t.Fatalf("UpdateExpenseReportSubsidiary (draft, no lines): %v", err)
+	}
+	testutil.AssertVersioned(t, d, "expense_reports", reportID, "update")
+	if rep, _ := s.GetExpenseReport(context.Background(), reportID); rep.SubsidiaryID != sub2 {
+		t.Errorf("subsidiary = %d, want %d", rep.SubsidiaryID, sub2)
+	}
+
+	// A non-existent subsidiary is rejected.
+	if err := s.UpdateExpenseReportSubsidiary(ctx, reportID, 99999); !errors.Is(err, ErrExpenseReportRefMissing) {
+		t.Fatalf("bad sub = %v, want ErrExpenseReportRefMissing", err)
+	}
+
+	// Once a line exists the sub is LOCKED (a change would orphan the line's account).
+	if _, err := s.AddExpenseReportLine(ctx, reportID, ExpenseReportLineInput{AccountID: acctID, Amount: -100}); err != nil {
+		t.Fatalf("AddExpenseReportLine: %v", err)
+	}
+	if err := s.UpdateExpenseReportSubsidiary(ctx, reportID, 1); !errors.Is(err, ErrExpenseReportHasLines) {
+		t.Fatalf("change sub with lines = %v, want ErrExpenseReportHasLines", err)
+	}
+
+	// And a submitted report is a state error.
+	if err := s.SubmitExpenseReport(ctx, reportID); err != nil {
+		t.Fatalf("SubmitExpenseReport: %v", err)
+	}
+	if err := s.UpdateExpenseReportSubsidiary(ctx, reportID, 1); !errors.Is(err, ErrExpenseReportState) {
+		t.Fatalf("change sub while submitted = %v, want ErrExpenseReportState", err)
+	}
+	assertLedgerClean(t, d)
+}
+
+// TestDiscardExpenseReport (p25.3): a DRAFT report and its lines hard-delete with
+// op='delete' version rows (audit preserved); a non-draft report is not discardable.
+func TestDiscardExpenseReport(t *testing.T) {
+	s, d, ctx, submitterID, acctID := seedExpenseReportEnv(t)
+
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	if err != nil {
+		t.Fatalf("CreateExpenseReport: %v", err)
+	}
+	lineID, err := s.AddExpenseReportLine(ctx, reportID, ExpenseReportLineInput{AccountID: acctID, Amount: -300})
+	if err != nil {
+		t.Fatalf("AddExpenseReportLine: %v", err)
+	}
+
+	if err := s.DiscardExpenseReport(ctx, reportID); err != nil {
+		t.Fatalf("DiscardExpenseReport: %v", err)
+	}
+	// The report + its line have op='delete' version snapshots and no live rows.
+	testutil.AssertVersioned(t, d, "expense_reports", reportID, "delete")
+	testutil.AssertVersioned(t, d, "expense_report_lines", lineID, "delete")
+	var nRep, nLine int
+	_ = d.QueryRow(`SELECT COUNT(*) FROM expense_reports WHERE id=?`, reportID).Scan(&nRep)
+	_ = d.QueryRow(`SELECT COUNT(*) FROM expense_report_lines WHERE id=?`, lineID).Scan(&nLine)
+	if nRep != 0 || nLine != 0 {
+		t.Fatalf("live rows after discard: report=%d line=%d, want 0/0", nRep, nLine)
+	}
+
+	// A SUBMITTED report is not discardable (draft-only).
+	rep2, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	if err != nil {
+		t.Fatalf("create 2: %v", err)
+	}
+	if _, err := s.AddExpenseReportLine(ctx, rep2, ExpenseReportLineInput{AccountID: acctID, Amount: -1}); err != nil {
+		t.Fatalf("add line 2: %v", err)
+	}
+	if err := s.SubmitExpenseReport(ctx, rep2); err != nil {
+		t.Fatalf("submit 2: %v", err)
+	}
+	if err := s.DiscardExpenseReport(ctx, rep2); !errors.Is(err, ErrExpenseReportState) {
+		t.Fatalf("discard submitted = %v, want ErrExpenseReportState", err)
+	}
+	assertLedgerClean(t, d)
+}
+
 // TestExpenseReportStateMachine proves illegal transitions are rejected with typed
 // errors and leave no audit trace (the change rolls back).
 func TestExpenseReportStateMachine(t *testing.T) {

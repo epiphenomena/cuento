@@ -397,6 +397,7 @@ func (s *server) routes() []Route {
 		{http.MethodGet, "/expenses", ExpenseSubmit, http.HandlerFunc(s.expensesPage)},
 		{http.MethodPost, "/expenses", ExpenseSubmit, http.HandlerFunc(s.expenseCreate)},
 		{http.MethodGet, "/expenses/{id}", ExpenseSubmit, http.HandlerFunc(s.expenseDetail)},
+		{http.MethodPost, "/expenses/{id}/subsidiary", ExpenseSubmit, http.HandlerFunc(s.expenseSetSubsidiary)},
 		{http.MethodGet, "/expenses/{id}/lines/new", ExpenseSubmit, http.HandlerFunc(s.expenseLineNewForm)},
 		{http.MethodGet, "/expenses/{id}/lines/{lid}/edit", ExpenseSubmit, http.HandlerFunc(s.expenseLineEditForm)},
 		{http.MethodPost, "/expenses/{id}/lines", ExpenseSubmit, http.HandlerFunc(s.expenseLineCreate)},
@@ -428,6 +429,13 @@ func (s *server) routes() []Route {
 		{http.MethodGet, "/expenses/review/{id}", TxnWrite, http.HandlerFunc(s.expenseReviewForm)},
 		{http.MethodPost, "/expenses/review/post/{id}", TxnWrite, http.HandlerFunc(s.expenseReviewPost)},
 		{http.MethodPost, "/expenses/review/reject/{id}", TxnWrite, http.HandlerFunc(s.expenseReviewReject)},
+		// p25.3 discard (ExpenseSubmit): hard-deletes a DRAFT report + its lines.
+		// Registered LAST of the /expenses routes on purpose: the permission-matrix
+		// reachability sweep (TestRouteRegistryComplete) sends a real POST to every route
+		// in registry order against ONE shared seeded report (id 1); discard is the only
+		// route that can DELETE that report, so it must run after every route that needs
+		// it to still exist. (Mux precedence is unaffected by slice order.)
+		{http.MethodPost, "/expenses/{id}/discard", ExpenseSubmit, http.HandlerFunc(s.expenseDiscard)},
 	}
 	// p15.12 reports index: GET /reports lists the reports the current user may
 	// access, grouped by report group, each a link to a concrete /reports/{id}. The

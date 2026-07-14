@@ -54,11 +54,16 @@ var (
 	// ErrExpenseReportRefMissing: a referenced submitter/subsidiary/account/fund/
 	// program does not exist.
 	ErrExpenseReportRefMissing = errors.New("store: expense report reference not found")
+	// ErrExpenseReportHasLines: the subsidiary cannot be changed once the report has
+	// lines (they are scoped to the sub; changing it would orphan their accounts).
+	ErrExpenseReportHasLines = errors.New("store: expense report subsidiary is locked (has lines)")
 )
 
 // CreateExpenseReport creates a draft report for submitterID in subsidiaryID under
 // ONE change and returns the new id (status=draft). Validates the submitter +
-// subsidiary exist inside fn so a rejection rolls back cleanly.
+// subsidiary exist inside fn so a rejection rolls back cleanly. The subsidiary is the
+// submitter's default at creation but is EDITABLE in-page until the first line is added
+// (UpdateExpenseReportSubsidiary, p25.3) -- it is no longer fixed at creation.
 func (s *Store) CreateExpenseReport(ctx context.Context, submitterID, subsidiaryID int64) (int64, error) {
 	var newID int64
 	_, err := s.write(ctx, "expense_report.create", "",
@@ -90,6 +95,93 @@ func (s *Store) CreateExpenseReport(ctx context.Context, submitterID, subsidiary
 		return 0, fmt.Errorf("create expense report: %w", err)
 	}
 	return newID, nil
+}
+
+// UpdateExpenseReportSubsidiary changes a report's subsidiary (p25.3) under one
+// change. Allowed ONLY while the report is draft|rejected AND has NO lines: the sub
+// scopes each line's account/fund options, so changing it after lines exist would
+// orphan them (ErrExpenseReportHasLines). Validates the new subsidiary exists.
+// Versioned op='update'.
+func (s *Store) UpdateExpenseReportSubsidiary(ctx context.Context, reportID, subsidiaryID int64) error {
+	_, err := s.write(ctx, "expense_report.set_subsidiary", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			rep, err := loadExpenseReport(ctx, q, reportID)
+			if err != nil {
+				return err
+			}
+			if rep.Status == "converted" {
+				return ErrExpenseReportImmutable
+			}
+			if rep.Status != "draft" && rep.Status != "rejected" {
+				return ErrExpenseReportState
+			}
+			n, err := q.CountExpenseReportLines(ctx, reportID)
+			if err != nil {
+				return fmt.Errorf("count lines: %w", err)
+			}
+			if n > 0 {
+				return ErrExpenseReportHasLines
+			}
+			if _, err := q.GetSubsidiary(ctx, subsidiaryID); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return ErrExpenseReportRefMissing
+				}
+				return fmt.Errorf("load subsidiary %d: %w", subsidiaryID, err)
+			}
+			if err := q.SetExpenseReportSubsidiary(ctx, sqlc.SetExpenseReportSubsidiaryParams{
+				SubsidiaryID: subsidiaryID, ID: reportID,
+			}); err != nil {
+				return fmt.Errorf("set subsidiary: %w", err)
+			}
+			return insertExpenseReportVersion(ctx, q, changeID, "update", reportID)
+		})
+	if err != nil {
+		return fmt.Errorf("set expense report %d subsidiary: %w", reportID, err)
+	}
+	return nil
+}
+
+// DiscardExpenseReport HARD-deletes a DRAFT report and all its lines (p25.3) under one
+// change. Draft-only (ErrExpenseReportState otherwise): a draft has no
+// posted_transaction_id and nothing references it, so no FK is fought. Each line gets
+// an op='delete' version BEFORE its live delete, then the report gets its own
+// op='delete' version BEFORE the report row is deleted (rule 14: snapshot-before-delete).
+func (s *Store) DiscardExpenseReport(ctx context.Context, reportID int64) error {
+	_, err := s.write(ctx, "expense_report.discard", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			rep, err := loadExpenseReport(ctx, q, reportID)
+			if err != nil {
+				return err
+			}
+			if rep.Status != "draft" {
+				return ErrExpenseReportState
+			}
+			// Delete each line (version op='delete' captured before the live delete).
+			lines, err := q.ListExpenseReportLines(ctx, reportID)
+			if err != nil {
+				return fmt.Errorf("list lines: %w", err)
+			}
+			for _, l := range lines {
+				if err := insertExpenseReportLineVersion(ctx, q, changeID, "delete", l.ID); err != nil {
+					return err
+				}
+				if err := q.DeleteExpenseReportLine(ctx, l.ID); err != nil {
+					return fmt.Errorf("delete line %d: %w", l.ID, err)
+				}
+			}
+			// Then the report itself (version before the live delete).
+			if err := insertExpenseReportVersion(ctx, q, changeID, "delete", reportID); err != nil {
+				return err
+			}
+			if err := q.DeleteExpenseReport(ctx, reportID); err != nil {
+				return fmt.Errorf("delete report: %w", err)
+			}
+			return nil
+		})
+	if err != nil {
+		return fmt.Errorf("discard expense report %d: %w", reportID, err)
+	}
+	return nil
 }
 
 // ExpenseReportLineInput is the desired state of one proposed split: an account, a

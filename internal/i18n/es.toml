@@ -1888,8 +1888,10 @@ other = "Abrir"
 other = "Motivo del revisor"
 [expense.list.empty]
 other = "Aún no tiene informes de gastos."
-[expense.new.subsidiary]
-other = "Filial"
+[expense.detail.set_subsidiary]
+other = "Cambiar filial"
+[expense.discard]
+other = "Descartar"
 [expense.new.btn]
 other = "Nuevo informe de gastos"
 [expense.status.draft]

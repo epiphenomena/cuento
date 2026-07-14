@@ -1,10 +1,10 @@
 {{/*
   p20.2 submitter "my reports" list (GET /expenses, Perm ExpenseSubmit). The current
   user's OWN expense reports with status; a rejected report shows the reviewer's
-  reason and links to the editor to fix + resubmit. A "new report" form picks the
-  subsidiary (one sub per report) and POSTs to /expenses. .Page is an
-  expensesPageModel. Every string via {{t}} (rule 9); subsidiary names are stored
-  proper nouns; no inline script (rule 12).
+  reason and links to the editor to fix + resubmit. p25.3: "New report" is a plain
+  POST (the subsidiary is chosen on the report page now, not here); a DRAFT row also
+  carries a Discard action. .Page is an expensesPageModel. Every string via {{t}}
+  (rule 9); subsidiary names are stored proper nouns; no inline script (rule 12).
 */ -}}
 {{define "expenses.tmpl" -}}
 {{template "shell-open" (shellTitle . (t "expense.list.title"))}}
@@ -12,17 +12,11 @@
   <h1>{{t "expense.list.title"}}</h1>
   <p class="hint">{{t "expense.list.intro"}}</p>
 
+  {{/* New report: a plain POST creates a draft (in the submitter's default subsidiary)
+       and redirects to the report page, where the sub can be changed until the first
+       line is added (p25.3). */}}
   <form method="post" action="/expenses" class="expense-new-form">
-    <div class="field">
-      <label for="er-sub">{{t "expense.new.subsidiary"}}</label>
-      <select id="er-sub" name="subsidiary_id">
-        {{range .Subs}}<option value="{{.ID}}">{{.Name}}</option>
-        {{end}}
-      </select>
-    </div>
-    <div class="form-actions">
-      <button type="submit" class="btn btn-primary">{{t "expense.new.btn"}}</button>
-    </div>
+    <button type="submit" class="btn btn-primary">{{t "expense.new.btn"}}</button>
   </form>
 
   <table class="expense-reports-table">
@@ -45,6 +39,12 @@
         </td>
         <td class="er-actions">
           <a class="btn btn-ghost" href="/expenses/{{.ID}}">{{t "expense.list.open"}}</a>
+          {{if .Draft}}
+          {{/* p25.3: discard a draft (hard-deletes it + any lines). */}}
+          <form method="post" action="/expenses/{{.ID}}/discard" class="inline">
+            <button type="submit" class="btn btn-ghost">{{t "expense.discard"}}</button>
+          </form>
+          {{end}}
         </td>
       </tr>
       {{else}}

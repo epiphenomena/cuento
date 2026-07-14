@@ -54,13 +54,14 @@ type expenseReportRow struct {
 	StatusKey   string // i18n key: expense.status.<status>
 	ReviewNotes string // the reviewer's rejection reason ("" unless rejected)
 	Rejected    bool
+	Draft       bool // draft -> the discard affordance (p25.3)
 }
 
-// expensesPageModel is the GET /expenses model: the current user's OWN reports and
-// the subsidiary picker for a new report.
+// expensesPageModel is the GET /expenses model: the current user's OWN reports. The
+// "new report" affordance is a plain button (p25.3: the subsidiary is chosen on the
+// report page, no longer a list-page picker).
 type expensesPageModel struct {
 	Rows []expenseReportRow
-	Subs []subOption // the "new report" subsidiary picker
 }
 
 // expensesPage handles GET /expenses (ExpenseSubmit): the submitter's own reports
@@ -84,20 +85,13 @@ func (s *server) expensesPage(w http.ResponseWriter, r *http.Request) {
 			ID:        rep.ID,
 			SubName:   subNames[rep.SubsidiaryID],
 			StatusKey: "expense.status." + rep.Status,
+			Draft:     rep.Status == "draft",
 		}
 		if rep.Status == "rejected" {
 			row.Rejected = true
 			row.ReviewNotes = rep.ReviewNotes
 		}
 		model.Rows = append(model.Rows, row)
-	}
-	subs, err := s.store.AllSubsidiaries(ctx)
-	if err != nil {
-		s.serverError(w)
-		return
-	}
-	for _, sb := range subs {
-		model.Subs = append(model.Subs, subOption{ID: sb.ID, Name: sb.Name})
 	}
 	s.render(w, r, http.StatusOK, "expenses.tmpl", s.newShellPage(r, model))
 }
@@ -130,6 +124,60 @@ func (s *server) expenseCreate(w http.ResponseWriter, r *http.Request) {
 	redirectAfterForm(w, r, "/expenses/"+strconv.FormatInt(id, 10))
 }
 
+// expenseSetSubsidiary handles POST /expenses/{id}/subsidiary (ExpenseSubmit, p25.3):
+// change a draft report's subsidiary in-page (the store rejects the change once the
+// report has lines or is not editable). Always redirects back to the report page; a
+// rejected change is a no-op the picker's guard already prevents on a well-behaved
+// client, so there is no field-error surface.
+func (s *server) expenseSetSubsidiary(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := parseID(r.PathValue("id"))
+	rep, ok := s.loadEditableReport(w, r, id)
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	sub := parseID(r.PostFormValue("subsidiary_id"))
+	if sub != 0 && sub != rep.SubsidiaryID {
+		if err := s.store.UpdateExpenseReportSubsidiary(s.actorCtx(ctx), id, sub); err != nil {
+			// Expected guards (locked/bad sub) just no-op back to the page; anything else
+			// is a real fault.
+			if !errors.Is(err, store.ErrExpenseReportHasLines) &&
+				!errors.Is(err, store.ErrExpenseReportState) &&
+				!errors.Is(err, store.ErrExpenseReportRefMissing) {
+				s.serverError(w)
+				return
+			}
+		}
+	}
+	redirectAfterForm(w, r, "/expenses/"+strconv.FormatInt(id, 10))
+}
+
+// expenseDiscard handles POST /expenses/{id}/discard (ExpenseSubmit, p25.3): hard-
+// delete a DRAFT report and its lines (the store guards draft-only). Redirects to the
+// reports list. The UI only offers discard on a draft, so a POST against a non-draft is
+// an abnormal request: the store rejects it (ErrExpenseReportState) and the handler
+// just routes back to the list (not a 500, not a 404) -- ownership is still enforced.
+func (s *server) expenseDiscard(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := parseID(r.PathValue("id"))
+	if _, ok := s.loadOwnedReport(w, r, id); !ok {
+		return
+	}
+	if err := s.store.DiscardExpenseReport(s.actorCtx(ctx), id); err != nil {
+		if errors.Is(err, store.ErrExpenseReportState) {
+			redirectAfterForm(w, r, "/expenses")
+			return
+		}
+		s.serverError(w)
+		return
+	}
+	redirectAfterForm(w, r, "/expenses")
+}
+
 // ===========================================================================
 // REPORT DETAIL / EDITOR
 // ===========================================================================
@@ -150,9 +198,13 @@ type expenseLineRow struct {
 type expenseDetailModel struct {
 	ID          int64
 	SubName     string
+	SubID       int64       // the report's current subsidiary (selected in the picker)
+	Subs        []subOption // subsidiary picker options (shown only when SubEditable)
+	SubEditable bool        // editable AND no lines yet -> the sub picker is shown (p25.3)
 	Status      string
 	StatusKey   string
 	Editable    bool   // draft|rejected -> the add/edit-line form + Submit show
+	Draft       bool   // draft -> the discard affordance (p25.3)
 	Rejected    bool   // rejected -> the resubmit affordance + reviewer reason show
 	ReviewNotes string // the reviewer's rejection reason (rejected only)
 	Lines       []expenseLineRow
@@ -206,13 +258,29 @@ func (s *server) expenseDetail(w http.ResponseWriter, r *http.Request) {
 	model := expenseDetailModel{
 		ID:        id,
 		SubName:   subNames[rep.SubsidiaryID],
+		SubID:     rep.SubsidiaryID,
 		Status:    rep.Status,
 		StatusKey: "expense.status." + rep.Status,
 		Editable:  rep.Status == "draft" || rep.Status == "rejected",
+		Draft:     rep.Status == "draft",
 		Rejected:  rep.Status == "rejected",
 	}
 	if model.Rejected {
 		model.ReviewNotes = rep.ReviewNotes
+	}
+	// p25.3: the subsidiary is editable in-page ONLY while the report is editable AND
+	// has no lines (a line's account/fund options are sub-scoped; the store enforces
+	// the same lock). Load the picker options only then.
+	if model.Editable && len(lines) == 0 {
+		model.SubEditable = true
+		subs, err := s.store.AllSubsidiaries(ctx)
+		if err != nil {
+			s.serverError(w)
+			return
+		}
+		for _, sb := range subs {
+			model.Subs = append(model.Subs, subOption{ID: sb.ID, Name: sb.Name})
+		}
 	}
 	for _, l := range lines {
 		row := expenseLineRow{

@@ -22,6 +22,19 @@ func (q *Queries) CountExpenseReportLines(ctx context.Context, reportID int64) (
 	return count, err
 }
 
+const deleteExpenseReport = `-- name: DeleteExpenseReport :exec
+DELETE FROM expense_reports
+WHERE id = ?
+`
+
+// Hard delete of a DRAFT report (p25.3 discard). Its lines are deleted first (each with
+// an op=delete version); for op=delete the report's own version row is captured BEFORE
+// this runs (rule 14: the live row must still exist to snapshot).
+func (q *Queries) DeleteExpenseReport(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteExpenseReport, id)
+	return err
+}
+
 const deleteExpenseReportLine = `-- name: DeleteExpenseReportLine :exec
 DELETE FROM expense_report_lines
 WHERE id = ?
@@ -361,6 +374,25 @@ type SetExpenseReportStatusParams struct {
 // (the store passes the current notes through).
 func (q *Queries) SetExpenseReportStatus(ctx context.Context, arg SetExpenseReportStatusParams) error {
 	_, err := q.db.ExecContext(ctx, setExpenseReportStatus, arg.Status, arg.ReviewNotes, arg.ID)
+	return err
+}
+
+const setExpenseReportSubsidiary = `-- name: SetExpenseReportSubsidiary :exec
+UPDATE expense_reports
+SET subsidiary_id = ?
+WHERE id = ?
+`
+
+type SetExpenseReportSubsidiaryParams struct {
+	SubsidiaryID int64
+	ID           int64
+}
+
+// Live update of a draft report's subsidiary (p25.3: the submitter picks the sub on
+// the report page, editable ONLY while the report has no lines -- the store guards the
+// line-count precondition so a change can't orphan sub-scoped line accounts).
+func (q *Queries) SetExpenseReportSubsidiary(ctx context.Context, arg SetExpenseReportSubsidiaryParams) error {
+	_, err := q.db.ExecContext(ctx, setExpenseReportSubsidiary, arg.SubsidiaryID, arg.ID)
 	return err
 }
 

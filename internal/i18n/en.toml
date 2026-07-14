@@ -1894,8 +1894,10 @@ other = "Open"
 other = "Reviewer's reason"
 [expense.list.empty]
 other = "You have no expense reports yet."
-[expense.new.subsidiary]
-other = "Subsidiary"
+[expense.detail.set_subsidiary]
+other = "Set subsidiary"
+[expense.discard]
+other = "Discard"
 [expense.new.btn]
 other = "New expense report"
 [expense.status.draft]

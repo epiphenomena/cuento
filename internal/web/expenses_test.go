@@ -56,6 +56,61 @@ func seedREAccount(t *testing.T, st *store.Store, typ, name string) int64 {
 	return id
 }
 
+// TestExpenseSubsidiaryAndDiscard (p25.3): the subsidiary picker shows on a draft with
+// no lines and changes the report's sub in-page; it disappears once a line exists; and
+// a draft is discardable (hard-deleted) from the report page.
+func TestExpenseSubsidiaryAndDiscard(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	sub := mkSubmitter(t, st, "sub_disc")
+	sysCtx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	sub2, err := st.CreateSubsidiary(sysCtx, store.CreateSubsidiaryInput{ParentID: 1, Name: "Branch", BaseCurrency: "USD"})
+	if err != nil {
+		t.Fatalf("CreateSubsidiary: %v", err)
+	}
+	// A revenue account mapped to sub2 (propagates to the root, D18), so a line can be
+	// added while the report is in sub2.
+	rev, err := st.CreateAccount(sysCtx, store.CreateAccountInput{
+		Type: "revenue", DefaultCurrency: "USD",
+		Names: map[string]string{"en": "Rev Branch"}, Subsidiaries: []int64{sub2},
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+
+	// New report (empty POST -> draft in the submitter's default subsidiary).
+	rec := asUser(t, h, sm, sub, http.MethodPost, "/expenses", url.Values{})
+	repID := reportIDFromRedirect(t, rec)
+
+	// The draft detail shows the in-page subsidiary picker (editable + no lines).
+	pickerAction := `action="/expenses/` + itoa(repID) + `/subsidiary"`
+	body := asUser(t, h, sm, sub, http.MethodGet, "/expenses/"+itoa(repID), nil).Body.String()
+	if !strings.Contains(body, pickerAction) {
+		t.Errorf("draft detail missing the subsidiary picker:\n%s", body)
+	}
+
+	// Change the subsidiary in-page.
+	asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+itoa(repID)+"/subsidiary", url.Values{"subsidiary_id": {itoa(sub2)}})
+	if rep, _ := st.GetExpenseReport(context.Background(), repID); rep.SubsidiaryID != sub2 {
+		t.Fatalf("subsidiary after change = %d, want %d", rep.SubsidiaryID, sub2)
+	}
+
+	// Add a line -> the sub is now locked, so the picker disappears.
+	addLine(t, h, sm, sub, repID, rev, "50.00")
+	body = asUser(t, h, sm, sub, http.MethodGet, "/expenses/"+itoa(repID), nil).Body.String()
+	if strings.Contains(body, pickerAction) {
+		t.Errorf("subsidiary picker should be gone once a line exists:\n%s", body)
+	}
+
+	// Discard the draft (with its line) -> redirect to /expenses; the report is gone.
+	rec = asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+itoa(repID)+"/discard", url.Values{})
+	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/expenses" {
+		t.Fatalf("discard = %d -> %q, want 303 -> /expenses", rec.Code, rec.Header().Get("Location"))
+	}
+	if _, err := st.GetExpenseReport(context.Background(), repID); err == nil {
+		t.Errorf("report still exists after discard (want deleted)")
+	}
+}
+
 // TestExpenseUnbalancedSubmitOK: a submitter creates a report, adds an UNBALANCED set
 // of R/E lines (a revenue and an expense whose magnitudes do NOT net to zero), and
 // SUBMITS -- the submit succeeds (200/redirect) and the report shows "submitted". This
