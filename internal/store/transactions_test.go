@@ -610,6 +610,143 @@ func TestUpdateDiffsSplits(t *testing.T) {
 	testutil.AssertVersioned(t, e.d, "transactions", id, "update")
 }
 
+// --- Update: a pre-existing split may keep a now-inactive account (p26.13) --
+
+// TestUpdateKeepsInactiveAccountOnUnchangedSplit posts a balanced txn, deactivates
+// the account of one of its splits, then updates ONLY a non-account field (memo).
+// Because that split's account is unchanged, the now-inactive account is tolerated
+// and the update succeeds (and is versioned). Editing a NEW split, or a split whose
+// account CHANGED, still requires an ACTIVE account.
+func TestUpdateKeepsInactiveAccountOnUnchangedSplit(t *testing.T) {
+	e := newTxnEnv(t)
+	id, err := e.s.PostTransaction(mutCtx(), e.balancedInput(100))
+	if err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+	live := txnSplits(t, e.d, id)
+	if len(live) != 2 {
+		t.Fatalf("want 2 splits, got %d", len(live))
+	}
+	var salariesSplit, checkingSplit int64
+	for _, sp := range live {
+		switch sp.AccountID {
+		case e.salaries:
+			salariesSplit = sp.ID
+		case e.checking:
+			checkingSplit = sp.ID
+		}
+	}
+
+	// Deactivate the account referenced by BOTH splits' partner: deactivate checking.
+	if err := e.s.DeactivateAccount(mutCtx(), e.checking); err != nil {
+		t.Fatalf("DeactivateAccount(checking): %v", err)
+	}
+
+	// Update ONLY the memo; keep the same split accounts (checking stays inactive).
+	upd := PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD", Memo: "edited",
+		Splits: []SplitInput{
+			{ID: &salariesSplit, AccountID: e.salaries, Amount: 100, Position: 0},
+			{ID: &checkingSplit, AccountID: e.checking, Amount: -100, Position: 1},
+		},
+	}
+	if err := e.s.UpdateTransaction(mutCtx(), id, upd); err != nil {
+		t.Fatalf("UpdateTransaction (memo only, inactive account unchanged) = %v, want nil", err)
+	}
+	testutil.AssertVersioned(t, e.d, "transactions", id, "update")
+
+	var memo string
+	if err := e.d.QueryRow(`SELECT memo FROM transactions WHERE id = ?`, id).Scan(&memo); err != nil {
+		t.Fatalf("read memo: %v", err)
+	}
+	if memo != "edited" {
+		t.Errorf("memo = %q, want %q", memo, "edited")
+	}
+}
+
+// TestUpdateChangeToInactiveAccountRejected: changing an existing split's account to
+// a DIFFERENT (also inactive) account still requires an active account -> rejected.
+func TestUpdateChangeToInactiveAccountRejected(t *testing.T) {
+	e := newTxnEnv(t)
+	// A second checking-like asset leaf, mapped to the sub, then deactivated.
+	other := mkAcct(t, e.s, "asset", "Savings", []int64{e.subUS}, nil, nil)
+	id, err := e.s.PostTransaction(mutCtx(), e.balancedInput(100))
+	if err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+	live := txnSplits(t, e.d, id)
+	var salariesSplit, checkingSplit int64
+	for _, sp := range live {
+		switch sp.AccountID {
+		case e.salaries:
+			salariesSplit = sp.ID
+		case e.checking:
+			checkingSplit = sp.ID
+		}
+	}
+	if err := e.s.DeactivateAccount(mutCtx(), other); err != nil {
+		t.Fatalf("DeactivateAccount(other): %v", err)
+	}
+
+	before := countChanges(t, e.d)
+	upd := PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{ID: &salariesSplit, AccountID: e.salaries, Amount: 100, Position: 0},
+			{ID: &checkingSplit, AccountID: other, Amount: -100, Position: 1}, // account CHANGED to inactive
+		},
+	}
+	if err := e.s.UpdateTransaction(mutCtx(), id, upd); !errors.Is(err, ErrInactiveAccount) {
+		t.Fatalf("UpdateTransaction (account changed to inactive) = %v, want ErrInactiveAccount", err)
+	}
+	if n := countChanges(t, e.d); n != before {
+		t.Errorf("changes = %d, want %d (rejected update leaves no trace)", n, before)
+	}
+}
+
+// TestUpdateNewSplitOnInactiveAccountRejected: adding a brand-new split on an
+// inactive account still requires an active account -> rejected.
+func TestUpdateNewSplitOnInactiveAccountRejected(t *testing.T) {
+	e := newTxnEnv(t)
+	other := mkAcct(t, e.s, "asset", "Savings", []int64{e.subUS}, nil, nil)
+	id, err := e.s.PostTransaction(mutCtx(), e.balancedInput(100))
+	if err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+	live := txnSplits(t, e.d, id)
+	var salariesSplit, checkingSplit int64
+	for _, sp := range live {
+		switch sp.AccountID {
+		case e.salaries:
+			salariesSplit = sp.ID
+		case e.checking:
+			checkingSplit = sp.ID
+		}
+	}
+	if err := e.s.DeactivateAccount(mutCtx(), other); err != nil {
+		t.Fatalf("DeactivateAccount(other): %v", err)
+	}
+
+	before := countChanges(t, e.d)
+	// Keep both original splits (balanced 100/-100) and add a new zero-net pair on the
+	// inactive account, so the ONLY reason to reject is the inactive account, not balance.
+	upd := PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{ID: &salariesSplit, AccountID: e.salaries, Amount: 100, Position: 0},
+			{ID: &checkingSplit, AccountID: e.checking, Amount: -100, Position: 1},
+			{AccountID: other, Amount: 50, Position: 2}, // NEW split on inactive account
+			{AccountID: e.equity, Amount: -50, Position: 3},
+		},
+	}
+	if err := e.s.UpdateTransaction(mutCtx(), id, upd); !errors.Is(err, ErrInactiveAccount) {
+		t.Fatalf("UpdateTransaction (new split on inactive account) = %v, want ErrInactiveAccount", err)
+	}
+	if n := countChanges(t, e.d); n != before {
+		t.Errorf("changes = %d, want %d (rejected update leaves no trace)", n, before)
+	}
+}
+
 // --- Delete: soft ---------------------------------------------------------
 
 func TestDeleteIsSoft(t *testing.T) {

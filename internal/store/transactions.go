@@ -144,7 +144,7 @@ func (s *Store) PostTransaction(ctx context.Context, in PostTransactionInput) (i
 // double-post on retry). All validation runs on q, so a rejection rolls the caller's
 // change back.
 func (s *Store) postTransactionTx(ctx context.Context, q *sqlc.Queries, changeID int64, in PostTransactionInput) (int64, error) {
-	resolved, err := s.validateAndResolve(ctx, q, in)
+	resolved, err := s.validateAndResolve(ctx, q, in, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -189,19 +189,24 @@ func (s *Store) UpdateTransaction(ctx context.Context, id int64, in PostTransact
 				return fmt.Errorf("load transaction %d: %w", id, err)
 			}
 
-			resolved, err := s.validateAndResolve(ctx, q, in)
-			if err != nil {
-				return err
-			}
-
-			// Current live splits, keyed by id, for the diff.
+			// Current live splits, keyed by id, for the diff -- loaded BEFORE
+			// validation so validateAndResolve can tell, per split, whether its
+			// account is UNCHANGED (p26.13: an unchanged now-inactive account stays
+			// editable).
 			live, err := q.SplitsByTransaction(ctx, id)
 			if err != nil {
 				return fmt.Errorf("load splits of %d: %w", id, err)
 			}
 			liveByID := make(map[int64]sqlc.Split, len(live))
+			liveAccountByID := make(map[int64]int64, len(live))
 			for _, sp := range live {
 				liveByID[sp.ID] = sp
+				liveAccountByID[sp.ID] = sp.AccountID
+			}
+
+			resolved, err := s.validateAndResolve(ctx, q, in, liveAccountByID)
+			if err != nil {
+				return err
 			}
 
 			// STORE-LEVEL split lock (D13, TestEditReconciledTxnBlocked). A split
@@ -531,7 +536,14 @@ func (s *Store) TransactionAsOf(ctx context.Context, id int64, at time.Time) (Tr
 // the tx-bound q (no TOCTOU window) and returns the resolved splits (program /
 // functional class defaulted). It is shared by Post and Update so their validation
 // -- and their defaulting, which the update diff depends on -- is identical.
-func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in PostTransactionInput) ([]resolvedSplit, error) {
+//
+// liveAccountByID maps an EXISTING split id to its persisted account id; Update
+// passes it (Post passes nil). A split whose id is present AND whose incoming
+// account_id equals the persisted account_id keeps a now-inactive account (p26.13);
+// every other split still requires an active account. A map-miss (bogus/absent id)
+// -> false: the active-account check applies, and the missing id is caught later as
+// ErrSplitNotFound.
+func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in PostTransactionInput, liveAccountByID map[int64]int64) ([]resolvedSplit, error) {
 	if len(in.Splits) < 2 {
 		return nil, ErrTooFewSplits
 	}
@@ -571,7 +583,11 @@ func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in Post
 
 	resolved := make([]resolvedSplit, 0, len(in.Splits))
 	for i := range in.Splits {
-		r, err := s.resolveSplit(ctx, q, in.SubsidiaryID, root, in.Splits[i])
+		sp := in.Splits[i]
+		// A pre-existing split whose account is unchanged may keep a now-inactive
+		// account (p26.13); a new or account-changed split still requires active.
+		allowInactive := sp.ID != nil && liveAccountByID[*sp.ID] == sp.AccountID
+		r, err := s.resolveSplit(ctx, q, in.SubsidiaryID, root, sp, allowInactive)
 		if err != nil {
 			return nil, err
 		}
@@ -604,7 +620,14 @@ func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in Post
 
 // resolveSplit validates one split against the tx-bound q and defaults its program
 // (R/E) and functional class (expense). The account is loaded ONCE and reused.
-func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID int64, root sqlc.Program, in SplitInput) (resolvedSplit, error) {
+//
+// allowInactiveAccount relaxes ONLY the inactive-account rejection: it is set by the
+// caller for an UPDATE of a pre-existing split whose account is UNCHANGED from the
+// persisted split (p26.13), so a historical transaction on a since-deactivated
+// account stays editable without reactivating. It is false on create and on any new
+// or account-changed split, which still require an active account. No other check
+// (missing, placeholder, subsidiary-map, fund, program, functional class) is relaxed.
+func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID int64, root sqlc.Program, in SplitInput, allowInactiveAccount bool) (resolvedSplit, error) {
 	acct, err := q.GetAccount(ctx, in.AccountID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -621,7 +644,7 @@ func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID int64, 
 	if !leaf {
 		return resolvedSplit{}, ErrPlaceholderAccount
 	}
-	if acct.Active == 0 {
+	if acct.Active == 0 && !allowInactiveAccount {
 		return resolvedSplit{}, ErrInactiveAccount
 	}
 
