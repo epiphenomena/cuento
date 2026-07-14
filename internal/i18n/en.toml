@@ -424,8 +424,8 @@ other = "Chart of accounts"
 other = "New account"
 [accounts.merge]
 other = "Merge accounts"
-[accounts.register]
-other = "Register"
+[accounts.reconcile]
+other = "Reconcile"
 [accounts.deactivate]
 other = "Deactivate"
 [accounts.inactive]

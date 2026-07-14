@@ -64,13 +64,19 @@
     <tbody>
       {{range .Rows}}
       <tr class="acct-row{{if not .Active}} acct-inactive{{end}}" data-depth="{{.Depth}}">
-        <td class="acct-name acct-depth-{{.Depth}}">{{.Name}}{{if not .Active}} <span class="badge">{{t "accounts.inactive"}}</span>{{end}}</td>
+        {{/* p25: the account name opens its register (the everyday drill-down); the
+             dedicated Register button is gone. */}}
+        <td class="acct-name acct-depth-{{.Depth}}"><a href="/accounts/{{.ID}}/register">{{.Name}}</a>{{if not .Active}} <span class="badge">{{t "accounts.inactive"}}</span>{{end}}</td>
         <td>{{t (printf "account.type.%s" .Type)}}</td>
         <td class="acct-balances">
           {{range .Balances}}<span class="bal">{{.}}</span> {{end}}
         </td>
         <td class="acct-actions">
-          <a class="btn btn-ghost" href="/accounts/{{.ID}}/register">{{t "accounts.register"}}</a>
+          {{if .Reconcilable}}
+          {{/* p25: reconcilable accounts get a reconcile affordance -> the recon list,
+               anchored to this account's start row. */}}
+          <a class="btn btn-ghost" href="/reconciliations#recon-acct-{{.ID}}">{{t "accounts.reconcile"}}</a>
+          {{end}}
           <button type="button" class="btn btn-ghost"
                   hx-get="/accounts/{{.ID}}/edit" hx-target="#account-form" hx-swap="outerHTML">
             {{t "common.edit"}}

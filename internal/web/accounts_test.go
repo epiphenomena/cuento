@@ -126,6 +126,50 @@ func TestAccountsCreateHappyPath(t *testing.T) {
 	}
 }
 
+// TestAccountsRowRegisterLinkAndReconcile (p25): the account NAME links to its
+// register (the dedicated Register button is gone), and a reconcilable account shows
+// a Reconcile affordance to the recon list while a non-reconcilable one does not.
+func TestAccountsRowRegisterLinkAndReconcile(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	book := mkUser(t, st, "book_recon", "write", false)
+
+	mkAcct := func(name string, reconcilable bool) int64 {
+		form := url.Values{}
+		form.Set("type", "asset")
+		form.Set("currency", "USD")
+		form.Set("name_en", name)
+		form.Set("sub_1", "1")
+		if reconcilable {
+			form.Set("reconcilable", "on")
+		}
+		rec := asUser(t, h, sm, book, http.MethodPost, "/accounts", form)
+		if rec.Code >= 400 {
+			t.Fatalf("create %q: status=%d, body=%s", name, rec.Code, rec.Body.String())
+		}
+		return accountIDByName(t, st, name)
+	}
+
+	reconID := mkAcct("Bank Recon", true)
+	plainID := mkAcct("Plain Asset", false)
+
+	body := asUser(t, h, sm, book, http.MethodGet, "/accounts", nil).Body.String()
+
+	// The name is the register link.
+	if !strings.Contains(body, `href="/accounts/`+itoa(reconID)+`/register">Bank Recon</a>`) {
+		t.Errorf("reconcilable account name is not a register link:\n%s", body)
+	}
+	if !strings.Contains(body, `href="/accounts/`+itoa(plainID)+`/register">Plain Asset</a>`) {
+		t.Errorf("plain account name is not a register link:\n%s", body)
+	}
+	// The reconcilable account shows the Reconcile affordance; the plain one does not.
+	if !strings.Contains(body, `href="/reconciliations#recon-acct-`+itoa(reconID)+`"`) {
+		t.Errorf("reconcilable account missing the Reconcile link:\n%s", body)
+	}
+	if strings.Contains(body, `href="/reconciliations#recon-acct-`+itoa(plainID)+`"`) {
+		t.Errorf("non-reconcilable account should not show the Reconcile link:\n%s", body)
+	}
+}
+
 // TestAccountsEditHappyPath: a Bookkeeper edits an account's English name and it
 // changes in the tree.
 func TestAccountsEditHappyPath(t *testing.T) {

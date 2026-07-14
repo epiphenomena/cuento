@@ -419,8 +419,8 @@ other = "Plan de cuentas"
 other = "Nueva cuenta"
 [accounts.merge]
 other = "Combinar cuentas"
-[accounts.register]
-other = "Registro"
+[accounts.reconcile]
+other = "Conciliar"
 [accounts.deactivate]
 other = "Desactivar"
 [accounts.inactive]

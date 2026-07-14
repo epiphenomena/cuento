@@ -51,9 +51,10 @@ test.describe('transaction editor', () => {
     await createAsset(page, 'Editor Checking');
     await createAsset(page, 'Editor Savings');
 
-    // Open the editor from Editor Checking's register (the everyday entry point).
+    // Open the editor from Editor Checking's register (the everyday entry point). p25:
+    // the account name is the register link (the Register button was dropped).
     const row = page.locator('tr.acct-row', { hasText: 'Editor Checking' });
-    await row.getByRole('link', { name: /^register$/i }).click();
+    await row.getByRole('link', { name: 'Editor Checking' }).click();
     await page.waitForURL('**/register');
     await page.getByRole('link', { name: /new transaction/i }).click();
     await page.waitForURL('**/transactions/new');

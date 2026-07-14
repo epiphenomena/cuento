@@ -529,12 +529,13 @@ func (s *Store) ReconciledSplitCount(ctx context.Context, accountID int64) (int,
 // TreeRow is one account in tree order with its name resolved for the requested
 // lang (empty when that lang has no name -- the en->any fallback is p05.3).
 type TreeRow struct {
-	ID        int64
-	ParentID  sql.NullInt64
-	Type      string
-	Active    int64
-	SortOrder int64
-	Name      string
+	ID           int64
+	ParentID     sql.NullInt64
+	Type         string
+	Active       int64
+	Reconcilable bool
+	SortOrder    int64
+	Name         string
 }
 
 // Tree returns accounts in pre-order (recursive CTE), names resolved for `lang`
@@ -551,7 +552,7 @@ func (s *Store) Tree(ctx context.Context, lang string, subFilter *int64) ([]Tree
 		}
 		out := make([]TreeRow, len(rows))
 		for i, r := range rows {
-			out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, SortOrder: r.SortOrder, Name: r.Name}
+			out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, Reconcilable: r.Reconcilable != 0, SortOrder: r.SortOrder, Name: r.Name}
 		}
 		return out, nil
 	}
@@ -561,7 +562,7 @@ func (s *Store) Tree(ctx context.Context, lang string, subFilter *int64) ([]Tree
 	}
 	out := make([]TreeRow, len(rows))
 	for i, r := range rows {
-		out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, SortOrder: r.SortOrder, Name: r.Name}
+		out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, Reconcilable: r.Reconcilable != 0, SortOrder: r.SortOrder, Name: r.Name}
 	}
 	return out, nil
 }

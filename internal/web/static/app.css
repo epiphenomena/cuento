@@ -406,6 +406,10 @@ input[aria-invalid="true"] {
   margin: 0;
 }
 .acct-balances .bal { display: inline-block; margin-right: var(--space-3); }
+/* Per-currency activity/balance amounts sit side by side; space them so multiple
+   currencies don't run together (programs activity, fund balances). */
+.prog-activity .amount,
+.fund-balance .amount { display: inline-block; margin-right: var(--space-3); }
 .badge {
   font-size: 0.75em;
   padding: 0 var(--space-2);

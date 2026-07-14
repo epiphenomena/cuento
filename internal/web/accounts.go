@@ -79,12 +79,13 @@ func currencyExponents(ctx context.Context, st *store.Store) (map[string]int, er
 // acctRow is one rendered tree row: the account plus its formatted per-currency
 // balances and an indent depth for the tree table.
 type acctRow struct {
-	ID       int64
-	Name     string
-	Type     string
-	Active   bool
-	Depth    int
-	Balances []string // pre-formatted "CCY 1,234.56" strings (rule 10)
+	ID           int64
+	Name         string
+	Type         string
+	Active       bool
+	Reconcilable bool // -> the section's reconcile affordance (p25)
+	Depth        int
+	Balances     []string // pre-formatted "CCY 1,234.56" strings (rule 10)
 }
 
 // subOption is a subsidiary offered in the filter and the checklist.
@@ -158,11 +159,12 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		ar := acctRow{
-			ID:     row.ID,
-			Name:   row.Name,
-			Type:   row.Type,
-			Active: row.Active != 0,
-			Depth:  depth[row.ID],
+			ID:           row.ID,
+			Name:         row.Name,
+			Type:         row.Type,
+			Active:       row.Active != 0,
+			Reconcilable: row.Reconcilable,
+			Depth:        depth[row.ID],
 		}
 		for _, c := range bals[row.ID] {
 			ar.Balances = append(ar.Balances, c.Currency+" "+money.Format(c.Minor, c.Exponent, opts))

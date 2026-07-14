@@ -114,18 +114,18 @@ func (q *Queries) AccountSubsidiaries(ctx context.Context, accountID int64) ([]i
 }
 
 const accountTree = `-- name: AccountTree :many
-WITH RECURSIVE tree(id, parent_id, type, active, sort_order, path) AS (
-  SELECT a.id, a.parent_id, a.type, a.active, a.sort_order,
+WITH RECURSIVE tree(id, parent_id, type, active, reconcilable, sort_order, path) AS (
+  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.sort_order,
          printf('%020d.%020d', a.sort_order, a.id)
   FROM accounts a
   WHERE a.parent_id IS NULL
   UNION ALL
-  SELECT a.id, a.parent_id, a.type, a.active, a.sort_order,
+  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.sort_order,
          t.path || '/' || printf('%020d.%020d', a.sort_order, a.id)
   FROM accounts a
   JOIN tree t ON a.parent_id = t.id
 )
-SELECT tree.id, tree.parent_id, tree.type, tree.active, tree.sort_order,
+SELECT tree.id, tree.parent_id, tree.type, tree.active, tree.reconcilable, tree.sort_order,
        CAST(COALESCE(
          (SELECT an1.name FROM account_names an1 WHERE an1.account_id = tree.id AND an1.lang = ?),
          (SELECT an2.name FROM account_names an2 WHERE an2.account_id = tree.id AND an2.lang = 'en'),
@@ -137,12 +137,13 @@ ORDER BY tree.path
 `
 
 type AccountTreeRow struct {
-	ID        int64
-	ParentID  sql.NullInt64
-	Type      string
-	Active    int64
-	SortOrder int64
-	Name      string
+	ID           int64
+	ParentID     sql.NullInt64
+	Type         string
+	Active       int64
+	Reconcilable int64
+	SortOrder    int64
+	Name         string
 }
 
 // All accounts in DEPTH-FIRST (pre-order) order, resolving each account's name via
@@ -170,6 +171,7 @@ func (q *Queries) AccountTree(ctx context.Context, lang string) ([]AccountTreeRo
 			&i.ParentID,
 			&i.Type,
 			&i.Active,
+			&i.Reconcilable,
 			&i.SortOrder,
 			&i.Name,
 		); err != nil {
@@ -187,18 +189,18 @@ func (q *Queries) AccountTree(ctx context.Context, lang string) ([]AccountTreeRo
 }
 
 const accountTreeBySubsidiary = `-- name: AccountTreeBySubsidiary :many
-WITH RECURSIVE tree(id, parent_id, type, active, sort_order, path) AS (
-  SELECT a.id, a.parent_id, a.type, a.active, a.sort_order,
+WITH RECURSIVE tree(id, parent_id, type, active, reconcilable, sort_order, path) AS (
+  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.sort_order,
          printf('%020d.%020d', a.sort_order, a.id)
   FROM accounts a
   WHERE a.parent_id IS NULL
   UNION ALL
-  SELECT a.id, a.parent_id, a.type, a.active, a.sort_order,
+  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.sort_order,
          t.path || '/' || printf('%020d.%020d', a.sort_order, a.id)
   FROM accounts a
   JOIN tree t ON a.parent_id = t.id
 )
-SELECT tree.id, tree.parent_id, tree.type, tree.active, tree.sort_order,
+SELECT tree.id, tree.parent_id, tree.type, tree.active, tree.reconcilable, tree.sort_order,
        CAST(COALESCE(
          (SELECT an1.name FROM account_names an1 WHERE an1.account_id = tree.id AND an1.lang = ?),
          (SELECT an2.name FROM account_names an2 WHERE an2.account_id = tree.id AND an2.lang = 'en'),
@@ -216,12 +218,13 @@ type AccountTreeBySubsidiaryParams struct {
 }
 
 type AccountTreeBySubsidiaryRow struct {
-	ID        int64
-	ParentID  sql.NullInt64
-	Type      string
-	Active    int64
-	SortOrder int64
-	Name      string
+	ID           int64
+	ParentID     sql.NullInt64
+	Type         string
+	Active       int64
+	Reconcilable int64
+	SortOrder    int64
+	Name         string
 }
 
 // Like AccountTree but restricted to accounts mapped to a specific subsidiary.
@@ -247,6 +250,7 @@ func (q *Queries) AccountTreeBySubsidiary(ctx context.Context, arg AccountTreeBy
 			&i.ParentID,
 			&i.Type,
 			&i.Active,
+			&i.Reconcilable,
 			&i.SortOrder,
 			&i.Name,
 		); err != nil {

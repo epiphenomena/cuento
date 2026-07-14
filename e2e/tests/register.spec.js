@@ -39,9 +39,10 @@ test.describe('account register', () => {
     }
     await saveAndReload(page, { reloadPath: '/accounts' });
 
-    // Follow the per-row Register link.
+    // Open the register by clicking the account NAME (p25: the name is the register
+    // link; the dedicated Register button was dropped).
     const row = page.locator('tr.acct-row', { hasText: 'Checking E2E' });
-    await row.getByRole('link', { name: /^register$/i }).click();
+    await row.getByRole('link', { name: 'Checking E2E' }).click();
     await page.waitForURL('**/register');
 
     // The register page renders its heading, the filter form (now in the section
