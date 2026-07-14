@@ -19,7 +19,7 @@
 import { parseAmountMinor, drcrToSigned, formatSignedMinor } from './txnamount.js';
 import { fundImbalances, applyFundToAll } from './txnfund.js';
 import { nextCell, invalidRowsForSubsidiary } from './txngrid.js';
-import { allRowsEmpty } from './txnpayee.js';
+import { allRowsEmpty, isRowEmpty } from './txnpayee.js';
 
 function initEditor(form) {
   const exp = 2; // currency exponent; USD/MXN are 2. Amounts are display-only here.
@@ -165,10 +165,23 @@ function initEditor(form) {
     });
   }
 
-  // --- add row ------------------------------------------------------------
-  const addBtn = form.querySelector('#txn-add-row');
-  if (addBtn) {
-    addBtn.addEventListener('click', () => addRow());
+  // --- add row (auto, p25.2) ----------------------------------------------
+  // No "Add row" button: the grid keeps exactly one trailing empty row. When the last
+  // row stops being empty (isRowEmpty, the tested predicate), append a fresh one; the
+  // server drops the trailing empty row on submit. addRow is still the primitive the
+  // keyboard Enter-on-last-cell and this auto-append both call.
+  function rowFieldValues(rowEl) {
+    const i = rowEl.dataset.row;
+    const get = (f) => {
+      const el = form.querySelector(`#txn-${f}-${i}`);
+      return el ? el.value : '';
+    };
+    return { account: get('account'), amount: get('amount'), dr: get('dr'), cr: get('cr'), memo: get('memo') };
+  }
+  function ensureTrailingEmptyRow() {
+    const rowEls = [...form.querySelectorAll('.txn-row')];
+    const last = rowEls[rowEls.length - 1];
+    if (last && !isRowEmpty(rowFieldValues(last))) addRow();
   }
   function addRow() {
     const tbody = form.querySelector('#txn-rows');
@@ -363,7 +376,7 @@ function initEditor(form) {
       }
       if (action === 'move') {
         // Boundary no-op (target == current cell): don't trap focus -- let native
-        // Tab carry out of the grid to the Save/Add-row controls.
+        // Tab carry out of the grid to the Save controls.
         if (cell.row === rowIndex && cell.col === col) return;
         const target = cellInput(cell.row, cell.col);
         if (target) {
@@ -372,6 +385,11 @@ function initEditor(form) {
         }
       }
     });
+
+    // Auto-append (p25.2): any edit that leaves the last row non-empty grows a fresh
+    // trailing empty row. Delegated on the grid so it survives addRow without re-wiring.
+    grid.addEventListener('input', ensureTrailingEmptyRow);
+    grid.addEventListener('change', ensureTrailingEmptyRow);
   }
 
   // --- payee autocomplete + autofill (p12.3) ------------------------------
@@ -451,6 +469,7 @@ function initEditor(form) {
       gateAll();
       markSubsidiaryConflicts();
       recompute();
+      ensureTrailingEmptyRow(); // a payee template brings in filled rows -> keep a trailing empty
     }
 
     function fetchAndApplyTemplate(id) {
@@ -509,6 +528,9 @@ function initEditor(form) {
   gateAll();
   markSubsidiaryConflicts();
   recompute();
+  // Guarantee the one-trailing-empty-row invariant on every render (initial load, the
+  // subsidiary re-filter swap, and a 422 re-render where the server dropped empties).
+  ensureTrailingEmptyRow();
 }
 
 // Browser glue: initialize each editor form on load and after an htmx swap (the

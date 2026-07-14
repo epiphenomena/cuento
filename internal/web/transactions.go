@@ -173,9 +173,12 @@ func (s *server) txnNewForm(w http.ResponseWriter, r *http.Request) {
 		model.Notes = r.URL.Query().Get("notes")
 		model.Payee = parseID(r.URL.Query().Get("payee"))
 	} else {
-		// First load: today's date (Appendix C `t` = today) and two empty rows.
+		// First load: today's date (Appendix C `t` = today) and ONE empty row. The
+		// client auto-appends a fresh trailing row as soon as the last row is edited
+		// (p25.2), so there is always exactly one empty row and no "Add row" button; the
+		// server drops the trailing empty row on submit (parseSplitForms).
 		model.Date = money.FormatDate(time.Now(), dateFormatFor(u))
-		model.Rows = []txnRowModel{{Index: 0}, {Index: 1}}
+		model.Rows = []txnRowModel{{Index: 0}}
 	}
 	s.renderEditor(w, r, model)
 }
@@ -192,7 +195,7 @@ func (s *server) echoRowsFromQuery(r *http.Request, model txnEditorModel) []txnR
 	}
 	n := int(parseID(r.URL.Query().Get("rows")))
 	if n <= 0 {
-		n = 2
+		n = 1
 	}
 	rows := make([]txnRowModel, 0, n)
 	for i := 0; i < n; i++ {

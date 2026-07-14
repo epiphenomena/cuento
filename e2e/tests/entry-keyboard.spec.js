@@ -108,23 +108,17 @@ test.describe('keyboard-only entry', () => {
     // txn-editor.spec.js; here we focus on driving the grid itself by keyboard).
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
+    // p25.2: the grid starts with a SINGLE empty row and auto-appends a fresh trailing
+    // row as each row is filled -- there is no "Add row" button.
     await expect(page.locator('#txn-account-0')).toBeVisible();
-    await expect(page.locator('#txn-account-1')).toBeVisible();
-
-    // The grid starts with two rows; we need four. Activate the "Add row" button TWICE
-    // with the keyboard (focus it, press Enter -- a real <button> in tab order).
-    const addRow = page.locator('#txn-add-row');
-    await addRow.focus();
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#txn-account-2')).toBeVisible();
-    await addRow.focus();
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#txn-account-3')).toBeVisible();
+    await expect(page.locator('#txn-account-1')).toHaveCount(0);
 
     // --- Row 0: KB Savings +40.00, fund KB Water Grant --------------------------
     // Drive each field by keyboard. Selects are operated by Arrow keys (real keyboard),
-    // amounts by typing, and we Tab between fields to prove linear reachability.
+    // amounts by typing, and we Tab between fields to prove linear reachability. Filling
+    // row 0's account grows row 1 (the auto-append).
     await selectByKeyboard(page, '#txn-account-0', 'KB Savings');
+    await expect(page.locator('#txn-account-1')).toBeVisible();
     await page.keyboard.press('Tab'); // account -> amount
     await expect(page.locator('#txn-amount-0')).toBeFocused();
     await page.keyboard.type('40.00');
@@ -140,6 +134,7 @@ test.describe('keyboard-only entry', () => {
 
     // --- Row 1: KB Checking -40.00, fund KB Water Grant -------------------------
     await selectByKeyboard(page, '#txn-account-1', 'KB Checking');
+    await expect(page.locator('#txn-account-2')).toBeVisible();
     await page.keyboard.press('Tab');
     await expect(page.locator('#txn-amount-1')).toBeFocused();
     await page.keyboard.type('-40.00');
@@ -149,6 +144,7 @@ test.describe('keyboard-only entry', () => {
 
     // --- Row 2: KB Savings +10.00, Unrestricted ---------------------------------
     await selectByKeyboard(page, '#txn-account-2', 'KB Savings');
+    await expect(page.locator('#txn-account-3')).toBeVisible();
     await page.keyboard.press('Tab');
     await expect(page.locator('#txn-amount-2')).toBeFocused();
     await page.keyboard.type('10.00');
@@ -192,14 +188,15 @@ test.describe('keyboard-only entry', () => {
 
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
+    // p25.2: starts with a single empty row; filling row 0 auto-appends row 1.
     await expect(page.locator('#txn-account-0')).toBeVisible();
-    await expect(page.locator('#txn-account-1')).toBeVisible();
 
     // --- Enter-advance with skip-hidden on an ASSET row ------------------------
     // Choose an asset account in row 0 so its program/class cells stay hidden. Then
     // from the account cell, Enter advances account -> amount (col+1). This exercises
     // the WIRED Enter handler (native Enter on a <select> would otherwise do nothing).
     await selectByKeyboard(page, '#txn-account-0', 'KB2 Savings');
+    await expect(page.locator('#txn-account-1')).toBeVisible();
     await page.locator('#txn-account-0').focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('#txn-amount-0')).toBeFocused();

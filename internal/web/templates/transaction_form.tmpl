@@ -239,10 +239,9 @@
     </tbody>
   </table>
   <input type="hidden" name="rows" id="txn-rows-count" value="{{len .Rows}}">
-
-  <div class="txn-actions">
-    <button type="button" id="txn-add-row" class="btn btn-ghost">{{t "txn.add_row"}}</button>
-  </div>
+  {{/* p25.2: no "Add row" button — the grid starts with one empty row and the client
+       auto-appends a fresh trailing row as soon as the last row is edited; the trailing
+       empty row is dropped server-side on submit. */}}
 
   {{/* Sticky totals bar (Appendix C): the live imbalance chips (overall + per fund)
        are populated client-side (display only); the server's authoritative

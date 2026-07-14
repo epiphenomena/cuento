@@ -844,8 +844,6 @@ other = "Clase funcional"
 other = "Nota"
 [txn.col.error]
 other = "Error"
-[txn.add_row]
-other = "Agregar fila"
 [txn.autofill.dropped_out_of_sub]
 other = "Se omitieron algunas lineas de la ultima transaccion de este beneficiario porque sus cuentas no estan en la subsidiaria seleccionada."
 [register.new_txn]

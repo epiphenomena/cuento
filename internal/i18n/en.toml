@@ -850,8 +850,6 @@ other = "Functional class"
 other = "Memo"
 [txn.col.error]
 other = "Error"
-[txn.add_row]
-other = "Add row"
 [txn.autofill.dropped_out_of_sub]
 other = "Some lines from this payee's last transaction were left out because their accounts are not in the selected subsidiary."
 [register.new_txn]

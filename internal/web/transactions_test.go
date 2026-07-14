@@ -635,7 +635,7 @@ func TestTxnEditorEsNoRawKeys(t *testing.T) {
 	// safe to assert broadly on the editor's own vocabulary.
 	for _, key := range []string{
 		"txn.col.", "txn.fund.", "txn.class.", "txn.amount.", "txn.new_title",
-		"txn.subsidiary", "txn.date", "txn.payee", "txn.memo", "txn.add_row",
+		"txn.subsidiary", "txn.date", "txn.payee", "txn.memo",
 		"error.txn.",
 	} {
 		if strings.Contains(body, key) {

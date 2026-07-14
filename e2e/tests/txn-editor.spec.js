@@ -59,16 +59,18 @@ test.describe('transaction editor', () => {
     await page.getByRole('link', { name: /new transaction/i }).click();
     await page.waitForURL('**/transactions/new');
 
-    // The grid renders with its header and two starter rows (stable ids).
+    // The grid renders with its header and a single starter row (p25.2: it auto-appends
+    // a fresh trailing row as each row is filled, no "Add row" button).
     await expect(page.locator('form#txn-form')).toBeVisible();
     await expect(page.locator('#txn-account-0')).toBeVisible();
-    await expect(page.locator('#txn-account-1')).toBeVisible();
+    await expect(page.locator('#txn-account-1')).toHaveCount(0);
 
     // Fill a balanced transfer: DR Editor Savings 25.00, CR Editor Checking 25.00.
     // The account combobox is a real <select> (ARIA listbox enhancement is progressive
     // -- selectOption drives the underlying control). Amounts are the SIGNED column
-    // (signed display mode; the admin's default).
+    // (signed display mode; the admin's default). Filling row 0 grows row 1.
     await page.locator('#txn-account-0').selectOption({ label: 'Editor Savings' });
+    await expect(page.locator('#txn-account-1')).toBeVisible();
     await page.locator('#txn-amount-0').fill('25.00');
     await page.locator('#txn-account-1').selectOption({ label: 'Editor Checking' });
     await page.locator('#txn-amount-1').fill('-25.00');
