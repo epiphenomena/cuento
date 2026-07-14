@@ -373,6 +373,240 @@ func TestMappingAppliesSubFundProgramFunction(t *testing.T) {
 	assertExpenseClass(t, sqldb, res, "Supplies", "program")
 }
 
+// parseTestInputs parses the synthetic mapping/config/source once for the
+// split-import (scaffold + per-subsidiary) tests.
+func parseTestInputs(t *testing.T) ([]AccountMap, Config, []Record) {
+	t.Helper()
+	accMap, err := ReadAccountMap(strings.NewReader(testAccountMap()))
+	if err != nil {
+		t.Fatalf("ReadAccountMap: %v", err)
+	}
+	cfg, err := ReadConfig(strings.NewReader(testConfig()))
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	recs, err := ParseRecords(strings.NewReader(testSource()))
+	if err != nil {
+		t.Fatalf("ParseRecords: %v", err)
+	}
+	return accMap, cfg, recs
+}
+
+func txnCount(t *testing.T, st *store.Store, ctx context.Context, subID int64) int64 {
+	t.Helper()
+	n, err := st.SubsidiaryTxnCount(ctx, subID)
+	if err != nil {
+		t.Fatalf("SubsidiaryTxnCount: %v", err)
+	}
+	return n
+}
+
+// TestScaffoldCreatesReferenceDataNoTxns: runScaffold populates subsidiaries,
+// programs, funds and the WHOLE account chart (incl. the synthetic counter
+// accounts) but posts ZERO transactions -- the reference-data half of the split.
+func TestScaffoldCreatesReferenceDataNoTxns(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	accMap, cfg, _ := parseTestInputs(t)
+
+	res, err := runScaffold(ctx, accMap, cfg, nil, st, false)
+	if err != nil {
+		t.Fatalf("runScaffold: %v", err)
+	}
+	for _, want := range []string{"Test US", "Test MX"} {
+		if _, ok := res.SubsidiaryIDs[want]; !ok {
+			t.Errorf("subsidiary %q not scaffolded", want)
+		}
+	}
+	for _, want := range []string{"FX Clearing", "Opening Balances", "Checking", "Cash MX"} {
+		if _, ok := res.AccountIDs[want]; !ok {
+			t.Errorf("account %q not scaffolded", want)
+		}
+	}
+	if _, ok := res.ProgramIDs["Education"]; !ok {
+		t.Errorf("program Education not scaffolded")
+	}
+	if _, ok := res.FundIDs["GRANT1"]; !ok {
+		t.Errorf("fund GRANT1 not scaffolded")
+	}
+	var nTxns int
+	if err := sqldb.QueryRow(`SELECT COUNT(*) FROM transactions`).Scan(&nTxns); err != nil {
+		t.Fatalf("count transactions: %v", err)
+	}
+	if nTxns != 0 {
+		t.Errorf("scaffold posted %d transactions, want 0", nTxns)
+	}
+}
+
+// TestImportSubsidiaryAdditive: scaffold, import Test US, then import Test MX into
+// the SAME db. Each import posts only its own subsidiary's transactions; the second
+// import does not disturb the first; and the cross-currency transfer decomposes
+// through the SAME scaffolded FX Clearing account in both runs.
+func TestImportSubsidiaryAdditive(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	accMap, cfg, recs := parseTestInputs(t)
+
+	scaf, err := runScaffold(ctx, accMap, cfg, nil, st, false)
+	if err != nil {
+		t.Fatalf("runScaffold: %v", err)
+	}
+	usSub := scaf.SubsidiaryIDs["Test US"]
+	mxSub := scaf.SubsidiaryIDs["Test MX"]
+	fxID := scaf.AccountIDs["FX Clearing"]
+
+	// Import Test US: US gets transactions, MX stays empty.
+	usRes, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, "Test US", false)
+	if err != nil {
+		t.Fatalf("import Test US: %v", err)
+	}
+	usCount := txnCount(t, st, ctx, usSub)
+	if usCount == 0 {
+		t.Fatalf("Test US has no transactions after its import")
+	}
+	if n := txnCount(t, st, ctx, mxSub); n != 0 {
+		t.Errorf("Test MX has %d transactions before its import, want 0", n)
+	}
+	if !usRes.accountHasSplit(fxID) {
+		t.Errorf("US import did not route the cross-currency transfer through FX Clearing")
+	}
+
+	// Import Test MX into the SAME db: additive, US untouched.
+	mxRes, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, "Test MX", false)
+	if err != nil {
+		t.Fatalf("import Test MX: %v", err)
+	}
+	if n := txnCount(t, st, ctx, usSub); n != usCount {
+		t.Errorf("Test US transaction count changed from %d to %d after importing Test MX", usCount, n)
+	}
+	if n := txnCount(t, st, ctx, mxSub); n == 0 {
+		t.Errorf("Test MX has no transactions after its import")
+	}
+	if !mxRes.accountHasSplit(fxID) {
+		t.Errorf("MX import did not route the cross-currency transfer through FX Clearing")
+	}
+	// Cross-run resolution: the FX Clearing id reloaded in each run is the scaffold id.
+	if usRes.AccountIDs["FX Clearing"] != fxID || mxRes.AccountIDs["FX Clearing"] != fxID {
+		t.Errorf("FX Clearing id diverged across runs: scaffold=%d us=%d mx=%d",
+			fxID, usRes.AccountIDs["FX Clearing"], mxRes.AccountIDs["FX Clearing"])
+	}
+}
+
+// TestImportSubsidiaryGuardRefusesReimport: importing a subsidiary that already has
+// transactions is refused, and no transactions are added.
+func TestImportSubsidiaryGuardRefusesReimport(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	accMap, cfg, recs := parseTestInputs(t)
+
+	scaf, err := runScaffold(ctx, accMap, cfg, nil, st, false)
+	if err != nil {
+		t.Fatalf("runScaffold: %v", err)
+	}
+	usSub := scaf.SubsidiaryIDs["Test US"]
+	if _, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, "Test US", false); err != nil {
+		t.Fatalf("first import: %v", err)
+	}
+	before := txnCount(t, st, ctx, usSub)
+
+	_, err = runImportSubsidiary(ctx, recs, accMap, cfg, st, "Test US", false)
+	if err == nil || !strings.Contains(err.Error(), "already has") {
+		t.Fatalf("re-import error = %v, want an 'already has' refusal", err)
+	}
+	if after := txnCount(t, st, ctx, usSub); after != before {
+		t.Errorf("re-import changed Test US transaction count from %d to %d", before, after)
+	}
+}
+
+// TestImportSubsidiaryFailsWithoutScaffold: a per-subsidiary import into a bare
+// migrated db (no scaffold) fails loud and creates nothing.
+func TestImportSubsidiaryFailsWithoutScaffold(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	accMap, cfg, recs := parseTestInputs(t)
+
+	if _, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, "Test US", false); err == nil {
+		t.Fatal("import into an un-scaffolded db succeeded; want a loud failure")
+	}
+	var nTxns int
+	if err := sqldb.QueryRow(`SELECT COUNT(*) FROM transactions`).Scan(&nTxns); err != nil {
+		t.Fatalf("count transactions: %v", err)
+	}
+	if nTxns != 0 {
+		t.Errorf("failed import left %d transactions; want 0", nTxns)
+	}
+}
+
+// TestSharedCounterResolvedNoDuplicate: the reloaded FX Clearing / Opening Balances
+// ids equal the scaffold ids, and no duplicate synthetic account rows are created.
+func TestSharedCounterResolvedNoDuplicate(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	accMap, cfg, recs := parseTestInputs(t)
+
+	scaf, err := runScaffold(ctx, accMap, cfg, nil, st, false)
+	if err != nil {
+		t.Fatalf("runScaffold: %v", err)
+	}
+	usRes, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, "Test US", false)
+	if err != nil {
+		t.Fatalf("import Test US: %v", err)
+	}
+	for _, name := range []string{"FX Clearing", "Opening Balances"} {
+		if usRes.AccountIDs[name] != scaf.AccountIDs[name] {
+			t.Errorf("%s id diverged: scaffold=%d reload=%d", name, scaf.AccountIDs[name], usRes.AccountIDs[name])
+		}
+		var n int
+		if err := sqldb.QueryRow(
+			`SELECT COUNT(*) FROM account_names WHERE lang='en' AND name=?`, name,
+		).Scan(&n); err != nil {
+			t.Fatalf("count %s: %v", name, err)
+		}
+		if n != 1 {
+			t.Errorf("%s has %d account rows, want 1 (no duplicate from the per-sub run)", name, n)
+		}
+	}
+}
+
+// TestSubsidiaryNativeReconciliation: the per-currency net-debit total for an
+// imported subsidiary is zero (the reconcile gate), and the per-type breakdown is
+// non-empty (the books actually posted).
+func TestSubsidiaryNativeReconciliation(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	accMap, cfg, recs := parseTestInputs(t)
+
+	scaf, err := runScaffold(ctx, accMap, cfg, nil, st, false)
+	if err != nil {
+		t.Fatalf("runScaffold: %v", err)
+	}
+	if _, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, "Test US", false); err != nil {
+		t.Fatalf("import Test US: %v", err)
+	}
+	totals, err := st.SubsidiaryNativeTotals(ctx, scaf.SubsidiaryIDs["Test US"])
+	if err != nil {
+		t.Fatalf("SubsidiaryNativeTotals: %v", err)
+	}
+	if len(totals) == 0 {
+		t.Fatal("no native totals; the subsidiary posted nothing")
+	}
+	byCur := map[string]int64{}
+	for _, tot := range totals {
+		byCur[tot.Currency] += tot.Total
+	}
+	for cur, sum := range byCur {
+		if sum != 0 {
+			t.Errorf("native total for %s = %d, want 0 (posted splits must net to zero)", cur, sum)
+		}
+	}
+}
+
 func TestImportedBooksBalance(t *testing.T) {
 	sqldb, _, res := buildInto(t, false)
 	ctx := context.Background()

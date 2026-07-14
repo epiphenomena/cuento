@@ -61,6 +61,14 @@ func main() {
 		if err := buildCmd(ctx, args); err != nil {
 			log.Fatalf("build: %v", err)
 		}
+	case "scaffold":
+		if err := scaffoldCmd(ctx, args); err != nil {
+			log.Fatalf("scaffold: %v", err)
+		}
+	case "import-subsidiary":
+		if err := importSubCmd(ctx, args); err != nil {
+			log.Fatalf("import-subsidiary: %v", err)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "ledgerimport: unknown subcommand %q\n\n", cmd)
 		usage()
@@ -70,8 +78,10 @@ func main() {
 
 func usage() {
 	fmt.Fprint(os.Stderr, "usage: ledgerimport <command> [flags]\n\ncommands:\n"+
-		"  accounts  emit a reviewable account-mapping CSV skeleton from the source export\n"+
-		"  build     convert the source export + mapping into a cuento SQLite db\n")
+		"  accounts           emit a reviewable account-mapping CSV skeleton from the source export\n"+
+		"  build              convert the source export + mapping into a FRESH cuento SQLite db (all subsidiaries)\n"+
+		"  scaffold           create a fresh db with reference data only (subs, programs, funds, chart, rates)\n"+
+		"  import-subsidiary  additively import ONE subsidiary's transactions into a scaffolded db\n")
 }
 
 // accountsCmd wires runAccounts to the real files. It reads the source CSV at
@@ -198,6 +208,176 @@ func buildCmd(ctx context.Context, args []string) error {
 		return fmt.Errorf("produced db has integrity errors; see above")
 	}
 	return nil
+}
+
+// scaffoldCmd creates a FRESH db populated with subsidiary-independent reference
+// data only (rates, subsidiaries, program tree, funds, the whole account chart) --
+// the "scaffold once" half of the split-import model (D26). It reads no source
+// rows and posts no transactions; per-subsidiary transaction imports follow via
+// import-subsidiary. Like build, it refuses an existing output file.
+func scaffoldCmd(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("scaffold", flag.ContinueOnError)
+	mapPath := fs.String("map", "", "path to the reviewed account-mapping CSV")
+	configPath := fs.String("config", "", "path to the global mapping config JSON")
+	ratesPath := fs.String("rates", "", "optional path to a historical FX-rates CSV (rate_date,base,quote,rate,source)")
+	outPath := fs.String("o", "fixtures/sample.db", "output SQLite db path")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *mapPath == "" || *configPath == "" {
+		return fmt.Errorf("-map and -config are both required")
+	}
+	accMap, err := readAccountMapFile(*mapPath)
+	if err != nil {
+		return err
+	}
+	cfg, err := readConfigFile(*configPath)
+	if err != nil {
+		return err
+	}
+	var rates []store.Rate
+	if *ratesPath != "" {
+		rates, err = readRatesFile(*ratesPath)
+		if err != nil {
+			return err
+		}
+	}
+	// A fresh scaffold wants a fresh db: refuse to overwrite (a re-run is an explicit rm).
+	if _, err := os.Stat(*outPath); err == nil {
+		return fmt.Errorf("output %s already exists; remove it first for a clean scaffold", *outPath)
+	}
+	if err := db.Migrate(ctx, *outPath); err != nil {
+		return fmt.Errorf("migrate output db: %w", err)
+	}
+	sqldb, err := db.Open(*outPath)
+	if err != nil {
+		return fmt.Errorf("open output db: %w", err)
+	}
+	defer func() { _ = sqldb.Close() }()
+
+	st := store.New(sqldb)
+	actorCtx := store.WithActor(ctx, store.Actor{ID: systemActorID})
+
+	res, err := runScaffold(actorCtx, accMap, cfg, rates, st, false)
+	if err != nil {
+		return err
+	}
+	log.Printf("scaffolded %s: %d subsidiaries, %d programs, %d funds, %d accounts (0 transactions)",
+		*outPath, len(res.SubsidiaryIDs), len(res.ProgramIDs), len(res.FundIDs), len(res.AccountIDs))
+
+	vs, err := ledger.Check(ctx, sqldb)
+	if err != nil {
+		return fmt.Errorf("ledger check: %w", err)
+	}
+	for _, v := range vs {
+		log.Printf("%s %s: %s", v.Severity, v.Rule, v.Detail)
+	}
+	if ledger.HasErrors(vs) {
+		return fmt.Errorf("produced db has integrity errors; see above")
+	}
+	return nil
+}
+
+// importSubCmd additively imports ONE subsidiary's transactions into an
+// already-scaffolded db (it REQUIRES the db to exist and does not migrate). It
+// prints the surfaced warnings and a per-currency/type native trial-balance for the
+// operator to reconcile against the source books, then runs the whole-db integrity
+// suite. Safe to run against a live, in-use db; re-importing a subsidiary is
+// refused (fresh scaffold + import, D26).
+func importSubCmd(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("import-subsidiary", flag.ContinueOnError)
+	source := fs.String("source", "", "path to the source ledger CSV export")
+	mapPath := fs.String("map", "", "path to the reviewed account-mapping CSV")
+	configPath := fs.String("config", "", "path to the global mapping config JSON")
+	outPath := fs.String("o", "", "existing scaffolded SQLite db path")
+	subName := fs.String("subsidiary", "", "the subsidiary NAME to import (must match the config)")
+	anonymize := fs.Bool("anonymize", false, "hash payees/memos so the db carries no real names/notes")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *source == "" || *mapPath == "" || *configPath == "" || *outPath == "" || *subName == "" {
+		return fmt.Errorf("-source, -map, -config, -o and -subsidiary are all required")
+	}
+	accMap, err := readAccountMapFile(*mapPath)
+	if err != nil {
+		return err
+	}
+	cfg, err := readConfigFile(*configPath)
+	if err != nil {
+		return err
+	}
+	src, err := os.Open(*source)
+	if err != nil {
+		return fmt.Errorf("open source: %w", err)
+	}
+	defer func() { _ = src.Close() }()
+	recs, err := ParseRecords(src)
+	if err != nil {
+		return err
+	}
+
+	// An additive import REQUIRES a scaffolded db: refuse a missing file (never
+	// migrate here -- migration is the scaffold's job).
+	if _, err := os.Stat(*outPath); err != nil {
+		return fmt.Errorf("output db %s does not exist; run `ledgerimport scaffold` first", *outPath)
+	}
+	sqldb, err := db.Open(*outPath)
+	if err != nil {
+		return fmt.Errorf("open output db: %w", err)
+	}
+	defer func() { _ = sqldb.Close() }()
+
+	st := store.New(sqldb)
+	actorCtx := store.WithActor(ctx, store.Actor{ID: systemActorID})
+
+	res, err := runImportSubsidiary(actorCtx, recs, accMap, cfg, st, *subName, *anonymize)
+	if err != nil {
+		return err
+	}
+	for _, w := range res.Warnings {
+		log.Printf("WARNING: %s", w)
+	}
+	log.Printf("imported subsidiary %q into %s: %d source groups posted, %d warnings",
+		*subName, *outPath, len(res.tidTxns), len(res.Warnings))
+
+	// Operator reconciliation: per currency/type native totals (compare to the books).
+	if subID, ok := subsidiaryIDByName(actorCtx, st, *subName); ok {
+		totals, terr := st.SubsidiaryNativeTotals(actorCtx, subID)
+		if terr != nil {
+			return terr
+		}
+		log.Printf("native totals for %q (net-debit minor units; grand total per currency must be 0):", *subName)
+		for _, t := range totals {
+			log.Printf("  %s %-9s %d", t.Currency, t.Type, t.Total)
+		}
+	}
+
+	vs, err := ledger.Check(ctx, sqldb)
+	if err != nil {
+		return fmt.Errorf("ledger check: %w", err)
+	}
+	for _, v := range vs {
+		log.Printf("%s %s: %s", v.Severity, v.Rule, v.Detail)
+	}
+	if ledger.HasErrors(vs) {
+		return fmt.Errorf("produced db has integrity errors; see above")
+	}
+	return nil
+}
+
+// subsidiaryIDByName resolves a subsidiary name to its id from the db (for the
+// CLI's post-import reconciliation output).
+func subsidiaryIDByName(ctx context.Context, st *store.Store, name string) (int64, bool) {
+	subs, err := st.SubTree(ctx)
+	if err != nil {
+		return 0, false
+	}
+	for _, s := range subs {
+		if s.Name == name {
+			return s.ID, true
+		}
+	}
+	return 0, false
 }
 
 func readAccountMapFile(path string) ([]AccountMap, error) {

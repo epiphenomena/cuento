@@ -110,6 +110,21 @@ func (b *builder) postGroup(ctx context.Context, tid string, recs []Record) erro
 
 	for _, cur := range curOrder {
 		bucket := buckets[cur]
+		// Per-subsidiary import: post only the bucket(s) whose subsidiary is the
+		// import target. `multi` above was computed over the FULL group, so a
+		// cross-currency intercompany transfer (legs in two subsidiaries) still
+		// decomposes through FX Clearing (D3) instead of misrouting the lone
+		// remaining leg to Opening Balances. Empty importSub = all subsidiaries
+		// (the all-in-one build / scaffold+per-sub-loop path).
+		if b.importSub != "" {
+			subName, err := b.countryToSub(bucket[0].country)
+			if err != nil {
+				return fmt.Errorf("tid %s: %w", tid, err)
+			}
+			if subName != b.importSub {
+				continue
+			}
+		}
 		if err := b.postBucket(ctx, tid, cur, date, desc, payeeSrc, bucket, multi, opening); err != nil {
 			return err
 		}
@@ -360,9 +375,13 @@ func (b *builder) payee(ctx context.Context, src string) (*int64, error) {
 	if id, ok := b.payeeID[name]; ok {
 		return &id, nil
 	}
-	id, err := b.st.CreatePayee(ctx, name)
+	// EnsurePayee (find-or-create, case-insensitive UNIQUE) rather than CreatePayee:
+	// a per-subsidiary run starts with an empty b.payeeID cache, so a payee shared
+	// across subsidiaries would otherwise be re-created (duplicate) on the second
+	// run. Find-or-create makes per-sub payee creation idempotent and additive.
+	id, err := b.st.EnsurePayee(ctx, name)
 	if err != nil {
-		return nil, fmt.Errorf("create payee: %w", err)
+		return nil, fmt.Errorf("ensure payee: %w", err)
 	}
 	b.payeeID[name] = id
 	return &id, nil

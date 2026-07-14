@@ -337,6 +337,26 @@ SELECT id FROM splits WHERE account_id = ? ORDER BY id;
 -- the destination. id last.
 UPDATE splits SET account_id = ? WHERE id = ?;
 
+-- name: CountTransactionsBySubsidiary :one
+-- How many transactions (INCLUDING soft-deleted) belong to a subsidiary. The
+-- historical importer's per-subsidiary idempotency guard: a non-zero count means
+-- the subsidiary was already imported (even a later-corrected attempt), so an
+-- additive re-import is refused (re-import = a fresh scaffold + import, D26).
+SELECT COUNT(*) FROM transactions WHERE subsidiary_id = ?;
+
+-- name: SubsidiaryNativeTotals :many
+-- Net-debit split totals grouped by (currency, account type) for one subsidiary,
+-- over non-deleted transactions. The importer's per-subsidiary reconciliation: the
+-- per-type native trial-balance the operator compares to the source books, and
+-- (summed per currency) an insurance gate that posted splits net to zero natively.
+SELECT t.currency, a.type, CAST(COALESCE(SUM(s.amount), 0) AS INTEGER) AS total
+FROM splits s
+JOIN transactions t ON t.id = s.transaction_id AND t.deleted = 0
+JOIN accounts a ON a.id = s.account_id
+WHERE t.subsidiary_id = ?
+GROUP BY t.currency, a.type
+ORDER BY t.currency, a.type;
+
 -- name: CountReconciledSplitsForAccount :one
 -- How many splits on an account carry a non-NULL reconciliation_id (p22.5). The
 -- merge block-guard uses this: repointing a reconciled split to the destination

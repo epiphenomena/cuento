@@ -37,6 +37,49 @@ host per `docs/deploy.md` (systemd unit + Litestream). The import is re-runnable
 any time before cutover to pick up a newer CSV; a re-run is a fresh `-o` file
 (the builder refuses to overwrite an existing db).
 
+## Additive per-subsidiary import (scaffold + import-subsidiary)
+
+`build` above imports every subsidiary at once into a fresh db. To bring
+subsidiaries live **one at a time** — import the US side, prove/debug it in
+production for a while, then import Honduras later into the same running db — use
+the split path instead. It has the same invariants; it just separates the
+subsidiary-independent reference data (created once) from each subsidiary's
+transactions (added independently).
+
+```
+# Once: scaffold the reference db (subsidiaries, program tree, funds, the WHOLE
+# account chart incl. FX Clearing + Opening Balances, and rates). No transactions.
+ledgerimport scaffold -map ... -config ... -rates ... -o cuento.db
+cuento check --strict cuento.db          # clean; 0 transactions
+
+# Import ONE subsidiary's transactions additively (repeat later per subsidiary).
+# ALWAYS back up first — the importer is row-by-row with no rollback; recovery is
+# restore-from-backup, not transaction abort.
+cp cuento.db cuento.db.bak
+ledgerimport import-subsidiary -source ... -map ... -config ... -subsidiary UPLAM -o cuento.db
+cuento check --strict cuento.db          # green -> keep; red -> cp cuento.db.bak cuento.db
+# ... run/prove UPLAM live ...
+ledgerimport import-subsidiary -source ... -map ... -config ... -subsidiary UPH -o cuento.db
+```
+
+`make scaffold-db` and `make import-sub IMPORT_SUB=UPLAM` wrap this with the
+backup/restore safety net (stop the server first — it holds the db file open).
+
+Semantics:
+- **Scaffold is created once and only looked up afterward.** A per-subsidiary
+  import creates NO shared entities; it resolves subsidiaries, programs, funds and
+  accounts from the db and **fails loud** if the scaffold is missing or was built
+  from a different mapping. Run `scaffold` before any `import-subsidiary`.
+- **Re-import is refused.** Importing a subsidiary that already has transactions
+  errors out. To redo a subsidiary, start over with a fresh `scaffold`.
+- **Per-subsidiary reconciliation.** After each import the tool prints the native
+  (per-currency, per-account-type) trial-balance totals to compare against the
+  source books, and fails if a subsidiary's posted splits do not net to zero per
+  currency. A cross-currency intercompany transfer still decomposes through FX
+  Clearing (D3) even though its two legs import under different subsidiaries.
+- **Consolidated reports show only the imported side(s)** until every subsidiary is
+  imported — expected during the prove period, not a bug.
+
 ## Current rehearsal result (p09.4, best-guess mapping, non-strict)
 
 `cuento check -db fixtures/sample.db`:

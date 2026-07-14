@@ -402,6 +402,43 @@ func (s *Store) GetTransaction(ctx context.Context, id int64) (sqlc.Transaction,
 	return row, nil
 }
 
+// SubsidiaryTxnCount returns the number of transactions (including soft-deleted)
+// posted to a subsidiary. The historical importer uses it as a per-subsidiary
+// idempotency guard: a non-zero count means the subsidiary was already imported,
+// so an additive re-import is refused (re-import means a fresh scaffold + import,
+// D26). Read-only; sqlc.
+func (s *Store) SubsidiaryTxnCount(ctx context.Context, subsidiaryID int64) (int64, error) {
+	n, err := s.q.CountTransactionsBySubsidiary(ctx, subsidiaryID)
+	if err != nil {
+		return 0, fmt.Errorf("store: count transactions for subsidiary %d: %w", subsidiaryID, err)
+	}
+	return n, nil
+}
+
+// NativeTotal is one (currency, account type) net-debit total for a subsidiary.
+type NativeTotal struct {
+	Currency string
+	Type     string
+	Total    int64
+}
+
+// SubsidiaryNativeTotals returns the net-debit split totals grouped by currency
+// and account type for a subsidiary (non-deleted transactions). The importer uses
+// it for per-subsidiary reconciliation: the per-type native trial-balance for the
+// operator, and (summed per currency) an insurance check that posted splits net to
+// zero. Read-only; sqlc.
+func (s *Store) SubsidiaryNativeTotals(ctx context.Context, subsidiaryID int64) ([]NativeTotal, error) {
+	rows, err := s.q.SubsidiaryNativeTotals(ctx, subsidiaryID)
+	if err != nil {
+		return nil, fmt.Errorf("store: subsidiary %d native totals: %w", subsidiaryID, err)
+	}
+	out := make([]NativeTotal, len(rows))
+	for i, r := range rows {
+		out[i] = NativeTotal{Currency: r.Currency, Type: r.Type, Total: r.Total}
+	}
+	return out, nil
+}
+
 // TransactionState is a transaction reconstructed as of a time (D4/D5): the header
 // plus its split set. Present is false when the txn did not exist (or was deleted)
 // at that time.

@@ -11,7 +11,7 @@ SQLC        ?= sqlc
 GOLANGCILINT?= golangci-lint
 GOFUMPT     ?= gofumpt
 
-.PHONY: all gen lint test check golive-check e2e fixture golden run release build clean tools
+.PHONY: all gen lint test check golive-check e2e fixture dev-db scaffold-db import-sub golden run release build clean tools
 
 all: lint test check
 
@@ -89,6 +89,58 @@ fixture:
 	$(LEDGERIMPORT) build -source $(FIXTURE_SOURCE) -map $(FIXTURE_MAP) \
 		-config $(FIXTURE_CONFIG) $(if $(wildcard $(FIXTURE_RATES)),-rates $(FIXTURE_RATES),) \
 		-o $(FIXTURE_DB) --anonymize
+
+## dev-db — local only: rebuild the throwaway dev database bin/dev.db from the same
+## gitignored real export + reviewed mapping as `fixture`, but WITHOUT --anonymize
+## (real names, for local go-live review — bin/ is gitignored so nothing leaks, rule
+## 11) and re-add the dev login. Use this after the importer or mapping changes so the
+## running app isn't served a stale db. Stop the :3390 server FIRST (it holds the file
+## open); restart it after. DEV_PASS overrides the seeded password.
+DEV_DB   ?= $(BINDIR)/dev.db
+DEV_USER ?= admin
+DEV_PASS ?= devpass123
+dev-db:
+	@mkdir -p $(BINDIR)
+	$(GO) build -o $(LEDGERIMPORT) ./cmd/ledgerimport
+	$(GO) build -o $(BINARY) ./cmd/cuento
+	rm -f $(DEV_DB) $(DEV_DB)-* $(DEV_DB).*
+	$(LEDGERIMPORT) build -source $(FIXTURE_SOURCE) -map $(FIXTURE_MAP) \
+		-config $(FIXTURE_CONFIG) $(if $(wildcard $(FIXTURE_RATES)),-rates $(FIXTURE_RATES),) \
+		-o $(DEV_DB)
+	printf '%s\n' '$(DEV_PASS)' | $(BINARY) user add $(DEV_USER) --admin -db $(DEV_DB)
+	@echo "dev-db: rebuilt $(DEV_DB) (login $(DEV_USER)/$(DEV_PASS)) — (re)start the :3390 server now"
+
+## scaffold-db / import-sub — local only: the SPLIT go-live import (D26). scaffold-db
+## builds a fresh reference db (subs, programs, funds, whole chart, rates; NO
+## transactions); import-sub then ADDITIVELY imports ONE subsidiary's transactions
+## into it, with a backup/restore safety net (the importer stays row-by-row, so a
+## failed import is recovered by restoring the .bak, not rolled back). Import the US
+## side, prove it live, then run import-sub again with IMPORT_SUB=UPH later. Stop the
+## server first (it holds the db file open). Re-importing a subsidiary is refused —
+## re-import means a fresh scaffold-db + import-sub from scratch.
+IMPORT_DB  ?= $(BINDIR)/live.db
+IMPORT_SUB ?= UPLAM
+scaffold-db:
+	@mkdir -p $(BINDIR)
+	$(GO) build -o $(LEDGERIMPORT) ./cmd/ledgerimport
+	$(GO) build -o $(BINARY) ./cmd/cuento
+	rm -f $(IMPORT_DB) $(IMPORT_DB)-* $(IMPORT_DB).*
+	$(LEDGERIMPORT) scaffold -map $(FIXTURE_MAP) -config $(FIXTURE_CONFIG) \
+		$(if $(wildcard $(FIXTURE_RATES)),-rates $(FIXTURE_RATES),) -o $(IMPORT_DB)
+	$(BINARY) check -db $(IMPORT_DB) --strict
+	@echo "scaffold-db: reference db ready at $(IMPORT_DB) — now: make import-sub IMPORT_SUB=UPLAM"
+
+import-sub:
+	@mkdir -p $(BINDIR)
+	$(GO) build -o $(LEDGERIMPORT) ./cmd/ledgerimport
+	$(GO) build -o $(BINARY) ./cmd/cuento
+	@bak="$(IMPORT_DB).bak.$$(date +%Y%m%d-%H%M%S)"; cp $(IMPORT_DB) "$$bak"; \
+		echo "import-sub: backed up $(IMPORT_DB) -> $$bak"; \
+		$(LEDGERIMPORT) import-subsidiary -source $(FIXTURE_SOURCE) -map $(FIXTURE_MAP) \
+			-config $(FIXTURE_CONFIG) -subsidiary $(IMPORT_SUB) -o $(IMPORT_DB) && \
+		$(BINARY) check -db $(IMPORT_DB) --strict && \
+		echo "import-sub $(IMPORT_SUB): GREEN (backup kept at $$bak)" || \
+		{ echo "import-sub $(IMPORT_SUB): FAILED — restore with: cp $$bak $(IMPORT_DB)"; exit 1; }
 
 ## golden — regenerate report goldens (internal/reports/testdata/*.{txt,csv}) via the
 ## -update test flag; deterministic (params/currency/locale pinned in the tests). The

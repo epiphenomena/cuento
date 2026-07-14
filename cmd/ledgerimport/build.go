@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"cuento/internal/store"
 )
@@ -47,8 +49,121 @@ func (r *BuildResult) accountHasSplit(id int64) bool { return r.splitAccounts[id
 // it rather than creating a second root (single-root trigger, D18).
 const rootSubsidiaryID = int64(1)
 
-// runBuild is the build subcommand's core. ctx must already carry an actor
-// (store.WithActor) -- the CLI wrapper binds the system actor (id 1).
+// newResult returns an empty BuildResult with every map initialized.
+func newResult() *BuildResult {
+	return &BuildResult{
+		SubsidiaryIDs: map[string]int64{},
+		ProgramIDs:    map[string]int64{},
+		FundIDs:       map[string]int64{},
+		AccountIDs:    map[string]int64{},
+		tidTxns:       map[string][]int64{},
+		splitAccounts: map[int64]bool{},
+	}
+}
+
+// runScaffold creates all subsidiary-INDEPENDENT reference data in a fresh db:
+// rates, both subsidiaries, the program tree, funds, and the WHOLE account chart
+// (incl. grouping placeholders and the synthetic FX Clearing / Opening Balances
+// accounts) with each account's deactivations. It reads NO source rows and posts
+// NO transactions -- those are the per-subsidiary, additive phase
+// (runImportSubsidiary). This is the "scaffold once" half of the split-import
+// model (D26): reference data is created here and only ever LOOKED UP afterwards.
+// ctx must carry an actor (store.WithActor); the CLI binds the system actor.
+func runScaffold(
+	ctx context.Context,
+	accMap []AccountMap,
+	cfg Config,
+	rates []store.Rate,
+	st *store.Store,
+	anonymize bool,
+) (*BuildResult, error) {
+	// Load historical FX rates first (reference data, D12): the currencies they
+	// reference are all migration-seeded. An empty batch is a no-op.
+	if err := st.PutRates(ctx, rates); err != nil {
+		return nil, fmt.Errorf("load rates: %w", err)
+	}
+	res := newResult()
+	b := &builder{st: st, cfg: cfg, res: res, anonymize: anonymize}
+	if err := b.subsidiaries(ctx); err != nil {
+		return nil, err
+	}
+	if err := b.programs(ctx); err != nil {
+		return nil, err
+	}
+	if err := b.funds(ctx); err != nil {
+		return nil, err
+	}
+	if err := b.accounts(ctx, accMap); err != nil {
+		return nil, err
+	}
+	// NB scaffold does NOT deactivate the source-inactive ("(deleted)") accounts:
+	// an inactive account may still hold historical splits that a later per-sub
+	// import must post, and the leaf-active trigger forbids posting to an inactive
+	// account. Deactivation is deferred to the per-sub phase, once every subsidiary
+	// in an account's scope has been imported (deactivateReadyAccounts).
+	return res, nil
+}
+
+// runImportSubsidiary ADDITIVELY imports one subsidiary's transactions into an
+// already-scaffolded db. It creates nothing shared: it reloads the subsidiary,
+// program, fund and account id maps FROM the db (fail loud if the scaffold is
+// missing), refuses a subsidiary that already has transactions (re-import means a
+// fresh scaffold, D26), then posts only that subsidiary's currency buckets and
+// runs a native reconciliation gate. Safe to run once per subsidiary against a
+// live, in-use db (every write still goes through the store, versioned).
+func runImportSubsidiary(
+	ctx context.Context,
+	recs []Record,
+	accMap []AccountMap,
+	cfg Config,
+	st *store.Store,
+	subName string,
+	anonymize bool,
+) (*BuildResult, error) {
+	res := newResult()
+	b := &builder{st: st, cfg: cfg, res: res, anonymize: anonymize}
+	if err := b.reloadState(ctx, accMap); err != nil {
+		return nil, err
+	}
+	subID, ok := b.res.SubsidiaryIDs[subName]
+	if !ok {
+		return nil, fmt.Errorf("import-subsidiary: subsidiary %q not found; run scaffold first", subName)
+	}
+	// Idempotency guard: a subsidiary that already has transactions is not a clean
+	// additive target (re-import = fresh scaffold + import, D26).
+	n, err := st.SubsidiaryTxnCount(ctx, subID)
+	if err != nil {
+		return nil, err
+	}
+	if n > 0 {
+		return nil, fmt.Errorf("import-subsidiary: subsidiary %q already has %d transactions; "+
+			"re-import means a fresh db (scaffold + import from scratch)", subName, n)
+	}
+	// Shared counter accounts must exist AND be scoped to this subsidiary, else the
+	// store rejects every counter-leg mid-import. Catch it before posting.
+	if err := b.preflightSharedAccounts(ctx, subID); err != nil {
+		return nil, err
+	}
+	b.importSub = subName
+	if err := b.transactions(ctx, recs); err != nil {
+		return nil, err
+	}
+	// Deactivate the source-inactive ("(deleted)") accounts whose whole subsidiary
+	// scope is now imported (rule 14: deactivate, never delete). Deferred to here so
+	// the historical splits post first.
+	if err := b.deactivateReadyAccounts(ctx, accMap); err != nil {
+		return nil, err
+	}
+	if err := b.reconcile(ctx, subName, subID); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+// runBuild is the all-in-one build: scaffold a fresh db, then import every
+// configured subsidiary additively. It preserves the original one-shot behavior
+// (make fixture / dev-db) as a convenience wrapper over the split-import core.
+// ctx must carry an actor (store.WithActor).
 func runBuild(
 	ctx context.Context,
 	source io.Reader,
@@ -62,49 +177,46 @@ func runBuild(
 	if err != nil {
 		return nil, err
 	}
-
-	// Load historical FX rates first (reference data, D12): the currencies they
-	// reference are all migration-seeded, so this needs none of the entity phases,
-	// and loading it up front means a report run against the produced db can convert
-	// immediately. An empty batch is a no-op.
-	if err := st.PutRates(ctx, rates); err != nil {
-		return nil, fmt.Errorf("load rates: %w", err)
-	}
-
-	res := &BuildResult{
-		SubsidiaryIDs: map[string]int64{},
-		ProgramIDs:    map[string]int64{},
-		FundIDs:       map[string]int64{},
-		AccountIDs:    map[string]int64{},
-		tidTxns:       map[string][]int64{},
-		splitAccounts: map[int64]bool{},
-	}
-
-	b := &builder{st: st, cfg: cfg, res: res, anonymize: anonymize}
-
-	if err := b.subsidiaries(ctx); err != nil {
+	res, err := runScaffold(ctx, accMap, cfg, rates, st, anonymize)
+	if err != nil {
 		return nil, err
 	}
-	if err := b.programs(ctx); err != nil {
-		return nil, err
-	}
-	if err := b.funds(ctx); err != nil {
-		return nil, err
-	}
-	if err := b.accounts(ctx, accMap); err != nil {
-		return nil, err
-	}
-	if err := b.transactions(ctx, recs); err != nil {
-		return nil, err
-	}
-	// Deactivate accounts flagged inactive in the source (QuickBooks "(deleted)")
-	// AFTER posting: an inactive account still holds its historical splits, but the
-	// leaf-active trigger forbids posting TO an inactive account, so it must be
-	// active during the transactions phase and deactivated only now.
-	if err := b.deactivateAccounts(ctx); err != nil {
-		return nil, err
+	for _, subName := range configuredSubsidiaryNames(cfg) {
+		subRes, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, subName, anonymize)
+		if err != nil {
+			return nil, err
+		}
+		mergeResult(res, subRes)
 	}
 	return res, nil
+}
+
+// configuredSubsidiaryNames returns the distinct child-subsidiary names in the
+// config, sorted for a deterministic import order.
+func configuredSubsidiaryNames(cfg Config) []string {
+	seen := map[string]bool{}
+	var names []string
+	for _, sc := range cfg.Subsidiaries {
+		if !seen[sc.Name] {
+			seen[sc.Name] = true
+			names = append(names, sc.Name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// mergeResult folds a per-subsidiary result's posted transactions, touched
+// accounts, and warnings into an accumulating result (the entity id maps already
+// live on dst from the scaffold and are identical).
+func mergeResult(dst, src *BuildResult) {
+	for tid, txns := range src.tidTxns {
+		dst.tidTxns[tid] = append(dst.tidTxns[tid], txns...)
+	}
+	for id := range src.splitAccounts {
+		dst.splitAccounts[id] = true
+	}
+	dst.Warnings = append(dst.Warnings, src.Warnings...)
 }
 
 // builder holds the cross-phase state (id maps, currency exponents) so the phase
@@ -117,7 +229,11 @@ type builder struct {
 
 	exponent map[string]int // currency code -> minor-unit exponent (D1)
 	payeeID  map[string]int64
-	inactive []int64 // account ids to deactivate after posting (source "(deleted)")
+
+	// importSub is the subsidiary NAME a per-subsidiary import targets: postGroup
+	// posts only the currency buckets resolving to it (empty = all subsidiaries,
+	// the all-in-one build path). See transactions.go postGroup.
+	importSub string
 
 	// acctType maps a created account id -> its cuento type. resolveSplit consults
 	// it so a source dimension (functional class from kls, program from kat) is only
@@ -325,23 +441,235 @@ func (b *builder) accounts(ctx context.Context, rows []AccountMap) error {
 		}
 		b.res.AccountIDs[r.SourceAcct] = id
 		b.acctType[id] = r.CuentoType
-		if !r.Active {
-			// Deepest-first so a placeholder is deactivated after its children (order
-			// is not store-enforced, but keeps the log readable). `ordered` is
-			// parent-before-child, so prepend to reverse it.
-			b.inactive = append([]int64{id}, b.inactive...)
+		// Source-inactive ("(deleted)") accounts are created ACTIVE here and
+		// deactivated later, per subsidiary, once their historical splits have posted
+		// (deactivateReadyAccounts).
+	}
+	return nil
+}
+
+// deactivateReadyAccounts sets active=0 on the mapping's source-inactive
+// ("(deleted)") accounts whose ENTIRE subsidiary scope now has transactions -- so a
+// not-yet-imported subsidiary can still post its historical splits to the account
+// first. Each is one versioned store change (op='update', never a hard delete --
+// rule 14); an already-inactive account is skipped (idempotent across per-sub runs
+// for an account shared by several subsidiaries).
+func (b *builder) deactivateReadyAccounts(ctx context.Context, accMap []AccountMap) error {
+	for _, m := range accMap {
+		if m.Active {
+			continue
+		}
+		id, ok := b.res.AccountIDs[m.SourceAcct]
+		if !ok {
+			continue
+		}
+		ready := true
+		for _, sn := range m.Subsidiaries {
+			sid, ok := b.res.SubsidiaryIDs[sn]
+			if !ok {
+				ready = false
+				break
+			}
+			n, err := b.st.SubsidiaryTxnCount(ctx, sid)
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				ready = false
+				break
+			}
+		}
+		if !ready {
+			continue
+		}
+		acct, err := b.st.GetAccount(ctx, id)
+		if err != nil {
+			return fmt.Errorf("deactivate: load account %d: %w", id, err)
+		}
+		if acct.Active == 0 {
+			continue // already inactive
+		}
+		if err := b.st.DeactivateAccount(ctx, id); err != nil {
+			return fmt.Errorf("deactivate account %d: %w", id, err)
 		}
 	}
 	return nil
 }
 
-// deactivateAccounts sets active=0 on the accounts flagged inactive in the mapping
-// (source "(deleted)"), once their historical splits are posted. Each is one
-// versioned store change (op='update', never a hard delete -- rule 14).
-func (b *builder) deactivateAccounts(ctx context.Context) error {
-	for _, id := range b.inactive {
-		if err := b.st.DeactivateAccount(ctx, id); err != nil {
-			return fmt.Errorf("deactivate account %d: %w", id, err)
+// reloadState rehydrates the cross-phase id maps FROM the scaffolded db (instead
+// of creating), so a per-subsidiary import running in a separate process can
+// resolve every shared entity by lookup. Fails loud if the scaffold is missing or
+// inconsistent with the mapping -- shared entities are never created here.
+func (b *builder) reloadState(ctx context.Context, accMap []AccountMap) error {
+	subs, err := b.st.SubTree(ctx)
+	if err != nil {
+		return fmt.Errorf("reload subsidiaries: %w", err)
+	}
+	for _, s := range subs {
+		b.res.SubsidiaryIDs[s.Name] = s.ID
+	}
+	progs, err := b.st.ProgramTree(ctx)
+	if err != nil {
+		return fmt.Errorf("reload programs: %w", err)
+	}
+	for _, p := range progs {
+		b.res.ProgramIDs[p.Name] = p.ID
+	}
+	// Funds are keyed by DONOR in res.FundIDs (resolveSplit looks up by r.Donor);
+	// the db stores them by name, so invert cfg.Funds (donor -> Name) to recover it.
+	funds, err := b.st.ListFunds(ctx)
+	if err != nil {
+		return fmt.Errorf("reload funds: %w", err)
+	}
+	fundByName := make(map[string]int64, len(funds))
+	for _, f := range funds {
+		fundByName[f.Name] = f.ID
+	}
+	for donor, fc := range b.cfg.Funds {
+		if id, ok := fundByName[fc.Name]; ok {
+			b.res.FundIDs[donor] = id
+		}
+	}
+	return b.reloadAccounts(ctx, accMap)
+}
+
+// reloadAccounts rebuilds res.AccountIDs (source_acct -> id) and acctType from the
+// db by matching each account-mapping row to its db account via the FULL
+// number-free NAME PATH (root..self). The path is the only stable key: names are
+// not globally unique (only siblings are disambiguated), but a full name path IS
+// unique (the scaffold created each db name from the row's NameEN), and source_acct
+// is not persisted on the account row. Fails loud on any unmatched row or a
+// duplicate path -- proof the scaffold used this same mapping.
+func (b *builder) reloadAccounts(ctx context.Context, accMap []AccountMap) error {
+	if b.acctType == nil {
+		b.acctType = map[int64]string{}
+	}
+	rows, err := b.st.Tree(ctx, "en", nil)
+	if err != nil {
+		return fmt.Errorf("reload accounts: %w", err)
+	}
+	name := make(map[int64]string, len(rows))
+	parent := make(map[int64]sql.NullInt64, len(rows))
+	for _, r := range rows {
+		name[r.ID] = r.Name
+		parent[r.ID] = r.ParentID
+	}
+	dbPath := make(map[string]int64, len(rows))
+	for _, r := range rows {
+		p := dbAccountPath(r.ID, name, parent)
+		if _, dup := dbPath[p]; dup {
+			return fmt.Errorf("reload accounts: duplicate name path %q in db", strings.ReplaceAll(p, "\x00", ":"))
+		}
+		dbPath[p] = r.ID
+	}
+
+	nameEN := make(map[string]string, len(accMap)) // source_acct -> NameEN
+	parEN := make(map[string]string, len(accMap))  // source_acct -> parent source_acct
+	for _, m := range accMap {
+		nameEN[m.SourceAcct] = m.NameEN
+		parEN[m.SourceAcct] = m.CuentoParent
+	}
+	for _, m := range accMap {
+		p, err := mapAccountPath(m.SourceAcct, nameEN, parEN)
+		if err != nil {
+			return fmt.Errorf("reload accounts: %w", err)
+		}
+		id, ok := dbPath[p]
+		if !ok {
+			return fmt.Errorf("reload accounts: account %q (path %q) not in db; scaffold with the same mapping first",
+				m.SourceAcct, strings.ReplaceAll(p, "\x00", ":"))
+		}
+		b.res.AccountIDs[m.SourceAcct] = id
+		b.acctType[id] = m.CuentoType
+	}
+	return nil
+}
+
+// dbAccountPath returns the NUL-joined name path root..self for a db account.
+func dbAccountPath(id int64, name map[int64]string, parent map[int64]sql.NullInt64) string {
+	var segs []string
+	for cur, depth := id, 0; depth < 1024; depth++ {
+		segs = append([]string{name[cur]}, segs...)
+		p := parent[cur]
+		if !p.Valid {
+			break
+		}
+		cur = p.Int64
+	}
+	return strings.Join(segs, "\x00")
+}
+
+// mapAccountPath returns the NUL-joined NameEN path root..self for an account-map
+// row, walking CuentoParent up. It rejects a missing parent or an over-deep chain
+// (a cycle) rather than looping forever.
+func mapAccountPath(sourceAcct string, nameEN, parEN map[string]string) (string, error) {
+	var segs []string
+	cur := sourceAcct
+	for depth := 0; ; depth++ {
+		if depth >= 1024 {
+			return "", fmt.Errorf("account %q parent chain too deep (cycle?)", sourceAcct)
+		}
+		en, ok := nameEN[cur]
+		if !ok {
+			return "", fmt.Errorf("account %q references missing parent %q", sourceAcct, cur)
+		}
+		segs = append([]string{en}, segs...)
+		par := parEN[cur]
+		if par == "" {
+			break
+		}
+		cur = par
+	}
+	return strings.Join(segs, "\x00"), nil
+}
+
+// preflightSharedAccounts verifies the synthetic counter accounts (FX Clearing,
+// Opening Balances) exist in the scaffolded db AND are scoped to the importing
+// subsidiary -- else the store rejects every counter-leg mid-import. Fails loud so
+// a misconfigured scaffold is caught before any transaction posts.
+func (b *builder) preflightSharedAccounts(ctx context.Context, subID int64) error {
+	for _, key := range []string{b.cfg.FXClearingAccount, b.cfg.OpeningBalanceAccount} {
+		id, ok := b.res.AccountIDs[key]
+		if !ok {
+			return fmt.Errorf("shared counter account %q missing from db; run scaffold first", key)
+		}
+		subs, err := b.st.AccountSubsidiaryIDs(ctx, id)
+		if err != nil {
+			return err
+		}
+		found := false
+		for _, s := range subs {
+			if s == subID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("shared counter account %q not scoped to subsidiary id %d; "+
+				"re-scaffold with it mapped to every posting subsidiary", key, subID)
+		}
+	}
+	return nil
+}
+
+// reconcile is the per-subsidiary native reconciliation GATE: the net-debit split
+// total per currency must be zero (every posted transaction balances, so the
+// subsidiary total does too -- a nonzero total means a posted-splits bug, so fail
+// loud). The per-type breakdown it reads is surfaced to the operator by the CLI
+// (importSubCmd) for a manual trial-balance check against the source books.
+func (b *builder) reconcile(ctx context.Context, subName string, subID int64) error {
+	totals, err := b.st.SubsidiaryNativeTotals(ctx, subID)
+	if err != nil {
+		return err
+	}
+	byCur := map[string]int64{}
+	for _, t := range totals {
+		byCur[t.Currency] += t.Total
+	}
+	for cur, sum := range byCur {
+		if sum != 0 {
+			return fmt.Errorf("subsidiary %q native imbalance in %s: %d minor units "+
+				"(posted splits do not net to zero)", subName, cur, sum)
 		}
 	}
 	return nil

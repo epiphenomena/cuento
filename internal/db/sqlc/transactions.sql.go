@@ -44,6 +44,21 @@ func (q *Queries) CountReconciledSplitsForAccount(ctx context.Context, accountID
 	return count, err
 }
 
+const countTransactionsBySubsidiary = `-- name: CountTransactionsBySubsidiary :one
+SELECT COUNT(*) FROM transactions WHERE subsidiary_id = ?
+`
+
+// How many transactions (INCLUDING soft-deleted) belong to a subsidiary. The
+// historical importer's per-subsidiary idempotency guard: a non-zero count means
+// the subsidiary was already imported (even a later-corrected attempt), so an
+// additive re-import is refused (re-import = a fresh scaffold + import, D26).
+func (q *Queries) CountTransactionsBySubsidiary(ctx context.Context, subsidiaryID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countTransactionsBySubsidiary, subsidiaryID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteSplit = `-- name: DeleteSplit :exec
 DELETE FROM splits WHERE id = ?
 `
@@ -732,6 +747,49 @@ func (q *Queries) SplitsByTransaction(ctx context.Context, transactionID int64) 
 			&i.Position,
 			&i.ReconciliationID,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const subsidiaryNativeTotals = `-- name: SubsidiaryNativeTotals :many
+SELECT t.currency, a.type, CAST(COALESCE(SUM(s.amount), 0) AS INTEGER) AS total
+FROM splits s
+JOIN transactions t ON t.id = s.transaction_id AND t.deleted = 0
+JOIN accounts a ON a.id = s.account_id
+WHERE t.subsidiary_id = ?
+GROUP BY t.currency, a.type
+ORDER BY t.currency, a.type
+`
+
+type SubsidiaryNativeTotalsRow struct {
+	Currency string
+	Type     string
+	Total    int64
+}
+
+// Net-debit split totals grouped by (currency, account type) for one subsidiary,
+// over non-deleted transactions. The importer's per-subsidiary reconciliation: the
+// per-type native trial-balance the operator compares to the source books, and
+// (summed per currency) an insurance gate that posted splits net to zero natively.
+func (q *Queries) SubsidiaryNativeTotals(ctx context.Context, subsidiaryID int64) ([]SubsidiaryNativeTotalsRow, error) {
+	rows, err := q.db.QueryContext(ctx, subsidiaryNativeTotals, subsidiaryID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SubsidiaryNativeTotalsRow
+	for rows.Next() {
+		var i SubsidiaryNativeTotalsRow
+		if err := rows.Scan(&i.Currency, &i.Type, &i.Total); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
