@@ -335,6 +335,62 @@ func TestRegisterFilters(t *testing.T) {
 	}
 }
 
+// TestRegisterDescriptionColumn: the register's Description column (p26.17) shows the
+// split's OWN description, and is description-ONLY -- an empty split description renders
+// "" (the template shows an em-dash), it does NOT fall back to the memo the way the
+// account-ledger/reconciliation reports do. This pins both the passthrough and the
+// deliberate no-memo-fallback so a later "helpful" fallback here is caught.
+func TestRegisterDescriptionColumn(t *testing.T) {
+	e := newRegEnv(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// Split #1 (checking) carries a description; split #2 (expense) carries only a memo
+	// (no description) so we can assert the register does NOT borrow the memo.
+	in := store.PostTransactionInput{
+		Date: "2025-01-15", SubsidiaryID: e.subA, Currency: "USD",
+		Memo: "header memo",
+		Splits: []store.SplitInput{
+			{AccountID: e.checking, Amount: 100, Description: "Rent check #4021", Position: 0},
+			{AccountID: e.expense, Amount: -100, ProgramID: ptrI(generalProgram), FunctionalClass: ptrS("program"), Memo: "split note", Position: 1},
+		},
+	}
+	if _, err := e.st.PostTransaction(ctx, in); err != nil {
+		t.Fatalf("post: %v", err)
+	}
+
+	opts := formatOptsFor(nil)
+	rowsFor := func(acct int64) []regRow {
+		rows, _, _, err := registerRows(ctx, e.st, acct, store.RegisterCursor{}, store.RegisterFilters{}, 0, "en", opts)
+		if err != nil {
+			t.Fatalf("registerRows: %v", err)
+		}
+		return rows
+	}
+
+	// The checking split's register row shows its description verbatim.
+	crows := rowsFor(e.checking)
+	if len(crows) != 1 {
+		t.Fatalf("checking register = %d rows, want 1", len(crows))
+	}
+	if crows[0].Description != "Rent check #4021" {
+		t.Errorf("checking Description = %q, want %q", crows[0].Description, "Rent check #4021")
+	}
+
+	// The expense split has NO description: the register Description is empty (no memo
+	// fallback), even though the split memo and the header memo are both non-empty.
+	erows := rowsFor(e.expense)
+	if len(erows) != 1 {
+		t.Fatalf("expense register = %d rows, want 1", len(erows))
+	}
+	if erows[0].Description != "" {
+		t.Errorf("expense Description = %q, want empty (no memo fallback in the register)", erows[0].Description)
+	}
+	// The Memo column still carries the split memo (unchanged behavior).
+	if erows[0].Memo != "split note" {
+		t.Errorf("expense Memo = %q, want %q", erows[0].Memo, "split note")
+	}
+}
+
 func ptrI(v int64) *int64   { return &v }
 func ptrS(v string) *string { return &v }
 

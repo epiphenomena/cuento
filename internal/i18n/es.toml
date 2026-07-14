@@ -530,6 +530,8 @@ other = "Fecha"
 other = "Subsidiaria"
 [register.col.payee]
 other = "Beneficiario"
+[register.col.description]
+other = "Descripción"
 [register.col.memo]
 other = "Nota"
 [register.col.counter]
@@ -946,6 +948,8 @@ other = "Subsidiaria"
 other = "Beneficiario"
 [history.field.memo]
 other = "Nota"
+[history.field.description]
+other = "Descripción"
 [history.field.notes]
 other = "Observaciones"
 [history.field.currency]

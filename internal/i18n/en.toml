@@ -536,6 +536,8 @@ other = "Date"
 other = "Subsidiary"
 [register.col.payee]
 other = "Payee"
+[register.col.description]
+other = "Description"
 [register.col.memo]
 other = "Memo"
 [register.col.counter]
@@ -952,6 +954,8 @@ other = "Subsidiary"
 other = "Payee"
 [history.field.memo]
 other = "Memo"
+[history.field.description]
+other = "Description"
 [history.field.notes]
 other = "Notes"
 [history.field.currency]

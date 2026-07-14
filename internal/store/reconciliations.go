@@ -480,6 +480,7 @@ type ReconciliationStatementSplit struct {
 	SubsidiaryID int64
 	PayeeID      *int64
 	SplitMemo    string
+	Description  string // per-split free-text (p26.15); the statement Description cell
 	TxnMemo      string
 	Date         string // raw YYYY-MM-DD
 }
@@ -506,6 +507,7 @@ func (s *Store) ReconciliationStatementSplits(ctx context.Context, reconID int64
 			SubsidiaryID: r.SubsidiaryID,
 			PayeeID:      nullInt64ToPtr(r.PayeeID),
 			SplitMemo:    r.Memo,
+			Description:  r.Description,
 			TxnMemo:      r.TxnMemo,
 			Date:         r.Date,
 		}

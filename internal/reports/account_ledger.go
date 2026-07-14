@@ -14,7 +14,7 @@ import (
 // lists every account's as-of balance in one line, the account ledger drills into a
 // single account and prints its movement: opening balance (the account's balance the
 // day BEFORE `from`), then every split in [from,to] in date order — its date, the
-// payee/description, its FUND (the split's fund, or "Unrestricted" for a nil fund),
+// split description (else memo), its FUND (the split's fund, or "Unrestricted" for a nil fund),
 // its signed net-debit amount (D2), and a RUNNING balance — closing with the
 // account's as-of-`to` balance. By construction opening + Σ(range lines) == closing
 // (cumulative(to) = cumulative(from-1) + activity(from..to)); the golden asserts it
@@ -57,8 +57,8 @@ func registerAccountLedger(reg *Registry) {
 // per-currency opening balance (as of the day before From), the in-range splits
 // (DrillSplits over [From,To], per currency), and the closing balance (as of To) —
 // all in the scope's descendant closure (D18) — and renders one section per currency:
-// an opening row, one data row per split (date linked to its txn, payee/description,
-// fund, amount, running balance), and a closing row. The running balance starts at
+// an opening row, one data row per split (date linked to its txn, split description
+// (else memo), fund, amount, running balance), and a closing row. The running balance starts at
 // opening and accumulates each line's amount; the closing row equals opening + Σlines,
 // which also equals the independently-queried as-of-To balance (asserted in the test).
 func runAccountLedger(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
@@ -106,11 +106,7 @@ func runAccountLedger(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 	// MidRangeOnlyCurrency (a regression guard pinning this behavior).
 	ccys := unionCurrencies(openByCcy, closeByCcy)
 
-	// Name maps (payee, fund) resolved once (bounded reference data).
-	payees, err := payeeNames(ctx, tk.Store())
-	if err != nil {
-		return Table{}, err
-	}
+	// Fund names resolved once (bounded reference data).
 	funds, err := fundNames(ctx, tk.Store())
 	if err != nil {
 		return Table{}, err
@@ -158,7 +154,7 @@ func runAccountLedger(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 			t.Rows = append(t.Rows, Row{
 				Cells: []Cell{
 					DateCell(ln.Date).WithTxn(ln.TxnID),
-					TextCell(lineDescription(ln, payees)),
+					TextCell(lineDescription(ln)),
 					fundCell(ln.FundID, funds),
 					MoneyCell(ln.Amount, ccy),
 					MoneyCell(running, ccy),
@@ -191,15 +187,13 @@ func runAccountLedger(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 	return t, nil
 }
 
-// lineDescription is a ledger line's Description cell text: the payee name when the
-// split's transaction names one, else the split memo, else the transaction memo —
-// mirroring the register's memo fallback (a payee-tagged line reads by its payee; an
-// untagged line by its note).
-func lineDescription(ln store.DrillRow, payees map[int64]string) string {
-	if ln.PayeeID != nil {
-		if name := payees[*ln.PayeeID]; name != "" {
-			return name
-		}
+// lineDescription is a ledger line's Description cell text: the split's own free-text
+// description (p26.15/p26.17), else the split memo, else the transaction memo. Payee is
+// being retired from the read surfaces, so a line reads by its per-split description
+// first, falling back to its note.
+func lineDescription(ln store.DrillRow) string {
+	if ln.Description != "" {
+		return ln.Description
 	}
 	if ln.SplitMemo != "" {
 		return ln.SplitMemo
@@ -259,20 +253,6 @@ func dayBefore(d string) string {
 		return d
 	}
 	return tm.AddDate(0, 0, -1).Format("2006-01-02")
-}
-
-// payeeNames returns id->name for every payee (bounded reference data, loaded once per
-// report run) so a ledger line resolves its payee without a per-line join.
-func payeeNames(ctx context.Context, st *store.Store) (map[int64]string, error) {
-	ps, err := st.ListPayees(ctx)
-	if err != nil {
-		return nil, err
-	}
-	m := make(map[int64]string, len(ps))
-	for _, p := range ps {
-		m[p.ID] = p.Name
-	}
-	return m, nil
 }
 
 // fundNames returns id->name for every fund (active AND closed — a historical line may

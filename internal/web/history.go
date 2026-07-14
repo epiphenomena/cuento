@@ -270,6 +270,8 @@ func histFieldLabel(f store.HistoryField) string {
 		return "history.field.functional_class"
 	case store.FieldNotes:
 		return "history.field.notes"
+	case store.FieldSplitDescription:
+		return "history.field.description"
 	default: // FieldMemo / FieldSplitMemo
 		return "history.field.memo"
 	}

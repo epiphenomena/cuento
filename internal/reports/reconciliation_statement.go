@@ -17,7 +17,7 @@ import (
 //     account+currency -- the statement chain, PriorFinalizedStatementBalance);
 //   - the INCLUDED (cleared) SPLITS -- every split cleared against this recon, in
 //     date order, reusing the account-ledger register-row shape (date linked to its
-//     txn, payee/description, fund, amount);
+//     txn, split description (else memo), fund, amount);
 //   - the CLEARED TOTAL (the net-debit sum of those splits);
 //   - the CLOSING balance = opening + cleared, ASSERTED to equal the statement balance
 //     (the recon's own finalize gate / ledger Z9), so the report proves the chain.
@@ -99,10 +99,6 @@ func runReconciliationStatement(ctx context.Context, tk *Toolkit, p Params) (Tab
 		return Table{}, err
 	}
 
-	payees, err := payeeNames(ctx, st)
-	if err != nil {
-		return Table{}, err
-	}
 	funds, err := fundNames(ctx, st)
 	if err != nil {
 		return Table{}, err
@@ -150,7 +146,7 @@ func runReconciliationStatement(ctx context.Context, tk *Toolkit, p Params) (Tab
 		t.Rows = append(t.Rows, Row{
 			Cells: []Cell{
 				DateCell(sp.Date).WithTxn(sp.TxnID),
-				TextCell(statementDescription(sp, payees)),
+				TextCell(statementDescription(sp)),
 				statementFundCell(sp.FundID, funds),
 				MoneyCell(sp.Amount, ccy),
 			},
@@ -202,14 +198,12 @@ func infoRow(labelKey string, value Cell) Row {
 	}
 }
 
-// statementDescription is a cleared line's Description cell text: the payee name when
-// the split's transaction names one, else the split memo, else the transaction memo --
-// the same fallback the account-ledger register uses.
-func statementDescription(sp store.ReconciliationStatementSplit, payees map[int64]string) string {
-	if sp.PayeeID != nil {
-		if name := payees[*sp.PayeeID]; name != "" {
-			return name
-		}
+// statementDescription is a cleared line's Description cell text: the split's own
+// free-text description (p26.15/p26.17), else the split memo, else the transaction memo
+// -- the same fallback the account-ledger uses. Payee is retired from the read surfaces.
+func statementDescription(sp store.ReconciliationStatementSplit) string {
+	if sp.Description != "" {
+		return sp.Description
 	}
 	if sp.SplitMemo != "" {
 		return sp.SplitMemo

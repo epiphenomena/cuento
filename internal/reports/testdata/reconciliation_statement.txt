@@ -1,27 +1,27 @@
-   Date               Description                         Fund                    Amount
--  -----------------  ----------------------------------  --------------  --------------
+   Date               Description                  Fund                    Amount
+-  -----------------  ---------------------------  --------------  --------------
 >  Account            Checking US
 >  Statement date     2026-05-31
 >  Currency           USD
 >  Status             Finalized
->  Statement balance                                                       USD 36,735.00
->  2026-05-31         Opening balance                                           USD 0.00
-   2025-01-01         Opening balances RV Estados Unidos  Unrestricted     USD 50,000.00
-   2025-02-05         General donation                    Unrestricted      USD 2,000.00
-   2025-02-28         February salaries                   Unrestricted     USD -8,000.00
-   2025-03-01         March rent                          Unrestricted     USD -1,500.00
-   2025-03-10         Annual insurance                    Unrestricted       USD -600.00
-   2025-03-31         Q1 bank fees                        Unrestricted        USD -25.00
-   2025-04-05         Beca Agua US contribution           Beca Agua 2025    USD 2,000.00
-   2025-05-20         Program supplies (US)               Beca Agua 2025   USD -1,500.00
-   2025-06-01         Building Fund gift                  Building Fund    USD 50,000.00
-   2025-06-15         Building improvement                Building Fund   USD -40,000.00
-   2025-07-01         Intercompany funding to MX          Unrestricted    USD -10,000.00
-   2025-08-01         FX transfer in (USD)                Unrestricted        USD 260.00
-   2025-09-15         Gala ticket sales                   Unrestricted      USD 3,000.00
-   2025-09-20         Gala catering                       Unrestricted     USD -1,000.00
-   2025-11-01         Supplies (v3, final)                Unrestricted       USD -600.00
-   2026-01-10         Program fees Q1                     Unrestricted      USD 1,200.00
-   2026-02-27         February 2026 salaries              Unrestricted     USD -8,500.00
->  2026-05-31         Cleared total                                        USD 36,735.00
-=  2026-05-31         Closing balance                                      USD 36,735.00
+>  Statement balance                                                USD 36,735.00
+>  2026-05-31         Opening balance                                    USD 0.00
+   2025-01-01         Opening bank balance         Unrestricted     USD 50,000.00
+   2025-02-05         Donation deposit             Unrestricted      USD 2,000.00
+   2025-02-28         Payroll run Feb              Unrestricted     USD -8,000.00
+   2025-03-01         Office rent check            Unrestricted     USD -1,500.00
+   2025-03-10         Liability insurance premium  Unrestricted       USD -600.00
+   2025-03-31         Quarterly account fees       Unrestricted        USD -25.00
+   2025-04-05         Restricted gift deposit      Beca Agua 2025    USD 2,000.00
+   2025-05-20         Filter parts payment         Beca Agua 2025   USD -1,500.00
+   2025-06-01         Capital campaign gift        Building Fund    USD 50,000.00
+   2025-06-15         Roof replacement payment     Building Fund   USD -40,000.00
+   2025-07-01         Wire to RV Mexico            Unrestricted    USD -10,000.00
+   2025-08-01         Converted MXN settlement     Unrestricted        USD 260.00
+   2025-09-15         Gala ticket deposit          Unrestricted      USD 3,000.00
+   2025-09-20         Caterer invoice payment      Unrestricted     USD -1,000.00
+   2025-11-01         Office supplies payment      Unrestricted       USD -600.00
+   2026-01-10         Tuition fees received        Unrestricted      USD 1,200.00
+   2026-02-27         Payroll run Feb 2026         Unrestricted     USD -8,500.00
+>  2026-05-31         Cleared total                                 USD 36,735.00
+=  2026-05-31         Closing balance                               USD 36,735.00

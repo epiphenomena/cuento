@@ -602,7 +602,7 @@ input[aria-invalid="true"] {
 
 /* Flexible text columns: take the remaining width, truncate with ellipsis
    rather than wrap. The max-width is the bound the ellipsis needs to trigger. */
-.register-table .reg-payee,
+.register-table .reg-description,
 .register-table .reg-memo,
 .register-table .reg-counter {
   max-width: 14rem;

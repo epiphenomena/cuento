@@ -413,7 +413,7 @@ func (q *Queries) PriorFinalizedStatementBalance(ctx context.Context, arg PriorF
 }
 
 const reconciliationClearedSplits = `-- name: ReconciliationClearedSplits :many
-SELECT s.id, s.transaction_id, s.amount, s.fund_id, s.memo,
+SELECT s.id, s.transaction_id, s.amount, s.fund_id, s.memo, s.description,
        t.date, t.subsidiary_id, t.payee_id, t.memo AS txn_memo
 FROM splits s
 JOIN transactions t ON t.id = s.transaction_id
@@ -428,6 +428,7 @@ type ReconciliationClearedSplitsRow struct {
 	Amount        int64
 	FundID        sql.NullInt64
 	Memo          string
+	Description   string
 	Date          string
 	SubsidiaryID  int64
 	PayeeID       sql.NullInt64
@@ -460,6 +461,7 @@ func (q *Queries) ReconciliationClearedSplits(ctx context.Context, reconciliatio
 			&i.Amount,
 			&i.FundID,
 			&i.Memo,
+			&i.Description,
 			&i.Date,
 			&i.SubsidiaryID,
 			&i.PayeeID,

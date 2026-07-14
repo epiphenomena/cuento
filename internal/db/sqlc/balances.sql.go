@@ -95,7 +95,7 @@ WITH RECURSIVE scope(id) AS (
 )
 SELECT sp.id AS split_id, t.id AS txn_id, t.date, t.subsidiary_id, t.currency,
        sp.amount, sp.fund_id, sp.program_id, sp.functional_class,
-       sp.memo AS split_memo, t.memo AS txn_memo, t.payee_id
+       sp.memo AS split_memo, t.memo AS txn_memo, t.payee_id, sp.description
 FROM splits sp
 JOIN transactions t ON t.id = sp.transaction_id
 WHERE t.deleted = 0
@@ -142,6 +142,7 @@ type DrillSplitsRow struct {
 	SplitMemo       string
 	TxnMemo         string
 	PayeeID         sql.NullInt64
+	Description     string
 }
 
 // The report DRILL-DOWN (p15.3d): every non-deleted split contributing to ONE
@@ -211,6 +212,7 @@ func (q *Queries) DrillSplits(ctx context.Context, arg DrillSplitsParams) ([]Dri
 			&i.SplitMemo,
 			&i.TxnMemo,
 			&i.PayeeID,
+			&i.Description,
 		); err != nil {
 			return nil, err
 		}
@@ -480,6 +482,7 @@ filtered AS (
   SELECT sp.id AS split_id, t.id AS txn_id, t.date, t.subsidiary_id,
          t.currency, sp.account_id, sp.amount, sp.fund_id, sp.program_id,
          sp.functional_class, sp.memo AS split_memo, t.memo AS txn_memo, t.payee_id,
+         sp.description,
          CAST(SUM(sp.amount) OVER (
            PARTITION BY t.currency
            ORDER BY t.date, sp.id
@@ -498,7 +501,7 @@ filtered AS (
     AND (? = 0 OR sp.program_id = ?)
 )
 SELECT split_id, txn_id, date, subsidiary_id, currency, account_id, amount, fund_id,
-       program_id, functional_class, split_memo, txn_memo, payee_id,
+       program_id, functional_class, split_memo, txn_memo, payee_id, description,
        running_balance
 FROM filtered
 ORDER BY date DESC, split_id DESC
@@ -536,6 +539,7 @@ type RegisterPageRow struct {
 	SplitMemo       string
 	TxnMemo         string
 	PayeeID         sql.NullInt64
+	Description     string
 	RunningBalance  int64
 }
 
@@ -611,6 +615,7 @@ func (q *Queries) RegisterPage(ctx context.Context, arg RegisterPageParams) ([]R
 			&i.SplitMemo,
 			&i.TxnMemo,
 			&i.PayeeID,
+			&i.Description,
 			&i.RunningBalance,
 		); err != nil {
 			return nil, err

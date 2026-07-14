@@ -51,7 +51,7 @@ type regRow struct {
 	// Rendered strings (rule 9/10).
 	Date              string // formatted per the user's date setting
 	SubName           string // subsidiary name (rendered only when the page shows the badge)
-	PayeeName         string // "" = no payee
+	Description       string // split description (p26.17 Description column; "" = none)
 	Memo              string // split memo, else txn memo
 	CounterAccount    string // the other account's name (2-split); "" when IsSplit
 	IsSplit           bool   // true for a >2-split txn -> template shows the "Split" word
@@ -81,10 +81,6 @@ func registerRows(
 	}
 
 	names, err := accountNameMap(ctx, st, lang)
-	if err != nil {
-		return nil, store.RegisterCursor{}, false, err
-	}
-	payees, err := payeeNameMap(ctx, st)
 	if err != nil {
 		return nil, store.RegisterCursor{}, false, err
 	}
@@ -130,10 +126,6 @@ func registerRows(
 		if memo == "" {
 			memo = r.TxnMemo
 		}
-		payee := ""
-		if r.PayeeID != nil {
-			payee = payees[*r.PayeeID]
-		}
 		fund := ""
 		if r.FundID != nil {
 			fund = funds[*r.FundID]
@@ -149,7 +141,7 @@ func registerRows(
 			Currency:          r.Currency,
 			Date:              money.FormatDate(parseISOForDisplay(r.Date), df),
 			SubName:           subs[r.SubsidiaryID],
-			PayeeName:         payee,
+			Description:       r.Description,
 			Memo:              memo,
 			CounterAccount:    ca.name,
 			IsSplit:           ca.isSplit,

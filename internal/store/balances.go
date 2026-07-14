@@ -260,6 +260,7 @@ type RegisterRow struct {
 	FunctionalClass *string
 	SplitMemo       string
 	TxnMemo         string
+	Description     string // per-split free-text (p26.15); the register Description column
 	PayeeID         *int64
 	RunningBalance  int64 // cumulative to this row within its currency
 }
@@ -363,6 +364,7 @@ func (s *Store) RegisterPage(
 			FunctionalClass: nullStringToPtr(r.FunctionalClass),
 			SplitMemo:       r.SplitMemo,
 			TxnMemo:         r.TxnMemo,
+			Description:     r.Description,
 			PayeeID:         nullInt64ToPtr(r.PayeeID),
 			RunningBalance:  r.RunningBalance,
 		}
@@ -480,6 +482,7 @@ type DrillRow struct {
 	FunctionalClass *string
 	SplitMemo       string
 	TxnMemo         string
+	Description     string // per-split free-text (p26.15); the ledger Description cell
 	PayeeID         *int64
 }
 
@@ -537,6 +540,7 @@ func (s *Store) DrillSplits(ctx context.Context, f DrillFilter) ([]DrillRow, err
 			FunctionalClass: nullStringToPtr(r.FunctionalClass),
 			SplitMemo:       r.SplitMemo,
 			TxnMemo:         r.TxnMemo,
+			Description:     r.Description,
 			PayeeID:         nullInt64ToPtr(r.PayeeID),
 		}
 	}

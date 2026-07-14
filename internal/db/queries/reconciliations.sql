@@ -188,7 +188,7 @@ ORDER BY t.date, s.id;
 -- reconciliation spans all funds AND all subsidiaries (D13/D20), and its cleared set
 -- is fully identified by reconciliation_id; scoping would shrink the set and break the
 -- chain. Param: reconciliation_id.
-SELECT s.id, s.transaction_id, s.amount, s.fund_id, s.memo,
+SELECT s.id, s.transaction_id, s.amount, s.fund_id, s.memo, s.description,
        t.date, t.subsidiary_id, t.payee_id, t.memo AS txn_memo
 FROM splits s
 JOIN transactions t ON t.id = s.transaction_id

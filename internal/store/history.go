@@ -48,6 +48,9 @@ const (
 	FieldProgram    HistoryField = "program"
 	FieldFunctional HistoryField = "functional_class"
 	FieldSplitMemo  HistoryField = "memo"
+	// FieldSplitDescription is a split's per-line free-text description (p26.15/p26.17),
+	// surfaced in the split diff now that splits_versions carries it.
+	FieldSplitDescription HistoryField = "description"
 )
 
 // DiffValue is one side (old or new) of a field change. Exactly one representation
@@ -229,6 +232,9 @@ func splitDiff(prev, cur *sqlc.SplitVersionHistoryRow) []FieldDiff {
 	if prev.Memo != cur.Memo {
 		diffs = append(diffs, FieldDiff{Field: FieldSplitMemo, Old: DiffValue{Text: prev.Memo}, New: DiffValue{Text: cur.Memo}})
 	}
+	if prev.Description != cur.Description {
+		diffs = append(diffs, FieldDiff{Field: FieldSplitDescription, Old: DiffValue{Text: prev.Description}, New: DiffValue{Text: cur.Description}})
+	}
 	return diffs
 }
 
@@ -255,6 +261,9 @@ func splitFieldsFull(row *sqlc.SplitVersionHistoryRow, newSide bool) []FieldDiff
 	}
 	if row.Memo != "" {
 		diffs = append(diffs, put(FieldSplitMemo, DiffValue{Text: row.Memo}))
+	}
+	if row.Description != "" {
+		diffs = append(diffs, put(FieldSplitDescription, DiffValue{Text: row.Description}))
 	}
 	return diffs
 }
