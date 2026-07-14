@@ -113,4 +113,29 @@ test.describe('chart of accounts', () => {
     await expect(page.getByText('Renamed E2E')).toBeVisible();
     await expect(page.getByText('Editable E2E')).toHaveCount(0);
   });
+
+  // p26.14: the subsidiary + active-only filters are remembered in the session, so
+  // a fresh navigation back to /accounts restores the last-used selection instead
+  // of resetting to defaults. Sets a real filter (sub -> the root subsidiary,
+  // active-only checked), navigates away, and asserts both are restored on return.
+  test('remembers and restores the filter selection across navigation', async ({ page, server }) => {
+    await login(page, server);
+    await page.goto('/accounts');
+
+    // Set a deliberate filter: pick the root subsidiary and check "active only".
+    // The form auto-applies on change (htmx GET), which saves it to the session.
+    await page.locator('#sub-filter').selectOption('1');
+    await page.locator('input[name="active"]').check();
+    // Let the htmx change-fetch settle (it swaps #accounts-results).
+    await expect(page.locator('#accounts-results')).toBeVisible();
+
+    // Navigate away to another in-app page (same session), then come back to a
+    // BARE /accounts with no query params -- a fresh nav that must restore.
+    await page.goto('/funds');
+    await page.goto('/accounts');
+
+    // The saved selection is restored from the session.
+    await expect(page.locator('#sub-filter')).toHaveValue('1');
+    await expect(page.locator('input[name="active"]')).toBeChecked();
+  });
 });

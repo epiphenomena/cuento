@@ -25,6 +25,15 @@ const sessionIdleTimeout = 2 * time.Hour
 // effect without re-login.
 const sessionUserKey = "user_id"
 
+// sessionAcctSubKey / sessionAcctActiveKey remember the chart-of-accounts filter
+// selection (subsidiary id + active-only bool) across navigations (p26.14). This
+// is a pure UI convenience, not versioned business data -- no DB column, no
+// user-settings row; it lives only in the scs session.
+const (
+	sessionAcctSubKey    = "accounts_sub_filter"
+	sessionAcctActiveKey = "accounts_active_only"
+)
+
 // newSessionManager builds the scs SessionManager backed by the goose-managed
 // `sessions` table via sqlite3store (D9). Cookie posture follows rule 13:
 // HttpOnly and SameSite=Lax (scs defaults, set explicitly for clarity and to

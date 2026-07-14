@@ -112,8 +112,33 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(ctx)
 	lang := langOf(ctx)
 
-	subFilter := parseID(r.URL.Query().Get("sub"))
-	activeOnly := r.URL.Query().Get("active") == "1"
+	// p26.14: remember the last-used filter selection in the session so a fresh
+	// navigation to /accounts (bare URL, from the nav) restores it. The signal that
+	// distinguishes a deliberate filter submit from a fresh visit is the PRESENCE of
+	// the `sub` key: the filter form's `sub` select ALWAYS submits a value (min
+	// `sub=0` for "all") on both the htmx change-fetch and the noscript submit,
+	// whereas a bare nav carries no query params at all. Keying on presence (not a
+	// non-empty value) is what makes "unchecked active is remembered as OFF" work:
+	// on a sub-present request `active` reads false when unchecked and we SAVE that
+	// false, never falling into the restore branch (which would otherwise treat the
+	// missing `active` as "no preference" and wrongly restore the default). The
+	// `active` checkbox key is unreliable on its own (absent when unchecked), so it
+	// is never used as the discriminator.
+	q := r.URL.Query()
+	var subFilter int64
+	var activeOnly bool
+	if q.Has("sub") {
+		subFilter = parseID(q.Get("sub"))
+		activeOnly = q.Get("active") == "1"
+		s.sessions.Put(ctx, sessionAcctSubKey, subFilter)
+		s.sessions.Put(ctx, sessionAcctActiveKey, activeOnly)
+	} else {
+		// Fresh visit: restore. scs GetInt64/GetBool return 0/false when unset,
+		// which already equals the page's defaults (all subsidiaries, show inactive),
+		// so "none stored" needs no special-casing.
+		subFilter = s.sessions.GetInt64(ctx, sessionAcctSubKey)
+		activeOnly = s.sessions.GetBool(ctx, sessionAcctActiveKey)
+	}
 
 	var subPtr *int64
 	if subFilter > 0 {

@@ -547,6 +547,120 @@ func TestBalancesColumnMatchesQuery(t *testing.T) {
 	}
 }
 
+// TestAccountsFilterRemembered: p26.14 -- the chart-of-accounts subsidiary+active
+// filters are remembered in the session. A GET carrying the filter form params
+// (sub present, active off) both applies and SAVES the selection; a later bare
+// nav to /accounts (no params) RESTORES it, including "active only" OFF (which is
+// remembered as off, not treated as "no preference -> restore default on").
+func TestAccountsFilterRemembered(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	admin := mkUser(t, st, "admin2", "read", true)
+
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	subA, err := st.CreateSubsidiary(ctx, store.CreateSubsidiaryInput{ParentID: 1, Name: "Alpha", BaseCurrency: "USD"})
+	if err != nil {
+		t.Fatalf("create sub: %v", err)
+	}
+
+	// One session shared across both requests (same token row => request 2 reads
+	// the value request 1 committed).
+	cookie := mintCookie(t, sm, admin)
+	do := func(path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// (a) A deliberate filter submit: sub present + active unchecked (no active key).
+	rec := do("/accounts?sub=" + itoa(subA))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("filter GET = %d, body: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `value="`+itoa(subA)+`" selected`) {
+		t.Fatalf("filter GET did not select sub %d; body: %s", subA, rec.Body.String())
+	}
+
+	// (b) A bare nav to /accounts (no params) must RESTORE the saved selection.
+	rec = do("/accounts")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bare GET = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `value="`+itoa(subA)+`" selected`) {
+		t.Errorf("bare GET did not restore sub %d; body: %s", subA, body)
+	}
+	// "active only" was OFF on the saving request -> restored OFF: the checkbox
+	// input must NOT carry `checked`.
+	if activeCheckboxChecked(body) {
+		t.Errorf("bare GET restored active-only as ON; want remembered OFF; body: %s", body)
+	}
+}
+
+// TestAccountsFilterActiveOffOverwritesOn: the load-bearing case the task singles
+// out. Within ONE session, save active ON, then a later sub-present request with
+// active UNCHECKED must OVERWRITE the remembered value to OFF (not be treated as
+// "no preference"), so a subsequent bare nav restores OFF. This discriminates the
+// correct unconditional save from a "save only when on" bug.
+func TestAccountsFilterActiveOffOverwritesOn(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	admin := mkUser(t, st, "admin4", "read", true)
+	cookie := mintCookie(t, sm, admin)
+	do := func(path string) string {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d", path, rec.Code)
+		}
+		return rec.Body.String()
+	}
+	do("/accounts?sub=0&active=1")              // remember active ON
+	do("/accounts?sub=0")                       // sub present, active unchecked -> overwrite to OFF
+	if activeCheckboxChecked(do("/accounts")) { // bare nav must restore OFF
+		t.Errorf("active-only was not overwritten to OFF by an unchecked sub-present request")
+	}
+}
+
+// TestAccountsFilterRememberedActiveOn: the mirror case -- saving with active=1
+// restores active-only ON.
+func TestAccountsFilterRememberedActiveOn(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	admin := mkUser(t, st, "admin3", "read", true)
+	cookie := mintCookie(t, sm, admin)
+	do := func(path string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := do("/accounts?sub=0&active=1"); rec.Code != http.StatusOK {
+		t.Fatalf("filter GET = %d", rec.Code)
+	}
+	body := do("/accounts").Body.String()
+	if !activeCheckboxChecked(body) {
+		t.Errorf("bare GET did not restore active-only ON; body: %s", body)
+	}
+}
+
+// activeCheckboxChecked reports whether the rendered active-only checkbox input
+// carries `checked`. It isolates the input tag so an unrelated `checked` elsewhere
+// can't fool the assertion.
+func activeCheckboxChecked(body string) bool {
+	i := strings.Index(body, `name="active"`)
+	if i < 0 {
+		return false
+	}
+	end := strings.IndexByte(body[i:], '>')
+	if end < 0 {
+		return false
+	}
+	return strings.Contains(body[i:i+end], "checked")
+}
+
 // itoa is a tiny local int64->string to keep the test file dependency-free.
 func itoa(n int64) string {
 	if n == 0 {
