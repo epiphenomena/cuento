@@ -21,7 +21,7 @@
 // locator/URL/response waits and a plain page.request fetch for the CSV.
 
 const { test, expect } = require('../fixtures');
-const { saveAndReload } = require('../helpers');
+const { saveAndReload, openNewAccount, saveAccount } = require('../helpers');
 
 const TB = '/reports/trial_balance';
 const BS = '/reports/balance_sheet';
@@ -45,15 +45,13 @@ async function login(page, server) {
 // txn-editor spec): waits for the inline form to settle before Save (hx-post wired)
 // and for the reload response (the new row is in the SSR DOM).
 async function createAsset(page, name) {
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('#af-name-en')).toBeVisible();
+  await openNewAccount(page);
   await page.locator('#af-name-en').fill(name);
   const rootSub = page.locator('input[name="sub_1"]');
   if (!(await rootSub.isChecked())) {
     await rootSub.check();
   }
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  await saveAccount(page);
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 
@@ -362,9 +360,7 @@ test('reports: open the functional expenses (990 Part IX), see the 990-line rows
   // An asset account to fund the expense, and an EXPENSE account carrying an effective
   // Part IX line (IX.16 Occupancy) and a default functional class (management).
   await createAsset(page, 'FE Bank');
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+  await openNewAccount(page);
   // Choosing the expense type swaps in the expense form (the #af-func class field and the
   // type-filtered #af-990 line select), preserving the typed name/sub (overlayFormValues).
   await page.locator('#af-type').selectOption('expense');
@@ -376,7 +372,7 @@ test('reports: open the functional expenses (990 Part IX), see the 990-line rows
   // The 990 line select (#af-990) offers the expense (Part IX) lines; pick IX.16 Occupancy
   // so the account has an effective Part IX code and lands on its own 990 line.
   await page.locator('#af-990').selectOption('IX.16');
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  await saveAccount(page);
   await expect(page.locator('tr.acct-row', { hasText: 'FE Rent' })).toBeVisible();
 
   // Post an expense transaction: debit FE Rent (an expense, class prefilled management),
@@ -516,9 +512,7 @@ test('reports: open the balance sheet, see the sections + net-asset split + a ba
 // type change triggers an htmx form-swap, like the expense path in txn-editor.spec.js);
 // a revenue split is the "Received" side of a fund receipt.
 async function createRevenueAccount(page, name) {
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+  await openNewAccount(page);
   await page.locator('#af-type').selectOption('revenue');
   // #af-program (the IsRE default-program select) exists ONLY on the revenue/expense
   // form, so waiting for it confirms the type-change hx-get swap landed (the old asset
@@ -529,7 +523,7 @@ async function createRevenueAccount(page, name) {
   await page.locator('#af-name-en').fill(name);
   const rootSub = page.locator('input[name="sub_1"]');
   if (!(await rootSub.isChecked())) await rootSub.check();
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  await saveAccount(page);
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 
@@ -537,16 +531,14 @@ async function createRevenueAccount(page, name) {
 // mapped to the root subsidiary. An expense split requires a functional class (rule 7),
 // which prefills from this default on the txn form.
 async function createExpenseAccount(page, name) {
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+  await openNewAccount(page);
   await page.locator('#af-type').selectOption('expense');
   await expect(page.locator('#af-func')).toBeVisible();
   await page.locator('#af-name-en').fill(name);
   const rootSub = page.locator('input[name="sub_1"]');
   if (!(await rootSub.isChecked())) await rootSub.check();
   await page.locator('#af-func').selectOption('program');
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  await saveAccount(page);
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 
@@ -867,9 +859,7 @@ test('reports: open the 990 package, see the four Parts + Unmapped buckets + tot
   await createAsset(page, 'F990 Bank E2E');
   await createRevenueAccount(page, 'F990 Gift E2E'); // no 990 code -> Unmapped (Part VIII)
 
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+  await openNewAccount(page);
   await page.locator('#af-type').selectOption('expense');
   await expect(page.locator('#af-func')).toBeVisible();
   await page.locator('#af-name-en').fill('F990 Rent E2E');
@@ -877,7 +867,7 @@ test('reports: open the 990 package, see the four Parts + Unmapped buckets + tot
   if (!(await rootSub.isChecked())) await rootSub.check();
   await page.locator('#af-func').selectOption('management');
   await page.locator('#af-990').selectOption('IX.16'); // effective Part IX line
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  await saveAccount(page);
   await expect(page.locator('tr.acct-row', { hasText: 'F990 Rent E2E' })).toBeVisible();
 
   // A revenue receipt: DR F990 Bank 90.00, CR F990 Gift 90.00 (the revenue split carries a

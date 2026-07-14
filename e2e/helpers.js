@@ -33,4 +33,27 @@ async function saveAndReload(page, { reloadPath, formSelector = 'form#account-fo
   await reloaded;
 }
 
-module.exports = { saveAndReload };
+// openNewAccount navigates to the create-account page (p26.7). The New-account
+// trigger on /accounts is now a plain LINK to GET /accounts/new (its own full-shell
+// page), not an inline htmx swap into #account-form. Many specs create an account as
+// fixture setup; this centralizes the changed mechanics (link click + navigation
+// wait) so the field-filling stays inline in each spec. Waits for #af-name-en so the
+// form is ready to fill.
+async function openNewAccount(page) {
+  await page.goto('/accounts');
+  await page.getByRole('link', { name: /new account/i }).click();
+  await page.waitForURL('**/accounts/new');
+  await expect(page.locator('#af-name-en')).toBeVisible();
+}
+
+// saveAccount submits the create/edit form (p26.7). Save is a plain full-page POST
+// that 303-redirects to /accounts on success (PRG), so we wait for that navigation.
+// (A validation failure re-renders the SAME page at 422; for create the POST action
+// is also /accounts so this still resolves — the caller's follow-up assertion catches
+// a real failure, matching the old saveAndReload contract.)
+async function saveAccount(page) {
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL('**/accounts');
+}
+
+module.exports = { saveAndReload, openNewAccount, saveAccount };

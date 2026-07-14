@@ -14,7 +14,7 @@
 //   - confirm button:   button "Confirm merge"
 
 const { test, expect } = require('../fixtures');
-const { saveAndReload } = require('../helpers');
+const { saveAccount } = require('../helpers');
 
 async function login(page, server) {
   await page.goto('/login');
@@ -32,16 +32,19 @@ async function login(page, server) {
 // under parallel load; the form just sits open). Merge is type-agnostic (it needs
 // two same-type leaves), so asset leaves are equivalent coverage without the race.
 async function createLeaf(page, name) {
-  await page.getByRole('button', { name: /new account/i }).click();
+  // p26.7: New account is its own full page (GET /accounts/new). The caller is
+  // already on /accounts, so navigate via the New-account link.
+  await page.getByRole('link', { name: /new account/i }).click();
+  await page.waitForURL('**/accounts/new');
   await expect(page.locator('#af-name-en')).toBeVisible();
   await page.locator('#af-name-en').fill(name);
   const rootSub = page.locator('input[name="sub_1"]');
   if (!(await rootSub.isChecked())) {
     await rootSub.check();
   }
-  // saveAndReload waits for the form to settle (Save's hx-post wired) and for the
-  // reload response (waitForURL is a no-op when already on /accounts) -- see helpers.js.
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  // saveAccount submits the plain full-page POST and waits for the 303 back to
+  // /accounts (see helpers.js).
+  await saveAccount(page);
   await expect(page.getByText(name, { exact: true })).toBeVisible();
 }
 

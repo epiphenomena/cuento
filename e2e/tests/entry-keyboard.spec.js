@@ -24,7 +24,7 @@
 // and asserts focus/save, proving the keys work in a real browser.
 
 const { test, expect } = require('../fixtures');
-const { saveAndReload } = require('../helpers');
+const { openNewAccount, saveAccount } = require('../helpers');
 
 async function login(page, server) {
   await page.goto('/login');
@@ -37,13 +37,11 @@ async function login(page, server) {
 // createAsset makes a leaf asset account (the form's default type, so no type-change
 // re-fetch race) mapped to the root subsidiary. Mirrors txn-editor.spec.js.
 async function createAsset(page, name) {
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('#af-name-en')).toBeVisible();
+  await openNewAccount(page);
   await page.locator('#af-name-en').fill(name);
   const rootSub = page.locator('input[name="sub_1"]');
   if (!(await rootSub.isChecked())) await rootSub.check();
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  await saveAccount(page);
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 

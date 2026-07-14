@@ -11,7 +11,7 @@
 // swap), so they need no settle dance; the editor save is a plain submit.
 
 const { test, expect } = require('../fixtures');
-const { saveAndReload } = require('../helpers');
+const { openNewAccount, saveAccount } = require('../helpers');
 
 // The htmx settle marker is installed centrally by the `page` fixture (fixtures.js);
 // the per-row p12.4 actions (edit/void/duplicate/history) are plain full-page <a>
@@ -26,15 +26,13 @@ async function login(page, server) {
 }
 
 async function createAsset(page, name) {
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('#af-name-en')).toBeVisible();
+  await openNewAccount(page);
   await page.locator('#af-name-en').fill(name);
   const rootSub = page.locator('input[name="sub_1"]');
   if (!(await rootSub.isChecked())) {
     await rootSub.check();
   }
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  await saveAccount(page);
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 

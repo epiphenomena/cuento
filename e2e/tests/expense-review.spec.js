@@ -21,6 +21,7 @@
 // destination GET response deterministically. RULE 11: all data synthetic.
 
 const { test, expect } = require('../fixtures');
+const { openNewAccount, saveAccount } = require('../helpers');
 
 function unique() {
   return Math.random().toString(36).slice(2, 8);
@@ -42,13 +43,14 @@ async function login(page, username, password) {
 // .e2e-settled` immediately before the click so the swapped-in form's Save hx-post is
 // wired (the settle-race helpers.js documents).
 async function createLeafAccount(page, type, name) {
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
-  // Changing the type re-fetches the whole form (hx-get on #af-type). Wait for THAT GET
-  // swap to arrive before touching the swapped form, so the following settle-wait can
-  // never resolve on the STALE pre-swap `.e2e-settled` marker (the settle race helpers.js
-  // documents) -- the flake class that dropped the Save click under parallel load.
+  // p26.7: the create form is its own full-shell page (GET /accounts/new). Changing
+  // the type still re-fetches the form in place as an htmx swap (hx-get on #af-type,
+  // HX-Target #account-form -> the bare partial), so the type-swap + settle waits
+  // below are unchanged; only the way we OPEN the form is now a navigation.
+  await openNewAccount(page);
+  // Wait for THAT GET swap to arrive before touching the swapped form, so the
+  // following settle-wait can never resolve on the STALE pre-swap `.e2e-settled`
+  // marker (the settle race helpers.js documents).
   const typeSwapped = page.waitForResponse(
     (r) => new URL(r.url()).pathname === '/accounts/new' && r.request().method() === 'GET',
   );
@@ -63,12 +65,8 @@ async function createLeafAccount(page, type, name) {
   if (!(await rootSub.isChecked())) await rootSub.check();
   if (type === 'expense') await page.locator('#af-func').selectOption('program');
 
-  const reloaded = page.waitForResponse(
-    (r) => new URL(r.url()).pathname === '/accounts' && r.request().method() === 'GET',
-  );
-  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
-  await page.getByRole('button', { name: /^save$/i }).click();
-  await reloaded;
+  // Save is a plain full-page POST -> 303 back to /accounts.
+  await saveAccount(page);
   await expect(page.getByText(name)).toBeVisible();
   return name;
 }

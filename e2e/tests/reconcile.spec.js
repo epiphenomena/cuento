@@ -26,7 +26,7 @@
 // / transaction_form.tmpl.
 
 const { test, expect } = require('../fixtures');
-const { saveAndReload } = require('../helpers');
+const { openNewAccount, saveAccount } = require('../helpers');
 
 async function login(page, server) {
   await page.goto('/login');
@@ -40,9 +40,7 @@ async function login(page, server) {
 // the reconcilable flag when asked. `type` 'asset' is the form default (no type-change
 // re-fetch); other types trigger the htmx form swap, so we wait for it to settle.
 async function createAccount(page, name, type, reconcilable) {
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+  await openNewAccount(page);
   if (type !== 'asset') {
     await page.locator('#af-type').selectOption(type);
     // The type change swaps the form; wait for the new form to settle again.
@@ -58,7 +56,7 @@ async function createAccount(page, name, type, reconcilable) {
     const recon = page.locator('input[name="reconcilable"]');
     if (!(await recon.isChecked())) await recon.check();
   }
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  await saveAccount(page);
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 

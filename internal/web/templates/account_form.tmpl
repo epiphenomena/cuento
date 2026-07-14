@@ -1,30 +1,27 @@
 {{/*
-  p11.1 chart-of-accounts create/edit form partial ("account-form"). SINGLE SOURCE
-  of the form region: the page renders the "New account" trigger inside
-  #account-form; GET /accounts/new and /accounts/{id}/edit swap THIS partial in
-  (hx-target #account-form, outerHTML), and a failed POST re-renders it at 422 --
-  so input ids stay stable across every swap (anti-jank, Appendix C). The dot is
-  always an accountForm.
+  p11.1 / p26.7 chart-of-accounts create/edit form partial ("account-form"). SINGLE
+  SOURCE of the form region, embedded by account_form_page.tmpl (the dedicated
+  full-shell create/edit page, p26.7). The dot is always an accountForm.
 
-  hx-post targets /accounts (create) when .ID is 0, else /accounts/{id} (edit).
-  hx-target="#account-form" + hx-swap="outerHTML": the 422 error render lands in
-  place; a 2xx/3xx success is a server redirect to /accounts (htmx follows it),
-  reloading the tree. Field errors come from .Errors (formErrors): .Errors.ErrorKey
-  "field" is the i18n KEY (or "") rendered via {{t}} (rule 9); autofocus is stamped
-  on .Errors.FirstInvalid only. No inline script/style (strict CSP, rule 12).
+  A PLAIN full-page POST (method=post action=/accounts | /accounts/{id}) -- NOT an
+  htmx target swap: on success the handler 303-redirects to /accounts (PRG); on a
+  store typed error it re-renders the WHOLE page at 422 with the field error +
+  autofocus on the first invalid control (anti-jank: input ids stay stable across
+  the re-render, Appendix C). Field errors come from .Errors (formErrors):
+  .Errors.ErrorKey "field" is the i18n KEY (or "") rendered via {{t}} (rule 9);
+  autofocus is stamped on .Errors.FirstInvalid only. No inline script/style (rule 12).
 
   Type-dependent regions: the functional-class select shows only for expense
   accounts (.IsExpense), the default-program select only for revenue/expense
-  (.IsRE). Changing type re-fetches the form (hx-get on the type select) so those
-  regions and the filtered 990/parent options refresh; a full submit still
-  validates server-side (the store is the source of truth).
+  (.IsRE). Changing type re-fetches JUST this form region (hx-get on the type
+  select, hx-target #account-form, outerHTML) so those regions and the filtered
+  990/parent options refresh in place on the standalone page; the handler serves
+  the bare partial for that swap (HX-Target header) and the full page otherwise. A
+  full submit still validates server-side (the store is the source of truth).
 */ -}}
 {{define "account-form" -}}
-<form id="account-form" class="account-form"
-      hx-post="{{if .ID}}/accounts/{{.ID}}{{else}}/accounts{{end}}"
-      hx-target="#account-form" hx-swap="outerHTML">
-
-  <h2>{{if .ID}}{{t "accounts.form.edit_title"}}{{else}}{{t "accounts.form.new_title"}}{{end}}</h2>
+<form id="account-form" class="account-form" method="post"
+      action="{{if .ID}}/accounts/{{.ID}}{{else}}/accounts{{end}}">
 
   <div class="field">
     <label for="af-type">{{t "accounts.form.type"}}</label>

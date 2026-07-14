@@ -100,13 +100,14 @@ test.describe('CSP console clean across the -dev UI', () => {
       await page.waitForLoadState('networkidle');
     }
 
-    // Trigger an htmx SWAP: the chart-of-accounts "new account" inline form arrives
-    // as a partial swapped into the page (not a full navigation). A swapped-in
-    // fragment can carry inline style a static page load never renders, so exercising
-    // one closes that gap. The form settles (fixtures stamps e2e-settled) with no CSP
-    // violation if the partial is inline-free.
+    // Trigger an htmx SWAP: the chart-of-accounts "merge" form arrives as a partial
+    // swapped into #account-form (not a full navigation). A swapped-in fragment can
+    // carry inline style a static page load never renders, so exercising one closes
+    // that gap. (New/Edit moved to their own full pages in p26.7; Merge stays inline
+    // and is the remaining inline swap on this page.) The form settles (fixtures
+    // stamps e2e-settled) with no CSP violation if the partial is inline-free.
     await page.goto('/accounts');
-    await page.getByRole('button', { name: /new account/i }).click();
+    await page.getByRole('button', { name: /merge/i }).click();
     await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
 
     expect(violations, `CSP violations detected:\n${violations.join('\n')}`).toEqual([]);

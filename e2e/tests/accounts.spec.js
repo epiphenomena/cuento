@@ -1,18 +1,24 @@
 // @ts-check
-// Functional test of the REAL chart-of-accounts flow (p11.1). It drives the
+// Functional test of the REAL chart-of-accounts flow (p11.1, p26.7). It drives the
 // actual /accounts page served by `cuento serve -dev` against a fresh migrated db
 // with a seeded admin (who is is_admin, hence TxnWrite). It logs in, creates an
-// account through the real inline htmx form, asserts it appears in the tree, edits
-// it, and proves a bad submit shows the localized field error inline (the p10.3
-// form-error convention). Selectors come straight from account_form.tmpl /
+// account through the real create form, asserts it appears in the tree, edits it,
+// and proves a bad submit shows the localized field error (the p10.3 form-error
+// convention).
+//
+// p26.7: the create/edit form moved OUT of the inline #account-form htmx swap onto
+// dedicated full-shell pages. The New/Edit triggers are now plain links (a full-page
+// navigation to GET /accounts/new and /accounts/{id}/edit), and Save is a plain POST
+// that 303-redirects to /accounts on success or re-renders the WHOLE page at 422 with
+// the field error + autofocus on failure. Selectors from account_form.tmpl /
 // accounts.tmpl:
-//   - New-account trigger:  button "New account" (hx-get /accounts/new)
+//   - New-account trigger:  link "New account" (-> /accounts/new)
+//   - per-row Edit trigger:  link "Edit" (-> /accounts/{id}/edit)
 //   - form fields:          #af-name-en, #af-name-es, #af-type, #af-currency
 //   - subsidiary checklist: input[name="sub_1"] (the root "Organization")
-//   - inline field error:   p.field-error (rendered {{t error.account.*}})
+//   - field error:          p.field-error (rendered {{t error.account.*}})
 
 const { test, expect } = require('../fixtures');
-const { saveAndReload } = require('../helpers');
 
 // login signs the admin in and lands on the authenticated shell. Reused by every
 // test here (no storageState wiring in this suite; a fresh login is cheap).
@@ -25,14 +31,15 @@ async function login(page, server) {
 }
 
 test.describe('chart of accounts', () => {
-  test('creates an account through the inline form and it appears in the tree', async ({ page, server }) => {
+  test('creates an account through the form page and it appears in the tree', async ({ page, server }) => {
     await login(page, server);
 
     await page.goto('/accounts');
     await expect(page.getByRole('heading', { name: /chart of accounts/i })).toBeVisible();
 
-    // Open the inline create form (htmx swaps #account-form).
-    await page.getByRole('button', { name: /new account/i }).click();
+    // Open the create form on its OWN page (a plain navigation, p26.7).
+    await page.getByRole('link', { name: /new account/i }).click();
+    await page.waitForURL('**/accounts/new');
     await expect(page.locator('#af-name-en')).toBeVisible();
 
     // Fill a valid create: en + es names, type asset, root subsidiary checked.
@@ -46,21 +53,23 @@ test.describe('chart of accounts', () => {
       await rootSub.check();
     }
 
-    // Success is a server redirect to /accounts; the new account is in the tree.
-    await saveAndReload(page, { reloadPath: '/accounts' });
+    // Success is a server 303-redirect back to /accounts; the new account is in the tree.
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL('**/accounts');
     await expect(page.getByText('Petty Cash E2E')).toBeVisible();
   });
 
-  test('a bad submit shows the localized field error inline', async ({ page, server }) => {
+  test('a bad submit re-renders the page with the localized field error', async ({ page, server }) => {
     await login(page, server);
     await page.goto('/accounts');
 
-    await page.getByRole('button', { name: /new account/i }).click();
+    await page.getByRole('link', { name: /new account/i }).click();
+    await page.waitForURL('**/accounts/new');
     await expect(page.locator('#af-name-en')).toBeVisible();
 
     // Leave the English name blank -> the store rejects with ErrNameRequired, which
-    // the handler maps to error.account.name_required and re-renders the form region
-    // at 422 (htmx swaps it in). The field error must appear inline.
+    // the handler maps to error.account.name_required and re-renders the WHOLE page
+    // at 422 with the field error + native autofocus on the invalid name input.
     await page.locator('#af-name-en').fill('');
     const rootSub = page.locator('input[name="sub_1"]');
     if (!(await rootSub.isChecked())) {
@@ -68,10 +77,11 @@ test.describe('chart of accounts', () => {
     }
     await page.getByRole('button', { name: /^save$/i }).click();
 
-    // The inline localized error is shown, and we did NOT navigate away.
+    // The localized error is shown; we stayed on the form (POST action is /accounts).
     await expect(page.locator('p.field-error')).toBeVisible();
     await expect(page.locator('p.field-error')).toContainText(/english name is required/i);
-    expect(new URL(page.url()).pathname).toBe('/accounts');
+    // Autofocus landed on the first invalid control (native on a real page render).
+    await expect(page.locator('#af-name-en')).toBeFocused();
   });
 
   test('edits an existing account and the new name shows in the tree', async ({ page, server }) => {
@@ -79,23 +89,27 @@ test.describe('chart of accounts', () => {
     await page.goto('/accounts');
 
     // Create one to edit.
-    await page.getByRole('button', { name: /new account/i }).click();
+    await page.getByRole('link', { name: /new account/i }).click();
+    await page.waitForURL('**/accounts/new');
     await page.locator('#af-name-en').fill('Editable E2E');
     await page.locator('#af-type').selectOption('asset');
     const rootSub = page.locator('input[name="sub_1"]');
     if (!(await rootSub.isChecked())) {
       await rootSub.check();
     }
-    await saveAndReload(page, { reloadPath: '/accounts' });
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL('**/accounts');
     await expect(page.getByText('Editable E2E')).toBeVisible();
 
-    // Open its edit form (the row's Edit button swaps #account-form).
+    // Open its edit page (the row's Edit link navigates to /accounts/{id}/edit).
     const row = page.locator('tr.acct-row', { hasText: 'Editable E2E' });
-    await row.getByRole('button', { name: /^edit$/i }).click();
+    await row.getByRole('link', { name: /^edit$/i }).click();
+    await page.waitForURL('**/accounts/*/edit');
     await expect(page.locator('#af-name-en')).toHaveValue('Editable E2E');
 
     await page.locator('#af-name-en').fill('Renamed E2E');
-    await saveAndReload(page, { reloadPath: '/accounts' });
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL('**/accounts');
     await expect(page.getByText('Renamed E2E')).toBeVisible();
     await expect(page.getByText('Editable E2E')).toHaveCount(0);
   });

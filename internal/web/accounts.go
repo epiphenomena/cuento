@@ -304,11 +304,11 @@ type programOption struct {
 	Name string
 }
 
-// accountNewForm handles GET /accounts/new (TxnWrite): the empty create form,
-// rendered as the "account-form" partial for htmx to swap in. The form's option
-// lists depend on the chosen type; new forms default to "asset" and the client
-// re-fetches on type change (progressive: a full submit still validates server-
-// side). Defaults to root subsidiary checked.
+// accountNewForm handles GET /accounts/new (TxnWrite): the empty create form on its
+// OWN full-shell page (p26.7 -- a plain navigation, so the form is on-screen even
+// when the tree is scrolled). The form's option lists depend on the chosen type;
+// new forms default to "asset" and the type select re-fetches on change. Defaults
+// to root subsidiary checked.
 func (s *server) accountNewForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	typ := r.URL.Query().Get("type")
@@ -324,7 +324,19 @@ func (s *server) accountNewForm(w http.ResponseWriter, r *http.Request) {
 	// sends the form as query params on the GET); overlay them so switching type
 	// does not wipe what the user typed.
 	overlayFormValues(&form, r)
-	s.render(w, r, http.StatusOK, "account-form", form)
+	s.renderAccountFormPage(w, r, form)
+}
+
+// renderAccountFormPage renders the create/edit form. The type-select re-fetch is
+// an in-place htmx swap of ONLY the form region (HX-Target "account-form"), so for
+// that request it serves the bare "account-form" partial; a plain navigation gets
+// the full shell page (p26.7). Mirrors accountsPage's HX-Target content negotiation.
+func (s *server) renderAccountFormPage(w http.ResponseWriter, r *http.Request, form accountForm) {
+	if r.Header.Get("HX-Target") == "account-form" {
+		s.render(w, r, http.StatusOK, "account-form", form)
+		return
+	}
+	s.render(w, r, http.StatusOK, "account_form_page.tmpl", s.newShellPage(r, form))
 }
 
 // overlayFormValues copies any submitted (query or form) field values onto a form
@@ -371,7 +383,7 @@ func overlayFormValues(form *accountForm, r *http.Request) {
 }
 
 // accountEditForm handles GET /accounts/{id}/edit (TxnWrite): the form prefilled
-// from the account's current state, for an inline htmx swap.
+// from the account's current state, on its own full-shell page (p26.7).
 func (s *server) accountEditForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := parseID(r.PathValue("id"))
@@ -414,7 +426,7 @@ func (s *server) accountEditForm(w http.ResponseWriter, r *http.Request) {
 	// A type-change re-fetch on the edit form overlays in-progress entries over the
 	// live values (same mechanism as the create form).
 	overlayFormValues(&form, r)
-	s.render(w, r, http.StatusOK, "account-form", form)
+	s.renderAccountFormPage(w, r, form)
 }
 
 // accountName reads an account's name in a given language WITH the p05.3 fallback
@@ -744,9 +756,12 @@ func (s *server) parseAccountForm(r *http.Request, id int64) (accountForm, parse
 }
 
 // renderAccountFormError maps a store TYPED error to an i18n field-error key and
-// re-renders the "account-form" partial at 422 (the p10.3 convention). It never
-// re-validates -- the store is the source of truth; this only TRANSLATES its
-// typed errors to (field, key) pairs and lets renderFormError do the swap.
+// re-renders the create/edit PAGE at 422 with the field error + autofocus on the
+// first invalid control (p26.7 anti-jank: the form lives on its own page now, so the
+// error render is a full-page re-render, not the old inline partial swap). It never
+// re-validates -- the store is the source of truth; this only TRANSLATES its typed
+// errors to (field, key) pairs. Native browser autofocus lands on the stamped
+// control (a real navigation), mirroring settings.tmpl's 422 path.
 func (s *server) renderAccountFormError(w http.ResponseWriter, r *http.Request, form accountForm, err error) {
 	field, key := accountErrorField(err)
 	if key == "" {
@@ -755,7 +770,7 @@ func (s *server) renderAccountFormError(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	form.Errors.add(field, key)
-	s.renderFormError(w, r, "account-form", form)
+	s.render(w, r, http.StatusUnprocessableEntity, "account_form_page.tmpl", s.newShellPage(r, form))
 }
 
 // accountErrorField maps a store typed error to the (form field, i18n key) pair

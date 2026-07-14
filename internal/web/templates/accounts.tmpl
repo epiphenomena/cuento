@@ -34,10 +34,10 @@
   <noscript><button type="submit" class="btn">{{t "accounts.filter.apply"}}</button></noscript>
 </form>
 <div class="subnav-actions">
-  <button type="button" class="btn btn-primary"
-          hx-get="/accounts/new" hx-target="#account-form" hx-swap="outerHTML">
-    {{t "accounts.new"}}
-  </button>
+  {{/* p26.7: New opens a dedicated full page (GET /accounts/new) -- a plain link, so
+       the form is always on-screen even when the tree is scrolled. Merge stays inline
+       (its two-step preview swaps into #account-form below). */}}
+  <a class="btn btn-primary" href="/accounts/new">{{t "accounts.new"}}</a>
   <button type="button" class="btn btn-ghost"
           hx-get="/accounts/merge" hx-target="#account-form" hx-swap="outerHTML">
     {{t "accounts.merge"}}
@@ -77,10 +77,8 @@
                anchored to this account's start row. */}}
           <a class="btn btn-ghost" href="/reconciliations#recon-acct-{{.ID}}">{{t "accounts.reconcile"}}</a>
           {{end}}
-          <button type="button" class="btn btn-ghost"
-                  hx-get="/accounts/{{.ID}}/edit" hx-target="#account-form" hx-swap="outerHTML">
-            {{t "common.edit"}}
-          </button>
+          {{/* p26.7: Edit opens a dedicated full page (GET /accounts/{id}/edit). */}}
+          <a class="btn btn-ghost" href="/accounts/{{.ID}}/edit">{{t "common.edit"}}</a>
           {{if .Active}}
           <form method="post" action="/accounts/{{.ID}}/deactivate" class="inline">
             <button type="submit" class="btn btn-ghost">{{t "accounts.deactivate"}}</button>
@@ -102,8 +100,10 @@
   {{- with .Page}}
   <h1>{{t "accounts.title"}}</h1>
 
-  {{/* The inline create/edit/merge form swaps in here; the New/Merge triggers live
-       in the section bar (p23.10) and target this region. Empty until opened. */}}
+  {{/* p26.7: create/edit moved to their own pages (GET /accounts/new,
+       /accounts/{id}/edit); this region now hosts only the inline MERGE form + its
+       two-step preview (the Merge trigger in the section bar targets it). Empty
+       until Merge is opened. */}}
   <div id="account-form" class="account-form-region"></div>
 
   {{template "accounts-results" .}}

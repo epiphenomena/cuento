@@ -23,7 +23,7 @@
 // data is synthetic.
 
 const { test, expect } = require('../fixtures');
-const { saveAndReload } = require('../helpers');
+const { openNewAccount, saveAccount } = require('../helpers');
 
 function unique() {
   return Math.random().toString(36).slice(2, 8);
@@ -50,16 +50,14 @@ test('expenses: submitter drafts an unbalanced report, submits, sees a rejection
   await login(page, server.username, server.password);
 
   // A revenue leaf account in the root subsidiary (a report line needs an R/E account).
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('#af-name-en')).toBeVisible();
+  await openNewAccount(page);
   await page.locator('#af-type').selectOption('revenue');
   await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
   await page.locator('#af-name-en').fill(revName);
   await page.locator('#af-name-es').fill(`${revName} ES`);
   const acctSub = page.locator('input[name="sub_1"]');
   if (!(await acctSub.isChecked())) await acctSub.check();
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  await saveAccount(page);
   await expect(page.getByText(revName)).toBeVisible();
 
   // Create the submitter user (txn_perm=none, no admin).
@@ -195,9 +193,7 @@ test('expenses: subsidiary auto-set, account/fund/program combos, amount blur, d
 
   // A revenue leaf account that covers BOTH subsidiaries, so switching the report's sub
   // keeps the account offered in the grid.
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('#af-name-en')).toBeVisible();
+  await openNewAccount(page);
   await page.locator('#af-type').selectOption('revenue');
   await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
   await page.locator('#af-name-en').fill(revName);
@@ -209,7 +205,7 @@ test('expenses: subsidiary auto-set, account/fund/program combos, amount blur, d
     const box = subBoxes.nth(i);
     if (!(await box.isChecked())) await box.check();
   }
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  await saveAccount(page);
   await expect(page.getByText(revName)).toBeVisible();
 
   // Create the submitter user + grant can_submit_expenses.

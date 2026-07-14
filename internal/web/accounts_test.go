@@ -126,6 +126,93 @@ func TestAccountsCreateHappyPath(t *testing.T) {
 	}
 }
 
+// TestAccountNewFormFullPage (p26.7): GET /accounts/new is a plain navigation now,
+// so it renders a FULL shell page (shell nav + an <h1> title), not the bare
+// account-form partial. The form is present on that page.
+func TestAccountNewFormFullPage(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	book := mkUser(t, st, "book_new", "write", false)
+
+	rec := asUser(t, h, sm, book, http.MethodGet, "/accounts/new", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /accounts/new status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	// Full shell markers: the app nav + a page <h1> (the create title).
+	if !strings.Contains(body, `class="app-nav"`) {
+		t.Errorf("GET /accounts/new missing the shell nav (not a full page); body: %s", body)
+	}
+	if !strings.Contains(body, "<h1>") {
+		t.Errorf("GET /accounts/new missing an <h1> page title; body: %s", body)
+	}
+	// The form itself (plain POST, no htmx target swap) is present.
+	if !strings.Contains(body, `id="af-name-en"`) {
+		t.Errorf("GET /accounts/new missing the account form; body: %s", body)
+	}
+}
+
+// TestAccountEditFormFullPage (p26.7): GET /accounts/{id}/edit renders a full shell
+// page prefilled from the account, not the bare partial.
+func TestAccountEditFormFullPage(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	book := mkUser(t, st, "book_edit", "write", false)
+
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	id, err := st.CreateAccount(ctx, store.CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{1},
+	})
+	if err != nil {
+		t.Fatalf("seed account: %v", err)
+	}
+
+	rec := asUser(t, h, sm, book, http.MethodGet, "/accounts/"+itoa(id)+"/edit", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /accounts/%d/edit status = %d, want 200; body: %s", id, rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `class="app-nav"`) {
+		t.Errorf("GET edit missing the shell nav (not a full page); body: %s", body)
+	}
+	if !strings.Contains(body, "<h1>") {
+		t.Errorf("GET edit missing an <h1> page title; body: %s", body)
+	}
+	if !strings.Contains(body, `value="Cash"`) {
+		t.Errorf("GET edit did not prefill the account name; body: %s", body)
+	}
+}
+
+// TestAccountNewFormTypeSwapPartial (p26.7): the type-select re-fetch keeps working
+// as an in-place htmx swap on the standalone page. htmx sends HX-Target
+// "account-form", so the handler must serve the BARE partial (no shell chrome) so
+// the swap replaces just the form, not inject a whole document.
+func TestAccountNewFormTypeSwapPartial(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	book := mkUser(t, st, "book_swap", "write", false)
+
+	req := httptest.NewRequest(http.MethodGet, "/accounts/new?type=expense", strings.NewReader(""))
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "account-form")
+	req.AddCookie(mintCookie(t, sm, book))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("type-swap GET status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	// A bare partial: the form is present but NOT the shell nav.
+	if !strings.Contains(body, `id="account-form"`) {
+		t.Errorf("type-swap missing the form partial; body: %s", body)
+	}
+	if strings.Contains(body, `class="app-nav"`) {
+		t.Errorf("type-swap returned full shell chrome (would inject a whole doc into #account-form); body: %s", body)
+	}
+	// Expense type shows the functional-class region.
+	if !strings.Contains(body, `id="af-func"`) {
+		t.Errorf("type-swap to expense missing the functional-class select; body: %s", body)
+	}
+}
+
 // TestAccountsRowRegisterLinkAndReconcile (p25): the account NAME links to its
 // register (the dedicated Register button is gone), and a reconcilable account shows
 // a Reconcile affordance to the recon list while a non-reconcilable one does not.
@@ -248,6 +335,11 @@ func TestAccountsCreateInvalidShowsFieldError(t *testing.T) {
 	}
 	if !strings.Contains(body, "autofocus") {
 		t.Errorf("422 body missing autofocus on the first invalid field; body: %s", body)
+	}
+	// p26.7: the 422 re-render is now a FULL page (anti-jank on a standalone form
+	// page), not the bare partial -- assert the shell chrome is present.
+	if !strings.Contains(body, `class="app-nav"`) {
+		t.Errorf("422 create re-render is not a full page (missing shell nav); body: %s", body)
 	}
 }
 

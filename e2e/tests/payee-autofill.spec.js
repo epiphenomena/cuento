@@ -16,7 +16,7 @@
 // page.waitForFunction; we use locator waits (auto-retry) instead.
 
 const { test, expect } = require('../fixtures');
-const { saveAndReload } = require('../helpers');
+const { openNewAccount, saveAccount } = require('../helpers');
 
 async function installSettleMarker(page) {
   await page.addInitScript(() => {
@@ -37,15 +37,14 @@ async function login(page, server) {
 }
 
 async function createAsset(page, name) {
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
+  await openNewAccount(page);
   await page.locator('#af-name-en').fill(name);
   await page.locator('#af-type').selectOption('asset');
   const rootSub = page.locator('input[name="sub_1"]');
   if (!(await rootSub.isChecked())) {
     await rootSub.check();
   }
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  await saveAccount(page);
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 

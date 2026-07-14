@@ -1,0 +1,24 @@
+{{/*
+  p26.7 dedicated create/edit page for the chart-of-accounts form. The New/Edit
+  triggers on /accounts are plain links to GET /accounts/new and
+  /accounts/{id}/edit, which render THIS full shell page (shell-open / <main> /
+  shell-close) instead of swapping the "account-form" partial inline -- so the form
+  is always on-screen even when the tree is scrolled.
+
+  .Page is an accountForm. The <h1> title (new vs edit) lives HERE, outside the
+  form, so it persists across the type-select's in-place htmx re-swap of the form
+  region (which replaces only #account-form). The form body is the shared
+  "account-form" partial; a failed POST re-renders this whole page at 422 (anti-
+  jank: input ids stay stable). Reuses the existing accounts.form.* keys (no new
+  i18n). Every string via {{t}} (rule 9); no inline script (rule 12).
+*/ -}}
+{{define "account_form_page.tmpl" -}}
+{{- $title := (t "accounts.form.new_title") -}}
+{{- if .Page.ID}}{{$title = (t "accounts.form.edit_title")}}{{end -}}
+{{template "shell-open" (shellTitle . $title)}}
+  {{- with .Page}}
+  <h1>{{if .ID}}{{t "accounts.form.edit_title"}}{{else}}{{t "accounts.form.new_title"}}{{end}}</h1>
+  {{template "account-form" .}}
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

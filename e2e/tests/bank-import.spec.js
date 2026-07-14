@@ -22,6 +22,7 @@
 //   - duplicate row:    tr.import-row-duplicate ; flag: span.import-dupe-flag
 
 const { test, expect } = require('../fixtures');
+const { openNewAccount, saveAccount } = require('../helpers');
 
 // A per-run account name so parallel specs on the worker never collide.
 function uniqueName() {
@@ -40,9 +41,7 @@ async function login(page, server) {
 // the real inline form and returns its display name. Mirrors accounts.spec.js.
 async function createAssetAccount(page) {
   const name = uniqueName();
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('#af-name-en')).toBeVisible();
+  await openNewAccount(page);
   await page.locator('#af-name-en').fill(name);
   await page.locator('#af-name-es').fill(name);
   await page.locator('#af-type').selectOption('asset');
@@ -63,10 +62,15 @@ async function createAssetAccount(page) {
 // triggers an htmx form-swap that server-renders #af-func; see txn-editor.spec.js.
 async function createExpenseAccount(page) {
   const name = uniqueName() + ' Exp';
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+  // p26.7: the create form is its own full-shell page; the expense type change still
+  // re-fetches the form region in place (htmx hx-get on #af-type, HX-Target
+  // #account-form). Wait for THAT GET swap before touching #af-func.
+  await openNewAccount(page);
+  const typeSwapped = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/accounts/new' && r.request().method() === 'GET',
+  );
   await page.locator('#af-type').selectOption('expense');
+  await typeSwapped;
   await expect(page.locator('#af-func')).toBeVisible();
   await page.locator('#af-name-en').fill(name);
   await page.locator('#af-name-es').fill(name);
@@ -74,12 +78,8 @@ async function createExpenseAccount(page) {
   if (!(await rootSub.isChecked())) await rootSub.check();
   await page.locator('#af-func').selectOption('program');
 
-  const reloaded = page.waitForResponse(
-    (r) => new URL(r.url()).pathname === '/accounts' && r.request().method() === 'GET',
-  );
-  await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
-  await page.getByRole('button', { name: /^save$/i }).click();
-  await reloaded;
+  // Save is a plain full-page POST -> 303 back to /accounts.
+  await saveAccount(page);
   await expect(page.getByText(name)).toBeVisible();
   return name;
 }

@@ -9,7 +9,7 @@
 // Selectors come from transaction_form.tmpl / register.tmpl / accounts.tmpl.
 
 const { test, expect } = require('../fixtures');
-const { saveAndReload } = require('../helpers');
+const { openNewAccount, saveAccount } = require('../helpers');
 
 // The htmx settle marker (`e2e-settled` on each htmx:afterSettle target) is installed
 // centrally by the `page` fixture — see fixtures.js for why (hx-* triggers on a
@@ -31,15 +31,13 @@ async function login(page, server) {
 // (so its hx-post is wired) and for the reload response (so the new row is in the SSR
 // DOM) — see createLeaf in merge.spec.js for the full rationale.
 async function createAsset(page, name) {
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('#af-name-en')).toBeVisible();
+  await openNewAccount(page);
   await page.locator('#af-name-en').fill(name);
   const rootSub = page.locator('input[name="sub_1"]');
   if (!(await rootSub.isChecked())) {
     await rootSub.check();
   }
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  await saveAccount(page);
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 
@@ -112,12 +110,7 @@ test.describe('transaction editor', () => {
     // A checking account, then an expense account with a default functional class
     // (Management & general).
     await createAsset(page, 'Editor Bank');
-    await page.goto('/accounts');
-    await page.getByRole('button', { name: /new account/i }).click();
-    // The New-account form arrives via an htmx swap; wait for it to SETTLE (not just
-    // appear) so htmx has wired #af-type's change→hx-get before we drive it — else
-    // the type change fires into an unwired select and the re-fetch never happens.
-    await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+    await openNewAccount(page);
     // Choosing the expense type triggers an htmx form-swap (hx-get -> #account-form,
     // outerHTML) that server-renders the functional-class default field (#af-func is
     // gated by {{if .IsExpense}}). #af-func becoming visible is the swap's own signal.
@@ -131,7 +124,7 @@ test.describe('transaction editor', () => {
     // #af-func visible means the expense re-fetch swapped in (old form gone), so
     // saveAndReload's `.e2e-settled` wait now tracks THIS form — it waits for the
     // re-rendered Save's hx-post to be wired, then for the reload response.
-    await saveAndReload(page, { reloadPath: '/accounts' });
+    await saveAccount(page);
     await expect(page.locator('tr.acct-row', { hasText: 'Editor Rent' })).toBeVisible();
 
     await page.goto('/transactions/new');
@@ -159,16 +152,14 @@ test.describe('transaction editor', () => {
 
     // A checking account and an expense account (whose pick must fire the class gating).
     await createAsset(page, 'Combo Checking');
-    await page.goto('/accounts');
-    await page.getByRole('button', { name: /new account/i }).click();
-    await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+    await openNewAccount(page);
     await page.locator('#af-type').selectOption('expense');
     await expect(page.locator('#af-func')).toBeVisible();
     await page.locator('#af-name-en').fill('Combo Rent');
     const rootSub = page.locator('input[name="sub_1"]');
     if (!(await rootSub.isChecked())) await rootSub.check();
     await page.locator('#af-func').selectOption('management');
-    await saveAndReload(page, { reloadPath: '/accounts' });
+    await saveAccount(page);
     await expect(page.locator('tr.acct-row', { hasText: 'Combo Rent' })).toBeVisible();
 
     await page.goto('/transactions/new');
@@ -221,16 +212,14 @@ test.describe('transaction editor', () => {
     await createFund(page, 'Water Grant Combo');
 
     // An expense account so the program cell is revealed on its row.
-    await page.goto('/accounts');
-    await page.getByRole('button', { name: /new account/i }).click();
-    await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+    await openNewAccount(page);
     await page.locator('#af-type').selectOption('expense');
     await expect(page.locator('#af-func')).toBeVisible();
     await page.locator('#af-name-en').fill('Combo Supplies');
     const rootSub2 = page.locator('input[name="sub_1"]');
     if (!(await rootSub2.isChecked())) await rootSub2.check();
     await page.locator('#af-func').selectOption('management');
-    await saveAndReload(page, { reloadPath: '/accounts' });
+    await saveAccount(page);
     await expect(page.locator('tr.acct-row', { hasText: 'Combo Supplies' })).toBeVisible();
 
     await page.goto('/transactions/new');

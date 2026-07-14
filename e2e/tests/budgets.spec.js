@@ -22,7 +22,7 @@
 // / budget_line_form.tmpl.
 
 const { test, expect } = require('../fixtures');
-const { saveAndReload } = require('../helpers');
+const { saveAndReload, openNewAccount, saveAccount } = require('../helpers');
 
 async function login(page, server) {
   await page.goto('/login');
@@ -39,9 +39,7 @@ test('budgets: create schedule + revenue account + fund + budget + line', async 
   await login(page, server);
 
   // --- prerequisite: a revenue leaf account (a budget line needs an R/E account) ---
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('#af-name-en')).toBeVisible();
+  await openNewAccount(page);
   // The type select re-fetches the form on change (hx-get); wait for the swap to
   // settle before filling the re-rendered fields.
   await page.locator('#af-type').selectOption('revenue');
@@ -50,7 +48,7 @@ test('budgets: create schedule + revenue account + fund + budget + line', async 
   await page.locator('#af-name-es').fill('Ingresos por Subvenciones E2E');
   const acctSub = page.locator('input[name="sub_1"]');
   if (!(await acctSub.isChecked())) await acctSub.check();
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  await saveAccount(page);
   await expect(page.getByText('Grants Revenue E2E')).toBeVisible();
 
   // --- prerequisite: a fund scoped to the root subsidiary ---

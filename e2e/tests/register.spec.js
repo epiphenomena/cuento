@@ -9,7 +9,7 @@
 // Selectors come from register.tmpl / accounts.tmpl.
 
 const { test, expect } = require('../fixtures');
-const { saveAndReload } = require('../helpers');
+const { openNewAccount, saveAccount } = require('../helpers');
 
 async function login(page, server) {
   await page.goto('/login');
@@ -22,10 +22,9 @@ async function login(page, server) {
 test.describe('account register', () => {
   test('opens a reconcilable account register from the chart of accounts', async ({ page, server }) => {
     await login(page, server);
-    await page.goto('/accounts');
 
     // Create a reconcilable asset account to open a register for.
-    await page.getByRole('button', { name: /new account/i }).click();
+    await openNewAccount(page);
     await page.locator('#af-name-en').fill('Checking E2E');
     await page.locator('#af-type').selectOption('asset');
     const rootSub = page.locator('input[name="sub_1"]');
@@ -37,7 +36,7 @@ test.describe('account register', () => {
     if (!(await recon.isChecked())) {
       await recon.check();
     }
-    await saveAndReload(page, { reloadPath: '/accounts' });
+    await saveAccount(page);
 
     // Open the register by clicking the account NAME (p25: the name is the register
     // link; the dedicated Register button was dropped).
@@ -131,12 +130,18 @@ test.describe('account register', () => {
 // optionally under a named parent (the #af-parent select), then reloads /accounts.
 // Mirrors the p25.1 flow used across the register/txn specs.
 async function createAccount(page, { name, type, parent }) {
-  await page.goto('/accounts');
-  await page.getByRole('button', { name: /new account/i }).click();
-  await expect(page.locator('#af-name-en')).toBeVisible();
+  await openNewAccount(page);
   await page.locator('#af-name-en').fill(name);
-  if (type) {
+  // Only change the type when it differs from the form default ('asset'): selecting
+  // a non-default type re-fetches the form in place (htmx hx-get on #af-type,
+  // HX-Target #account-form). Wait for THAT swap before touching later fields, else
+  // the swap discards them. 'asset' is the default, so skip the change entirely.
+  if (type && type !== 'asset') {
+    const typeSwapped = page.waitForResponse(
+      (r) => new URL(r.url()).pathname === '/accounts/new' && r.request().method() === 'GET',
+    );
     await page.locator('#af-type').selectOption(type);
+    await typeSwapped;
   }
   if (parent) {
     await page.locator('#af-parent').selectOption({ label: parent });
@@ -145,6 +150,6 @@ async function createAccount(page, { name, type, parent }) {
   if (!(await rootSub.isChecked())) {
     await rootSub.check();
   }
-  await saveAndReload(page, { reloadPath: '/accounts' });
+  await saveAccount(page);
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
