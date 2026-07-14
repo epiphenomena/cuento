@@ -46,7 +46,7 @@ Order: `country, stmt, typ, acct, kat, dt, v, ndb, fndb, kls, klass, tid, desc, 
 | `stmt` | **Account super-type** | single char, 5 distinct | A / L / I / E / O = asset / liability / income(→revenue) / expense / other(→equity). Drives cuento `type`. |
 | `typ` | Entry/posting type | short text, ~30 distinct | classification of the journal entry; informational for the mapping. |
 | `acct` | **Account** | text path, up to ~110 chars, ~232 distinct | hierarchical account name/path (the leaf). Values are org data → mapping.yaml only. |
-| `parent` | Account parent | text path, ~60 distinct | parent grouping for `acct`; builds the account tree. Values → mapping.yaml. |
+| `parent` | Account parent | text path, ~60 distinct | parent grouping for `acct`. **Superseded (p26.12):** the account tree is now DERIVED from `stmt`+`typ` (see "Account tree derivation"); this column is IGNORED for structure. |
 | `kat` | **Program / department** dimension | short code, 8 distinct | ~83% populated. Maps to the program tree (D24) in mapping.yaml. |
 | `dt` | Transaction date | `YYYY-MM-DD`, always 10 chars | already ISO; maps straight to `transactions.date`. |
 | `kls` | **Functional class** | short text, 4 distinct (+blank) | maps to `program|management|fundraising` (D21); the 4th code is folded in mapping.yaml. |
@@ -87,7 +87,7 @@ Order: `country, stmt, typ, acct, kat, dt, v, ndb, fndb, kls, klass, tid, desc, 
 |---|---|
 | `country` | subsidiary (D18) |
 | `stmt` | account `type` (A/L/I/E/O → asset/liability/revenue/expense/equity) |
-| `acct` + `parent` | account tree + leaf; `type` from `stmt`; subsidiaries from `country` set |
+| `acct` + `stmt` + `typ` | account tree + leaf; two-level parent chain (see below); `type` from `stmt`; subsidiaries from `country` set. (`parent` COLUMN superseded, p26.12) |
 | `kat` | program (D24) |
 | `kls` | functional class on expense splits (D21) |
 | `donor` | fund (D20); blank → unrestricted |
@@ -96,6 +96,55 @@ Order: `country, stmt, typ, acct, kat, dt, v, ndb, fndb, kls, klass, tid, desc, 
 | `dt` | transaction date |
 | `desc` | memo |
 | `clr` | reconciliation state (imported in the p16 pass) |
+
+## Account tree derivation (`stmt` + `typ`, p26.12)
+
+The account hierarchy is DERIVED from `stmt` and `typ` as a deterministic
+**two-level chain**, not from the explicit `parent` column:
+
+    <stmt super-parent>  ->  <(stmt,typ) intermediate>  ->  <leaf acct>
+
+e.g. `stmt=A`, `typ="Bank"`, `acct="BOA Checking"` becomes **Assets → Bank → BOA
+Checking**. The `accounts` skeleton (`cmd/ledgerimport/accounts.go`) synthesizes
+the intermediate and super-parent rows into the reviewable account-mapping CSV, so
+`build` (which sees only the reviewed CSV, no `typ`) creates the tree
+parent-before-child with no extra logic.
+
+- **stmt → super-parent name:** `A/L/I/E/O → Assets/Liabilities/Revenue/Expenses/
+  Equity` (`stmtToSuperParent`), mirroring the report section headers. The
+  super-parent's cuento `type` is the stmt's type (`stmtToType`).
+- **Intermediates are keyed by `(cuento-type, typ)`**, not `typ` alone, so the same
+  `typ` under two different `stmt` supertypes produces two distinct tiers (e.g. an
+  asset "Bank" tier ≠ an expense "Bank" tier). This also enforces **type
+  consistency**: a leaf always nests under an intermediate of its OWN stmt type
+  (D26: prefer the leaf's own stmt).
+- **Synthetic parent rows are namespaced** (`::super:` / `::typ:` prefixes in the
+  CSV `source_acct` key), so a real leaf `acct` that happens to match a `typ` value
+  or a super-parent name never collides with a synthetic tier. The human-facing
+  `name_en`/`name_es` are the clean names ("Assets", the raw `typ`).
+- **Subsidiary unions (two-pass):** each synthetic parent carries the UNION of the
+  subsidiaries of the leaves ACTUALLY parented under it (rule 7 / Z12: a parent's
+  subsidiary set ⊇ every child's). This matters because `typ` is documented as a
+  **per-journal-entry** classification, so one `acct` recurs under many `typ` values
+  and accrues countries from all of them; the derivation fixes each leaf's parent
+  chain at its **first sighting** (file order — deterministic) but then propagates
+  the leaf's FULL country union up that chain, so a leaf spanning several typs never
+  leaves a country only on itself. **Caveat for review:** because `typ` is
+  per-journal-entry (not an account attribute), which `typ` names a leaf's parent is
+  semantically arbitrary; the go-live human review should confirm the resulting tier
+  names make sense (the task's `stmt=A,typ=Bank` example instead treats `typ` as an
+  account subtype — the two readings are surfaced here).
+- **Edge cases:** a blank `typ` parents the leaf DIRECTLY under the super-parent
+  (the intermediate tier is skipped); a `typ` whose text equals the super-parent's
+  own name collapses the tier (no self-parent); a blank/unknown `stmt` leaves the
+  leaf top-level for the human to place in review; a leaf `acct` literally NAMED like
+  a super-parent or a `typ` value coexists with the synthetic tier without collision
+  (the synthetic rows use the reserved `::super:`/`::typ:` keys, the leaf keeps its
+  own name), and stands as an ordinary leaf under its stmt/typ chain.
+
+The explicit `parent` column is **ignored** for structure (simplest correct
+behavior — the stmt/typ chain is authoritative; the go-live mapping gets human
+review either way).
 
 ## Hazards & quirks (for p09.3 parser and p09.4 mapping)
 

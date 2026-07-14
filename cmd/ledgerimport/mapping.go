@@ -73,6 +73,29 @@ func stmtToType(stmt string) string {
 	}
 }
 
+// stmtToSuperParent maps the source `stmt` super-type char to the display NAME of
+// the top-level super-parent account the two-level parent derivation nests under
+// (docs/ledger-export.md; A/L/I/E/O -> Assets/Liabilities/Revenue/Expenses/Equity).
+// These names mirror the balance-sheet / activity report section headers, so the
+// imported chart's top tier reads the same as the reports. A blank/unknown stmt
+// returns "" (the leaf is left top-level for the human to place in review).
+func stmtToSuperParent(stmt string) string {
+	switch strings.ToUpper(strings.TrimSpace(stmt)) {
+	case "A":
+		return "Assets"
+	case "L":
+		return "Liabilities"
+	case "I":
+		return "Revenue"
+	case "E":
+		return "Expenses"
+	case "O":
+		return "Equity"
+	default:
+		return ""
+	}
+}
+
 // WriteAccountMap emits the account-mapping CSV (header + rows) to w. Row order
 // is caller-controlled (accounts sorts by source account for a stable skeleton).
 func WriteAccountMap(w io.Writer, rows []AccountMap) error {
