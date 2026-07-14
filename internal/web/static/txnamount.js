@@ -79,6 +79,27 @@ export function formatSignedMinor(minor, exponent) {
   return neg ? '-' + body : body;
 }
 
+// formatAmountGrouped reformats a user-typed amount string on blur: it PARSES the input
+// (reusing parseAmountMinor's US-style '.' decimal / ',' grouping) and re-emits it with
+// thousands grouping and the currency's fraction width (e.g. `1000` -> `1,000.00`). A
+// blank or unparseable string is returned UNCHANGED -- the user is mid-type or cleared the
+// field, and this is a display convenience, not a validator (the Go store is authoritative,
+// trap 5). It is US-format only, matching parseAmountMinor; a non-US user's number format is
+// beyond the current client scope (see DECISIONS p26.4) -- the server still parses per the
+// user's setting. Sign is preserved (parentheses collapse to a leading '-').
+export function formatAmountGrouped(s, exponent) {
+  const minor = parseAmountMinor(s, exponent);
+  if (minor === null) return s; // blank / mid-type / malformed -> leave the user's text
+  const body = formatSignedMinor(minor, exponent); // e.g. "-1000.00" (no grouping yet)
+  const neg = body.startsWith('-');
+  const bare = neg ? body.slice(1) : body;
+  const dot = bare.indexOf('.');
+  const intPart = dot >= 0 ? bare.slice(0, dot) : bare;
+  const fracPart = dot >= 0 ? bare.slice(dot) : '';
+  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return (neg ? '-' : '') + grouped + fracPart;
+}
+
 // drcrToSigned maps a (debit, credit) pair of magnitude strings to ONE signed
 // net-debit minor amount (D2): debit is positive, credit is negative. Exactly one
 // side is filled (the DOM glue clears the other on input). Both blank -> null (an

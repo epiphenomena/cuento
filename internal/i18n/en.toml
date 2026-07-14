@@ -418,6 +418,8 @@ other = "Too many attempts. Please wait and try again."
 other = "Edit"
 [common.delete]
 other = "Delete"
+[common.delete_row]
+other = "Delete row"
 [accounts.title]
 other = "Chart of accounts"
 [accounts.new]
@@ -1894,8 +1896,6 @@ other = "Open"
 other = "Reviewer's reason"
 [expense.list.empty]
 other = "You have no expense reports yet."
-[expense.detail.set_subsidiary]
-other = "Set subsidiary"
 [expense.discard]
 other = "Discard"
 [expense.new.btn]

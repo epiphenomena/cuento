@@ -51,12 +51,15 @@ function optionLabel(opt) {
   return (p != null && p !== '') ? p : (opt.textContent || '').trim();
 }
 
-// collectOptions returns the pickable options as { label, value, el } (skipping the
-// placeholder "0"/"" option so the filtered list shows only real choices; the placeholder
-// stays the select's cleared state).
+// collectOptions returns the pickable options as { label, value, el }. p26.4 fix: the
+// value="0" option ("Unrestricted" / "None" / account-none) IS a real, selectable choice
+// -- keeping it in the list lets a user who picked a real option re-offer and re-pick the
+// reset-to-none entry. Only the empty-value ("") placeholder (if any) is excluded, since
+// that is not a meaningful selection. Picking the 0 option resets the select to its cleared
+// state (currentLabel() renders it blank -- an empty box == cleared, which is correct).
 function collectOptions(select) {
   return [...select.options]
-    .filter((o) => o.value !== '' && o.value !== '0')
+    .filter((o) => o.value !== '')
     .map((o) => ({ label: optionLabel(o), value: o.value, el: o }));
 }
 

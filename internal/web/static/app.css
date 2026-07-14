@@ -632,6 +632,27 @@ input[aria-invalid="true"] {
 .txn-fund-cell, .txn-program-cell, .txn-class-cell { width: 10rem; }
 .txn-row-error { width: 12rem; }
 
+/* p26.4 expense line grid: the same .txn-cell spreadsheet layout (the grid table already
+   carries .txn-grid), so the account combo overlay is contained by its cell -- fixing the
+   account-cell bleed behind the amount/fund inputs. Column widths mirror the txn grid; the
+   amount cell right-aligns its figure and reformats on blur (expensegrid.js). */
+.txn-grid .el-amount-cell input { text-align: right; }
+.el-account-cell { width: auto; }
+.el-amount-cell { width: 8rem; }
+.el-fund-cell, .el-program-cell { width: 10rem; }
+.el-memo-cell { width: auto; }
+.el-delete-col, .el-delete-cell { width: 2.5rem; text-align: center; }
+.el-row-error { width: 12rem; }
+/* The delete control is a compact borderless × that inherits the cell's spreadsheet feel. */
+.txn-grid td.el-delete-cell { text-align: center; }
+.el-delete {
+  padding: var(--space-1) var(--space-2);
+  line-height: 1;
+  font-size: 1.1rem;
+  color: var(--color-muted, inherit);
+}
+.el-delete:hover { color: var(--color-danger, inherit); }
+
 /* Row states. A server-flagged row and a client-detected out-of-subsidiary row
    both tint danger so the eye lands on the problem. */
 .txn-row[data-row-error] td.txn-cell { background: var(--color-danger-bg); }

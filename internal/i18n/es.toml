@@ -413,6 +413,8 @@ other = "Demasiados intentos. Espere e intente de nuevo."
 other = "Editar"
 [common.delete]
 other = "Eliminar"
+[common.delete_row]
+other = "Eliminar fila"
 [accounts.title]
 other = "Plan de cuentas"
 [accounts.new]
@@ -1888,8 +1890,6 @@ other = "Abrir"
 other = "Motivo del revisor"
 [expense.list.empty]
 other = "Aún no tiene informes de gastos."
-[expense.detail.set_subsidiary]
-other = "Cambiar filial"
 [expense.discard]
 other = "Descartar"
 [expense.new.btn]

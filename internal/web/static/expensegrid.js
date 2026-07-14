@@ -1,22 +1,36 @@
-// p25.4 expense-report line grid -- DOM GLUE (rule 12: a hand-written external ES
-// module, no framework, no inline handler, loaded under script-src 'self'). It mirrors
-// the transaction editor's auto-append (txneditor.js): the grid keeps exactly ONE
-// trailing empty row -- when the last row stops being empty, a fresh empty row is
-// appended; the server drops the trailing empty row on the bulk save (expenseLinesSave).
+// p25.4 / p26.4 expense-report line grid -- DOM GLUE (rule 12: a hand-written external ES
+// module, no framework, no inline handler, loaded under script-src 'self'). It mirrors the
+// transaction editor's auto-append (txneditor.js): the grid keeps exactly ONE trailing
+// empty row -- when the last row stops being empty, a fresh empty row is appended; the
+// server drops the trailing empty row on the bulk save (expenseLinesSave).
 //
 // There is NO balancing, NO DR/CR, NO functional-class here -- a plain account/amount/
 // fund/program/memo grid whose whole set saves under one change (replace-set by line id,
 // the hidden line_id_<i> round-trip). The pure emptiness predicate (isRowEmpty) is the
 // SAME tested one the txn editor uses (txnpayee.js); this module is the thin, e2e-covered
 // glue. Guarded so importing under Node is side-effect free (no `document`).
+//
+// p26.4 adds:
+//   - comboboxes on account/fund/program (the SAME widget as the txn grid) -- initCombos on
+//     init + after an htmx swap; stripCombo(clone)+initCombos(clone) across addRow; a
+//     resyncCombos after any programmatic select.value= (the sole-row reset).
+//   - amount right-align (CSS) + reformat-on-blur (formatAmountGrouped, delegated on tbody).
+//   - a per-row × delete button that RE-INDEXES the surviving rows so the name="_i" scheme
+//     stays contiguous 0..n-1 (server handler unchanged); deleting the only/last row resets
+//     it in place so the grid never drops below one trailing empty row.
 
 import { isRowEmpty } from './txnpayee.js';
+import { formatAmountGrouped } from './txnamount.js';
+import { initCombos, stripCombo, resyncCombos } from './combobox.js';
 
-// enhance wires ONE grid form: the auto-append of a trailing empty row on edit.
+// enhance wires ONE grid form: combos, auto-append of a trailing empty row on edit,
+// amount blur-reformat, and per-row delete + re-index.
 function enhance(form) {
   const tbody = form.querySelector('#expense-rows');
   const count = form.querySelector('#expense-rows-count');
   if (!tbody || !count) return;
+
+  const exp = 2; // expense amounts are 2-dp (like the txn grid); the server is authoritative.
 
   // rowFieldValues reads the emptiness-relevant fields of a row (account/amount/memo);
   // fund/program defaults alone do NOT make a row non-empty (isRowEmpty's contract).
@@ -29,6 +43,22 @@ function enhance(form) {
     return { account: get('account'), amount: get('amount'), memo: get('memo') };
   }
 
+  // reindexRow rewrites one row's id/name/data-row suffixes to `idx`, PRESERVING every
+  // value (unlike addRow's clone, which clears). Combos are closure-bound (not id-bound),
+  // so an enhanced row survives a re-index without re-enhancement.
+  function reindexRow(rowEl, idx) {
+    rowEl.dataset.row = String(idx);
+    rowEl.querySelectorAll('[id],[name]').forEach((el) => {
+      if (el.id) el.id = el.id.replace(/-\d+$/, `-${idx}`);
+      if (el.name) el.name = el.name.replace(/_\d+$/, `_${idx}`);
+    });
+  }
+
+  // syncCount rewrites #expense-rows-count from the live row set.
+  function syncCount() {
+    count.value = String(tbody.querySelectorAll('.el-row').length);
+  }
+
   // addRow clones the last row, rewrites its id/name suffixes to the new index, clears
   // inputs (including the hidden line_id so a new row INSERTS, ID 0, rather than updating
   // an existing line), resets selects to index 0, and appends it -- then bumps the count.
@@ -39,6 +69,11 @@ function enhance(form) {
     const idx = rows.length;
     const clone = template.cloneNode(true);
     clone.dataset.row = String(idx);
+    // Combobox clone contract (p26.2): the template's account/fund/program cells carry
+    // enhanced combos whose overlay listeners cloneNode does NOT copy (dead wrappers).
+    // Strip them back to clean native <select>s BEFORE the id/name rewrite so the overlay's
+    // own nodes aren't re-indexed; initCombos(clone) below re-enhances the fresh selects.
+    stripCombo(clone);
     clone.querySelectorAll('[id],[name]').forEach((el) => {
       if (el.id) el.id = el.id.replace(/-\d+$/, `-${idx}`);
       if (el.name) el.name = el.name.replace(/_\d+$/, `_${idx}`);
@@ -48,7 +83,40 @@ function enhance(form) {
     const errCell = clone.querySelector('.el-row-error');
     if (errCell) errCell.textContent = '';
     tbody.appendChild(clone);
-    count.value = String(tbody.querySelectorAll('.el-row').length);
+    syncCount();
+    initCombos(clone); // enhance the clone's clean selects
+  }
+
+  // resetRow clears one row in place (values, selects, hidden line_id, error), then
+  // resyncs its combos' overlays. Used for the sole/last delete so the grid never drops to
+  // zero rows (a clone-based addRow can't run at zero rows, and an emptied row saves as
+  // "no line" -- the server deletes the underlying line, which is the delete's intent).
+  function resetRow(rowEl) {
+    rowEl.querySelectorAll('input').forEach((el) => {
+      el.value = '';
+    });
+    rowEl.querySelectorAll('select').forEach((el) => {
+      el.selectedIndex = 0;
+    });
+    const errCell = rowEl.querySelector('.el-row-error');
+    if (errCell) errCell.textContent = '';
+    resyncCombos(rowEl); // the selects were set directly -> refresh their overlay text
+  }
+
+  // deleteRow removes the row (or resets it in place when it is the only row), then
+  // re-indexes the survivors to a contiguous 0..n-1 and re-asserts the trailing-empty
+  // invariant. The server handler is unchanged (it always sees a contiguous _i scheme).
+  function deleteRow(rowEl) {
+    const rows = [...tbody.querySelectorAll('.el-row')];
+    if (rows.length <= 1) {
+      resetRow(rowEl);
+      syncCount();
+      return;
+    }
+    rowEl.remove();
+    tbody.querySelectorAll('.el-row').forEach((r, i) => reindexRow(r, i));
+    syncCount();
+    ensureTrailingEmptyRow();
   }
 
   // ensureTrailingEmptyRow grows a fresh empty row when the last row is no longer empty.
@@ -58,9 +126,32 @@ function enhance(form) {
     if (last && !isRowEmpty(rowFieldValues(last))) addRow();
   }
 
-  // Delegated on the tbody so it survives addRow without re-wiring each control.
+  // Delegated on the tbody so they survive addRow/re-index without re-wiring each control.
   tbody.addEventListener('input', ensureTrailingEmptyRow);
   tbody.addEventListener('change', ensureTrailingEmptyRow);
+
+  // Amount blur-reformat: reformat the just-left amount input (1000 -> 1,000.00). Delegated
+  // (focusout bubbles; blur does not) so cloned rows are covered.
+  tbody.addEventListener('focusout', (evt) => {
+    const el = evt.target;
+    if (el && el.classList && el.classList.contains('el-amount')) {
+      el.value = formatAmountGrouped(el.value, exp);
+    }
+  });
+
+  // Per-row delete (the × button). type="button" so it never submits; delegated so it
+  // survives addRow/re-index.
+  tbody.addEventListener('click', (evt) => {
+    const btn = evt.target.closest('.el-delete');
+    if (!btn) return;
+    evt.preventDefault();
+    const rowEl = btn.closest('.el-row');
+    if (rowEl) deleteRow(rowEl);
+  });
+
+  // Enhance every combo select present on initial render / after a whole-form htmx swap
+  // (subsidiary re-scope, 422 re-render). Idempotent.
+  initCombos(form);
 
   // Guarantee the one-trailing-empty-row invariant on load (and after a 422 re-render
   // where the server dropped empties).

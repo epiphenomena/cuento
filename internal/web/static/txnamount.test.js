@@ -10,9 +10,11 @@ const assert = require('node:assert/strict');
 // The module is an ES module; load it via dynamic import from this CommonJS test
 // (the same pattern formfocus.test.js uses). A top-level await keeps each test
 // body synchronous.
-let parseAmountMinor, formatSignedMinor, drcrToSigned, signedToDrCr;
+let parseAmountMinor, formatSignedMinor, drcrToSigned, signedToDrCr, formatAmountGrouped;
 test.before(async () => {
-  ({ parseAmountMinor, formatSignedMinor, drcrToSigned, signedToDrCr } = await import('./txnamount.js'));
+  ({ parseAmountMinor, formatSignedMinor, drcrToSigned, signedToDrCr, formatAmountGrouped } = await import(
+    './txnamount.js'
+  ));
 });
 
 test('parseAmountMinor: plain decimal at exponent 2', () => {
@@ -65,4 +67,30 @@ test('drcr<->signed is a single round-trip mapping (trap 3)', () => {
     const { debit, credit } = signedToDrCr(minor, 2);
     assert.equal(drcrToSigned(debit, credit, 2), minor, `drcr round-trip ${minor}`);
   }
+});
+
+// p26.4: formatAmountGrouped reformats a user-typed amount on blur -- parse it (reusing
+// parseAmountMinor's US grouping/decimal handling), then re-emit it with thousands
+// grouping and the currency's fraction width. Blank/unparseable input is left untouched
+// (the user is mid-type / cleared the field); it never invents a value.
+test('formatAmountGrouped: pads fraction + inserts thousands grouping', () => {
+  assert.equal(formatAmountGrouped('1000', 2), '1,000.00');
+  assert.equal(formatAmountGrouped('1234567.5', 2), '1,234,567.50');
+  assert.equal(formatAmountGrouped('12.34', 2), '12.34');
+  assert.equal(formatAmountGrouped('0', 2), '0.00');
+});
+
+test('formatAmountGrouped: already-grouped input round-trips', () => {
+  assert.equal(formatAmountGrouped('1,000.00', 2), '1,000.00');
+  assert.equal(formatAmountGrouped('  42.5  ', 2), '42.50');
+});
+
+test('formatAmountGrouped: exponent 0 has no fraction', () => {
+  assert.equal(formatAmountGrouped('1000', 0), '1,000');
+});
+
+test('formatAmountGrouped: blank or unparseable is returned unchanged', () => {
+  assert.equal(formatAmountGrouped('', 2), '');
+  assert.equal(formatAmountGrouped('   ', 2), '   ');
+  assert.equal(formatAmountGrouped('abc', 2), 'abc');
 });
