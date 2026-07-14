@@ -22,6 +22,11 @@ type PayeeSuggestion struct {
 	Name string
 }
 
+// SuggestPayees is RETAINED but no longer wired to the web (p26.3): the header payee is
+// now a single client-side combobox filtering the full payee option list, so the
+// /payees/suggest fragment was removed. The store method + its sqlc query + test are
+// kept intact (a reusable prefix-ranked reader; no dead generated-SQL churn to retire).
+//
 // SuggestPayees returns active payees whose name PREFIX-matches q (case-insensitive;
 // payees.name is COLLATE NOCASE), ranked MOST-RECENT-FIRST by the payee's latest
 // non-deleted transaction date; payees never used (or with only deleted txns) rank

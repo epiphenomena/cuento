@@ -4,35 +4,18 @@ import (
 	"net/http"
 
 	"cuento/internal/money"
-	"cuento/internal/store"
 )
 
-// p12.3 payee autocomplete + autofill. Two TxnWrite routes feeding the transaction
-// ENTRY flow (matching the editor's write-gating, since they exist only to author an
-// entry): GET /payees/suggest?q= returns a ranked suggestion fragment; GET
+// p12.3 payee autofill. One TxnWrite route feeding the transaction ENTRY flow
+// (matching the editor's write-gating, since it exists only to author an entry): GET
 // /payees/{id}/template?sub= returns the editor split-ROWS partial prefilled from the
 // payee's last non-deleted transaction, with out-of-subsidiary splits dropped server
 // -side (respects-subsidiary). The never-overwrites guard is CLIENT-side (txnpayee.js
 // allRowsEmpty); the server always renders the template, the client decides to apply.
-
-// payeeSuggestModel is the model for the payee-suggest fragment: the ranked list.
-type payeeSuggestModel struct {
-	Suggestions []store.PayeeSuggestion
-}
-
-// payeeSuggest handles GET /payees/suggest?q=: the ranked prefix-matched payees
-// (most-recent-first; never-used last). Renders the "payee-suggest" fragment (a list
-// of <li> options the DOM glue turns into a pickable menu). An empty/no-match query
-// renders an empty fragment.
-func (s *server) payeeSuggest(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	sug, err := s.store.SuggestPayees(ctx, r.URL.Query().Get("q"))
-	if err != nil {
-		s.serverError(w)
-		return
-	}
-	s.render(w, r, http.StatusOK, "payee-suggest", payeeSuggestModel{Suggestions: sug})
-}
+//
+// p26.3: the ranked GET /payees/suggest fragment was REMOVED -- the header payee is now
+// a single client-side combobox filtering the full payee option list, so the server
+// suggest path was dead code.
 
 // payeeTemplate handles GET /payees/{id}/template?sub=: the split-rows partial
 // prefilled from the payee's last non-deleted transaction. Splits whose account is

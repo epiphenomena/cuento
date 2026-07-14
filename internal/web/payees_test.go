@@ -136,33 +136,6 @@ func TestAutofillRespectsSubsidiary(t *testing.T) {
 	}
 }
 
-// TestPayeeSuggestHandler: GET /payees/suggest?q= returns the ranked suggestion
-// fragment (the ordering itself is asserted in the store test; here we prove the
-// endpoint renders matches and honors the prefix).
-func TestPayeeSuggestHandler(t *testing.T) {
-	e := newTxnWebEnv(t)
-	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
-	_, err := e.st.CreatePayee(ctx, "Northwind Traders")
-	must(t, err, "payee nw")
-	_, err = e.st.CreatePayee(ctx, "Southwind Co")
-	must(t, err, "payee sw")
-
-	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/payees/suggest?q=north", nil)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("suggest: status=%d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, "Northwind Traders") {
-		t.Fatalf("suggest missing prefix match\n%s", body)
-	}
-	if strings.Contains(body, "Southwind Co") {
-		t.Fatalf("suggest returned a non-prefix match\n%s", body)
-	}
-	if !strings.Contains(body, `data-payee-id=`) {
-		t.Fatalf("suggestion items must carry data-payee-id\n%s", body)
-	}
-}
-
 // TestPayeeCreateOnSave: saving a transaction with a TYPED (new) payee name creates
 // the payee (find-or-create, versioned) and tags the transaction with it. A second
 // save with the same name REUSES the payee (no duplicate).

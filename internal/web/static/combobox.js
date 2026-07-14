@@ -24,6 +24,21 @@
 //     that references each option's value/label. So readers of selectedOptions[0].dataset
 //     (program/class gating) and option[data-account-option] (subsidiary marking) are
 //     undisturbed.
+//   - resyncCombos(root): after ANY code sets select.value directly (no `change` event),
+//     refresh each enhanced overlay's visible text from its select's selection. Used by
+//     apply-fund-to-all, gateRow's program prefill, and swap-row (p26.3). freeText combos
+//     keep their typed text (they own their input via onInput).
+//
+// p26.3 GENERALIZATION (so payee + the p26.4 expense grid reuse the SAME widget):
+//   enhance(select, opts) takes an optional opts:
+//     - allowFreeText: the overlay is a real tab stop (the select drops out of tab order)
+//       and a typed value that matches no option is KEPT (not reset to the selection) on
+//       blur/close. This is the payee case: a typed brand-new name must survive.
+//     - onInput(text): called on every keystroke (payee mirrors the typed text into the
+//       hidden payee_name field + resets the id sink to 0).
+//     - onPick({value, label}): called after a real option is picked and select.value is
+//       set + `change` dispatched (payee autofills the grid from the chosen payee).
+//   The account/fund/program call sites pass NO opts and behave exactly as p26.2.
 //
 // Guarded so importing under Node is side-effect free (no `document`), like txneditor.js.
 
@@ -45,9 +60,12 @@ function collectOptions(select) {
     .map((o) => ({ label: optionLabel(o), value: o.value, el: o }));
 }
 
-function enhance(select) {
+function enhance(select, opts) {
   if (!select || select.dataset.combo === '1') return;
   select.dataset.combo = '1';
+  const freeText = !!(opts && opts.allowFreeText);
+  const onInputCb = opts && typeof opts.onInput === 'function' ? opts.onInput : null;
+  const onPickCb = opts && typeof opts.onPick === 'function' ? opts.onPick : null;
 
   // Wrapper is a sibling container the overlay lives in; the select is moved inside it so
   // the input can be absolutely positioned over the select's box.
@@ -63,10 +81,17 @@ function enhance(select) {
   input.setAttribute('role', 'combobox');
   input.setAttribute('aria-autocomplete', 'list');
   input.setAttribute('aria-expanded', 'false');
-  // Not a sequential tab stop: the native <select> underneath is the tab stop (keeps the
-  // grid's Tab order account->amount and the keyboard e2e intact). Clicking or focusing
-  // the select still reveals/uses the input via the wiring below.
-  input.tabIndex = -1;
+  // Tab order: by default the native <select> underneath is the tab stop (keeps the
+  // grid's Tab order account->amount and the keyboard e2e intact); the overlay is
+  // reachable by click/focus only. For a freeText combo (payee) the overlay IS the
+  // tab stop -- a keyboard user must be able to type a brand-new value -- so the select
+  // drops out of tab order (it stays the value sink + no-JS fallback).
+  if (freeText) {
+    input.tabIndex = 0;
+    select.tabIndex = -1;
+  } else {
+    input.tabIndex = -1;
+  }
 
   const list = document.createElement('ul');
   list.className = 'combo-list';
@@ -86,6 +111,14 @@ function enhance(select) {
   }
 
   function syncInputToSelection() {
+    // freeText combos own their input text (a typed brand-new value must survive a
+    // blur/close even though the select is still 0). Only overwrite the box from the
+    // selection when there IS a real selection; otherwise leave the typed text alone.
+    if (freeText) {
+      const lbl = currentLabel();
+      if (lbl !== '') input.value = lbl;
+      return;
+    }
     input.value = currentLabel();
   }
 
@@ -124,15 +157,22 @@ function enhance(select) {
 
   function pick(value) {
     select.value = value;
-    syncInputToSelection();
+    // The picked option's label (before syncInputToSelection reconciles the box).
+    const opt = select.selectedOptions[0];
+    const label = opt ? optionLabel(opt) : '';
+    input.value = label; // real pick -> show the chosen label (freeText or not)
     close();
     // Bubble so the grid-delegated change listener (auto-append) AND the per-row change
     // listener (gating + subsidiary marking) both fire.
     select.dispatchEvent(new Event('change', { bubbles: true }));
+    if (onPickCb) onPickCb({ value, label });
   }
 
   // Typing filters/reorders. An empty box shows the full list in original order.
-  input.addEventListener('input', () => open(input.value));
+  input.addEventListener('input', () => {
+    open(input.value);
+    if (onInputCb) onInputCb(input.value);
+  });
 
   // Opening on focus/click shows the full list so the control feels like a dropdown.
   input.addEventListener('focus', () => {
@@ -176,13 +216,39 @@ function enhance(select) {
   select.addEventListener('change', syncInputToSelection);
 
   syncInputToSelection();
+  // Init seeding (freeText): on a 422 re-render of a typed-new payee the select is 0 but
+  // the caller holds the typed name (in #txn-payee-name) -> show it so the box isn't blank.
+  if (freeText && input.value === '' && opts && opts.initialText) {
+    input.value = opts.initialText;
+  }
 }
 
 // initCombos enhances every not-yet-enhanced combo select under `root` (idempotent).
+// Plain (no-opts) enhancement -- account/fund/program. The payee combo is enhanced
+// separately by txneditor.js with its freeText opts, so it is skipped here via a
+// data-combo-manual marker.
 function initCombos(root) {
   const scope = root || (typeof document !== 'undefined' ? document : null);
   if (!scope || typeof scope.querySelectorAll !== 'function') return;
-  scope.querySelectorAll('select.combo-input:not([data-combo])').forEach(enhance);
+  scope
+    .querySelectorAll('select.combo-input:not([data-combo]):not([data-combo-manual])')
+    .forEach((sel) => enhance(sel));
+}
+
+// resyncCombos refreshes each enhanced overlay's visible text from its select's current
+// selection. Call after ANY code sets select.value WITHOUT dispatching `change` (setting
+// .value fires no event, and the overlay only auto-syncs on `change`): apply-fund-to-all,
+// gateRow's program prefill, swap-row. freeText combos are skipped (they own their text).
+function resyncCombos(root) {
+  const scope = root || (typeof document !== 'undefined' ? document : null);
+  if (!scope || typeof scope.querySelectorAll !== 'function') return;
+  scope.querySelectorAll('.combo').forEach((wrap) => {
+    const select = wrap.querySelector('select.combo-input');
+    const input = wrap.querySelector('.combo-text');
+    if (!select || !input || select.dataset.comboManual === '1') return;
+    const opt = select.selectedOptions[0];
+    input.value = opt && opt.value !== '' && opt.value !== '0' ? optionLabel(opt) : '';
+  });
 }
 
 // stripCombo unwraps any enhanced combo under `root`, restoring a clean native select and
@@ -207,4 +273,4 @@ function stripCombo(root) {
   });
 }
 
-export { enhance, initCombos, stripCombo };
+export { enhance, initCombos, stripCombo, resyncCombos };

@@ -62,7 +62,7 @@
   {{if $.Page.DisplayDRCR}}<input type="hidden" name="amount_{{.Index}}" id="txn-amount-{{.Index}}" value="{{.Amount}}">{{end}}
 
   <td class="txn-cell txn-fund-cell">
-    <select name="fund_{{.Index}}" id="txn-fund-{{.Index}}" class="txn-fund">
+    <select name="fund_{{.Index}}" id="txn-fund-{{.Index}}" class="txn-fund combo-input">
       <option value="0">{{t "txn.fund.unrestricted"}}</option>
       {{range $.Page.Funds}}<option value="{{.ID}}"{{if eq .ID $.Row.Fund}} selected{{end}}>{{.Name}}</option>
       {{end}}
@@ -72,7 +72,7 @@
   <td class="txn-cell txn-program-cell">
     {{/* Program select -- shown by the JS only on R/E rows (Appendix C); rendered
          always so ids stay stable, gated visually by the client. */}}
-    <select name="program_{{.Index}}" id="txn-program-{{.Index}}" class="txn-program">
+    <select name="program_{{.Index}}" id="txn-program-{{.Index}}" class="txn-program combo-input">
       {{range $.Page.Programs}}<option value="{{.ID}}"{{if eq .ID $.Row.Program}} selected{{end}}>{{.Name}}</option>
       {{end}}
     </select>
@@ -116,16 +116,6 @@
 {{define "payee-template" -}}
 {{template "txn-rows" .}}
 <span id="txn-autofill-notice" hx-swap-oob="true" class="txn-autofill-notice"{{if not .AutofillNotice}} hidden{{end}}>{{if .AutofillNotice}}{{t .AutofillNotice}}{{end}}</span>
-{{- end}}
-
-{{/* payee-suggest: the p12.3 autocomplete results fragment htmx swaps into the payee
-     suggestion list on each input. Each item carries data-id/data-name so the DOM glue
-     (txneditor.js) can pick it (set the hidden payee id, fetch the template) WITHOUT an
-     hx-* trigger on the freshly-swapped node (that would hit the settle-wiring race).
-     Empty query / no matches renders nothing. */ -}}
-{{define "payee-suggest" -}}
-{{range .Suggestions}}<li class="txn-payee-suggestion" role="option" data-payee-id="{{.ID}}" data-payee-name="{{.Name}}">{{.Name}}</li>
-{{end}}
 {{- end}}
 
 {{/* transaction-form: the single-sourced form region. Rendered inside the full page
@@ -172,35 +162,24 @@
              placeholder="{{t "txn.date_hint"}}"
              {{if eq $.Page.FirstErrorRow -2}}autofocus{{end}}>
     </div>
-    <div class="txn-field txn-payee-field">
+    <div class="txn-field txn-payee-field" data-template-url="/payees">
       <label for="txn-payee">{{t "txn.payee"}}</label>
-      {{/* No-JS fallback: the native <select> posts `payee` (an EXISTING payee id).
-           p12.3 progressive enhancement (txneditor.js) HIDES this select and reveals the
-           autocomplete below, keeping the select as the id value sink. A TYPED new name
-           posts via payee_name (below); the handler prefers the id, else find-or-creates
-           by name (create-on-save, DECISIONS p12.3). No-JS degrades to pick-existing. */}}
-      <select name="payee" id="txn-payee" class="txn-payee">
+      {{/* p26.3: ONE control -- the native <select> enhanced by the SAME combobox widget
+           as account/fund/program (combo-input), so payee UX matches the grid selects.
+           No-JS fallback: the select posts `payee` (an EXISTING payee id). The combo is
+           enhanced MANUALLY by txneditor.js (data-combo-manual) with freeText opts so a
+           TYPED new name mirrors into #txn-payee-name (posts as payee_name; the handler
+           prefers the id else find-or-creates by name -- create-on-save, DECISIONS p12.3)
+           and a real pick fetches + autofills the grid from the payee's last transaction.
+           No-JS degrades to pick-existing. */}}
+      <select name="payee" id="txn-payee" class="txn-payee combo-input" data-combo-manual="1">
         <option value="0">{{t "txn.payee_none"}}</option>
         {{range .Payees}}<option value="{{.ID}}"{{if eq .ID $.Page.Payee}} selected{{end}}>{{.Name}}</option>
         {{end}}
       </select>
-      {{/* Autocomplete (JS-revealed; starts hidden so no-JS shows only the select). The
-           input's hx-get fetches the ranked suggestion fragment into
-           #txn-payee-suggestions; the DOM glue turns a clicked/keyed option into a pick
-           (sets #txn-payee + #txn-payee-name + fetches the template). payee_name carries
-           the typed/picked NAME so a brand-new payee (select id 0) is find-or-created on
-           save. data-template-url is the base for the per-payee template fetch. */}}
-      <div class="txn-payee-autocomplete" data-template-url="/payees" hidden>
-        <input type="text" id="txn-payee-input" class="txn-payee-input" autocomplete="off"
-               role="combobox" aria-expanded="false" aria-autocomplete="list"
-               aria-controls="txn-payee-suggestions" placeholder="{{t "txn.payee_search"}}"
-               value="{{.PayeeName}}"
-               hx-get="/payees/suggest" hx-trigger="input changed delay:150ms"
-               hx-target="#txn-payee-suggestions" hx-swap="innerHTML"
-               name="q">
-        <input type="hidden" name="payee_name" id="txn-payee-name" value="{{.PayeeName}}">
-        <ul id="txn-payee-suggestions" class="txn-payee-suggestions" role="listbox"></ul>
-      </div>
+      {{/* payee_name carries the typed/picked NAME so a brand-new payee (select id 0) is
+           find-or-created on save. Seeded on a 422 re-render of a typed-new payee. */}}
+      <input type="hidden" name="payee_name" id="txn-payee-name" value="{{.PayeeName}}">
     </div>
     <div class="txn-field">
       <label for="txn-memo">{{t "txn.memo"}}</label>

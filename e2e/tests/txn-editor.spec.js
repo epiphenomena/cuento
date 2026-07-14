@@ -43,6 +43,25 @@ async function createAsset(page, name) {
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 
+// createFund makes an active fund scoped to the root subsidiary + root program
+// ("General") through the inline /funds form, so the txn editor's fund combo has a real
+// option to filter (a fresh -dev db has none). Mirrors funds.spec.js.
+async function createFund(page, name) {
+  await page.goto('/funds');
+  await page.getByRole('button', { name: /new fund/i }).click();
+  await expect(page.locator('form#fund-form.e2e-settled')).toBeVisible();
+  await page.locator('#ff-name').fill(name);
+  await page.locator('#ff-program').selectOption({ label: 'General' });
+  const rootSub = page.locator('input[name="sub_1"]');
+  if (!(await rootSub.isChecked())) await rootSub.check();
+  const reloaded = page.waitForResponse(
+    (r) => r.url().endsWith('/funds') && r.request().method() === 'GET',
+  );
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await reloaded;
+  await expect(page.locator('tr.fund-row', { hasText: name })).toBeVisible();
+}
+
 test.describe('transaction editor', () => {
   test('enters a balanced 2-split transaction and it appears in the register', async ({ page, server }) => {
     await login(page, server);
@@ -192,5 +211,58 @@ test.describe('transaction editor', () => {
     await expect(input1).toHaveValue(/Combo Checking/);
     // Asset pick -> class cell hidden (gating fired on the CLONED row's select).
     await expect(page.locator('#txn-class-1')).toBeHidden();
+  });
+
+  // p26.3: the fund and program selects are ALSO enhanced into comboboxes. This drives
+  // the overlay inputs: typing filters, a pick sets the underlying select. Program is
+  // shown only on an R/E row (gated), so we pick an expense account first.
+  test('fund and program combos filter + pick by typing', async ({ page, server }) => {
+    await login(page, server);
+    await createFund(page, 'Water Grant Combo');
+
+    // An expense account so the program cell is revealed on its row.
+    await page.goto('/accounts');
+    await page.getByRole('button', { name: /new account/i }).click();
+    await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
+    await page.locator('#af-type').selectOption('expense');
+    await expect(page.locator('#af-func')).toBeVisible();
+    await page.locator('#af-name-en').fill('Combo Supplies');
+    const rootSub2 = page.locator('input[name="sub_1"]');
+    if (!(await rootSub2.isChecked())) await rootSub2.check();
+    await page.locator('#af-func').selectOption('management');
+    await saveAndReload(page, { reloadPath: '/accounts' });
+    await expect(page.locator('tr.acct-row', { hasText: 'Combo Supplies' })).toBeVisible();
+
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+
+    // Pick the expense account via its combo so the program cell reveals (R/E gating).
+    const acctCell = page.locator('.txn-row[data-row="0"] .txn-account-cell');
+    await acctCell.locator('.combo-text').click();
+    await acctCell.locator('.combo-text').fill('supplies');
+    await acctCell.locator('.combo-option', { hasText: 'Combo Supplies' }).click();
+    await expect(page.locator('#txn-program-0')).toBeVisible();
+
+    // Fund combo: type-filter to the created fund and pick it -> the native select gets
+    // its value AND the overlay shows the label.
+    const fundCell = page.locator('.txn-row[data-row="0"] .txn-fund-cell');
+    const fundInput = fundCell.locator('.combo-text');
+    await expect(fundInput).toBeVisible();
+    await fundInput.click();
+    await fundInput.fill('water');
+    await expect(fundCell.locator('.combo-option', { hasText: 'Water Grant Combo' })).toBeVisible();
+    await fundCell.locator('.combo-option', { hasText: 'Water Grant Combo' }).click();
+    await expect(page.locator('#txn-fund-0')).toHaveValue(/\d+/);
+    await expect(fundInput).toHaveValue(/Water Grant Combo/);
+
+    // Program combo: filter to "General" (the seeded root program) and pick it.
+    const progCell = page.locator('.txn-row[data-row="0"] .txn-program-cell');
+    const progInput = progCell.locator('.combo-text');
+    await progInput.click();
+    await progInput.fill('gene');
+    await expect(progCell.locator('.combo-option', { hasText: 'General' })).toBeVisible();
+    await progCell.locator('.combo-option', { hasText: 'General' }).click();
+    await expect(page.locator('#txn-program-0')).toHaveValue(/\d+/);
+    await expect(progInput).toHaveValue(/General/);
   });
 });

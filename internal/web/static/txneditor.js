@@ -20,7 +20,7 @@ import { parseAmountMinor, drcrToSigned, formatSignedMinor } from './txnamount.j
 import { fundImbalances, applyFundToAll } from './txnfund.js';
 import { nextCell, invalidRowsForSubsidiary } from './txngrid.js';
 import { allRowsEmpty, isRowEmpty } from './txnpayee.js';
-import { initCombos, stripCombo } from './combobox.js';
+import { initCombos, stripCombo, resyncCombos, enhance } from './combobox.js';
 
 function initEditor(form) {
   const exp = 2; // currency exponent; USD/MXN are 2. Amounts are display-only here.
@@ -120,6 +120,9 @@ function initEditor(form) {
     }
     if (!isExpense && classSel) classSel.value = '';
     if (!isRE && progSel) progSel.value = '';
+    // The program (and class) selects were set directly above -> refresh their combo
+    // overlays so the visible label matches (program is a combo; class is not, no-op).
+    resyncCombos(row);
   }
 
   function gateAll() {
@@ -138,6 +141,7 @@ function initEditor(form) {
       selects.forEach((s, idx) => {
         s.value = next[idx] === '' ? '0' : next[idx];
       });
+      resyncCombos(form); // fund selects were set directly -> refresh their overlays
       recompute();
     });
   }
@@ -399,30 +403,21 @@ function initEditor(form) {
     grid.addEventListener('change', ensureTrailingEmptyRow);
   }
 
-  // --- payee autocomplete + autofill (p12.3) ------------------------------
-  // Progressive enhancement: hide the native <select> (the no-JS value sink) and
-  // reveal the autocomplete input. Picking a suggestion writes the id into the select
-  // (so submit is unchanged), then fetches the payee's template and applies it -- but
-  // ONLY when every current row is empty (never-overwrites, allRowsEmpty; the pure
-  // guard). The template fetch is triggered PROGRAMMATICALLY (not an hx-* trigger on a
-  // freshly-swapped suggestion node) so it never races htmx's settle-tick wiring.
+  // --- payee combobox + autofill (p12.3, p26.3) ---------------------------
+  // p26.3: the payee is ONE control -- the native <select> enhanced by the SAME combobox
+  // widget as account/fund/program, with two extra behaviors folded in as opts:
+  //   - onInput: a typed name (not yet a real pick) is a NEW payee -> mirror it into the
+  //     hidden #txn-payee-name (posts as payee_name) and reset the id sink to 0 so the
+  //     handler find-or-creates by name (create-on-save). freeText keeps the typed text.
+  //   - onPick: a real payee -> set #txn-payee-name to its name and fetch+apply its last
+  //     transaction template, but ONLY when every current row is empty (never-overwrites,
+  //     allRowsEmpty). The select.value + `change` are handled by the widget.
+  // The template fetch is a manual fetch (not an hx-* trigger) so it never races htmx's
+  // settle-tick wiring.
   const payeeSelect = form.querySelector('#txn-payee');
-  const payeeAuto = form.querySelector('.txn-payee-autocomplete');
-  const payeeInput = form.querySelector('#txn-payee-input');
+  const payeeField = form.querySelector('.txn-payee-field');
   const payeeName = form.querySelector('#txn-payee-name');
-  const payeeList = form.querySelector('#txn-payee-suggestions');
-  if (payeeSelect && payeeAuto && payeeInput && payeeName && payeeList) {
-    payeeSelect.style.display = 'none';
-    payeeAuto.hidden = false;
-
-    // Typing a name (without picking a suggestion) is a NEW payee: post the typed
-    // name via payee_name and reset the id sink so the handler find-or-creates by
-    // name (create-on-save). Picking a suggestion overrides both (setPayee).
-    payeeInput.addEventListener('input', () => {
-      payeeName.value = payeeInput.value;
-      payeeSelect.value = '0';
-    });
-
+  if (payeeSelect && payeeField && payeeName) {
     function currentRowValues() {
       return [...form.querySelectorAll('.txn-row')].map((row) => {
         const i = row.dataset.row;
@@ -439,26 +434,6 @@ function initEditor(form) {
           memo: memo ? memo.value : '',
         };
       });
-    }
-
-    function setPayee(id, name) {
-      // Ensure the select has an option for this id (it may be a payee not in the
-      // initial option list), then select it so submit posts the chosen payee.
-      let opt = payeeSelect.querySelector(`option[value="${id}"]`);
-      if (!opt) {
-        opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = name;
-        payeeSelect.appendChild(opt);
-      }
-      payeeSelect.value = id;
-      payeeInput.value = name;
-      payeeName.value = name;
-    }
-
-    function clearSuggestions() {
-      payeeList.textContent = '';
-      payeeInput.setAttribute('aria-expanded', 'false');
     }
 
     function applyTemplateRows(html) {
@@ -483,7 +458,7 @@ function initEditor(form) {
     function fetchAndApplyTemplate(id) {
       // Never overwrite user input: apply only when the grid is entirely empty.
       if (!allRowsEmpty(currentRowValues())) return;
-      const base = payeeAuto.dataset.templateUrl || '/payees';
+      const base = payeeField.dataset.templateUrl || '/payees';
       const sub = subSel ? subSel.value : '';
       const url = `${base}/${encodeURIComponent(id)}/template?sub=${encodeURIComponent(sub)}`;
       // A manual fetch (not htmx) so the request fires immediately on pick, dodging the
@@ -502,31 +477,22 @@ function initEditor(form) {
         .catch(() => {});
     }
 
-    function pick(item) {
-      if (!item) return;
-      setPayee(item.dataset.payeeId, item.dataset.payeeName);
-      clearSuggestions();
-      fetchAndApplyTemplate(item.dataset.payeeId);
-    }
-
-    payeeList.addEventListener('click', (evt) => {
-      const item = evt.target.closest('.txn-payee-suggestion');
-      if (item) pick(item);
-    });
-    payeeInput.addEventListener('keydown', (evt) => {
-      if (evt.key === 'Enter') {
-        const first = payeeList.querySelector('.txn-payee-suggestion');
-        if (first) {
-          evt.preventDefault();
-          pick(first);
-        }
-      } else if (evt.key === 'Escape') {
-        clearSuggestions();
-      }
-    });
-    // Reflect suggestion presence in aria-expanded after each htmx swap of the list.
-    payeeList.addEventListener('htmx:afterSwap', () => {
-      payeeInput.setAttribute('aria-expanded', payeeList.children.length > 0 ? 'true' : 'false');
+    // Enhance the payee select into a freeText combobox (skipped by initCombos via
+    // data-combo-manual so ONLY this call, with its opts, wires it).
+    enhance(payeeSelect, {
+      allowFreeText: true,
+      initialText: payeeName.value,
+      onInput: (text) => {
+        // A typed name (no real pick yet) is a NEW payee: mirror it into payee_name and
+        // reset the id sink so the handler find-or-creates by name on save.
+        payeeName.value = text;
+        payeeSelect.value = '0';
+      },
+      onPick: ({ value, label }) => {
+        // A real payee pick: record the name and autofill the grid from its last txn.
+        payeeName.value = label;
+        fetchAndApplyTemplate(value);
+      },
     });
   }
 

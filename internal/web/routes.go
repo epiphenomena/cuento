@@ -288,14 +288,12 @@ func (s *server) routes() []Route {
 		{http.MethodGet, "/transactions/{id}/void", TxnWrite, http.HandlerFunc(s.voidReview)},
 		{http.MethodPost, "/transactions/{id}/void", TxnWrite, http.HandlerFunc(s.void)},
 		{http.MethodGet, "/transactions/{id}/duplicate", TxnWrite, http.HandlerFunc(s.txnDuplicate)},
-		// p12.3 payee autocomplete + autofill (Appendix B/F). Both feed the transaction
-		// ENTRY flow, so both are TxnWrite (matching the editor GET forms -- they exist
-		// only to author an entry). GET /payees/suggest returns a ranked suggestion
-		// fragment; GET /payees/{id}/template returns the split-rows editor partial the
-		// grid swaps in on a payee pick. The literal "/payees/suggest" is more specific
-		// than "/payees/{id}/template", so the Go 1.22+ mux routes them precisely. The
-		// permission-matrix test picks these up automatically (rule 8).
-		{http.MethodGet, "/payees/suggest", TxnWrite, http.HandlerFunc(s.payeeSuggest)},
+		// p12.3 payee autofill (Appendix B/F). Feeds the transaction ENTRY flow, so
+		// TxnWrite (matching the editor GET forms -- it exists only to author an entry).
+		// GET /payees/{id}/template returns the split-rows editor partial the grid swaps
+		// in on a payee pick. The permission-matrix test picks it up automatically (rule
+		// 8). (p26.3 removed /payees/suggest: the header payee is now a client-side combo
+		// filtering the full payee list, so the server suggest fragment is dead code.)
 		{http.MethodGet, "/payees/{id}/template", TxnWrite, http.HandlerFunc(s.payeeTemplate)},
 		// p12.5 funds workspace (Appendix B/F). Fund GRANTS are BOOKKEEPING data
 		// (D20, managed like programs), so GET (list + statement) is TxnRead and the

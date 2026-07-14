@@ -67,20 +67,28 @@ test.describe('payee autocomplete + autofill', () => {
     // First transaction: a typed NEW payee (create-on-save) + a balanced transfer.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    // The autocomplete input is revealed by JS (the native select is hidden).
-    await expect(page.locator('#txn-payee-input')).toBeVisible();
-    await page.locator('#txn-payee-input').fill('Autofill Vendor');
+    // p26.3: the payee is ONE combobox over #txn-payee (combo-input). The overlay input
+    // is the .combo-text inside the payee field; the native select is the value sink.
+    const payeeBox = page.locator('.txn-payee-field .combo-text');
+    await expect(payeeBox).toBeVisible();
+    await payeeBox.fill('Autofill Vendor');
+    // A typed brand-new name must survive blur (freeText) and post via payee_name.
+    // Blur onto the memo header input (a plain field, no combo overlay to intercept).
+    await page.locator('#txn-memo').click();
+    await expect(payeeBox).toHaveValue('Autofill Vendor');
+    await expect(page.locator('#txn-payee-name')).toHaveValue('Autofill Vendor');
     await enterTransfer(page, 'Auto Savings', 'Auto Checking', '40.00');
     await page.locator('#txn-memo-0').fill('first memo');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL('**/register**');
 
-    // Second entry: autocomplete the payee, pick it, and the prior splits prefill.
+    // Second entry: fuzzy-filter the payee, pick it, and the prior splits prefill.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    const input = page.locator('#txn-payee-input');
-    await input.fill('Auto'); // prefix match -> the suggestion appears
-    const suggestion = page.locator('.txn-payee-suggestion', { hasText: 'Autofill Vendor' });
+    const input = page.locator('.txn-payee-field .combo-text');
+    await input.click();
+    await input.fill('Auto'); // fuzzy match -> the option appears in the combo list
+    const suggestion = page.locator('.txn-payee-field .combo-option', { hasText: 'Autofill Vendor' });
     await expect(suggestion).toBeVisible();
     await suggestion.click();
 
@@ -99,7 +107,7 @@ test.describe('payee autocomplete + autofill', () => {
     // Seed a payee with a prior transaction (create-on-save).
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    await page.locator('#txn-payee-input').fill('Guard Vendor');
+    await page.locator('.txn-payee-field .combo-text').fill('Guard Vendor');
     await enterTransfer(page, 'Guard Savings', 'Guard Checking', '15.00');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL('**/register**');
@@ -108,9 +116,10 @@ test.describe('payee autocomplete + autofill', () => {
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
     await page.locator('#txn-amount-0').fill('99.00'); // user input first
-    const input = page.locator('#txn-payee-input');
+    const input = page.locator('.txn-payee-field .combo-text');
+    await input.click();
     await input.fill('Guard');
-    const suggestion = page.locator('.txn-payee-suggestion', { hasText: 'Guard Vendor' });
+    const suggestion = page.locator('.txn-payee-field .combo-option', { hasText: 'Guard Vendor' });
     await expect(suggestion).toBeVisible();
     await suggestion.click();
 

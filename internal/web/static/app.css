@@ -462,28 +462,10 @@ input[aria-invalid="true"] {
 .theme-preview .brand-lockup { font-size: 1.5rem; }
 .theme-preview .brand-lockup .brand-icon { width: 2.25rem; height: 2.25rem; }
 
-/* p12.3 payee autocomplete + autofill. The native <select id=txn-payee> is the
-   no-JS value sink; txneditor.js reveals this autocomplete and hides the select.
-   The suggestion list is a positioned dropdown of pickable options. */
+/* p12.3 payee autofill notice. p26.3: the payee is now a single combobox over
+   <select id=txn-payee> (the shared .combo widget styles it); the old bespoke
+   .txn-payee-autocomplete / .txn-payee-suggestions dropdown was removed. */
 .txn-payee-field { position: relative; }
-.txn-payee-autocomplete { position: relative; }
-.txn-payee-suggestions {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  position: absolute;
-  left: 0;
-  right: 0;
-  z-index: 20;
-  background: var(--color-surface);
-  border: var(--border);
-  border-radius: var(--radius);
-  max-height: 14rem;
-  overflow-y: auto;
-}
-.txn-payee-suggestions:empty { display: none; }
-.txn-payee-suggestion { padding: var(--space-2) var(--space-3); cursor: pointer; }
-.txn-payee-suggestion:hover { background: var(--color-surface-muted, rgba(0,0,0,0.06)); }
 .txn-autofill-notice { display: block; color: var(--color-text-muted); font-size: 0.9rem; }
 .txn-autofill-notice[hidden] { display: none; }
 
@@ -588,7 +570,8 @@ input[aria-invalid="true"] {
 .txn-header .txn-date { min-width: 8rem; }
 .txn-header .txn-payee-field { flex: 1 1 16rem; }
 .txn-header .txn-payee-field select,
-.txn-header .txn-payee-field .txn-payee-input { width: 100%; }
+.txn-header .txn-payee-field .combo,
+.txn-header .txn-payee-field .combo-text { width: 100%; }
 .txn-header .txn-memo-header { min-width: 14rem; }
 /* Apply-fund helper sits at the end of the header row as an inline cluster. */
 .txn-apply-fund { flex-direction: row !important; align-items: end; gap: var(--space-2); }
@@ -675,6 +658,13 @@ input[aria-invalid="true"] {
   background: var(--color-surface);
 }
 .txn-grid td.txn-cell .combo > .combo-text { padding: var(--space-2) var(--space-3); }
+/* p26.3: the header payee combo (outside .txn-grid) needs its own padding + a visible
+   border so it reads as a normal header field, not a borderless grid cell. */
+.txn-header .txn-payee-field .combo > .combo-text {
+  padding: var(--space-2) var(--space-3);
+  border: var(--border);
+  border-radius: var(--radius);
+}
 .combo > .combo-text:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: -2px;
