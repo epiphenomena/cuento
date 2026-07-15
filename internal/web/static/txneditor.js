@@ -7,7 +7,6 @@
 //   - DR/CR twin columns -> normalize into the hidden signed amount_i field (trap 3,
 //     the ONE mapping site is drcrToSigned in txnamount.js).
 //   - live imbalance chips (overall + per fund) from fundImbalances (display only).
-//   - fund apply-to-all (empty rows only) via applyFundToAll.
 //   - show the program select only on R/E rows, the class select only on expense
 //     rows, prefilled from the account's data-* defaults (server re-defaults).
 //   - subsidiary re-filter: flag rows whose account left the sub (invalidRowsForSub).
@@ -17,7 +16,7 @@
 // Guarded so importing under Node is side-effect free (no `document`).
 
 import { parseAmountMinor, drcrToSigned, formatSignedMinor } from './txnamount.js';
-import { fundImbalances, applyFundToAll } from './txnfund.js';
+import { fundImbalances } from './txnfund.js';
 import { nextCell, invalidRowsForSubsidiary } from './txngrid.js';
 import { isRowEmpty } from './rowstate.js';
 import { initCombos, stripCombo, resyncCombos } from './combobox.js';
@@ -136,23 +135,6 @@ function initEditor(form) {
     form.querySelectorAll('.txn-row').forEach(gateRow);
   }
 
-  // --- fund apply-to-all (empty rows only) --------------------------------
-  const applyBtn = form.querySelector('#txn-apply-fund-btn');
-  if (applyBtn) {
-    applyBtn.addEventListener('click', () => {
-      const sel = form.querySelector('#txn-apply-fund');
-      const value = sel ? sel.value : '';
-      const selects = [...form.querySelectorAll('.txn-fund')];
-      const current = selects.map((s) => (s.value === '0' ? '' : s.value));
-      const next = applyFundToAll(current, value);
-      selects.forEach((s, idx) => {
-        s.value = next[idx] === '' ? '0' : next[idx];
-      });
-      resyncCombos(form); // fund selects were set directly -> refresh their overlays
-      recompute();
-    });
-  }
-
   // --- subsidiary re-filter (client display; server also re-filters) ------
   const subSel = form.querySelector('#txn-subsidiary');
   function markSubsidiaryConflicts() {
@@ -237,6 +219,57 @@ function initEditor(form) {
     gateRow(clone);
   }
 
+  // --- delete row (p26.23) -------------------------------------------------
+  // Mirrors the expense grid's per-row × (expensegrid.js): remove the row (or reset it in
+  // place when it is the only row), re-index the survivors to a contiguous 0..n-1 so the
+  // name="_<i>" scheme stays contiguous, update the rows-count, and re-assert the
+  // one-trailing-empty invariant. The combobox/descfield enhancements are closure-bound to
+  // the element (not the id), so a re-index does NOT need a strip+re-init; only the
+  // id/name/data-* suffixes are rewritten. After a structural change we re-gate + recompute
+  // + re-mark subsidiary conflicts so the chips and per-row state stay correct.
+  function reindexRow(rowEl, idx) {
+    rowEl.dataset.row = String(idx);
+    if (rowEl.hasAttribute('data-row-error')) rowEl.setAttribute('data-row-error', String(idx));
+    rowEl.querySelectorAll('[id],[name]').forEach((el) => {
+      if (el.id) el.id = el.id.replace(/-\d+$/, `-${idx}`);
+      if (el.name) el.name = el.name.replace(/_\d+$/, `_${idx}`);
+    });
+    // Keep the description input's listbox pointer (txn-desc-list-<i>) on its OWN row.
+    rowEl.querySelectorAll('[data-desc-container]').forEach((el) => {
+      el.dataset.descContainer = el.dataset.descContainer.replace(/-\d+$/, `-${idx}`);
+    });
+  }
+  // resetRow clears one row's inputs/selects in place (used for the sole/last delete so the
+  // grid never drops to zero rows), then resyncs its combos + re-gates it.
+  function resetRow(rowEl) {
+    rowEl.classList.remove('sub-conflict');
+    rowEl.removeAttribute('data-row-error');
+    rowEl.querySelectorAll('input').forEach((el) => {
+      el.value = '';
+    });
+    rowEl.querySelectorAll('select').forEach((el) => {
+      el.selectedIndex = 0;
+    });
+    const errCell = rowEl.querySelector('.txn-row-error');
+    if (errCell) errCell.textContent = '';
+    resyncCombos(rowEl); // the selects were set directly -> refresh their overlay text
+    gateRow(rowEl); // re-hide program/class and re-apply defaults on the cleared row
+  }
+  function deleteRow(rowEl) {
+    const rowEls = [...form.querySelectorAll('.txn-row')];
+    if (rowEls.length <= 1) {
+      resetRow(rowEl);
+      form.querySelector('#txn-rows-count').value = String(form.querySelectorAll('.txn-row').length);
+    } else {
+      rowEl.remove();
+      [...form.querySelectorAll('.txn-row')].forEach((r, i) => reindexRow(r, i));
+      form.querySelector('#txn-rows-count').value = String(form.querySelectorAll('.txn-row').length);
+      ensureTrailingEmptyRow();
+    }
+    markSubsidiaryConflicts();
+    recompute();
+  }
+
   // --- select-on-focus (Appendix C) ---------------------------------------
   form.addEventListener('focusin', (evt) => {
     const el = evt.target;
@@ -283,22 +316,22 @@ function initEditor(form) {
   // truth) and are the cells the traversal must skip on other rows.
   const gridCols = drcr
     ? [
+        { field: 'desc', always: true },
         { field: 'account', always: true },
         { field: 'dr', always: true },
         { field: 'cr', always: true },
         { field: 'fund', always: true },
         { field: 'program', reveal: 'program' },
         { field: 'class', reveal: 'class' },
-        { field: 'desc', always: true },
         { field: 'memo', always: true },
       ]
     : [
+        { field: 'desc', always: true },
         { field: 'account', always: true },
         { field: 'amount', always: true },
         { field: 'fund', always: true },
         { field: 'program', reveal: 'program' },
         { field: 'class', reveal: 'class' },
-        { field: 'desc', always: true },
         { field: 'memo', always: true },
       ];
 
@@ -386,7 +419,9 @@ function initEditor(form) {
       }
     });
     if (firstBad >= 0) {
-      const cell = cellInput(firstBad, 0);
+      // Focus the ACCOUNT cell (the missing field), not column 0 -- which is now the
+      // description column (p26.23 moved description to the first column).
+      const cell = cellInput(firstBad, colOfField('account'));
       if (cell && typeof cell.focus === 'function') cell.focus();
     }
     return flagged;
@@ -483,6 +518,16 @@ function initEditor(form) {
     // trailing empty row. Delegated on the grid so it survives addRow without re-wiring.
     grid.addEventListener('input', ensureTrailingEmptyRow);
     grid.addEventListener('change', ensureTrailingEmptyRow);
+
+    // Per-row delete (p26.23): the × button. type="button" so it never submits; delegated
+    // so it survives addRow/re-index. Deleting the only/last row resets it in place.
+    grid.addEventListener('click', (evt) => {
+      const btn = evt.target.closest('.txn-delete');
+      if (!btn) return;
+      evt.preventDefault();
+      const rowEl = btn.closest('.txn-row');
+      if (rowEl) deleteRow(rowEl);
+    });
   }
 
   // p26.19: the per-transaction payee autofill (p12.3/p26.3) was REMOVED. Its whole-grid

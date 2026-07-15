@@ -66,11 +66,12 @@
     <table class="expense-lines-table txn-grid">
       <thead>
         <tr>
+          {{/* p26.23: description is the FIRST column (before Account). */}}
+          <th>{{t "expense.line.col.description"}}</th>
           <th>{{t "expense.line.col.account"}}</th>
           <th>{{t "expense.line.col.amount"}}</th>
           <th>{{t "expense.line.col.fund"}}</th>
           <th>{{t "expense.line.col.program"}}</th>
-          <th>{{t "expense.line.col.description"}}</th>
           <th>{{t "expense.line.col.memo"}}</th>
           <th>{{t "txn.col.error"}}</th>
           {{/* p26.11: the delete-× action column is the LAST column, AFTER the error column. */}}
@@ -82,6 +83,17 @@
         {{range $i, $l := .Lines}}
         <tr class="expense-line-row el-row" data-row="{{$i}}">
           <input type="hidden" name="line_id_{{$i}}" id="el-lineid-{{$i}}" value="{{if $l.ID}}{{$l.ID}}{{end}}">
+          {{/* p26.23: per-line free-text description is now the FIRST column (before Account).
+               Autocomplete + prefill, magnitude amount mode (sign derived server-side). */}}
+          <td class="txn-cell el-desc-cell">
+            <div class="desc-field">
+              <input type="text" name="description_{{$i}}" id="el-desc-{{$i}}" class="el-desc js-descfield"
+                     value="{{$l.Description}}" autocomplete="off"
+                     data-desc-container="el-desc-list-{{$i}}" data-desc-mode="magnitude"
+                     placeholder="{{t "txn.description_hint"}}">
+              <div class="desc-suggest-box" id="el-desc-list-{{$i}}" hidden></div>
+            </div>
+          </td>
           <td class="txn-cell el-account-cell">
             <select name="account_{{$i}}" id="el-account-{{$i}}" class="el-account combo-input">
               <option value="0">{{t "expense.line.form.account_none"}}</option>
@@ -105,17 +117,6 @@
               {{range $page.Programs}}<option value="{{.ID}}"{{if eq .ID $l.ProgramID}} selected{{end}}>{{.Name}}</option>
               {{end}}
             </select>
-          </td>
-          {{/* p26.19: per-line free-text description (autocomplete + prefill, magnitude
-               amount mode -- the sign is derived from the account type server-side). */}}
-          <td class="txn-cell el-desc-cell">
-            <div class="desc-field">
-              <input type="text" name="description_{{$i}}" id="el-desc-{{$i}}" class="el-desc js-descfield"
-                     value="{{$l.Description}}" autocomplete="off"
-                     data-desc-container="el-desc-list-{{$i}}" data-desc-mode="magnitude"
-                     placeholder="{{t "txn.description_hint"}}">
-              <div class="desc-suggest-box" id="el-desc-list-{{$i}}" hidden></div>
-            </div>
           </td>
           <td class="txn-cell el-memo-cell">
             <input type="text" name="memo_{{$i}}" id="el-memo-{{$i}}" class="el-memo" value="{{$l.Memo}}">

@@ -820,10 +820,6 @@ other = "Choose an account"
 other = "(unavailable)"
 [txn.fund.unrestricted]
 other = "Unrestricted General"
-[txn.fund.apply_all]
-other = "Apply fund to all rows"
-[txn.fund.apply_all_btn]
-other = "Apply to empty rows"
 [txn.amount.debit]
 other = "Debit"
 [txn.amount.credit]

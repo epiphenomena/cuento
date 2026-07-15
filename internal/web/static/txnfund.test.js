@@ -1,13 +1,13 @@
 // p12.2 transaction editor -- unit tests for the PURE fund logic (trap 2):
 // per-fund imbalance computation (client-side DISPLAY only; the server revalidates,
-// trap 5) and fund apply-to-all (fills EMPTY rows only). No `document` access.
+// trap 5). No `document` access. (p26.23 removed the fund apply-to-all helper + tests.)
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-let fundImbalances, applyFundToAll;
+let fundImbalances;
 test.before(async () => {
-  ({ fundImbalances, applyFundToAll } = await import('./txnfund.js'));
+  ({ fundImbalances } = await import('./txnfund.js'));
 });
 
 test('fundImbalances: balanced overall and per fund -> empty', () => {
@@ -74,18 +74,4 @@ test('fundImbalances: fewer than 2 funds -> no per-fund chips even if a group no
   const r = fundImbalances(rows);
   assert.equal(r.total, 100);
   assert.deepEqual(r.perFund, {}); // one fund only -> suppressed
-});
-
-test('applyFundToAll: fills only EMPTY rows, leaves set rows untouched', () => {
-  const funds = ['', '3', ''];
-  const out = applyFundToAll(funds, '7');
-  assert.deepEqual(out, ['7', '3', '7']);
-});
-
-test('applyFundToAll: applying the empty (unrestricted) value fills empty rows too', () => {
-  // The header select could apply "Unrestricted" (""), which still fills blanks;
-  // but blanks are already "" -- so nothing observable changes. The contract is
-  // "empty rows only", proven by the set row staying put.
-  const funds = ['5', '', '5'];
-  assert.deepEqual(applyFundToAll(funds, ''), ['5', '', '5']);
 });

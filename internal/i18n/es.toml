@@ -814,10 +814,6 @@ other = "Elija una cuenta"
 other = "(no disponible)"
 [txn.fund.unrestricted]
 other = "Fondo General sin restriccion"
-[txn.fund.apply_all]
-other = "Aplicar fondo a todas las filas"
-[txn.fund.apply_all_btn]
-other = "Aplicar a filas vacias"
 [txn.amount.debit]
 other = "Debe"
 [txn.amount.credit]

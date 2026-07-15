@@ -1,7 +1,8 @@
 // p12.2 transaction editor -- PURE fund logic (trap 2): per-fund imbalance
 // computation (the live chips are DISPLAY only; the server revalidates the D20
-// per-fund zero-sum, trap 5) and fund apply-to-all (fills EMPTY rows only,
-// Appendix C). No `document` access; unit-tested under `node --test`.
+// per-fund zero-sum, trap 5). No `document` access; unit-tested under `node --test`.
+// (p26.23 removed the fund apply-to-all helper along with its header control -- the fund
+// now defaults to Unrestricted, so the whole-grid apply is unwanted.)
 
 // fundImbalances computes, over the editor's split rows, the OVERALL net-debit sum
 // and the per-fund-group nonzero sums (D2/D20). Each row is { fund, amount }: `fund`
@@ -27,12 +28,4 @@ export function fundImbalances(rows) {
     }
   }
   return { total, perFund };
-}
-
-// applyFundToAll returns a new array of fund selections where every EMPTY entry is
-// set to `value` and every already-set entry is left untouched (Appendix C: the
-// header apply-to-all fills empty selections only). Pure; the DOM glue writes the
-// result back into the per-row selects.
-export function applyFundToAll(funds, value) {
-  return funds.map((f) => (f === '' || f === null || f === undefined ? value : f));
 }

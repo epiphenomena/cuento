@@ -689,7 +689,6 @@ func TestTxnEditorEsNoRawKeys(t *testing.T) {
 		i18n.T("es", "txn.col.account"), // "Cuenta"
 		i18n.T("es", "txn.col.amount"),  // "Importe"
 		i18n.T("es", "txn.new_title"),   // "Nueva transaccion"
-		i18n.T("es", "txn.fund.apply_all_btn"),
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("es editor missing translated string %q", want)

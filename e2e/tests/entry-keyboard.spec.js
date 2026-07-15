@@ -124,14 +124,19 @@ test.describe('keyboard-only entry', () => {
     await expect(page.locator('#txn-fund-0')).toBeFocused();
     await selectByKeyboard(page, '#txn-fund-0', 'KB Water Grant');
     // Row 0 is an ASSET account, so its program + class cells are visibility:hidden and
-    // must be SKIPPED by native Tab (no dead stop): fund -> description (p26.19, an always
-    // -visible cell) -> memo. This proves the "hidden cells are skipped" claim in
-    // docs/qa-entry.md while the new per-split description cell is traversed normally.
+    // must be SKIPPED by native Tab (no dead stop). p26.23 moved the per-split description
+    // to the FIRST column (before account), so the always-visible traversal for an asset
+    // row is desc -> account -> amount -> fund -> memo: from fund, Tab lands directly on
+    // memo (the hidden program/class are skipped). This proves the "hidden cells are
+    // skipped" claim in docs/qa-entry.md with description-first.
     await page.locator('#txn-fund-0').focus();
     await page.keyboard.press('Tab');
-    await expect(page.locator('#txn-desc-0')).toBeFocused();
-    await page.keyboard.press('Tab');
     await expect(page.locator('#txn-memo-0')).toBeFocused();
+    // And the description cell is reachable as the FIRST cell of the row (Shift+Tab from
+    // account lands on it).
+    await page.locator('#txn-account-0').focus();
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.locator('#txn-desc-0')).toBeFocused();
 
     // --- Row 1: KB Checking -40.00, fund KB Water Grant -------------------------
     await selectByKeyboard(page, '#txn-account-1', 'KB Checking');
@@ -207,29 +212,29 @@ test.describe('keyboard-only entry', () => {
     await page.keyboard.press('Enter');
     await expect(page.locator('#txn-fund-0')).toBeFocused();
 
-    // fund -> description via Enter: the program(4)/class(5) cells are hidden on this
-    // asset row, so the wired traversal SKIPS them and lands on the description cell
-    // (p26.19, an always-visible cell) -- never a hidden <select>.
+    // fund -> memo via Enter: the program(5)/class(6) cells are hidden on this asset row,
+    // so the wired traversal SKIPS them and lands on the memo cell -- never a hidden
+    // <select>. p26.23 moved description to the FIRST column, so it is no longer between
+    // fund and memo (the asset-row always-visible order is desc -> account -> amount ->
+    // fund -> memo).
     await page.keyboard.press('Enter');
-    await expect(page.locator('#txn-desc-0')).toBeFocused();
+    await expect(page.locator('#txn-memo-0')).toBeFocused();
     // Explicitly assert focus never sat on the hidden cells.
     await expect(page.locator('#txn-program-0')).not.toBeFocused();
     await expect(page.locator('#txn-class-0')).not.toBeFocused();
-    // description -> memo via Enter (both always-visible).
-    await page.keyboard.press('Enter');
-    await expect(page.locator('#txn-memo-0')).toBeFocused();
 
-    // Shift+Tab backward from memo -> description -> (skip hidden) fund.
-    await page.keyboard.press('Shift+Tab');
-    await expect(page.locator('#txn-desc-0')).toBeFocused();
+    // Shift+Tab backward from memo -> (skip hidden program/class) fund.
     await page.keyboard.press('Shift+Tab');
     await expect(page.locator('#txn-fund-0')).toBeFocused();
 
-    // Tab forward from fund skips the hidden cells to description, then memo.
-    await page.keyboard.press('Tab');
+    // The description cell is the FIRST column: Shift+Tab from the account cell lands on it,
+    // and Tab forward returns to account (proving description-first is reachable + skipped
+    // over by the hidden cells is not involved here -- both are always-visible).
+    await page.locator('#txn-account-0').focus();
+    await page.keyboard.press('Shift+Tab');
     await expect(page.locator('#txn-desc-0')).toBeFocused();
     await page.keyboard.press('Tab');
-    await expect(page.locator('#txn-memo-0')).toBeFocused();
+    await expect(page.locator('#txn-account-0')).toBeFocused();
 
     // --- Row 1: complete a balancing leg -------------------------------------
     await selectByKeyboard(page, '#txn-account-1', 'KB2 Checking');

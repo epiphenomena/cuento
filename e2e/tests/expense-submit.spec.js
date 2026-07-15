@@ -309,15 +309,21 @@ test('expenses: subsidiary auto-set, account/fund/program combos, amount blur, d
   await page.locator('#el-memo-2').fill('row-two-memo');
   await expect(page.locator('#el-account-3')).toBeVisible();
 
-  // (p26.11) COLUMN ORDER: the delete-× cell is the LAST cell in the row, AFTER the error
-  // column. Assert both header and row cell order so a regression that moves it back ahead
-  // of the error column is caught. Headers (p26.19 adds a description column before memo):
-  // account, amount, fund, program, description, memo, error, then the (empty, aria-hidden)
+  // (p26.11/p26.23) COLUMN ORDER: description is now the FIRST column (before account), and
+  // the delete-× cell is still the LAST cell in the row, AFTER the error column. Assert both
+  // header and row cell order so a regression that moves either is caught. Headers:
+  // description, account, amount, fund, program, memo, error, then the (empty, aria-hidden)
   // delete-action header.
   const headerCells = page.locator('#expense-grid-form thead th');
   await expect(headerCells).toHaveCount(8);
+  await expect(headerCells.first()).toHaveText(/description/i);
+  await expect(headerCells.nth(1)).toHaveText(/account/i);
   await expect(headerCells.nth(6)).toHaveText(/error/i);
   await expect(headerCells.last()).toHaveClass(/el-delete-col/);
+  // The description cell is the FIRST td in a data row.
+  await expect(
+    page.locator('.el-row[data-row="0"] > td').first(),
+  ).toHaveClass(/el-desc-cell/);
   // In a data row the error cell precedes the delete cell (the delete is the last td).
   const row0Cells = page.locator('.el-row[data-row="0"] > td, .el-row[data-row="0"] > th');
   await expect(row0Cells.last()).toHaveClass(/el-delete-cell/);

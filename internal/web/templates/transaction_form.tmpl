@@ -31,6 +31,21 @@
        new row. Keyed to the row index (trap 4). */}}
   <input type="hidden" name="split_id_{{.Index}}" id="txn-splitid-{{.Index}}" value="{{.SplitID}}">
 
+  {{/* p26.23: per-split free-text description is now the FIRST column (before Account).
+       Autocompletes from prior splits' descriptions and, on pick/commit, prefills THIS row
+       from the matched split when the row is otherwise empty (descfield.js). The listbox
+       lands in the sibling #txn-desc-list-<i> container. */}}
+  <td class="txn-cell txn-desc-cell">
+    <div class="desc-field">
+      <input type="text" name="description_{{.Index}}" id="txn-desc-{{.Index}}" class="txn-desc js-descfield"
+             value="{{.Description}}" autocomplete="off"
+             data-desc-container="txn-desc-list-{{.Index}}"
+             data-desc-mode="{{if $.Page.DisplayDRCR}}drcr{{else}}signed{{end}}"
+             placeholder="{{t "txn.description_hint"}}">
+      <div class="desc-suggest-box" id="txn-desc-list-{{.Index}}" hidden></div>
+    </div>
+  </td>
+
   <td class="txn-cell txn-account-cell">
     <select name="account_{{.Index}}" id="txn-account-{{.Index}}" class="txn-account combo-input">
       <option value="0">{{t "txn.account.choose"}}</option>
@@ -87,21 +102,6 @@
     </select>
   </td>
 
-  {{/* p26.19: per-split free-text description (replaces the header payee). Autocompletes
-       from prior splits' descriptions and, on pick/commit, prefills THIS row from the
-       matched split when the row is otherwise empty (descfield.js). The listbox lands in
-       the sibling #txn-desc-list-<i> container. */}}
-  <td class="txn-cell txn-desc-cell">
-    <div class="desc-field">
-      <input type="text" name="description_{{.Index}}" id="txn-desc-{{.Index}}" class="txn-desc js-descfield"
-             value="{{.Description}}" autocomplete="off"
-             data-desc-container="txn-desc-list-{{.Index}}"
-             data-desc-mode="{{if $.Page.DisplayDRCR}}drcr{{else}}signed{{end}}"
-             placeholder="{{t "txn.description_hint"}}">
-      <div class="desc-suggest-box" id="txn-desc-list-{{.Index}}" hidden></div>
-    </div>
-  </td>
-
   <td class="txn-cell txn-memo-cell">
     <input type="text" name="memo_{{.Index}}" id="txn-memo-{{.Index}}" class="txn-memo" value="{{.Memo}}">
   </td>
@@ -110,6 +110,14 @@
        drop txn-cell so it loses the borderless-input-in-a-bordered-cell look; the
        .txn-row-error rule styles it as a non-input message cell. */}}
   {{if .ErrorKey}}<td class="txn-row-error"><span class="field-error" role="alert">{{t .ErrorKey}}</span></td>{{else}}<td class="txn-row-error"></td>{{end}}
+
+  {{/* p26.23: a per-row delete control, the LAST cell (after the error column). type="button"
+       so it never submits the grid; txneditor.js re-indexes the surviving rows (contiguous
+       _i) on click, and deleting the only/last row resets it in place (the grid never drops
+       to zero -- exactly one trailing empty row is preserved). */}}
+  <td class="txn-delete-cell">
+    <button type="button" class="btn btn-ghost txn-delete" aria-label="{{t "common.delete_row"}}" title="{{t "common.delete_row"}}">&times;</button>
+  </td>
 </tr>
 {{- end}}
 {{- end}}
@@ -204,33 +212,28 @@
     {{/* The per-transaction payee header was removed (p26.19) -- the per-split free-text
          description (in each grid row) replaces it, autocompleting + prefilling per row.
          The payee data/columns/routes were physically removed in p26.20. */}}
-    <div class="txn-field">
+    {{/* p26.23: with the payee and apply-fund controls both gone, the header memo grows to
+         fill the freed horizontal space (the txn-field-grow modifier flex-grows this field). */}}
+    <div class="txn-field txn-field-grow">
       <label for="txn-memo">{{t "txn.memo"}}</label>
       <input type="text" name="memo" id="txn-memo" class="txn-memo-header" value="{{.Memo}}">
     </div>
     <input type="hidden" name="currency" value="{{.Currency}}">
-    <div class="txn-field txn-apply-fund">
-      <label for="txn-apply-fund">{{t "txn.fund.apply_all"}}</label>
-      <select id="txn-apply-fund" class="txn-apply-fund-select">
-        <option value="">{{t "txn.fund.unrestricted"}}</option>
-        {{range .Funds}}<option value="{{.ID}}">{{.Name}}</option>
-        {{end}}
-      </select>
-      <button type="button" id="txn-apply-fund-btn" class="btn btn-ghost">{{t "txn.fund.apply_all_btn"}}</button>
-    </div>
   </div>
 
   <table class="txn-grid">
     <thead>
       <tr>
+        <th>{{t "txn.col.description"}}</th>
         <th>{{t "txn.col.account"}}</th>
         {{if .DisplayDRCR}}<th>{{t "txn.col.debit"}}</th><th>{{t "txn.col.credit"}}</th>{{else}}<th>{{t "txn.col.amount"}}</th>{{end}}
         <th>{{t "txn.col.fund"}}</th>
         <th>{{t "txn.col.program"}}</th>
         <th>{{t "txn.col.class"}}</th>
-        <th>{{t "txn.col.description"}}</th>
         <th>{{t "txn.col.memo"}}</th>
         <th>{{t "txn.col.error"}}</th>
+        {{/* p26.23: the delete-× action column is the LAST column, AFTER the error column. */}}
+        <th class="txn-delete-col" aria-hidden="true"></th>
       </tr>
     </thead>
     <tbody id="txn-rows">

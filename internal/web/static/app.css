@@ -632,8 +632,8 @@ input[aria-invalid="true"] {
 
 .txn-editor { margin-top: var(--space-4); }
 
-/* Header: subsidiary / date / memo / apply-fund laid out in a wrapping
-   row of labelled fields, each taking a sensible share of the width. */
+/* Header: subsidiary / date / memo laid out in a wrapping row of labelled
+   fields, each taking a sensible share of the width. */
 .txn-header {
   display: flex;
   flex-wrap: wrap;
@@ -651,9 +651,12 @@ input[aria-invalid="true"] {
 .txn-header .txn-field select { min-width: 10rem; }
 .txn-header .txn-date { min-width: 8rem; }
 .txn-header .txn-memo-header { min-width: 14rem; }
-/* Apply-fund helper sits at the end of the header row as an inline cluster. */
-.txn-apply-fund { flex-direction: row !important; align-items: end; gap: var(--space-2); }
-.txn-apply-fund .txn-apply-fund-select { min-width: 9rem; }
+/* p26.23: with the payee + apply-fund controls gone, the header memo grows to fill the
+   freed horizontal space (a long, near-full-width memo field). The wrapping flex header
+   stays responsive: the grow field simply takes the remaining row width, and wraps to its
+   own line at narrow widths. */
+.txn-header .txn-field-grow { flex: 1 1 20rem; }
+.txn-header .txn-field-grow .txn-memo-header { width: 100%; }
 
 /* The split grid: a real table with collapsed borders so every column is ruled. */
 .txn-grid {
@@ -700,7 +703,13 @@ input[aria-invalid="true"] {
 .txn-grid td.txn-cell select:focus { background: var(--color-surface-alt); }
 /* Amount columns right-align their figures. */
 .txn-grid .txn-amount-cell input { text-align: right; }
-.txn-grid thead th:nth-child(2) { text-align: right; }
+/* p26.23: description is now column 1 and account column 2, so the amount/debit HEADER is
+   column 3 -- but ONLY in the two EDITABLE grids (the txn editor form + the editable
+   expense grid). The read-only expense table also carries .txn-grid yet has NO description
+   column (its column 3 is Fund), so scope this to the editable grids to avoid right-aligning
+   the wrong header there. */
+.txn-editor thead th:nth-child(3),
+#expense-grid-form thead th:nth-child(3) { text-align: right; }
 
 /* Sensible column widths (table-layout: fixed): the account, memo and error
    columns get the slack; the fixed selects stay compact. */
@@ -709,6 +718,8 @@ input[aria-invalid="true"] {
 .txn-amount-cell { width: 8rem; }
 .txn-fund-cell, .txn-program-cell, .txn-class-cell { width: 10rem; }
 .txn-row-error { width: 12rem; }
+.txn-desc-cell { width: auto; }
+.txn-delete-col, .txn-delete-cell { width: 2.5rem; text-align: center; }
 
 /* p26.4 expense line grid: the same .txn-cell spreadsheet layout (the grid table already
    carries .txn-grid), so the account combo overlay is contained by its cell -- fixing the
@@ -722,20 +733,24 @@ input[aria-invalid="true"] {
 .el-delete-col, .el-delete-cell { width: 2.5rem; text-align: center; }
 .el-row-error { width: 12rem; }
 /* The delete control is a compact borderless × that inherits the cell's spreadsheet feel.
-   p26.11: the delete cell is now the trailing column (after the error column) and dropped
-   txn-cell, so it re-declares the ruled border + centering here. */
-.txn-grid td.el-delete-cell {
+   p26.11/p26.23: the delete cell is the trailing column (after the error column) and drops
+   txn-cell, so it re-declares the ruled border + centering here. Shared by BOTH grids (the
+   expense grid's .el-delete and the txn grid's .txn-delete). */
+.txn-grid td.el-delete-cell,
+.txn-grid td.txn-delete-cell {
   text-align: center;
   border: var(--border);
   vertical-align: middle;
 }
-.el-delete {
+.el-delete,
+.txn-delete {
   padding: var(--space-1) var(--space-2);
   line-height: 1;
   font-size: 1.1rem;
   color: var(--color-muted, inherit);
 }
-.el-delete:hover { color: var(--color-danger, inherit); }
+.el-delete:hover,
+.txn-delete:hover { color: var(--color-danger, inherit); }
 
 /* Row states. A server-flagged row and a client-detected out-of-subsidiary row
    both tint danger so the eye lands on the problem. */

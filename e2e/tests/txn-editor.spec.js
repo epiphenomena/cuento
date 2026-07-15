@@ -82,6 +82,23 @@ test.describe('transaction editor', () => {
     await expect(page.locator('#txn-account-0')).toBeVisible();
     await expect(page.locator('#txn-account-1')).toHaveCount(0);
 
+    // p26.23: the apply-fund control is GONE (removed with the payee -> per-split
+    // description migration; the fund defaults to Unrestricted).
+    await expect(page.locator('#txn-apply-fund')).toHaveCount(0);
+    await expect(page.locator('#txn-apply-fund-btn')).toHaveCount(0);
+
+    // p26.23: DESCRIPTION is the FIRST grid column (before Account). Assert the header
+    // order and that the description cell is the FIRST td in a data row.
+    const headerCells = page.locator('.txn-grid thead th');
+    await expect(headerCells.first()).toHaveText(/description/i);
+    await expect(headerCells.nth(1)).toHaveText(/account/i);
+    const row0Cells = page.locator('.txn-row[data-row="0"] > td');
+    await expect(row0Cells.first()).toHaveClass(/txn-desc-cell/);
+    // And the description input still enhances (autocompletes) in its new position:
+    // typing prefills from a prior split is covered in payee-autofill.spec; here we just
+    // assert the input is present + typable as the first cell.
+    await expect(page.locator('#txn-desc-0')).toBeVisible();
+
     // Fill a balanced transfer: DR Editor Savings 25.00, CR Editor Checking 25.00.
     // The account combobox is a real <select> (ARIA listbox enhancement is progressive
     // -- selectOption drives the underlying control). Amounts are the SIGNED column
@@ -354,5 +371,64 @@ test.describe('transaction editor', () => {
     // Give any (erroneous) request a beat to have fired, then assert none did.
     await page.waitForTimeout(300);
     expect(posted).toBe(false);
+  });
+
+  // p26.23: the transaction grid gains the per-row × delete affordance (the same one the
+  // expense grid has). Deleting a MIDDLE row re-indexes the survivors (contiguous _i) so the
+  // memo text follows; deleting down to the last data row never drops below one trailing
+  // empty row; the delete cell is the trailing column, after the error column.
+  test('the × deletes a row, re-indexes survivors, and the last-row reset keeps one empty row', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'Del Checking');
+    await createAsset(page, 'Del Savings');
+
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+
+    // Column-order guard: the delete cell is the LAST td, right after the error cell.
+    const row0Cells = page.locator('.txn-row[data-row="0"] > td');
+    await expect(row0Cells.last()).toHaveClass(/txn-delete-cell/);
+    await expect(
+      page.locator('.txn-row[data-row="0"] .txn-row-error + .txn-delete-cell'),
+    ).toHaveCount(1);
+
+    // Build three data rows with distinguishable memos (auto-append grows the trailing row).
+    await page.locator('#txn-account-0').selectOption({ label: 'Del Savings' });
+    await page.locator('#txn-memo-0').fill('row-zero-memo');
+    await expect(page.locator('#txn-account-1')).toBeVisible();
+    await page.locator('#txn-account-1').selectOption({ label: 'Del Checking' });
+    await page.locator('#txn-memo-1').fill('row-one-memo');
+    await expect(page.locator('#txn-account-2')).toBeVisible();
+    await page.locator('#txn-account-2').selectOption({ label: 'Del Savings' });
+    await page.locator('#txn-memo-2').fill('row-two-memo');
+    await expect(page.locator('#txn-account-3')).toBeVisible();
+
+    // Delete the MIDDLE row (row-one-memo). Survivors re-index, so row-two-memo shifts to
+    // index 1 and the memo text follows.
+    await page.locator('.txn-row[data-row="1"] .txn-delete').click();
+    await expect(page.locator('#txn-memo-1')).toHaveValue('row-two-memo');
+    const rowsCount = Number(await page.locator('#txn-rows-count').inputValue());
+    await expect(page.locator(`#txn-account-${rowsCount - 1}`)).toBeVisible();
+    await expect(page.locator(`#txn-account-${rowsCount}`)).toHaveCount(0);
+
+    // Delete down to a single trailing empty row: repeatedly delete row 0.
+    let guard = 0;
+    while (guard < 10) {
+      const remaining = Number(await page.locator('#txn-rows-count').inputValue());
+      if (remaining <= 1) break;
+      await page.locator('.txn-row[data-row="0"] .txn-delete').click();
+      guard += 1;
+    }
+    await expect(page.locator('.txn-row')).toHaveCount(1);
+    await expect(page.locator('#txn-account-0')).toHaveValue('0');
+    await expect(page.locator('#txn-rows-count')).toHaveValue('1');
+
+    // Deleting the ONLY/last row resets it in place (never drops to zero rows).
+    await page.locator('#txn-memo-0').fill('leftover');
+    await page.locator('.txn-row[data-row="0"] .txn-delete').click();
+    await expect(page.locator('.txn-row')).toHaveCount(1);
+    await expect(page.locator('#txn-account-0')).toHaveValue('0');
+    await expect(page.locator('#txn-memo-0')).toHaveValue('');
+    await expect(page.locator('#txn-rows-count')).toHaveValue('1');
   });
 });
