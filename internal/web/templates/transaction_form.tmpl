@@ -84,10 +84,16 @@
     {{/* In DR/CR mode the signed field is still present (hidden) so submit posts it. In
          signed mode the visible input above IS amount_i, so no duplicate. */}}
     {{if $.Page.DisplayDRCR}}<input type="hidden" name="amount_{{.Index}}" id="txn-amount-{{.Index}}" value="{{.Amount}}">{{end}}
+    {{/* p26.45: trailing utility band (colspan 2) so row 1 sums to 14 and aligns over row 2's
+         error + delete cells. Empty on row 1 (nothing lives above the utility columns). */}}
+    <td class="txn-cell txn-util-cell" colspan="2"></td>
   </tr>
 
   <tr class="txn-row-more">
-    <td class="txn-cell txn-fund-cell" colspan="3">
+    {{/* p26.45: row 2's three content fields align band-for-band under row 1 (fund 5 under
+         description, progclass 4 under account, memo 3 under amount); error 1 + delete 1
+         trail under the colspan-2 utility header. Sum = 5+4+3+1+1 = 14. */}}
+    <td class="txn-cell txn-fund-cell" colspan="5">
       <select name="fund_{{.Index}}" id="txn-fund-{{.Index}}" class="txn-fund combo-input">
         <option value="0">{{t "txn.fund.unrestricted"}}</option>
         {{range $.Page.Funds}}<option value="{{.ID}}"{{if eq .ID $.Row.Fund}} selected{{end}}>{{.Name}}</option>
@@ -106,7 +112,7 @@
          A HIDDEN program_{i} carrier round-trips the STORED program verbatim so an
          Admin/Fundraising split KEEPS its (possibly non-root) program on load->save --
          load->save-unchanged is byte-identical (no spurious splits_versions row). */}}
-    <td class="txn-cell txn-progclass-cell" colspan="5">
+    <td class="txn-cell txn-progclass-cell" colspan="4">
       <input type="hidden" name="program_{{.Index}}" id="txn-program-{{.Index}}" value="{{.Program}}">
       <select name="progclass_{{.Index}}" id="txn-progclass-{{.Index}}" class="txn-progclass combo-input">
         <option value="c:management" data-class="1"{{if eq .Class "management"}} selected{{end}}>{{t "txn.progclass.admin"}}</option>
@@ -116,8 +122,8 @@
       </select>
     </td>
 
-    <td class="txn-cell txn-memo-cell" colspan="2">
-      <input type="text" name="memo_{{.Index}}" id="txn-memo-{{.Index}}" class="txn-memo" value="{{.Memo}}">
+    <td class="txn-cell txn-memo-cell" colspan="3">
+      <input type="text" name="memo_{{.Index}}" id="txn-memo-{{.Index}}" class="txn-memo" value="{{.Memo}}" placeholder="{{t "txn.memo_hint"}}">
     </td>
 
     {{/* p26.11: the trailing error cell is a status/message strip, not an editable field --
@@ -295,17 +301,25 @@
   {{end}}
 
   {{/* p26.32 two-row split layout: each split is its OWN <tbody class="txn-row"> (see
-       "txn-row"), so the grid's rows are tbodies, not a single wrapping tbody. The thead
-       labels row 1's three wide columns (description / account / amount); row 2's packed
-       fields (fund / program / class / memo) are unlabeled -- their inline selects carry
-       their own placeholders/values. Colspans on the header cells match row 1's cells so
-       the fixed-layout columns align (5 + 4 + 3 = 12). */}}
+       "txn-row"), so the grid's rows are tbodies, not a single wrapping tbody.
+
+       p26.45 ONE header row labels BOTH physical rows. The grid is 14 fixed-layout columns.
+       Row 1's three wide fields (description 5 / account 4 / amount 3) and row 2's three
+       content fields are ALIGNED band-for-band: Fund under Description (5), Program·Class
+       under Account (4), Memo under Amount (3). Each header cell is a STACKED two-line label
+       -- line 1 the row-1 field, line 2 a smaller muted row-2 field -- so the single <thead>
+       row identifies every field in both rows. A trailing colspan-2 utility header covers
+       row 2's error + delete cells (row 1 has a matching empty trailing cell). Both signed
+       (5/4/3/2) and DR/CR (5/4/2/1/2) modes sum to 14; the amount header stays a SINGLE
+       colspan-3 stacked Amount/Memo cell in BOTH modes (the twin DR/CR inputs keep their own
+       Debit/Credit placeholders), so the Memo sub-label always has a 3-span cell to sit in. */}}
   <table class="txn-grid txn-grid-2row">
     <thead>
       <tr>
-        <th colspan="5">{{t "txn.col.description"}}</th>
-        <th colspan="4">{{t "txn.col.account"}}</th>
-        {{if .DisplayDRCR}}<th colspan="2">{{t "txn.col.debit"}}</th><th colspan="1">{{t "txn.col.credit"}}</th>{{else}}<th colspan="3">{{t "txn.col.amount"}}</th>{{end}}
+        <th colspan="5"><span class="txn-hdr-main">{{t "txn.col.description"}}</span><span class="txn-hdr-sub">{{t "txn.col.fund"}}</span></th>
+        <th colspan="4"><span class="txn-hdr-main">{{t "txn.col.account"}}</span><span class="txn-hdr-sub">{{t "txn.col.progclass"}}</span></th>
+        <th colspan="3"><span class="txn-hdr-main">{{t "txn.col.amount"}}</span><span class="txn-hdr-sub">{{t "txn.col.memo"}}</span></th>
+        <th colspan="2" class="txn-hdr-util" aria-hidden="true"></th>
       </tr>
     </thead>
     {{range .Rows}}{{template "txn-row" (txnRowCtx $.Page .)}}

@@ -809,6 +809,18 @@ input[aria-invalid="true"] {
   border-bottom: 2px solid var(--color-primary);
   font-size: 0.85rem;
 }
+/* p26.45 stacked two-line header (the single <thead> row labels BOTH physical split rows):
+   line 1 (.txn-hdr-main) is the row-1 field (Description / Account / Amount); line 2
+   (.txn-hdr-sub) is a smaller muted row-2 field (Fund / Program·Class / Memo), aligned in
+   the same band. The trailing colspan-2 utility header (over error + delete) is blank. */
+.txn-grid-2row thead th .txn-hdr-main { display: block; }
+.txn-grid-2row thead th .txn-hdr-sub {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: normal;
+  color: var(--color-muted);
+}
+.txn-grid-2row thead th.txn-hdr-util { border-bottom: 2px solid var(--color-primary); }
 .txn-grid td.txn-cell {
   padding: 0;
   border: var(--border);
@@ -870,6 +882,7 @@ input[aria-invalid="true"] {
    its trailing status/delete cells are .el-row-error / .el-delete-cell. Both grids share
    these selectors so a split's two physical <tr> band together on the even tbodies. */
 .txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-cell,
+.txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-util-cell,
 .txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-row-error,
 .txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-delete-cell,
 .txn-grid-2row tbody.el-row:nth-of-type(even) td.txn-cell,

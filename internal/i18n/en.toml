@@ -869,9 +869,15 @@ other = "Fund"
 other = "Program"
 [txn.col.class]
 other = "Functional class"
+# p26.45 combined program/class column sub-label (the merged control from p26.41).
+[txn.col.progclass]
+other = "Program · Class"
 [txn.col.description]
 other = "Description"
 [txn.col.memo]
+other = "Memo"
+# p26.45 memo input placeholder (the second-row memo field, now labelled via the header).
+[txn.memo_hint]
 other = "Memo"
 [txn.col.error]
 other = "Error"

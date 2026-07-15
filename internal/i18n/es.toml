@@ -863,9 +863,15 @@ other = "Fondo"
 other = "Programa"
 [txn.col.class]
 other = "Clase funcional"
+# p26.45 combined program/class column sub-label (the merged control from p26.41).
+[txn.col.progclass]
+other = "Programa · Clase"
 [txn.col.description]
 other = "Descripción"
 [txn.col.memo]
+other = "Nota"
+# p26.45 memo input placeholder (the second-row memo field, now labelled via the header).
+[txn.memo_hint]
 other = "Nota"
 [txn.col.error]
 other = "Error"
