@@ -45,6 +45,15 @@ type Report struct {
 	// layer as a 500; a report that legitimately has nothing to show returns an
 	// empty Table, not an error.
 	Run func(ctx context.Context, tk *Toolkit, p Params) (Table, error)
+
+	// Tree marks a report whose table PRESENTS A NESTED ACCOUNT HIERARCHY (p26.26):
+	// its rows are a pre-order tree (a parent row's Indent is shallower than its
+	// following child rows, structural header/total rows sit at Indent 0), so the web
+	// layer emits `data-depth` on every row, renders the shared collapse/expand
+	// tree-controls above the table, and enhances it with treetable.js (the same
+	// reusable control the chart of accounts uses, p26.25). Reports that do not
+	// enumerate accounts as a hierarchy leave it false and render byte-identically.
+	Tree bool
 }
 
 // Groups returns the code-declared report-group set (D10): the permission buckets

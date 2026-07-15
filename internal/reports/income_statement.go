@@ -52,6 +52,7 @@ func registerIncomeStatement(reg *Registry) {
 		Group:      "financial",
 		ParamsSpec: ParamsSpec{Period: true, Granularity: true, Currency: true},
 		Run:        runIncomeStatement,
+		Tree:       true, // p26.26: the R/E tree nests placeholder parents over leaves.
 	})
 }
 

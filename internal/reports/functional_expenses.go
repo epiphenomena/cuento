@@ -63,6 +63,7 @@ func registerFunctionalExpenses(reg *Registry) {
 		Group:      "tax",
 		ParamsSpec: ParamsSpec{Period: true, Currency: true},
 		Run:        runFunctionalExpenses,
+		Tree:       true, // p26.26: each 990 Part IX line nests its expense accounts.
 	})
 }
 

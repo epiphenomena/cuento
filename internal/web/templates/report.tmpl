@@ -134,7 +134,20 @@
     <a href="{{.CSVHref}}" class="report-csv-link" download>{{t "reports.export.csv"}}</a>
   </p>
 
-  <table class="report-table">
+  {{/* p26.26: reports presenting a NESTED account hierarchy (trial balance, balance
+       sheet, income statement, functional expenses) reuse the p26.25 collapse/expand
+       tree control. The controls carry `hidden` (no-JS shows the full tree with inert
+       hidden buttons); treetable.js reveals + wires them. Non-tree reports skip this
+       block and emit no data-depth, so their tables render byte-identically. */}}
+  {{if .Tree}}
+  <div class="report-controls tree-controls">
+    <button type="button" class="btn btn-ghost tree-collapse-all" hidden>{{t "tree.collapse_all"}}</button>
+    <button type="button" class="btn btn-ghost tree-expand-level" hidden>{{t "tree.expand_level"}}</button>
+    <button type="button" class="btn btn-ghost tree-expand-all" hidden>{{t "tree.expand_all"}}</button>
+  </div>
+  {{end}}
+
+  <table class="report-table{{if .Tree}} tree-table{{end}}">
     <thead>
       <tr>
         {{- range .Table.Columns}}
@@ -144,7 +157,7 @@
     </thead>
     <tbody>
       {{- range .Table.Rows}}
-      <tr class="report-row report-indent-{{.Indent}}{{if .Subtotal}} report-subtotal{{end}}{{if .Total}} report-total{{end}}{{if .Warning}} report-warning{{end}}"{{if .Warning}} role="alert"{{end}}>
+      <tr class="report-row report-indent-{{.Indent}}{{if .Subtotal}} report-subtotal{{end}}{{if .Total}} report-total{{end}}{{if .Warning}} report-warning{{end}}"{{if $.Page.Tree}} data-depth="{{.Indent}}"{{end}}{{if .Warning}} role="alert"{{end}}>
         {{- range .Cells}}
         <td{{if .Right}} class="amount"{{end}}>{{if .Href}}<a class="report-drill-link" href="{{.Href}}">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>
         {{- end}}
@@ -154,6 +167,13 @@
       {{- end}}
     </tbody>
   </table>
+
+  {{if .Tree}}
+  {{/* p26.26: the reusable tree module (p26.25). Loaded on the PAGE; self-inits on
+       DOMContentLoaded and re-runs on htmx:afterSwap. It enhances every
+       table.tree-table, looking up the sibling .tree-controls container. */}}
+  <script type="module" src="{{asset "treetable.js"}}"></script>
+  {{end}}
   {{- end}}
 {{template "shell-close" .}}
 {{- end}}

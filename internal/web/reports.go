@@ -600,6 +600,11 @@ type reportPageModel struct {
 	Params  paramsForm
 	Table   renderedTable
 	CSVHref string
+	// Tree is true for a report presenting a NESTED account hierarchy (p26.26): the
+	// template then emits `data-depth` on every table row, renders the shared
+	// collapse/expand tree-controls above the table, and loads treetable.js to enhance
+	// it. False leaves the report table byte-identical (no controls, no data-depth).
+	Tree bool
 }
 
 // renderedTable is a Table prepared for the HTML template: localized column headers
@@ -818,6 +823,7 @@ func (s *server) reportPage(w http.ResponseWriter, r *http.Request) {
 		Params:  form,
 		Table:   renderTable(table, rep.ID, lang, formatOptsFor(u), dateFormatFor(u), exps),
 		CSVHref: "/reports/" + rep.ID + ".csv?" + r.Form.Encode(),
+		Tree:    rep.Tree, // p26.26: nested-account reports emit data-depth + tree controls.
 	}
 	s.render(w, r, http.StatusOK, "report.tmpl", s.newShellPage(r, model))
 }

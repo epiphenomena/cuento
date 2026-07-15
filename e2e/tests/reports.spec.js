@@ -55,6 +55,24 @@ async function createAsset(page, name) {
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 
+// createChildAsset makes a leaf ASSET under an existing asset parent (making the parent
+// a PLACEHOLDER). Type stays "asset" (its default) so no htmx form re-swap races the
+// parent select; the parent select is retried until it sticks (the accounts.spec
+// pattern). Used by the p26.26 trial-balance nested-tree test.
+async function createChildAsset(page, name, parentName) {
+  await page.goto('/accounts/new');
+  await page.locator('#af-name-en').fill(name);
+  await expect(async () => {
+    await page.locator('#af-parent').selectOption({ label: parentName });
+    await expect(page.locator('#af-parent')).not.toHaveValue('0');
+  }).toPass({ timeout: 5000 });
+  const rootSub = page.locator('input[name="sub_1"]');
+  if (!(await rootSub.isChecked())) await rootSub.check();
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL(/\/accounts$/);
+  await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
+}
+
 test('reports: open the trial balance, set as-of/scope, see the balancing total, CSV downloads', async ({
   page,
   server,
@@ -261,6 +279,68 @@ test('reports: drill a trial-balance figure to its transactions (each linking to
 
   // The reconciled figure header is shown (the signed native sum of the listed rows).
   await expect(page.locator('.report-drill-figure')).toBeVisible();
+});
+
+// p26.26 NESTED ACCOUNT TREE + collapse/expand controls on a REPORT page. Seeds a
+// PARENT asset with a CHILD leaf carrying a balance (a balanced transfer to a counter
+// account), so the trial balance nests the child under its placeholder parent. Then
+// drives the reused p26.25 tree controls (treetable.js): collapse-all hides the child,
+// expand-all restores it -- proving the control works on a report table, not only the
+// chart of accounts. MUTATES (three accounts + one txn); names are unique so it never
+// collides with sibling worker-db specs and it only ADDS rows. Strict CSP => NO
+// page.waitForFunction; only locator waits.
+test('reports: the trial balance nests accounts and the tree collapse/expand controls work', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  // A placeholder parent asset, a child leaf under it, and a counter leaf for the
+  // balancing side of a transfer.
+  await createAsset(page, 'TB Nest Parent');
+  await createChildAsset(page, 'TB Nest Child', 'TB Nest Parent');
+  await createAsset(page, 'TB Nest Counter');
+
+  // Balanced transfer: the child gets +75, the counter -75 (so the child -- and thus
+  // its parent's rolled-up subtotal -- carries a non-zero, tree-nesting balance).
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  // The child's split-option label is its DOTTED PATH (p26.1: parent.child); the
+  // top-level counter's path is just its name.
+  await page.locator('#txn-account-0').selectOption({ label: 'TB Nest Parent.TB Nest Child' });
+  await page.locator('#txn-amount-0').fill('75.00');
+  await page.locator('#txn-account-1').selectOption({ label: 'TB Nest Counter' });
+  await page.locator('#txn-amount-1').fill('-75.00');
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL('**/register**');
+
+  // Open the trial balance at the default as-of (today) so the just-posted txn counts.
+  await page.goto(`${TB}?scope=1`);
+  const table = page.locator('table.report-table.tree-table');
+  await expect(table).toBeVisible();
+
+  // The parent placeholder row (a SUBTOTAL carrying the rolled-up subtotal) and the
+  // child leaf row are both present initially (the module fully expands on load).
+  const parentRow = table.locator('tr.report-row', { hasText: 'TB Nest Parent' });
+  const childRow = table.locator('tr.report-row', { hasText: 'TB Nest Child' });
+  await expect(parentRow).toBeVisible();
+  await expect(childRow).toBeVisible();
+  // The parent row is the depth-0 root; the child sits one level deeper (data-depth).
+  await expect(parentRow).toHaveAttribute('data-depth', '0');
+  await expect(childRow).toHaveAttribute('data-depth', '1');
+
+  // The tree controls are present and REVEALED by treetable.js (they ship `hidden`).
+  const collapseAll = page.locator('.report-controls .tree-collapse-all');
+  await expect(collapseAll).toBeVisible();
+
+  // Collapse all -> only depth-0 rows remain; the child hides but the parent stays.
+  await collapseAll.click();
+  await expect(parentRow).toBeVisible();
+  await expect(childRow).toBeHidden();
+
+  // Expand all -> the child reappears.
+  await page.locator('.report-controls .tree-expand-all').click();
+  await expect(childRow).toBeVisible();
 });
 
 // p15.6 ACCOUNT LEDGER: seed a balanced transfer (so the chosen account has a real

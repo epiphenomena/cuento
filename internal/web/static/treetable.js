@@ -167,19 +167,35 @@ function enhanceTree(table, controls) {
   render();
 }
 
-// Browser glue: enhance the accounts tree on load and after the htmx filter swap
-// (which replaces #accounts-results, table + controls together). Idempotent via a
-// dataset flag on the table. Guarded for Node.
+// findControls locates the collapse/expand controls container for a given tree table.
+// The contract is a `.tree-controls` element SIBLING of the table (both the chart of
+// accounts, whose `.accounts-controls` also carries `.tree-controls`, and the p26.26
+// report pages, whose `.report-controls` does too, follow it). Preference order:
+//   1. within the accounts htmx swap wrapper (#accounts-results) if present, so the
+//      filter swap re-wires the fresh controls (accounts page),
+//   2. the nearest common ancestor's `.tree-controls` (report page: controls + table
+//      are siblings under the report shell),
+//   3. document-wide fallback (single-table pages).
+function findControls(table) {
+  const scoped = table.closest('#accounts-results');
+  if (scoped) return scoped.querySelector('.tree-controls');
+  const parent = table.parentElement;
+  if (parent) {
+    const near = parent.querySelector('.tree-controls');
+    if (near) return near;
+  }
+  return document.querySelector('.tree-controls');
+}
+
+// Browser glue: enhance every tree table on load and after an htmx swap (the accounts
+// filter replaces #accounts-results with table + controls together; report pages load
+// on nav). Idempotent via a dataset flag on the table. Guarded for Node.
 if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
   const initAll = () => {
     document.querySelectorAll('table.tree-table').forEach((table) => {
       if (table.dataset.treeWired) return;
       table.dataset.treeWired = '1';
-      const results = table.closest('#accounts-results') || document;
-      const controls = results.querySelector
-        ? results.querySelector('.accounts-controls')
-        : null;
-      enhanceTree(table, controls);
+      enhanceTree(table, findControls(table));
     });
   };
   document.addEventListener('DOMContentLoaded', initAll);

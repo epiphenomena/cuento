@@ -164,6 +164,89 @@ func TestTrialBalanceGolden(t *testing.T) {
 	checkGolden(t, "trial_balance.csv", csvBuf.Bytes())
 }
 
+// TestTrialBalanceNestedSubtotals asserts the p26.26 nesting invariant: the report
+// walks the account tree in pre-order and each PLACEHOLDER PARENT (Revenue, Expenses
+// on the fixture) emits a subtotal row whose CONVERTED figure equals the sum of its
+// descendant leaves' converted cells (the accounting point of a nested trial balance —
+// a parent rolls up its children). It also confirms the parent row precedes its
+// children (the treetable data-depth pre-order contract) and carries a blank native
+// column (a mixed-currency subtree has no single native figure).
+func TestTrialBalanceNestedSubtotals(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := context.Background()
+
+	rep := trialBalanceReport(t)
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, goldenParams(f)), goldenParams(f))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	// The two placeholder parents on the fixture and the leaves they roll up. The
+	// expected subtotal is the sum of the named leaves' CONVERTED cells (col 3),
+	// re-summed from the report's own emitted leaf rows so a wrong fold is caught.
+	parents := map[string][]string{
+		"Revenue":  {"Contributions", "Government Grants", "Program Service Fees", "Event Income"},
+		"Expenses": {"Salaries", "Program Supplies", "Food Purchases", "Occupancy", "Insurance", "Bank Fees", "Event Costs"},
+	}
+	const convCol = 3
+	for parent, kids := range parents {
+		// The parent subtotal row: a RowSubtotal whose account cell names the parent.
+		var subtotal int64
+		var foundParent bool
+		var parentIdx int
+		for i, row := range table.Rows {
+			if row.Kind == reports.RowSubtotal && len(row.Cells) > 0 &&
+				row.Cells[0].Kind == reports.CellText && row.Cells[0].Text == parent {
+				foundParent = true
+				parentIdx = i
+				subtotal = row.Cells[convCol].Minor
+				// The native column must be blank on a mixed-currency parent.
+				if !row.Cells[convCol-1].Blank {
+					t.Errorf("parent %q native cell not blank", parent)
+				}
+				break
+			}
+		}
+		if !foundParent {
+			t.Fatalf("no subtotal row for parent %q", parent)
+		}
+
+		// Sum the named children's converted (col 3) cells over the report's leaf rows.
+		var childSum int64
+		for _, row := range table.Rows {
+			if row.Kind != reports.RowData || len(row.Cells) <= convCol {
+				continue
+			}
+			nameCell := row.Cells[0]
+			if nameCell.Kind != reports.CellText {
+				continue
+			}
+			for _, kid := range kids {
+				if nameCell.Text == kid {
+					childSum += row.Cells[convCol].Minor
+					break
+				}
+			}
+		}
+		if subtotal != childSum {
+			t.Errorf("parent %q converted subtotal = %d, want sum(children) = %d", parent, subtotal, childSum)
+		}
+
+		// Pre-order: every child row appears AFTER the parent row.
+		for _, row := range table.Rows[:parentIdx] {
+			if row.Kind != reports.RowData || len(row.Cells) == 0 || row.Cells[0].Kind != reports.CellText {
+				continue
+			}
+			for _, kid := range kids {
+				if row.Cells[0].Text == kid {
+					t.Errorf("child %q of %q appears BEFORE its parent (breaks pre-order)", kid, parent)
+				}
+			}
+		}
+	}
+}
+
 // TestTrialBalanceScope: the trial balance over the ROOT scope and a LEAF subsidiary
 // (RV Mexico) yields DIFFERENT account sets — the leaf carries only its own accounts
 // (consolidation = the scope's descendant closure, D18), and US-only accounts are

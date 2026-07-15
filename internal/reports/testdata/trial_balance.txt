@@ -12,11 +12,13 @@
    Due to RV Internacional  USD        USD -$10,000.00   USD -$10,000.00
    Opening Balances         MXN       MXN -$315,000.00   USD -$17,403.31
    Opening Balances         USD       USD -$187,000.00  USD -$187,000.00
+>  Revenue                                               USD -$64,474.86
    Contributions            USD        USD -$52,750.00   USD -$52,750.00
    Government Grants        MXN       MXN -$100,000.00    USD -$5,524.86
    Government Grants        USD         USD -$2,000.00    USD -$2,000.00
    Program Service Fees     USD         USD -$1,200.00    USD -$1,200.00
    Event Income             USD         USD -$3,000.00    USD -$3,000.00
+>  Expenses                                               USD $23,750.14
    Salaries                 USD         USD $16,500.00    USD $16,500.00
    Program Supplies         MXN          MXN $5,000.00       USD $276.24
    Program Supplies         USD          USD $2,100.00     USD $2,100.00

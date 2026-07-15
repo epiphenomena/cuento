@@ -54,6 +54,7 @@ func registerBalanceSheet(reg *Registry) {
 		Group:      "financial",
 		ParamsSpec: ParamsSpec{AsOf: true, Currency: true, Detail: true},
 		Run:        runBalanceSheet,
+		Tree:       true, // p26.26: A/L/net-asset sections nest their account lines.
 	})
 }
 
