@@ -374,9 +374,11 @@ function resyncRowCombos(row) {
     const select = wrap.querySelector('select.combo-input');
     const inp = wrap.querySelector('.combo-text');
     if (!select || !inp || select.dataset.comboManual === '1') return;
+    // Mirror combobox.currentLabel / resyncCombos (p26.22): value="0" is a REAL selectable
+    // default (fund "Unrestricted", program "None") -- show its label, blank only value="".
     const opt = select.selectedOptions[0];
     let label = '';
-    if (opt && opt.value !== '' && opt.value !== '0') {
+    if (opt && opt.value !== '') {
       const p = opt.getAttribute('data-path');
       label = p != null && p !== '' ? p : (opt.textContent || '').trim();
     }

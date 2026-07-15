@@ -273,7 +273,13 @@ func (s *server) expenseDetail(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	s.render(w, r, http.StatusOK, "expense_detail.tmpl", s.newShellPage(r, model))
+	// The editable expense grid is the same wide .txn-grid the transaction editor uses
+	// (account/amount/fund/program/memo + delete columns); it overflows the centered
+	// reading column. Opt into the wide <main> like the register / txn editor so the grid
+	// gets the same horizontal room.
+	page := s.newShellPage(r, model)
+	page.Shell.Wide = true
+	s.render(w, r, http.StatusOK, "expense_detail.tmpl", page)
 }
 
 // buildExpenseDetailModel assembles the report-detail model shared by expenseDetail and

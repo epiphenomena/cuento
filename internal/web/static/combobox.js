@@ -106,6 +106,7 @@ function enhance(select, opts) {
 
   let items = []; // current filtered [{label,value}], in listbox order
   let active = -1; // active item index within `items`
+  let blurTimer = null; // pending deferred close (blur), cancelled on re-focus
 
   function currentLabel() {
     const opt = select.selectedOptions[0];
@@ -184,6 +185,12 @@ function enhance(select, opts) {
 
   // Opening on focus/click shows the full list so the control feels like a dropdown.
   input.addEventListener('focus', () => {
+    // Cancel any pending blur-close: a re-focus within the blur's 120ms window (a real
+    // user tabbing back to the cell) would otherwise let the stale timer fire AFTER this
+    // focus, closing the just-opened list AND rewriting input.value from the selection --
+    // which reads as "the box won't let me type" (my keystrokes keep getting wiped) and
+    // "re-focus doesn't reopen the list". Clearing it here makes focus authoritative.
+    if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
     syncInputToSelection();
     open('');
   });
@@ -216,7 +223,9 @@ function enhance(select, opts) {
 
   input.addEventListener('blur', () => {
     // Defer so a list mousedown can win; then reconcile the input text to the selection.
-    setTimeout(() => { close(); syncInputToSelection(); }, 120);
+    // The timer id is kept so a re-focus within the window can cancel it (see `focus`).
+    if (blurTimer) clearTimeout(blurTimer);
+    blurTimer = setTimeout(() => { blurTimer = null; close(); syncInputToSelection(); }, 120);
   });
 
   // If some other code (keyboard e2e, no-JS fallback path, another module) changes the
@@ -254,8 +263,13 @@ function resyncCombos(root) {
     const select = wrap.querySelector('select.combo-input');
     const input = wrap.querySelector('.combo-text');
     if (!select || !input || select.dataset.comboManual === '1') return;
+    // Mirror currentLabel (p26.22): value="0" is a REAL selectable default (fund
+    // "Unrestricted", program "None", account "Choose account"), so show its label -- only
+    // the empty-value placeholder (value="") is blank. Blanking value-0 here re-hid the fund
+    // "Unrestricted" that syncInputToSelection had set, because gateRow calls resyncCombos on
+    // load (the reported "fund does not display Unrestricted").
     const opt = select.selectedOptions[0];
-    input.value = opt && opt.value !== '' && opt.value !== '0' ? optionLabel(opt) : '';
+    input.value = opt && opt.value !== '' ? optionLabel(opt) : '';
   });
 }
 
