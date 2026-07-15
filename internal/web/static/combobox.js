@@ -228,6 +228,33 @@ function enhance(select, opts) {
     blurTimer = setTimeout(() => { blurTimer = null; close(); syncInputToSelection(); }, 120);
   });
 
+  // p26.44: KEYBOARD ENTRY bridge. For a non-freeText combo the native <select> is the Tab
+  // stop (p26.11: the overlay is tabIndex=-1, reachable by click/focus only) -- so a user who
+  // TABS to the account/fund/program cell and starts TYPING hits the browser's native <select>
+  // prefix-typeahead (a raw first-letter jump), NOT this fuzzy overlay: no ranked listbox ever
+  // opens ("the account field isn't supporting fuzzy matching"). Bridge it: a PRINTABLE key on
+  // the focused select is redirected to the overlay -- prevent the native typeahead, move focus
+  // to the overlay input, seed the char, and open the filtered list. Only bare single-character
+  // keys (no Ctrl/Meta/Alt) are intercepted, so Tab/Enter/Escape/Arrows (grid nav, the store's
+  // keyboard model in txngrid.js) and programmatic select-focus/selectOption are untouched.
+  if (!freeText) {
+    select.addEventListener('keydown', (evt) => {
+      if (evt.ctrlKey || evt.metaKey || evt.altKey) return;
+      if (evt.key == null || evt.key.length !== 1) return; // printable single char only
+      evt.preventDefault(); // suppress the native <select> typeahead jump
+      // Focus FIRST (a focusin handler may select() the input's contents), THEN seed the
+      // char and move the caret to the end -- so the next natively-typed char appends rather
+      // than replacing a selected seed (the select-on-focus wipe that dropped the first key).
+      input.focus();
+      input.value = evt.key;
+      if (typeof input.setSelectionRange === 'function') {
+        input.setSelectionRange(input.value.length, input.value.length);
+      }
+      open(input.value);
+      if (onInputCb) onInputCb(input.value);
+    });
+  }
+
   // If some other code (keyboard e2e, no-JS fallback path, another module) changes the
   // native select, keep the input label in sync.
   select.addEventListener('change', syncInputToSelection);
