@@ -341,6 +341,60 @@ input[type="password"] {
 input[aria-invalid="true"] {
   border-color: var(--color-danger);
 }
+
+/* p26.29: horizontal-ROW layout for the schedule + budget-line entry forms.
+   Both are htmx-swapped partials (stable ids preserved -- CSS-only, no template
+   restructuring) whose fields normally stack vertically. Here they flow as a
+   wrapping inline row of labelled controls, mirroring .txn-header.
+
+   The schedule form has kind-specific `.kind-block` wrappers that budgetkind.js
+   shows/hides via the `hidden` attribute. We must NOT fight that: the layout is
+   scoped to `:not([hidden])` blocks, so a JS-hidden block falls back to the UA
+   `[hidden]{display:none}` with no specificity battle -- the toggle stays intact.
+   The VISIBLE kind-block uses `display: contents` so its inner `.field`s flatten
+   into the same row as name/kind/notes (the wrapper carries no border/padding). */
+.schedule-form,
+.line-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-4);
+}
+/* The heading + the action buttons each own a full row (don't get pulled into
+   the input row). */
+.schedule-form > h2,
+.schedule-form > .form-actions,
+.line-form > h3,
+.line-form > .form-actions {
+  flex-basis: 100%;
+  margin-bottom: 0;
+}
+/* Each field becomes an inline column: label above control, with the error/hint
+   still stacked under the control (wraps sensibly on a 422 re-render). */
+.schedule-form .field,
+.line-form .field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+}
+.schedule-form .field > label,
+.line-form .field > label { margin-bottom: 0; }
+.schedule-form .field input,
+.schedule-form .field select,
+.line-form .field input,
+.line-form .field select { min-width: 9rem; }
+.schedule-form .field .hint,
+.schedule-form .field .field-error,
+.line-form .field .hint,
+.line-form .field .field-error { margin: 0; max-width: 16rem; }
+/* Flatten the ACTIVE kind-block so its fields join the row; hidden ones fall
+   back to the UA hidden rule untouched. */
+.schedule-form .kind-block:not([hidden]) { display: contents; }
+/* The custom-dates textarea is genuinely multi-line; give it room without
+   stretching the whole row. */
+.schedule-form #sf-custom { min-width: 18rem; }
+
 .flash:empty { display: none; }
 .flash {
   max-width: 60rem;
