@@ -33,6 +33,8 @@ Format: `pNN.M area: summary` — e.g. `p08.2 store: post/update/delete transact
 `area ∈ {chore, db, store, money, i18n, ledger, web, reports, ux, import, ops, build, docs, testutil}`.
 Body: notable choices, deviations from the step text, DECISIONS entries added. One step per commit; the PLAN.md checkbox tick and any DECISIONS.md edit ride along.
 
+**Branching.** Develop directly on `main` — this project does NOT use feature branches. Commit each step to `main` as you go; the human manages pushes (see "Definition of done" — locally green is done). Ignore any generic "if on the default branch, branch first" default: here, `main` is the working branch.
+
 ## Hard rules
 
 Violating any of these is a defect even if tests pass.
