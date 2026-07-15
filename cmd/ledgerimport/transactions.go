@@ -46,6 +46,14 @@ func (b *builder) transactions(ctx context.Context, recs []Record) error {
 	}
 	b.campusPlan = plan
 
+	// The account-driven campus-asset marker set (D p26.46): campus fixed-asset
+	// accounts whose splits join the campus fund without a kat=campus marker. Built
+	// from cfg (always loaded, so the per-subsidiary reload path gets it too).
+	b.campusAssetAccts = map[string]bool{}
+	for _, acct := range b.cfg.CampusAssetAccounts {
+		b.campusAssetAccts[acct] = true
+	}
+
 	for _, tid := range order {
 		if err := b.postGroup(ctx, tid, groups[tid]); err != nil {
 			return err
@@ -291,6 +299,13 @@ func (b *builder) postBucket(
 // is an ordinary unrestricted expense). Campus BALANCE-SHEET splits get no fund here;
 // they are offset candidates the Pass-2 offsetRtW may retag. The kat->program path is
 // unchanged for every campus split (RtW or overflowed): kat still feeds program.
+//
+// SEPARATELY, an account-driven marker (D p26.46): a split on a configured
+// campus-asset account (cfg.CampusAssetAccounts) is a fixed asset held BY the campus
+// project and joins the campus fund directly, overriding any donor. Because these are
+// ASSETS the kat/pool path above (isRE-guarded) would skip them; this path bypasses
+// that guard. It is not a pool event (asset swap), so buildCampusPlan ignores it; but
+// it IS marked campusRtW so Pass-2 offsetRtW pairs its cash counter-leg onto the fund.
 func (b *builder) resolveSplit(tid string, idx int, r Record) (pending, error) {
 	exp, ok := b.exponent[r.Currency]
 	if !ok {
@@ -328,7 +343,20 @@ func (b *builder) resolveSplit(tid string, idx int, r Record) (pending, error) {
 	// retag a portion of them. A missing plan entry (feature off, or a non-R/E campus
 	// split) leaves the donor decision untouched.
 	campusRtW := false
-	if r.Kat == "campus" && b.res.CampusFundID != nil && isRE {
+	switch {
+	case b.res.CampusFundID != nil && b.campusAssetAccts[r.Acct]:
+		// Account-driven campus marker (D p26.46): a fixed-asset account held BY the
+		// campus project (land, buildings under construction). Its splits are ASSETS,
+		// not R/E, so the kat/pool path below (guarded by isRE) never catches them --
+		// this branch bypasses that guard and tags the split RtW directly (overriding
+		// any donor). It is NOT a pool event: a campus asset purchase (Dr Asset / Cr
+		// Cash) is an asset swap WITHIN the fund, so buildCampusPlan leaves it out of
+		// the drawdown pool (revenue - expense); we set campusRtW so Pass-2 offsetRtW
+		// draws the cash offset onto the fund and the campus subset nets to zero with
+		// no plug.
+		s.FundID = b.res.CampusFundID
+		campusRtW = true
+	case r.Kat == "campus" && b.res.CampusFundID != nil && isRE:
 		if rtw, ok := b.campusPlan[campusKey{tid: tid, idx: idx}]; ok {
 			if rtw {
 				s.FundID = b.res.CampusFundID

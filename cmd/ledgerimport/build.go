@@ -256,6 +256,14 @@ type builder struct {
 	// the top of transactions() over the full skip-filtered export.
 	campusPlan campusPlan
 
+	// campusAssetAccts is the set of source_acct keys (cfg.CampusAssetAccounts) whose
+	// FIXED-ASSET splits belong to the campus fund even without a kat=campus marker (D
+	// p26.46). resolveSplit tags such a split RtW directly, bypassing the R/E-only
+	// campus guard; buildCampusPlan ignores it (an asset swap does not touch the
+	// drawdown pool). Built once at the top of transactions() from cfg (so it survives
+	// the separate-process per-subsidiary reload -- cfg is always loaded).
+	campusAssetAccts map[string]bool
+
 	// acctType maps a created account id -> its cuento type. resolveSplit consults
 	// it so a source dimension (functional class from kls, program from kat) is only
 	// applied on the account types the store accepts it on (D21/D24) -- the source

@@ -34,6 +34,7 @@ func testConfig() string {
   },
   "campus_fund": {"name": "Restore the Way", "funder": "", "purpose": "campus",
                   "restriction": "purpose"},
+  "campus_asset_accounts": ["Campus Land"],
   "functional_classes": {"PRG": "program", "MGT": "management"},
   "base_currency": "USD",
   "fx_clearing_account": "FX Clearing",
@@ -50,6 +51,7 @@ func testAccountMap() string {
 		{SourceAcct: "Assets", CuentoType: "asset", CuentoParent: "", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Assets", NameES: "Activos"},
 		{SourceAcct: "Checking", CuentoType: "asset", CuentoParent: "Assets", Subsidiaries: []string{"Test US"}, NameEN: "Checking", NameES: "Cuenta"},
 		{SourceAcct: "Cash MX", CuentoType: "asset", CuentoParent: "Assets", Subsidiaries: []string{"Test MX"}, NameEN: "Cash MX", NameES: "Efectivo"},
+		{SourceAcct: "Campus Land", CuentoType: "asset", CuentoParent: "Assets", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Campus Land", NameES: "Terreno Campus"},
 		{SourceAcct: "Revenue", CuentoType: "revenue", CuentoParent: "", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Revenue", NameES: "Ingresos"},
 		{SourceAcct: "Grant Revenue", CuentoType: "revenue", CuentoParent: "Revenue", Subsidiaries: []string{"Test US", "Test MX"}, DefaultProgram: "Education", NameEN: "Grant Revenue", NameES: "Ingreso Beca"},
 		{SourceAcct: "Donations", CuentoType: "revenue", CuentoParent: "Revenue", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Donations", NameES: "Donaciones"},
@@ -146,6 +148,17 @@ func testSource() string {
 		// program is still assigned (kat feeds program even when overflowed).
 		row("US", "E", "spend", "Campus Costs", "campus", "2025-10-01", "PRG", "10", "campus overspend", "GRANT1", "USD", "1.0", "80.00", "80.00", "0", "0", "Expenses"),
 		row("US", "A", "spend", "Checking", "", "2025-10-01", "", "10", "overspend paid", "", "USD", "1.0", "0", "0", "80.00", "80.00", "Assets"),
+		// tid 11 (2025-08-15, BETWEEN the campus revenue and the campus expense): a
+		// campus CAPITAL purchase Dr Campus Land 1000 / Cr Checking 1000. Campus Land is
+		// an ACCOUNT-DRIVEN campus marker (D p26.46), a FIXED ASSET with blank kat -- the
+		// isRE-guarded kat/pool path would skip it, but the account marker tags it RtW.
+		// It carries a DONOR (GRANT1) to prove the marker overrides the donor. Because it
+		// is an asset SWAP it is NOT a pool event: the pool stays 100 after Aug, so the
+		// Sep campus expense (tid 8, 60) is still WITHIN the pool and RtW -- proving the
+		// 1000 asset did NOT drain the pool. Its Checking offset (nil fund) is retagged
+		// RtW by Pass-2 so the campus subset nets to zero with NO plug.
+		row("US", "A", "buy", "Campus Land", "", "2025-08-15", "", "11", "campus land", "GRANT1", "USD", "1.0", "1000.00", "1000.00", "0", "0", "Assets"),
+		row("US", "A", "buy", "Checking", "", "2025-08-15", "", "11", "paid for land", "", "USD", "1.0", "0", "0", "1000.00", "1000.00", "Assets"),
 		// A consolidation-marker row (country CONSOL) that must be SKIPPED entirely.
 		row("CONSOL", "A", "elim", "Checking", "", "2025-05-01", "", "9", "elim", "", "", "1.0", "0", "0", "0", "0", "Assets"),
 	}
@@ -471,6 +484,39 @@ func TestCampusFundAssignedByKat(t *testing.T) {
 	if grant1OnCampus != 0 {
 		t.Errorf("a campus expense resolved to donor fund GRANT1; RtW must override donor")
 	}
+
+	// (b2) tid 11: account-driven campus-asset purchase (D p26.46). Campus Land is a
+	// FIXED-ASSET marker account, so its split joins the campus fund despite blank kat
+	// and a GRANT1 donor (marker overrides donor), and its Checking offset is retagged
+	// RtW -- one balanced transaction, no plug. It is an asset SWAP, not a pool event:
+	// the campus expense (tid 8, above) is still RtW, proving the 1000 asset did NOT
+	// drain the pool.
+	if n := res.txnCountForTid("11"); n != 1 {
+		t.Fatalf("tid 11 produced %d transactions, want 1", n)
+	}
+	// The Campus Land split carries the campus fund (+1000, a debit), never GRANT1.
+	var landCampus, landDonor int
+	if err := sqldb.QueryRow(
+		`SELECT COUNT(*) FROM splits WHERE account_id = ? AND fund_id = ? AND amount = 100000`,
+		res.AccountIDs["Campus Land"], campusID,
+	).Scan(&landCampus); err != nil {
+		t.Fatalf("count campus Land splits: %v", err)
+	}
+	if landCampus != 1 {
+		t.Errorf("Campus Land split: %d RtW debits, want 1 (account-driven marker)", landCampus)
+	}
+	if err := sqldb.QueryRow(
+		`SELECT COUNT(*) FROM splits WHERE account_id = ? AND fund_id = ?`,
+		res.AccountIDs["Campus Land"], res.FundIDs["GRANT1"],
+	).Scan(&landDonor); err != nil {
+		t.Fatalf("count GRANT1 Land splits: %v", err)
+	}
+	if landDonor != 0 {
+		t.Errorf("Campus Land resolved to donor GRANT1; the campus-asset marker must override the donor")
+	}
+	// The 1000 Checking credit offsetting the land purchase is retagged RtW (whole
+	// split), so tid 11's campus subset nets to zero with no plug.
+	assertCheckingCredit(t, sqldb, res, "11", campusID, -100000)
 
 	// (c) tid 10: campus expense 80 exceeds the remaining pool (40) -> OVERFLOW to
 	// unrestricted. Its Campus Costs split carries NO fund but still the Campus program.

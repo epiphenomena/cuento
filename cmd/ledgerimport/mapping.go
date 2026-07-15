@@ -243,6 +243,18 @@ type Config struct {
 	// off; kat still feeds program).
 	CampusFund *FundConfig `json:"campus_fund"`
 
+	// CampusAssetAccounts lists source_acct keys (matching the account-mapping CSV's
+	// source_acct column) for FIXED-ASSET accounts whose splits belong to the campus
+	// fund even though their source `kat` is not "campus" -- capital held BY the
+	// campus project (land, buildings under construction, etc.). A split on one of
+	// these accounts is treated like a campus split (assigned RtW, paired via the
+	// p26.43 offset logic), bypassing the R/E-only guard that the pool-driven kat
+	// path uses -- see resolveSplit. These are asset swaps within the fund, so they
+	// do NOT enter the chronological drawdown pool (only campus revenue/expense
+	// does). Empty/nil = no such accounts (the account-driven path is off; the
+	// kat=campus path is unaffected).
+	CampusAssetAccounts []string `json:"campus_asset_accounts"`
+
 	// FunctionalClasses maps a source `kls` code -> program|management|fundraising
 	// (D21). An unmapped/blank kls leaves the split to the account default.
 	FunctionalClasses map[string]string `json:"functional_classes"`
