@@ -63,29 +63,29 @@
        empty on save. This grid form is a SIBLING of the submit/discard forms below (no
        nested forms). */}}
   <form method="post" action="/expenses/{{.ID}}/lines" id="expense-grid-form" data-user-program="{{.UserProgram}}" data-account-missing-msg="{{t "error.expense.account_not_offered"}}">
-    <table class="expense-lines-table txn-grid">
+    {{/* p26.32 two-row line layout: each line is its OWN <tbody class="el-row"> holding a
+         .el-row-main (description / account / amount, wider) and a .el-row-more (fund /
+         program / memo / error / delete, packed). Grouping by <tbody> bands both physical
+         rows for the per-line zebra (nth-of-type, self-maintaining) and keeps every id-keyed
+         selector working (they descend the tbody). Header colspans (5 / 4 / 3 = 12) match row
+         1's cells so the fixed-layout columns align. */}}
+    <table class="expense-lines-table txn-grid txn-grid-2row">
       <thead>
         <tr>
           {{/* p26.23: description is the FIRST column (before Account). */}}
-          <th>{{t "expense.line.col.description"}}</th>
-          <th>{{t "expense.line.col.account"}}</th>
-          <th>{{t "expense.line.col.amount"}}</th>
-          <th>{{t "expense.line.col.fund"}}</th>
-          <th>{{t "expense.line.col.program"}}</th>
-          <th>{{t "expense.line.col.memo"}}</th>
-          <th>{{t "txn.col.error"}}</th>
-          {{/* p26.11: the delete-× action column is the LAST column, AFTER the error column. */}}
-          <th class="el-delete-col" aria-hidden="true"></th>
+          <th colspan="5">{{t "expense.line.col.description"}}</th>
+          <th colspan="4">{{t "expense.line.col.account"}}</th>
+          <th colspan="3">{{t "expense.line.col.amount"}}</th>
         </tr>
       </thead>
-      <tbody id="expense-rows">
-        {{$page := .}}
-        {{range $i, $l := .Lines}}
-        <tr class="expense-line-row el-row" data-row="{{$i}}">
-          <input type="hidden" name="line_id_{{$i}}" id="el-lineid-{{$i}}" value="{{if $l.ID}}{{$l.ID}}{{end}}">
-          {{/* p26.23: per-line free-text description is now the FIRST column (before Account).
+      {{$page := .}}
+      {{range $i, $l := .Lines}}
+      <tbody class="expense-line-row el-row" data-row="{{$i}}">
+        <tr class="el-row-main">
+          {{/* p26.23: per-line free-text description is the FIRST column (before Account).
                Autocomplete + prefill, magnitude amount mode (sign derived server-side). */}}
-          <td class="txn-cell el-desc-cell">
+          <td class="txn-cell el-desc-cell" colspan="5">
+            <input type="hidden" name="line_id_{{$i}}" id="el-lineid-{{$i}}" value="{{if $l.ID}}{{$l.ID}}{{end}}">
             <div class="desc-field">
               <input type="text" name="description_{{$i}}" id="el-desc-{{$i}}" class="el-desc js-descfield"
                      value="{{$l.Description}}" autocomplete="off"
@@ -94,44 +94,46 @@
               <div class="desc-suggest-box" id="el-desc-list-{{$i}}" hidden></div>
             </div>
           </td>
-          <td class="txn-cell el-account-cell">
+          <td class="txn-cell el-account-cell" colspan="4">
             <select name="account_{{$i}}" id="el-account-{{$i}}" class="el-account combo-input">
               <option value="0">{{t "expense.line.form.account_none"}}</option>
               {{range $page.Accounts}}<option value="{{.ID}}" {{if .Unavailable}}data-unavailable="1" data-path="{{.Path}} {{t "txn.account.unavailable_suffix"}}"{{else}}data-path="{{.Path}}"{{end}}{{if eq .ID $l.AccountID}} selected{{end}}>{{.Path}}{{if .Unavailable}} {{t "txn.account.unavailable_suffix"}}{{end}}</option>
               {{end}}
             </select>
           </td>
-          <td class="txn-cell el-amount-cell">
+          <td class="txn-cell el-amount-cell" colspan="3">
             <input type="text" name="amount_{{$i}}" id="el-amount-{{$i}}" class="el-amount amount" value="{{$l.AmountInput}}" inputmode="decimal">
           </td>
-          <td class="txn-cell el-fund-cell">
+        </tr>
+        <tr class="el-row-more">
+          <td class="txn-cell el-fund-cell" colspan="3">
             <select name="fund_{{$i}}" id="el-fund-{{$i}}" class="el-fund combo-input">
               <option value="0">{{t "expense.line.unrestricted"}}</option>
               {{range $page.Funds}}<option value="{{.ID}}"{{if eq .ID $l.FundID}} selected{{end}}>{{.Name}}</option>
               {{end}}
             </select>
           </td>
-          <td class="txn-cell el-program-cell">
+          <td class="txn-cell el-program-cell" colspan="4">
             <select name="program_{{$i}}" id="el-program-{{$i}}" class="el-program combo-input">
               <option value="0">{{t "expense.line.form.program_none"}}</option>
               {{range $page.Programs}}<option value="{{.ID}}"{{if eq .ID $l.ProgramID}} selected{{end}}>{{.Name}}</option>
               {{end}}
             </select>
           </td>
-          <td class="txn-cell el-memo-cell">
+          <td class="txn-cell el-memo-cell" colspan="3">
             <input type="text" name="memo_{{$i}}" id="el-memo-{{$i}}" class="el-memo" value="{{$l.Memo}}">
           </td>
-          <td class="el-row-error">{{if $l.ErrorKey}}<span class="field-error" role="alert">{{t $l.ErrorKey}}</span>{{end}}</td>
-          {{/* p26.4/p26.11: a per-row delete control, now the LAST cell (after the error
+          <td class="el-row-error" colspan="1">{{if $l.ErrorKey}}<span class="field-error" role="alert">{{t $l.ErrorKey}}</span>{{end}}</td>
+          {{/* p26.4/p26.11: a per-row delete control, the LAST cell (after the error
                column). type="button" so it never submits the grid; expensegrid.js re-indexes
                the surviving rows (contiguous _i) on click, and deleting the only/last row
                resets it in place (the grid never drops to zero). */}}
-          <td class="el-delete-cell">
+          <td class="el-delete-cell" colspan="1">
             <button type="button" class="btn btn-ghost el-delete" aria-label="{{t "common.delete_row"}}" title="{{t "common.delete_row"}}">&times;</button>
           </td>
         </tr>
-        {{end}}
       </tbody>
+      {{end}}
     </table>
     <input type="hidden" name="rows" id="expense-rows-count" value="{{len .Lines}}">
     <div class="form-actions">

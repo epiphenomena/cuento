@@ -309,24 +309,23 @@ test('expenses: subsidiary auto-set, account/fund/program combos, amount blur, d
   await page.locator('#el-memo-2').fill('row-two-memo');
   await expect(page.locator('#el-account-3')).toBeVisible();
 
-  // (p26.11/p26.23) COLUMN ORDER: description is now the FIRST column (before account), and
-  // the delete-× cell is still the LAST cell in the row, AFTER the error column. Assert both
-  // header and row cell order so a regression that moves either is caught. Headers:
-  // description, account, amount, fund, program, memo, error, then the (empty, aria-hidden)
-  // delete-action header.
+  // (p26.11/p26.23/p26.32) COLUMN ORDER: description is the FIRST column (before account),
+  // and the delete-× cell is still the LAST cell in the row, AFTER the error column.
+  // p26.32 two-row layout: each line is a <tbody class="el-row"> with .el-row-main
+  // (description / account / amount) and .el-row-more (fund / program / memo / error /
+  // delete). The thead labels only row 1's three wide columns (colspan 5 / 4 / 3).
   const headerCells = page.locator('#expense-grid-form thead th');
-  await expect(headerCells).toHaveCount(8);
+  await expect(headerCells).toHaveCount(3);
   await expect(headerCells.first()).toHaveText(/description/i);
   await expect(headerCells.nth(1)).toHaveText(/account/i);
-  await expect(headerCells.nth(6)).toHaveText(/error/i);
-  await expect(headerCells.last()).toHaveClass(/el-delete-col/);
-  // The description cell is the FIRST td in a data row.
+  await expect(headerCells.nth(2)).toHaveText(/amount/i);
+  // The description cell is the FIRST td in the line's first row.
   await expect(
-    page.locator('.el-row[data-row="0"] > td').first(),
+    page.locator('.el-row[data-row="0"] .el-row-main > td').first(),
   ).toHaveClass(/el-desc-cell/);
-  // In a data row the error cell precedes the delete cell (the delete is the last td).
-  const row0Cells = page.locator('.el-row[data-row="0"] > td, .el-row[data-row="0"] > th');
-  await expect(row0Cells.last()).toHaveClass(/el-delete-cell/);
+  // In the line's second row the error cell precedes the delete cell (the delete is last).
+  const row0MoreCells = page.locator('.el-row[data-row="0"] .el-row-more > td');
+  await expect(row0MoreCells.last()).toHaveClass(/el-delete-cell/);
   await expect(page.locator('.el-row[data-row="0"] .el-row-error'))
     .not.toHaveClass(/el-delete-cell/);
   // The delete cell comes right after the error cell in DOM order.

@@ -27,9 +27,12 @@ import { initDescField, stripDescField } from './descfield.js';
 // enhance wires ONE grid form: combos, auto-append of a trailing empty row on edit,
 // amount blur-reformat, and per-row delete + re-index.
 function enhance(form) {
-  const tbody = form.querySelector('#expense-rows');
+  // p26.32: each line is its own <tbody class="el-row"> (two-row layout), so there is no
+  // single wrapping tbody -- the grid table is the container the rows are appended to and
+  // the delegated listeners attach to. `table` replaces the old `#expense-rows` tbody.
+  const table = form.querySelector('.expense-lines-table');
   const count = form.querySelector('#expense-rows-count');
-  if (!tbody || !count) return;
+  if (!table || !count) return;
 
   const exp = 2; // expense amounts are 2-dp (like the txn grid); the server is authoritative.
 
@@ -79,14 +82,14 @@ function enhance(form) {
 
   // syncCount rewrites #expense-rows-count from the live row set.
   function syncCount() {
-    count.value = String(tbody.querySelectorAll('.el-row').length);
+    count.value = String(table.querySelectorAll('.el-row').length);
   }
 
   // addRow clones the last row, rewrites its id/name suffixes to the new index, clears
   // inputs (including the hidden line_id so a new row INSERTS, ID 0, rather than updating
   // an existing line), resets selects to index 0, and appends it -- then bumps the count.
   function addRow() {
-    const rows = tbody.querySelectorAll('.el-row');
+    const rows = table.querySelectorAll('.el-row');
     const template = rows[rows.length - 1];
     if (!template) return;
     const idx = rows.length;
@@ -112,7 +115,7 @@ function enhance(form) {
     });
     const errCell = clone.querySelector('.el-row-error');
     if (errCell) errCell.textContent = '';
-    tbody.appendChild(clone);
+    table.appendChild(clone);
     syncCount();
     initCombos(clone); // enhance the clone's clean selects
     initDescField(clone); // p26.19: re-wire the clone's clean description input
@@ -140,32 +143,32 @@ function enhance(form) {
   // re-indexes the survivors to a contiguous 0..n-1 and re-asserts the trailing-empty
   // invariant. The server handler is unchanged (it always sees a contiguous _i scheme).
   function deleteRow(rowEl) {
-    const rows = [...tbody.querySelectorAll('.el-row')];
+    const rows = [...table.querySelectorAll('.el-row')];
     if (rows.length <= 1) {
       resetRow(rowEl);
       syncCount();
       return;
     }
     rowEl.remove();
-    tbody.querySelectorAll('.el-row').forEach((r, i) => reindexRow(r, i));
+    table.querySelectorAll('.el-row').forEach((r, i) => reindexRow(r, i));
     syncCount();
     ensureTrailingEmptyRow();
   }
 
   // ensureTrailingEmptyRow grows a fresh empty row when the last row is no longer empty.
   function ensureTrailingEmptyRow() {
-    const rows = [...tbody.querySelectorAll('.el-row')];
+    const rows = [...table.querySelectorAll('.el-row')];
     const last = rows[rows.length - 1];
     if (last && !isRowEmpty(rowFieldValues(last))) addRow();
   }
 
   // Delegated on the tbody so they survive addRow/re-index without re-wiring each control.
-  tbody.addEventListener('input', ensureTrailingEmptyRow);
-  tbody.addEventListener('change', ensureTrailingEmptyRow);
+  table.addEventListener('input', ensureTrailingEmptyRow);
+  table.addEventListener('change', ensureTrailingEmptyRow);
 
   // Amount blur-reformat: reformat the just-left amount input (1000 -> 1,000.00). Delegated
   // (focusout bubbles; blur does not) so cloned rows are covered.
-  tbody.addEventListener('focusout', (evt) => {
+  table.addEventListener('focusout', (evt) => {
     const el = evt.target;
     if (el && el.classList && el.classList.contains('el-amount')) {
       el.value = formatAmountGrouped(el.value, exp);
@@ -174,7 +177,7 @@ function enhance(form) {
 
   // Per-row delete (the × button). type="button" so it never submits; delegated so it
   // survives addRow/re-index.
-  tbody.addEventListener('click', (evt) => {
+  table.addEventListener('click', (evt) => {
     const btn = evt.target.closest('.el-delete');
     if (!btn) return;
     evt.preventDefault();
@@ -190,7 +193,7 @@ function enhance(form) {
   function flagAccountlessRows() {
     const msg = form.dataset.accountMissingMsg || '';
     let flagged = false;
-    [...tbody.querySelectorAll('.el-row')].forEach((rowEl) => {
+    [...table.querySelectorAll('.el-row')].forEach((rowEl) => {
       const i = rowEl.dataset.row;
       const acctSel = form.querySelector(`#el-account-${i}`);
       const errCell = rowEl.querySelector('.el-row-error');
@@ -226,7 +229,7 @@ function enhance(form) {
   // p26.5: seed the user's default program on any EMPTY row present on load (the server's
   // starter empty row) so a fresh grid opens with the preferred program. Non-empty existing
   // lines keep their stored program (applyUserProgram only fills an unset program select).
-  tbody.querySelectorAll('.el-row').forEach((rowEl) => {
+  table.querySelectorAll('.el-row').forEach((rowEl) => {
     if (isRowEmpty(rowFieldValues(rowEl))) applyUserProgram(rowEl);
   });
 

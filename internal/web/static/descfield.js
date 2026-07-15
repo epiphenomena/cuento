@@ -283,7 +283,10 @@ function contextFor(input) {
   const doc = input.ownerDocument;
   if (!doc) return null;
   const form = input.closest('form');
-  const row = input.closest('tr');
+  // p26.32: a split/line is now a <tbody class="txn-row"/.el-row> holding TWO <tr> (the
+  // description lives in row 1, the memo/fund/program/class in row 2), so the row SCOPE is
+  // the tbody, not a single <tr>. Fall back to the closest <tr> for any single-row grid.
+  const row = input.closest('.txn-row, .el-row') || input.closest('tr');
 
   function listOf(el) {
     const stem = el.dataset.descContainer;
@@ -301,7 +304,7 @@ function contextFor(input) {
   // rowValuesOf reads the emptiness-relevant fields (account/amount/dr/cr/memo) of the
   // input's row, by class (both grids share .txn-account/.el-account etc. naming pairs).
   function rowValuesOf(el) {
-    const r = el.closest('tr');
+    const r = el.closest('.txn-row, .el-row') || el.closest('tr');
     if (!r) return {};
     const pick = (sels) => {
       for (const s of sels) {
@@ -323,7 +326,7 @@ function contextFor(input) {
   // imbalance chips, subsidiary marking, and auto-append all run without descfield
   // reaching into the parent module.
   function writeRow(el, ops) {
-    const r = el.closest('tr');
+    const r = el.closest('.txn-row, .el-row') || el.closest('tr');
     if (!r) return;
     const set = (sels, value) => {
       for (const s of sels) {

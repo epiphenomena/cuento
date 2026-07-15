@@ -23,102 +23,114 @@
 
 {{/* txn-row: one editable split row. Data is a txnRowModel; $ is the page model (for
      the option lists and the display mode). The row's data-row carries its index for
-     the JS grid; data-row-error marks a row the server flagged (trap 5). */ -}}
+     the JS grid; data-row-error marks a row the server flagged (trap 5).
+
+     p26.32 two-row layout: each split is ONE <tbody class="txn-row"> holding TWO <tr>:
+     row 1 (the wide fields) = description, account, amount; row 2 (packed) = fund,
+     program, class, memo, error, delete. Grouping by <tbody> (a table may have many)
+     bands both physical <tr> together for the per-split zebra (tbody.txn-row:nth-of-type
+     -- self-maintaining across add/delete/reindex) WITHOUT a data-split-index attribute,
+     and keeps every id-keyed selector (querySelectorAll('.txn-row'), row.querySelector)
+     working because they descend the tbody into both trs. The colspans of the two <tr>
+     each sum to 12 so the fixed-layout columns align; row 1's three cells are wider. */ -}}
 {{define "txn-row" -}}
 {{- with .Row -}}
-<tr class="txn-row" data-row="{{.Index}}"{{if .ErrorKey}} data-row-error="{{.Index}}"{{end}}>
-  {{/* Hidden split id round-trip (trap 1): the existing split's id, or empty for a
-       new row. Keyed to the row index (trap 4). */}}
-  <input type="hidden" name="split_id_{{.Index}}" id="txn-splitid-{{.Index}}" value="{{.SplitID}}">
+<tbody class="txn-row" data-row="{{.Index}}"{{if .ErrorKey}} data-row-error="{{.Index}}"{{end}}>
+  <tr class="txn-row-main">
+    {{/* Hidden split id round-trip (trap 1): the existing split's id, or empty for a
+         new row. Keyed to the row index (trap 4). Lives in the first cell of row 1. */}}
+    {{/* p26.23: per-split free-text description is the FIRST column (before Account).
+         Autocompletes from prior splits' descriptions and, on pick/commit, prefills THIS row
+         from the matched split when the row is otherwise empty (descfield.js). The listbox
+         lands in the sibling #txn-desc-list-<i> container. */}}
+    <td class="txn-cell txn-desc-cell" colspan="5">
+      <input type="hidden" name="split_id_{{.Index}}" id="txn-splitid-{{.Index}}" value="{{.SplitID}}">
+      <div class="desc-field">
+        <input type="text" name="description_{{.Index}}" id="txn-desc-{{.Index}}" class="txn-desc js-descfield"
+               value="{{.Description}}" autocomplete="off"
+               data-desc-container="txn-desc-list-{{.Index}}"
+               data-desc-mode="{{if $.Page.DisplayDRCR}}drcr{{else}}signed{{end}}"
+               placeholder="{{t "txn.description_hint"}}">
+        <div class="desc-suggest-box" id="txn-desc-list-{{.Index}}" hidden></div>
+      </div>
+    </td>
 
-  {{/* p26.23: per-split free-text description is now the FIRST column (before Account).
-       Autocompletes from prior splits' descriptions and, on pick/commit, prefills THIS row
-       from the matched split when the row is otherwise empty (descfield.js). The listbox
-       lands in the sibling #txn-desc-list-<i> container. */}}
-  <td class="txn-cell txn-desc-cell">
-    <div class="desc-field">
-      <input type="text" name="description_{{.Index}}" id="txn-desc-{{.Index}}" class="txn-desc js-descfield"
-             value="{{.Description}}" autocomplete="off"
-             data-desc-container="txn-desc-list-{{.Index}}"
-             data-desc-mode="{{if $.Page.DisplayDRCR}}drcr{{else}}signed{{end}}"
-             placeholder="{{t "txn.description_hint"}}">
-      <div class="desc-suggest-box" id="txn-desc-list-{{.Index}}" hidden></div>
-    </div>
-  </td>
+    <td class="txn-cell txn-account-cell" colspan="4">
+      <select name="account_{{.Index}}" id="txn-account-{{.Index}}" class="txn-account combo-input">
+        <option value="0">{{t "txn.account.choose"}}</option>
+        {{range $.Page.Accounts}}<option data-account-option value="{{.ID}}"
+          data-type="{{.Type}}" data-default-program="{{.DefaultProgram}}"
+          data-default-class="{{.DefaultClass}}" data-subsidiaries="{{.SubsCSV}}"
+          {{if .Unavailable}}data-unavailable="1" data-path="{{.Path}} {{t "txn.account.unavailable_suffix"}}"{{else}}data-path="{{.Path}}"{{end}}
+          {{if eq .ID $.Row.Account}} selected{{end}}>{{.Path}}{{if .Unavailable}} {{t "txn.account.unavailable_suffix"}}{{end}}</option>
+        {{end}}
+      </select>
+    </td>
 
-  <td class="txn-cell txn-account-cell">
-    <select name="account_{{.Index}}" id="txn-account-{{.Index}}" class="txn-account combo-input">
-      <option value="0">{{t "txn.account.choose"}}</option>
-      {{range $.Page.Accounts}}<option data-account-option value="{{.ID}}"
-        data-type="{{.Type}}" data-default-program="{{.DefaultProgram}}"
-        data-default-class="{{.DefaultClass}}" data-subsidiaries="{{.SubsCSV}}"
-        {{if .Unavailable}}data-unavailable="1" data-path="{{.Path}} {{t "txn.account.unavailable_suffix"}}"{{else}}data-path="{{.Path}}"{{end}}
-        {{if eq .ID $.Row.Account}} selected{{end}}>{{.Path}}{{if .Unavailable}} {{t "txn.account.unavailable_suffix"}}{{end}}</option>
-      {{end}}
-    </select>
-  </td>
+    {{if $.Page.DisplayDRCR}}
+    {{/* DR/CR twin columns (display mode). The JS normalizes these into amount_i. */}}
+    <td class="txn-cell txn-amount-cell" colspan="2">
+      <input type="text" name="dr_{{.Index}}" id="txn-dr-{{.Index}}" class="txn-dr amount" value="{{.AmountDR}}" inputmode="decimal" placeholder="{{t "txn.amount.debit"}}">
+    </td>
+    <td class="txn-cell txn-amount-cell" colspan="1">
+      <input type="text" name="cr_{{.Index}}" id="txn-cr-{{.Index}}" class="txn-cr amount" value="{{.AmountCR}}" inputmode="decimal" placeholder="{{t "txn.amount.credit"}}">
+    </td>
+    {{else}}
+    {{/* Signed single column (works with no JS). */}}
+    <td class="txn-cell txn-amount-cell" colspan="3">
+      <input type="text" name="amount_{{.Index}}" id="txn-amount-{{.Index}}" class="txn-amount amount" value="{{.Amount}}" inputmode="decimal" placeholder="{{t "txn.amount.signed"}}">
+    </td>
+    {{end}}
+    {{/* In DR/CR mode the signed field is still present (hidden) so submit posts it. In
+         signed mode the visible input above IS amount_i, so no duplicate. */}}
+    {{if $.Page.DisplayDRCR}}<input type="hidden" name="amount_{{.Index}}" id="txn-amount-{{.Index}}" value="{{.Amount}}">{{end}}
+  </tr>
 
-  {{if $.Page.DisplayDRCR}}
-  {{/* DR/CR twin columns (display mode). The JS normalizes these into amount_i. */}}
-  <td class="txn-cell txn-amount-cell">
-    <input type="text" name="dr_{{.Index}}" id="txn-dr-{{.Index}}" class="txn-dr amount" value="{{.AmountDR}}" inputmode="decimal" placeholder="{{t "txn.amount.debit"}}">
-  </td>
-  <td class="txn-cell txn-amount-cell">
-    <input type="text" name="cr_{{.Index}}" id="txn-cr-{{.Index}}" class="txn-cr amount" value="{{.AmountCR}}" inputmode="decimal" placeholder="{{t "txn.amount.credit"}}">
-  </td>
-  {{else}}
-  {{/* Signed single column (works with no JS). */}}
-  <td class="txn-cell txn-amount-cell">
-    <input type="text" name="amount_{{.Index}}" id="txn-amount-{{.Index}}" class="txn-amount amount" value="{{.Amount}}" inputmode="decimal" placeholder="{{t "txn.amount.signed"}}">
-  </td>
-  {{end}}
-  {{/* In DR/CR mode the signed field is still present (hidden) so submit posts it. In
-       signed mode the visible input above IS amount_i, so no duplicate. */}}
-  {{if $.Page.DisplayDRCR}}<input type="hidden" name="amount_{{.Index}}" id="txn-amount-{{.Index}}" value="{{.Amount}}">{{end}}
+  <tr class="txn-row-more">
+    <td class="txn-cell txn-fund-cell" colspan="3">
+      <select name="fund_{{.Index}}" id="txn-fund-{{.Index}}" class="txn-fund combo-input">
+        <option value="0">{{t "txn.fund.unrestricted"}}</option>
+        {{range $.Page.Funds}}<option value="{{.ID}}"{{if eq .ID $.Row.Fund}} selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </td>
 
-  <td class="txn-cell txn-fund-cell">
-    <select name="fund_{{.Index}}" id="txn-fund-{{.Index}}" class="txn-fund combo-input">
-      <option value="0">{{t "txn.fund.unrestricted"}}</option>
-      {{range $.Page.Funds}}<option value="{{.ID}}"{{if eq .ID $.Row.Fund}} selected{{end}}>{{.Name}}</option>
-      {{end}}
-    </select>
-  </td>
+    <td class="txn-cell txn-program-cell" colspan="3">
+      {{/* Program select -- shown by the JS only on R/E rows (Appendix C); rendered
+           always so ids stay stable, gated visually by the client. */}}
+      <select name="program_{{.Index}}" id="txn-program-{{.Index}}" class="txn-program combo-input">
+        {{range $.Page.Programs}}<option value="{{.ID}}"{{if eq .ID $.Row.Program}} selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </td>
 
-  <td class="txn-cell txn-program-cell">
-    {{/* Program select -- shown by the JS only on R/E rows (Appendix C); rendered
-         always so ids stay stable, gated visually by the client. */}}
-    <select name="program_{{.Index}}" id="txn-program-{{.Index}}" class="txn-program combo-input">
-      {{range $.Page.Programs}}<option value="{{.ID}}"{{if eq .ID $.Row.Program}} selected{{end}}>{{.Name}}</option>
-      {{end}}
-    </select>
-  </td>
+    <td class="txn-cell txn-class-cell" colspan="2">
+      {{/* Functional class -- shown by the JS only on expense rows; P/M/F. */}}
+      <select name="class_{{.Index}}" id="txn-class-{{.Index}}" class="txn-class">
+        <option value="">{{t "txn.class.none"}}</option>
+        {{range $.Page.Classes}}<option value="{{.}}"{{if eq . $.Row.Class}} selected{{end}}>{{t (printf "txn.class.%s" .)}}</option>
+        {{end}}
+      </select>
+    </td>
 
-  <td class="txn-cell txn-class-cell">
-    {{/* Functional class -- shown by the JS only on expense rows; P/M/F. */}}
-    <select name="class_{{.Index}}" id="txn-class-{{.Index}}" class="txn-class">
-      <option value="">{{t "txn.class.none"}}</option>
-      {{range $.Page.Classes}}<option value="{{.}}"{{if eq . $.Row.Class}} selected{{end}}>{{t (printf "txn.class.%s" .)}}</option>
-      {{end}}
-    </select>
-  </td>
+    <td class="txn-cell txn-memo-cell" colspan="2">
+      <input type="text" name="memo_{{.Index}}" id="txn-memo-{{.Index}}" class="txn-memo" value="{{.Memo}}">
+    </td>
 
-  <td class="txn-cell txn-memo-cell">
-    <input type="text" name="memo_{{.Index}}" id="txn-memo-{{.Index}}" class="txn-memo" value="{{.Memo}}">
-  </td>
+    {{/* p26.11: the trailing error cell is a status/message strip, not an editable field --
+         drop txn-cell so it loses the borderless-input-in-a-bordered-cell look; the
+         .txn-row-error rule styles it as a non-input message cell. */}}
+    {{if .ErrorKey}}<td class="txn-row-error" colspan="1"><span class="field-error" role="alert">{{t .ErrorKey}}</span></td>{{else}}<td class="txn-row-error" colspan="1"></td>{{end}}
 
-  {{/* p26.11: the trailing error cell is a status/message strip, not an editable field --
-       drop txn-cell so it loses the borderless-input-in-a-bordered-cell look; the
-       .txn-row-error rule styles it as a non-input message cell. */}}
-  {{if .ErrorKey}}<td class="txn-row-error"><span class="field-error" role="alert">{{t .ErrorKey}}</span></td>{{else}}<td class="txn-row-error"></td>{{end}}
-
-  {{/* p26.23: a per-row delete control, the LAST cell (after the error column). type="button"
-       so it never submits the grid; txneditor.js re-indexes the surviving rows (contiguous
-       _i) on click, and deleting the only/last row resets it in place (the grid never drops
-       to zero -- exactly one trailing empty row is preserved). */}}
-  <td class="txn-delete-cell">
-    <button type="button" class="btn btn-ghost txn-delete" aria-label="{{t "common.delete_row"}}" title="{{t "common.delete_row"}}">&times;</button>
-  </td>
-</tr>
+    {{/* p26.23: a per-row delete control, the LAST cell (after the error column). type="button"
+         so it never submits the grid; txneditor.js re-indexes the surviving rows (contiguous
+         _i) on click, and deleting the only/last row resets it in place (the grid never drops
+         to zero -- exactly one trailing empty row is preserved). */}}
+    <td class="txn-delete-cell" colspan="1">
+      <button type="button" class="btn btn-ghost txn-delete" aria-label="{{t "common.delete_row"}}" title="{{t "common.delete_row"}}">&times;</button>
+    </td>
+  </tr>
+</tbody>
 {{- end}}
 {{- end}}
 
@@ -221,25 +233,22 @@
     <input type="hidden" name="currency" value="{{.Currency}}">
   </div>
 
-  <table class="txn-grid">
+  {{/* p26.32 two-row split layout: each split is its OWN <tbody class="txn-row"> (see
+       "txn-row"), so the grid's rows are tbodies, not a single wrapping tbody. The thead
+       labels row 1's three wide columns (description / account / amount); row 2's packed
+       fields (fund / program / class / memo) are unlabeled -- their inline selects carry
+       their own placeholders/values. Colspans on the header cells match row 1's cells so
+       the fixed-layout columns align (5 + 4 + 3 = 12). */}}
+  <table class="txn-grid txn-grid-2row">
     <thead>
       <tr>
-        <th>{{t "txn.col.description"}}</th>
-        <th>{{t "txn.col.account"}}</th>
-        {{if .DisplayDRCR}}<th>{{t "txn.col.debit"}}</th><th>{{t "txn.col.credit"}}</th>{{else}}<th>{{t "txn.col.amount"}}</th>{{end}}
-        <th>{{t "txn.col.fund"}}</th>
-        <th>{{t "txn.col.program"}}</th>
-        <th>{{t "txn.col.class"}}</th>
-        <th>{{t "txn.col.memo"}}</th>
-        <th>{{t "txn.col.error"}}</th>
-        {{/* p26.23: the delete-× action column is the LAST column, AFTER the error column. */}}
-        <th class="txn-delete-col" aria-hidden="true"></th>
+        <th colspan="5">{{t "txn.col.description"}}</th>
+        <th colspan="4">{{t "txn.col.account"}}</th>
+        {{if .DisplayDRCR}}<th colspan="2">{{t "txn.col.debit"}}</th><th colspan="1">{{t "txn.col.credit"}}</th>{{else}}<th colspan="3">{{t "txn.col.amount"}}</th>{{end}}
       </tr>
     </thead>
-    <tbody id="txn-rows">
-      {{range .Rows}}{{template "txn-row" (txnRowCtx $.Page .)}}
-      {{end}}
-    </tbody>
+    {{range .Rows}}{{template "txn-row" (txnRowCtx $.Page .)}}
+    {{end}}
   </table>
   <input type="hidden" name="rows" id="txn-rows-count" value="{{len .Rows}}">
   {{/* p25.2: no "Add row" button — the grid starts with one empty row and the client

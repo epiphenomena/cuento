@@ -88,12 +88,15 @@ test.describe('transaction editor', () => {
     await expect(page.locator('#txn-apply-fund-btn')).toHaveCount(0);
 
     // p26.23: DESCRIPTION is the FIRST grid column (before Account). Assert the header
-    // order and that the description cell is the FIRST td in a data row.
+    // order and that the description cell is the FIRST cell of a split's first row.
+    // p26.32: each split is a <tbody class="txn-row"> holding two <tr>; row 1
+    // (.txn-row-main) carries description / account / amount, so the first td of the
+    // split's first <tr> is the description cell.
     const headerCells = page.locator('.txn-grid thead th');
     await expect(headerCells.first()).toHaveText(/description/i);
     await expect(headerCells.nth(1)).toHaveText(/account/i);
-    const row0Cells = page.locator('.txn-row[data-row="0"] > td');
-    await expect(row0Cells.first()).toHaveClass(/txn-desc-cell/);
+    const row0MainCells = page.locator('.txn-row[data-row="0"] .txn-row-main > td');
+    await expect(row0MainCells.first()).toHaveClass(/txn-desc-cell/);
     // And the description input still enhances (autocompletes) in its new position:
     // typing prefills from a prior split is covered in payee-autofill.spec; here we just
     // assert the input is present + typable as the first cell.
@@ -385,9 +388,10 @@ test.describe('transaction editor', () => {
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
 
-    // Column-order guard: the delete cell is the LAST td, right after the error cell.
-    const row0Cells = page.locator('.txn-row[data-row="0"] > td');
-    await expect(row0Cells.last()).toHaveClass(/txn-delete-cell/);
+    // Column-order guard: the delete cell is the LAST td of the split's second row
+    // (p26.32), right after the error cell.
+    const row0MoreCells = page.locator('.txn-row[data-row="0"] .txn-row-more > td');
+    await expect(row0MoreCells.last()).toHaveClass(/txn-delete-cell/);
     await expect(
       page.locator('.txn-row[data-row="0"] .txn-row-error + .txn-delete-cell'),
     ).toHaveCount(1);

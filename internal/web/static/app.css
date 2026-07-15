@@ -804,14 +804,42 @@ input[aria-invalid="true"] {
 #expense-grid-form thead th:nth-child(3) { text-align: right; }
 
 /* Sensible column widths (table-layout: fixed): the account, memo and error
-   columns get the slack; the fixed selects stay compact. */
-.txn-grid col,
-.txn-account-cell { width: auto; }
-.txn-amount-cell { width: 8rem; }
-.txn-fund-cell, .txn-program-cell, .txn-class-cell { width: 10rem; }
-.txn-row-error { width: 12rem; }
-.txn-desc-cell { width: auto; }
-.txn-delete-col, .txn-delete-cell { width: 2.5rem; text-align: center; }
+   columns get the slack; the fixed selects stay compact. These apply to the
+   SINGLE-ROW grids (the read-only expense table). The two-row txn/expense grids
+   (p26.32) size their columns via the colspan model instead -- see below -- so
+   they are excluded here (:not(.txn-grid-2row)). */
+.txn-grid:not(.txn-grid-2row) col,
+.txn-grid:not(.txn-grid-2row) .txn-account-cell { width: auto; }
+.txn-grid:not(.txn-grid-2row) .txn-amount-cell { width: 8rem; }
+.txn-grid:not(.txn-grid-2row) .txn-fund-cell,
+.txn-grid:not(.txn-grid-2row) .txn-program-cell,
+.txn-grid:not(.txn-grid-2row) .txn-class-cell { width: 10rem; }
+.txn-grid:not(.txn-grid-2row) .txn-row-error { width: 12rem; }
+.txn-grid:not(.txn-grid-2row) .txn-desc-cell { width: auto; }
+.txn-delete-col,
+.txn-grid:not(.txn-grid-2row) .txn-delete-cell { width: 2.5rem; text-align: center; }
+
+/* p26.32 two-row split layout + per-split zebra. Each split is one <tbody class="txn-row">
+   holding a .txn-row-main (description / account / amount, wider) and a .txn-row-more
+   (fund / program / class / memo / error / delete, packed). The header colspans (5 / 4 / 3)
+   and the row cells' colspans divide the 12 implicit fixed-layout columns, so row 1's three
+   fields are wider than row 2's six. The per-split zebra bands BOTH physical rows together
+   by alternating the whole tbody -- nth-of-type is self-maintaining across add/delete/
+   reindex, and grouping by tbody means no data-split-index attribute is needed. */
+.txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-cell,
+.txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-row-error,
+.txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-delete-cell {
+  background: var(--color-surface-alt);
+}
+.txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-cell input,
+.txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-cell select,
+.txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-cell .combo > .combo-text {
+  background: var(--color-surface-alt);
+}
+/* A soft top rule opens each split so the two-row group reads as one unit. */
+.txn-grid-2row tbody.txn-row + tbody.txn-row { border-top: 2px solid var(--color-primary); }
+/* Row 2's packed cells sit slightly indented visually via the left description column being
+   the widest; nothing else to do -- the colspans carry the proportions. */
 
 /* p26.4 expense line grid: the same .txn-cell spreadsheet layout (the grid table already
    carries .txn-grid), so the account combo overlay is contained by its cell -- fixing the
@@ -845,9 +873,17 @@ input[aria-invalid="true"] {
 .txn-delete:hover { color: var(--color-danger, inherit); }
 
 /* Row states. A server-flagged row and a client-detected out-of-subsidiary row
-   both tint danger so the eye lands on the problem. */
-.txn-row[data-row-error] td.txn-cell { background: var(--color-danger-bg); }
+   both tint danger so the eye lands on the problem. p26.32: these follow (and so win
+   over) the per-split zebra, and also tint the cell's input/select/combo so an errored
+   EVEN (zebra-alt) row reads danger, not zebra. */
+.txn-row[data-row-error] td.txn-cell,
 .txn-row.sub-conflict td.txn-cell { background: var(--color-danger-bg); }
+.txn-row[data-row-error] td.txn-cell input,
+.txn-row[data-row-error] td.txn-cell select,
+.txn-row[data-row-error] td.txn-cell .combo > .combo-text,
+.txn-row.sub-conflict td.txn-cell input,
+.txn-row.sub-conflict td.txn-cell select,
+.txn-row.sub-conflict td.txn-cell .combo > .combo-text { background: var(--color-danger-bg); }
 .txn-row-error .field-error,
 .el-row-error .field-error { padding: 0; display: inline-block; }
 /* p26.11: the trailing error cell is a STATUS/message strip, not an editable field. An

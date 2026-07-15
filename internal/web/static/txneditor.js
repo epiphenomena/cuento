@@ -178,10 +178,12 @@ function initEditor(form) {
     if (last && !isRowEmpty(rowFieldValues(last))) addRow();
   }
   function addRow() {
-    const tbody = form.querySelector('#txn-rows');
+    // p26.32: each split is its own <tbody class="txn-row"> (two-row layout), so there is
+    // no single wrapping tbody -- append the cloned tbody to the grid table itself.
+    const table = form.querySelector('.txn-grid');
     const rows = form.querySelectorAll('.txn-row');
     const template = rows[rows.length - 1];
-    if (!template) return;
+    if (!table || !template) return;
     const idx = rows.length;
     const clone = template.cloneNode(true);
     clone.dataset.row = String(idx);
@@ -211,7 +213,7 @@ function initEditor(form) {
     });
     const errCell = clone.querySelector('.txn-row-error');
     if (errCell) errCell.textContent = '';
-    tbody.appendChild(clone);
+    table.appendChild(clone);
     form.querySelector('#txn-rows-count').value = String(form.querySelectorAll('.txn-row').length);
     initCombos(clone); // enhance the clone's clean account select
     initDescField(clone); // p26.19: re-wire the clone's clean description input
