@@ -336,13 +336,20 @@ test.describe('combobox + description prefill row-targeting', () => {
 
     // The sub is now locked: no #er-sub select, but the grid form carries data-sub.
     await expect(page.locator('#er-sub')).toHaveCount(0);
-    await expect(page.locator('#expense-grid-form')).toHaveAttribute('data-sub', /\d+/);
+    const dataSub = await page.locator('#expense-grid-form').getAttribute('data-sub');
+    expect(Number(dataSub)).toBeGreaterThan(0);
 
-    // The next (trailing) line's description autocomplete still resolves the in-sub suggestion
-    // -- proving the data-sub fallback threaded the subsidiary (else sub=0 would be unscoped).
+    // The next (trailing) line's description autocomplete must send sub=<data-sub>, NOT sub=0:
+    // the outgoing /descriptions/suggest request carries the locked subsidiary, proving the
+    // data-sub fallback threaded it (a broken fallback would send the unscoped sub=0).
     const elDesc1 = page.locator('#el-desc-1');
     await elDesc1.click();
+    const suggestReq = page.waitForRequest((r) => r.url().includes('/descriptions/suggest'));
     await elDesc1.fill('Locked scope');
+    const sentSub = new URL((await suggestReq).url()).searchParams.get('sub');
+    expect(sentSub).toBe(dataSub);
+
+    // And the in-sub suggestion still resolves.
     await expect(
       page.locator('#el-desc-list-1 .desc-suggestion', { hasText: 'Locked scope demo' }),
     ).toBeVisible();
