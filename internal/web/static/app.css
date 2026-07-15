@@ -399,8 +399,31 @@ input[aria-invalid="true"] {
   border-bottom: 2px solid var(--color-primary);
   background: var(--color-surface-alt);
 }
-.tree-table .acct-balances { font-variant-numeric: tabular-nums; }
+/* p26.25: the balance column (header + cells) is right-aligned with tabular figures,
+   matching amounts elsewhere (register/report/recon tables). */
+.tree-table th.acct-balances, .tree-table td.acct-balances {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .tree-table .acct-inactive { opacity: 0.6; }
+
+/* p26.25: tree collapse/expand controls sit above the tree; JS reveals them (they
+   render `hidden`). A tight horizontal cluster like the section actions. */
+.tree-controls { display: flex; gap: var(--space-2); margin: var(--space-3) 0; }
+/* Per-row disclosure toggle injected into the parent row's name cell. A borderless
+   glyph button; ▸ collapsed, ▾ expanded (rotates the same glyph). */
+.tree-toggle {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  margin-right: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  line-height: 1;
+}
+.tree-toggle::before { content: "\25BE"; } /* ▾ expanded */
+.tree-toggle.is-collapsed::before { content: "\25B8"; } /* ▸ collapsed */
 /* Tree indentation. The selectors are qualified with `.tree-table td` so they
    OUTRANK `.tree-table td`'s own padding shorthand (equal-specificity padding-left
    would otherwise win and flatten the tree). A nesting guide line makes the

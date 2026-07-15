@@ -138,4 +138,75 @@ test.describe('chart of accounts', () => {
     await expect(page.locator('#sub-filter')).toHaveValue('1');
     await expect(page.locator('input[name="active"]')).toBeChecked();
   });
+
+  // p26.25: the reusable tree-table collapse/expand controls (treetable.js). Builds a
+  // 3-deep asset chain (root -> child -> leaf), then drives the controls: collapse-all
+  // leaves only depth-0 rows, expand-one-level reveals the next depth progressively,
+  // and a per-row disclosure toggle hides/shows just that row's subtree.
+  test('collapse/expand controls drive the accounts tree', async ({ page, server }) => {
+    await login(page, server);
+
+    // createAccount fills the standalone create form and returns to /accounts.
+    // NOTE: a new form already defaults to type "asset", so we do NOT touch the type
+    // select -- changing it re-fetches the whole form region via htmx (parent options
+    // must be type-compatible), which REPLACES #af-parent and would race our parent
+    // selection. Leaving type at its default keeps the form stable. We still retry the
+    // parent selection until it sticks and confirm a non-zero parent before saving.
+    async function createAccount(name, parentName) {
+      await page.goto('/accounts/new');
+      await page.locator('#af-name-en').fill(name);
+      if (parentName) {
+        await expect(async () => {
+          await page.locator('#af-parent').selectOption({ label: parentName });
+          await expect(page.locator('#af-parent')).not.toHaveValue('0');
+        }).toPass({ timeout: 5000 });
+      }
+      const rootSub = page.locator('input[name="sub_1"]');
+      if (!(await rootSub.isChecked())) await rootSub.check();
+      await page.getByRole('button', { name: /^save$/i }).click();
+      // Wait for the success redirect to the bare /accounts (not a 422 re-render,
+      // whose URL would also end in /accounts), and confirm the row landed.
+      await page.waitForURL(/\/accounts$/);
+      await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
+    }
+
+    await createAccount('Tree Root E2E', null);
+    await createAccount('Tree Child E2E', 'Tree Root E2E');
+    await createAccount('Tree Leaf E2E', 'Tree Child E2E');
+
+    await page.goto('/accounts');
+    const root = page.locator('tr.acct-row', { hasText: 'Tree Root E2E' });
+    const child = page.locator('tr.acct-row', { hasText: 'Tree Child E2E' });
+    const leaf = page.locator('tr.acct-row', { hasText: 'Tree Leaf E2E' });
+
+    // All three visible initially (the module fully expands on load).
+    await expect(root).toBeVisible();
+    await expect(child).toBeVisible();
+    await expect(leaf).toBeVisible();
+
+    // Collapse all -> only depth-0 rows remain; the child and leaf hide.
+    await page.locator('.tree-collapse-all').click();
+    await expect(root).toBeVisible();
+    await expect(child).toBeHidden();
+    await expect(leaf).toBeHidden();
+
+    // Expand one level -> depth-1 (child) shows, depth-2 (leaf) still hidden.
+    await page.locator('.tree-expand-level').click();
+    await expect(child).toBeVisible();
+    await expect(leaf).toBeHidden();
+
+    // Expand one more level -> the leaf (depth 2) shows.
+    await page.locator('.tree-expand-level').click();
+    await expect(leaf).toBeVisible();
+
+    // Per-row disclosure toggle: collapsing the ROOT hides its whole subtree.
+    await root.locator('.tree-toggle').click();
+    await expect(child).toBeHidden();
+    await expect(leaf).toBeHidden();
+    // Expanding the root again reveals its direct child (state persists: the leaf,
+    // whose parent-child was never collapsed, comes back too).
+    await root.locator('.tree-toggle').click();
+    await expect(child).toBeVisible();
+    await expect(leaf).toBeVisible();
+  });
 });

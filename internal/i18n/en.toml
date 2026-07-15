@@ -172,7 +172,7 @@ other = "1.234,50"
 [settings.number.plain]
 other = "1234.50"
 [settings.display.signed]
-other = "Signed (-1,234.50)"
+other = "Net Debits"
 [settings.display.dr_cr]
 other = "Debit / Credit (1,234.50 DR)"
 [settings.neg.minus]
@@ -458,6 +458,12 @@ other = "Type"
 other = "Balance"
 [accounts.col.actions]
 other = "Actions"
+[tree.collapse_all]
+other = "Collapse all"
+[tree.expand_level]
+other = "Expand one level"
+[tree.expand_all]
+other = "Expand all"
 [accounts.form.new_title]
 other = "New account"
 [accounts.form.edit_title]

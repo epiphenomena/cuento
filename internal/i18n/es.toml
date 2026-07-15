@@ -166,7 +166,7 @@ other = "1.234,50"
 [settings.number.plain]
 other = "1234.50"
 [settings.display.signed]
-other = "Con signo (-1,234.50)"
+other = "Débitos netos"
 [settings.display.dr_cr]
 other = "Debe / Haber (1,234.50 DR)"
 [settings.neg.minus]
@@ -453,6 +453,12 @@ other = "Tipo"
 other = "Saldo"
 [accounts.col.actions]
 other = "Acciones"
+[tree.collapse_all]
+other = "Contraer todo"
+[tree.expand_level]
+other = "Expandir un nivel"
+[tree.expand_all]
+other = "Expandir todo"
 [accounts.form.new_title]
 other = "Nueva cuenta"
 [accounts.form.edit_title]

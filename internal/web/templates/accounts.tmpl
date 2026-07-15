@@ -52,12 +52,21 @@
 {{- with .}}
 <div id="accounts-results">
   <p class="asof">{{t "accounts.balances_as_of"}} {{.AsOf}}</p>
+  {{/* p26.25: tree collapse/expand controls. treetable.js reveals these (they carry
+       `hidden` so a no-JS user sees the full tree with inert, hidden buttons) and
+       wires them to the tree below. They live INSIDE #accounts-results so the htmx
+       filter swap re-renders controls + table together (no stale references). */}}
+  <div class="accounts-controls tree-controls">
+    <button type="button" class="btn btn-ghost tree-collapse-all" hidden>{{t "tree.collapse_all"}}</button>
+    <button type="button" class="btn btn-ghost tree-expand-level" hidden>{{t "tree.expand_level"}}</button>
+    <button type="button" class="btn btn-ghost tree-expand-all" hidden>{{t "tree.expand_all"}}</button>
+  </div>
   <table class="tree-table">
     <thead>
       <tr>
         <th>{{t "accounts.col.name"}}</th>
         <th>{{t "accounts.col.type"}}</th>
-        <th>{{t "accounts.col.balances"}}</th>
+        <th class="acct-balances">{{t "accounts.col.balances"}}</th>
         <th>{{t "accounts.col.actions"}}</th>
       </tr>
     </thead>
@@ -107,6 +116,11 @@
   <div id="account-form" class="account-form-region"></div>
 
   {{template "accounts-results" .}}
+  {{/* p26.25: the reusable tree collapse/expand module. Loaded on the PAGE (not the
+       swapped #accounts-results partial: a <script> injected via htmx innerHTML does
+       not execute). It self-inits on DOMContentLoaded and re-runs on htmx:afterSwap
+       when the filter replaces #accounts-results, re-wiring the fresh table. */}}
+  <script type="module" src="{{asset "treetable.js"}}"></script>
   {{- end}}
 {{template "shell-close" .}}
 {{- end}}
