@@ -1,8 +1,8 @@
-   Line                                       Currency         Amount
--  -----------------------------------------  --------  -------------
->  Opening (spendable)                        USD            USD 0.00
-   Received                                   USD       USD 50,000.00
-   Applied — expenses                         USD            USD 0.00
-   Applied — non-expense (assets, principal)  USD       USD 40,000.00
->  Closing (spendable)                        USD       USD 10,000.00
-=  Total fund assets                          USD       USD 50,000.00
+   Line                                       Currency          Amount
+-  -----------------------------------------  --------  --------------
+>  Opening (spendable)                        USD            USD $0.00
+   Received                                   USD       USD $50,000.00
+   Applied — expenses                         USD            USD $0.00
+   Applied — non-expense (assets, principal)  USD       USD $40,000.00
+>  Closing (spendable)                        USD       USD $10,000.00
+=  Total fund assets                          USD       USD $50,000.00

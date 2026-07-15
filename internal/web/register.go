@@ -146,8 +146,8 @@ func registerRows(
 			CounterAccount:    ca.name,
 			IsSplit:           ca.isSplit,
 			FundName:          fund,
-			AmountFmt:         r.Currency + " " + money.Format(r.Amount, exp, opts),
-			RunningBalanceFmt: r.Currency + " " + money.Format(r.RunningBalance, exp, opts),
+			AmountFmt:         money.FormatMoney(r.Amount, r.Currency, exp, opts),
+			RunningBalanceFmt: money.FormatMoney(r.RunningBalance, r.Currency, exp, opts),
 		})
 	}
 	return rows, next, hasMore, nil

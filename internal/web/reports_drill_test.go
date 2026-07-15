@@ -233,9 +233,10 @@ func TestDrillRouteRendersRows(t *testing.T) {
 	if !strings.Contains(body, `class="drill-row"`) {
 		t.Errorf("drill page rendered no transaction rows")
 	}
-	// The figure header carries the reconciled MXN sum (39,500,000 minor = 395,000.00).
-	if !strings.Contains(body, "MXN 395,000.00") {
-		t.Errorf("drill page missing reconciled figure MXN 395,000.00; body:\n%s", body)
+	// The figure header carries the reconciled MXN sum (39,500,000 minor = 395,000.00),
+	// rendered with the per-currency symbol (MXN prefix "$", p26.24).
+	if !strings.Contains(body, "$395,000.00") {
+		t.Errorf("drill page missing reconciled figure $395,000.00; body:\n%s", body)
 	}
 }
 

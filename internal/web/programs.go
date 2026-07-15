@@ -154,7 +154,7 @@ func (s *server) buildProgramsPage(ctx context.Context, from, to string) (progra
 			Depth:  d,
 		}
 		for _, c := range totals[row.ID] {
-			pr.Activity = append(pr.Activity, c.Currency+" "+money.Format(c.Minor, c.Exponent, opts))
+			pr.Activity = append(pr.Activity, money.FormatMoney(c.Minor, c.Currency, c.Exponent, opts))
 		}
 		model.Rows = append(model.Rows, pr)
 	}

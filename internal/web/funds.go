@@ -124,7 +124,7 @@ func (s *server) buildFundsPage(ctx context.Context, showClosed bool) (fundsPage
 		// Deterministic currency order for a stable render.
 		sort.Slice(cells, func(i, j int) bool { return cells[i].Currency < cells[j].Currency })
 		for _, c := range cells {
-			row.Balances = append(row.Balances, c.Currency+" "+money.Format(c.Amount, exps[c.Currency], opts))
+			row.Balances = append(row.Balances, money.FormatMoney(c.Amount, c.Currency, exps[c.Currency], opts))
 			if c.Amount < 0 { // Z18: overspent restricted resources (net-debit, D2)
 				row.Negative = true
 			}
@@ -262,8 +262,8 @@ func (s *server) fundStatement(w http.ResponseWriter, r *http.Request) {
 			Memo:              memo,
 			IsAsset:           lr.IsAsset,
 			Currency:          lr.Currency,
-			AmountFmt:         lr.Currency + " " + money.Format(lr.Amount, exps[lr.Currency], opts),
-			RunningBalanceFmt: lr.Currency + " " + money.Format(lr.RunningBalance, exps[lr.Currency], opts),
+			AmountFmt:         money.FormatMoney(lr.Amount, lr.Currency, exps[lr.Currency], opts),
+			RunningBalanceFmt: money.FormatMoney(lr.RunningBalance, lr.Currency, exps[lr.Currency], opts),
 		})
 		closing[lr.Currency] = lr.RunningBalance
 		if !seen[lr.Currency] {
@@ -275,8 +275,8 @@ func (s *server) fundStatement(w http.ResponseWriter, r *http.Request) {
 	for _, ccy := range ccyOrder {
 		model.OpenClose = append(model.OpenClose, fundOpenClose{
 			Currency:   ccy,
-			OpeningFmt: ccy + " " + money.Format(0, exps[ccy], opts),
-			ClosingFmt: ccy + " " + money.Format(closing[ccy], exps[ccy], opts),
+			OpeningFmt: money.FormatMoney(0, ccy, exps[ccy], opts),
+			ClosingFmt: money.FormatMoney(closing[ccy], ccy, exps[ccy], opts),
 		})
 	}
 

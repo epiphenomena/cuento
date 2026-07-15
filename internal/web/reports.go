@@ -686,7 +686,7 @@ func renderCell(c reports.Cell, reportID, lang string, opts money.FormatOpts, df
 			return renderedCell{Text: "", Right: true}
 		}
 		return renderedCell{
-			Text:  c.Currency + " " + money.Format(c.Minor, exps[c.Currency], opts),
+			Text:  money.FormatMoney(c.Minor, c.Currency, exps[c.Currency], opts),
 			Right: true,
 			Href:  href,
 		}

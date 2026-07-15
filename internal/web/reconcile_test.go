@@ -445,9 +445,9 @@ func TestReconHistoryListsFinalizedRecon(t *testing.T) {
 		t.Errorf("history row missing statement-report link %q; body:\n%s", wantHref, body)
 	}
 	// The history row shows the finalized recon's statement balance (-15,000 minor =
-	// USD -150.00), formatted currency-prefixed.
-	if !strings.Contains(body, "-150.00") {
-		t.Errorf("history missing the finalized recon's statement balance (-150.00); body:\n%s", body)
+	// USD -$150.00), formatted with the per-currency symbol (p26.24).
+	if !strings.Contains(body, "-$150.00") {
+		t.Errorf("history missing the finalized recon's statement balance (-$150.00); body:\n%s", body)
 	}
 }
 

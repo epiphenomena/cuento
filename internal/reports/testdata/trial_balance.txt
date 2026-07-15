@@ -1,30 +1,30 @@
-   Account                  Currency    Native amount        Converted
--  -----------------------  --------  ---------------  ---------------
-   Checking US              USD         USD 35,935.00    USD 35,935.00
-   Checking MX              MXN        MXN 395,000.00    USD 21,823.20
-   Savings                  USD         USD 20,000.00    USD 20,000.00
-   Cash MXN                 MXN          MXN 6,400.00       USD 353.59
-   Building                 USD        USD 160,000.00   USD 160,000.00
-   Due from RV Mexico       USD         USD 10,000.00    USD 10,000.00
-   FX Clearing              MXN          MXN 5,000.00       USD 276.24
-   FX Clearing              USD          USD 9,740.00     USD 9,740.00
-   Credit Card              USD         USD -3,000.00    USD -3,000.00
-   Due to RV Internacional  USD        USD -10,000.00   USD -10,000.00
-   Opening Balances         MXN       MXN -315,000.00   USD -17,403.31
-   Opening Balances         USD       USD -187,000.00  USD -187,000.00
-   Contributions            USD        USD -52,750.00   USD -52,750.00
-   Government Grants        MXN       MXN -100,000.00    USD -5,524.86
-   Government Grants        USD         USD -2,000.00    USD -2,000.00
-   Program Service Fees     USD         USD -1,200.00    USD -1,200.00
-   Event Income             USD         USD -3,000.00    USD -3,000.00
-   Salaries                 USD         USD 16,500.00    USD 16,500.00
-   Program Supplies         MXN          MXN 5,000.00       USD 276.24
-   Program Supplies         USD          USD 2,100.00     USD 2,100.00
-   Food Purchases           MXN          MXN 3,600.00       USD 198.90
-   Occupancy                USD          USD 3,050.00     USD 3,050.00
-   Insurance                USD            USD 600.00       USD 600.00
-   Bank Fees                USD             USD 25.00        USD 25.00
-   Event Costs              USD          USD 1,000.00     USD 1,000.00
->  Total (native)           MXN              MXN 0.00
->  Total (native)           USD              USD 0.00
-=  Total (converted)                                          USD 0.00
+   Account                  Currency     Native amount         Converted
+-  -----------------------  --------  ----------------  ----------------
+   Checking US              USD         USD $35,935.00    USD $35,935.00
+   Checking MX              MXN        MXN $395,000.00    USD $21,823.20
+   Savings                  USD         USD $20,000.00    USD $20,000.00
+   Cash MXN                 MXN          MXN $6,400.00       USD $353.59
+   Building                 USD        USD $160,000.00   USD $160,000.00
+   Due from RV Mexico       USD         USD $10,000.00    USD $10,000.00
+   FX Clearing              MXN          MXN $5,000.00       USD $276.24
+   FX Clearing              USD          USD $9,740.00     USD $9,740.00
+   Credit Card              USD         USD -$3,000.00    USD -$3,000.00
+   Due to RV Internacional  USD        USD -$10,000.00   USD -$10,000.00
+   Opening Balances         MXN       MXN -$315,000.00   USD -$17,403.31
+   Opening Balances         USD       USD -$187,000.00  USD -$187,000.00
+   Contributions            USD        USD -$52,750.00   USD -$52,750.00
+   Government Grants        MXN       MXN -$100,000.00    USD -$5,524.86
+   Government Grants        USD         USD -$2,000.00    USD -$2,000.00
+   Program Service Fees     USD         USD -$1,200.00    USD -$1,200.00
+   Event Income             USD         USD -$3,000.00    USD -$3,000.00
+   Salaries                 USD         USD $16,500.00    USD $16,500.00
+   Program Supplies         MXN          MXN $5,000.00       USD $276.24
+   Program Supplies         USD          USD $2,100.00     USD $2,100.00
+   Food Purchases           MXN          MXN $3,600.00       USD $198.90
+   Occupancy                USD          USD $3,050.00     USD $3,050.00
+   Insurance                USD            USD $600.00       USD $600.00
+   Bank Fees                USD             USD $25.00        USD $25.00
+   Event Costs              USD          USD $1,000.00     USD $1,000.00
+>  Total (native)           MXN              MXN $0.00
+>  Total (native)           USD              USD $0.00
+=  Total (converted)                                           USD $0.00

@@ -109,10 +109,35 @@ func pow10(n int) int64 {
 }
 
 // Format renders minor units to a display string honoring all of FormatOpts.
-// The value is unitless (no currency symbol) — callers add the symbol from the
-// currencies table if desired. In DebitCredit mode the sign is carried by a
-// trailing DR/CR tag and the magnitude is always unsigned.
+// The value is unitless (no currency symbol) — this is the bare grouped-number
+// renderer that pairs with Parse for round-tripping editable inputs. Display
+// paths that want a per-currency symbol call FormatMoney instead (rule 10). In
+// DebitCredit mode the sign is carried by a trailing DR/CR tag and the magnitude
+// is always unsigned.
 func Format(minor int64, exponent int, opts FormatOpts) string {
+	return format(minor, exponent, opts, "")
+}
+
+// FormatMoney is the symbol-aware display renderer (AGENTS rule 10): it composes
+// the per-currency symbol from currencySymbol onto the magnitude, then applies
+// the sign per FormatOpts — so a negative USD reads "-$1,234.56" / "($1,234.56)"
+// and a negative HNL "-1,234.56L" / "(1,234.56L)", with the symbol always hugging
+// the digits and the sign wrapping the whole. It is display-only: FormatMoney's
+// output is never fed back to Parse (editable inputs use the bare Format), so the
+// symbol need not be re-parseable.
+func FormatMoney(minor int64, currency string, exponent int, opts FormatOpts) string {
+	sym, suffix := currencySymbol(currency)
+	if suffix {
+		return format(minor, exponent, opts, "\x00"+sym)
+	}
+	return format(minor, exponent, opts, sym+"\x00")
+}
+
+// format is the shared renderer. affix, when non-empty, carries the currency
+// symbol with a single NUL byte marking where the magnitude goes: "$\x00" is a
+// prefix symbol, "\x00L" a suffix symbol. The symbol composes onto the magnitude
+// before the sign marker (minus/parens) or DR/CR tag is applied around the whole.
+func format(minor int64, exponent int, opts FormatOpts, affix string) string {
 	group, decimal, grouped := opts.Number.separators()
 
 	// Work on the magnitude; the sign is applied by the display mode below.
@@ -138,6 +163,11 @@ func Format(minor int64, exponent int, opts FormatOpts) string {
 		fmt.Fprintf(&b, "%0*d", exponent, fracPart)
 	}
 	body := b.String()
+	if affix != "" {
+		// Splice the magnitude into the affix at its NUL placeholder so the
+		// symbol hugs the digits (prefix or suffix) before any sign wrapping.
+		body = strings.Replace(affix, "\x00", body, 1)
+	}
 
 	if opts.Display == DebitCredit {
 		if neg {
@@ -154,6 +184,26 @@ func Format(minor int64, exponent int, opts FormatOpts) string {
 		return "(" + body + ")"
 	}
 	return "-" + body
+}
+
+// currencySymbol returns the display symbol for an ISO currency code and whether
+// it is placed as a suffix (true) rather than a prefix. Symbols mirror the
+// currencies-table seed (migrations 00003/00011); position is NOT a DB column
+// (see DECISIONS "Currency symbol placement"), so it is owned here as a small
+// deterministic map. USD/MXN/EUR prefix; HNL suffixes "L". Any unmapped currency
+// falls back to its ISO code as a prefix (today's "CODE " convention, minus the
+// space) — deterministic and crash-free for a currency added via the admin page.
+func currencySymbol(code string) (sym string, suffix bool) {
+	switch code {
+	case "USD", "MXN":
+		return "$", false
+	case "EUR":
+		return "€", false
+	case "HNL":
+		return "L", true
+	default:
+		return code, false
+	}
 }
 
 // groupDigits renders a non-negative integer with optional thousands grouping.

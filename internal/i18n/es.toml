@@ -386,7 +386,7 @@ other = "Descargar copia de seguridad"
 
 # Etiqueta para un fondo sin restricciones (fund_id NULL), segun D20.
 [fund.unrestricted]
-other = "Fondo General No Restringido"
+other = "Sin restricción"
 
 # Muestra de interpolacion posicional (%s), usada por TestInterpolation.
 [greeting]
@@ -813,7 +813,7 @@ other = "Elija una cuenta"
 [txn.account.unavailable_suffix]
 other = "(no disponible)"
 [txn.fund.unrestricted]
-other = "Fondo General sin restriccion"
+other = "Sin restricción"
 [txn.amount.debit]
 other = "Debe"
 [txn.amount.credit]
@@ -1148,7 +1148,7 @@ other = "Saldo de apertura"
 [reports.account_ledger.closing]
 other = "Saldo de cierre"
 [reports.account_ledger.unrestricted]
-other = "Sin restriccion"
+other = "Sin restricción"
 [reports.account.choose]
 other = "Elija una cuenta…"
 
@@ -1193,7 +1193,7 @@ other = "Linea"
 [reports.fund_activity.col.amount]
 other = "Importe"
 [reports.fund_activity.unrestricted]
-other = "No restringido"
+other = "Sin restricción"
 [reports.fund_activity.opening]
 other = "Inicial (disponible)"
 [reports.fund_activity.received]
@@ -1692,7 +1692,7 @@ other = "Calendario"
 [budget.line.col.actions]
 other = "Acciones"
 [budget.line.unrestricted]
-other = "Sin restriccion"
+other = "Sin restricción"
 [budget.line.form.new_title]
 other = "Nueva linea"
 [budget.line.form.edit_title]

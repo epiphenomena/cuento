@@ -1,14 +1,14 @@
-   Line                                    Program  Management & general   Fundraising          Total
--  --------------------------------  -------------  --------------------  ------------  -------------
->  7 — Other salaries and wages      USD 16,500.00              USD 0.00      USD 0.00  USD 16,500.00
-   Salaries                          USD 16,500.00              USD 0.00      USD 0.00  USD 16,500.00
->  11g — Fees for services -- other       USD 0.00             USD 25.00      USD 0.00      USD 25.00
-   Bank Fees                              USD 0.00             USD 25.00      USD 0.00      USD 25.00
->  16 — Occupancy                         USD 0.00          USD 3,050.00      USD 0.00   USD 3,050.00
-   Occupancy                              USD 0.00          USD 3,050.00      USD 0.00   USD 3,050.00
->  24e — All other expenses           USD 2,575.14            USD 600.00  USD 1,000.00   USD 4,175.14
-   Event Costs                            USD 0.00              USD 0.00  USD 1,000.00   USD 1,000.00
-   Food Purchases                       USD 198.90              USD 0.00      USD 0.00     USD 198.90
-   Insurance                              USD 0.00            USD 600.00      USD 0.00     USD 600.00
-   Program Supplies                   USD 2,376.24              USD 0.00      USD 0.00   USD 2,376.24
-=  Total functional expenses         USD 19,075.14          USD 3,675.00  USD 1,000.00  USD 23,750.14
+   Line                                     Program  Management & general    Fundraising           Total
+-  --------------------------------  --------------  --------------------  -------------  --------------
+>  7 — Other salaries and wages      USD $16,500.00             USD $0.00      USD $0.00  USD $16,500.00
+   Salaries                          USD $16,500.00             USD $0.00      USD $0.00  USD $16,500.00
+>  11g — Fees for services -- other       USD $0.00            USD $25.00      USD $0.00      USD $25.00
+   Bank Fees                              USD $0.00            USD $25.00      USD $0.00      USD $25.00
+>  16 — Occupancy                         USD $0.00         USD $3,050.00      USD $0.00   USD $3,050.00
+   Occupancy                              USD $0.00         USD $3,050.00      USD $0.00   USD $3,050.00
+>  24e — All other expenses           USD $2,575.14           USD $600.00  USD $1,000.00   USD $4,175.14
+   Event Costs                            USD $0.00             USD $0.00  USD $1,000.00   USD $1,000.00
+   Food Purchases                       USD $198.90             USD $0.00      USD $0.00     USD $198.90
+   Insurance                              USD $0.00           USD $600.00      USD $0.00     USD $600.00
+   Program Supplies                   USD $2,376.24             USD $0.00      USD $0.00   USD $2,376.24
+=  Total functional expenses         USD $19,075.14         USD $3,675.00  USD $1,000.00  USD $23,750.14

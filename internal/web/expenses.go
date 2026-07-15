@@ -317,6 +317,7 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 	}
 	opts := formatOptsFor(u)
 	exp := s.reportExponent(ctx, rep)
+	ccy := s.reportCurrency(ctx, rep)
 
 	model := expenseDetailModel{
 		ID:        id,
@@ -377,7 +378,7 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 			ID:          l.ID,
 			AccountID:   l.AccountID,
 			AcctName:    acctNames[l.AccountID],
-			AmountFmt:   money.Format(displayAmount(l.Amount), exp, opts),
+			AmountFmt:   money.FormatMoney(displayAmount(l.Amount), ccy, exp, opts),
 			Description: l.Description,
 			Memo:        l.Memo,
 		}
@@ -423,6 +424,19 @@ func (s *server) reportExponent(ctx context.Context, rep sqlc.ExpenseReport) int
 		return 2
 	}
 	return s.currencyExponent(ctx, sub.BaseCurrency)
+}
+
+// reportCurrency resolves the ISO currency for a report's amounts (the report's
+// SUBSIDIARY base currency, D18) so display cells can render the per-currency
+// symbol via money.FormatMoney (rule 10). Best-effort: falls back to "" (which
+// money.FormatMoney treats as an unmapped, code-prefixed currency) on a lookup
+// miss.
+func (s *server) reportCurrency(ctx context.Context, rep sqlc.ExpenseReport) string {
+	sub, err := s.store.GetSubsidiary(ctx, rep.SubsidiaryID)
+	if err != nil {
+		return ""
+	}
+	return sub.BaseCurrency
 }
 
 // ===========================================================================

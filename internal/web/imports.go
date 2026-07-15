@@ -328,7 +328,7 @@ func (s *server) parseImportPreview(r *http.Request, raw []byte, accountID, subs
 	for _, row := range shown {
 		model.Rows = append(model.Rows, importPreviewRow{
 			Date:        money.FormatDate(parseISOForDisplay(row.Date), df),
-			AmountFmt:   acct.DefaultCurrency + " " + money.Format(row.AmountMinor, exp, opts),
+			AmountFmt:   money.FormatMoney(row.AmountMinor, acct.DefaultCurrency, exp, opts),
 			Description: row.Description,
 			Memo:        row.Memo,
 		})
@@ -433,7 +433,7 @@ func (s *server) buildImportResult(r *http.Request, batchID int64, filename, cur
 		}
 		model.Rows = append(model.Rows, importResultRow{
 			Date:        money.FormatDate(parseISOForDisplay(row.Date), df),
-			AmountFmt:   currency + " " + money.Format(row.AmountMinor, exp, opts),
+			AmountFmt:   money.FormatMoney(row.AmountMinor, currency, exp, opts),
 			Description: row.Description,
 			Memo:        row.Memo,
 			Duplicate:   row.Duplicate,

@@ -392,7 +392,7 @@ other = "Download backup snapshot"
 
 # Label for a NULL fund_id (unrestricted general fund), per D20.
 [fund.unrestricted]
-other = "Unrestricted General"
+other = "Unrestricted"
 
 # Positional-interpolation sample (%s), exercised by TestInterpolation.
 [greeting]
@@ -819,7 +819,7 @@ other = "Choose an account"
 [txn.account.unavailable_suffix]
 other = "(unavailable)"
 [txn.fund.unrestricted]
-other = "Unrestricted General"
+other = "Unrestricted"
 [txn.amount.debit]
 other = "Debit"
 [txn.amount.credit]

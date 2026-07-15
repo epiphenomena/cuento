@@ -103,6 +103,49 @@ func TestFormatSmallMagnitude(t *testing.T) {
 	}
 }
 
+// --- FormatMoney: per-currency symbol + placement (rule 10) ---
+
+func TestFormatMoneySymbolPlacement(t *testing.T) {
+	tests := []struct {
+		name     string
+		minor    int64
+		currency string
+		neg      NegStyle
+		display  DisplayMode
+		nf       NumberFormat
+		want     string
+	}{
+		// USD: prefix "$", no space.
+		{"USDpos", 123456, "USD", Minus, Signed, NumberUS, "$1,234.56"},
+		{"USDnegMinus", -123456, "USD", Minus, Signed, NumberUS, "-$1,234.56"},
+		{"USDnegParens", -123456, "USD", Parens, Signed, NumberUS, "($1,234.56)"},
+		{"USDzero", 0, "USD", Minus, Signed, NumberUS, "$0.00"},
+		{"USDdr", 123456, "USD", Minus, DebitCredit, NumberUS, "$1,234.56 DR"},
+		{"USDcr", -123456, "USD", Minus, DebitCredit, NumberUS, "$1,234.56 CR"},
+		// HNL: suffix "L", no space.
+		{"HNLpos", 123456, "HNL", Minus, Signed, NumberUS, "1,234.56L"},
+		{"HNLnegMinus", -123456, "HNL", Minus, Signed, NumberUS, "-1,234.56L"},
+		{"HNLnegParens", -123456, "HNL", Parens, Signed, NumberUS, "(1,234.56L)"},
+		{"HNLzero", 0, "HNL", Minus, Signed, NumberUS, "0.00L"},
+		{"HNLcr", -123456, "HNL", Minus, DebitCredit, NumberUS, "1,234.56L CR"},
+		// EUR: prefix "€".
+		{"EURpos", 123456, "EUR", Minus, Signed, NumberUS, "€1,234.56"},
+		// Grouping honors the user's number format for the magnitude.
+		{"USDeuGrouping", 123456, "USD", Minus, Signed, NumberEU, "$1.234,56"},
+		// Unmapped currency falls back to ISO-code prefix (no space).
+		{"UnmappedPos", 123456, "JPY", Minus, Signed, NumberUS, "JPY1,234.56"},
+		{"UnmappedNeg", -123456, "GBP", Parens, Signed, NumberUS, "(GBP1,234.56)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FormatMoney(tt.minor, tt.currency, 2, FormatOpts{Number: tt.nf, Neg: tt.neg, Display: tt.display})
+			if got != tt.want {
+				t.Fatalf("FormatMoney = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // --- Parse tables ---
 
 func TestParseNumberFormats(t *testing.T) {

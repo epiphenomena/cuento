@@ -72,12 +72,13 @@ func TestFundsListShowsBalancesFunderScope(t *testing.T) {
 	}
 	// Balance: Beca Agua's USD asset position is +500.00 (200000 receipt - 150000
 	// US supplies spend, minor units), MXN is +97,000.00 (10,000,000 receipt -
-	// 300,000 supplies). The formatted amounts appear (currency-prefixed).
-	if !strings.Contains(body, "USD 500.00") {
-		t.Errorf("list missing Beca Agua USD balance 500.00; body:\n%s", body)
+	// 300,000 supplies). The formatted amounts appear with the per-currency symbol
+	// (USD/MXN both prefix "$", no ISO code — rule 10, p26.24).
+	if !strings.Contains(body, "$500.00") {
+		t.Errorf("list missing Beca Agua USD balance $500.00; body:\n%s", body)
 	}
-	if !strings.Contains(body, "MXN 97,000.00") {
-		t.Errorf("list missing Beca Agua MXN balance 97,000.00")
+	if !strings.Contains(body, "$97,000.00") {
+		t.Errorf("list missing Beca Agua MXN balance $97,000.00")
 	}
 }
 
@@ -202,12 +203,13 @@ func TestFundStatementOpeningClosing(t *testing.T) {
 		}
 	}
 	// Opening is 0 for each currency; closing reconciles to the list balance.
-	if !strings.Contains(body, "USD 0.00") || !strings.Contains(body, "MXN 0.00") {
+	// Amounts carry the per-currency symbol (USD/MXN prefix "$", p26.24).
+	if !strings.Contains(body, "$0.00") {
 		t.Errorf("statement missing zero opening balances")
 	}
-	// Closing USD 500.00 (matches the list) and MXN 97,000.00.
-	if !strings.Contains(body, "USD 500.00") {
-		t.Errorf("statement missing USD closing 500.00")
+	// Closing $500.00 (matches the list) and $97,000.00.
+	if !strings.Contains(body, "$500.00") {
+		t.Errorf("statement missing USD closing $500.00")
 	}
 
 	// RECONCILIATION invariant: the statement's closing per currency EQUALS

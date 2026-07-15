@@ -169,7 +169,7 @@ func (s *server) buildReviewRow(ctx context.Context, rep sqlc.ExpenseReport, sub
 		Submitter: userNames[rep.SubmitterID],
 		SubName:   subNames[rep.SubsidiaryID],
 		LineCount: len(lines),
-		TotalFmt:  money.Format(total, exp, formatOptsFor(u)),
+		TotalFmt:  money.FormatMoney(total, s.reportCurrency(ctx, rep), exp, formatOptsFor(u)),
 		StatusKey: "expense.status." + rep.Status,
 	}
 	switch rep.Status {

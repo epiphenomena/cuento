@@ -616,7 +616,7 @@ func (s *server) budgetDetail(w http.ResponseWriter, r *http.Request) {
 			SubName:   subNames[l.SubsidiaryID],
 			AcctName:  acctNames[l.AccountID],
 			ProgName:  progNames[l.ProgramID],
-			AmountFmt: l.Currency + " " + money.Format(l.Amount, exps[l.Currency], opts),
+			AmountFmt: money.FormatMoney(l.Amount, l.Currency, exps[l.Currency], opts),
 			SchedName: schedNames[l.ScheduleID],
 		}
 		if l.FundID.Valid {

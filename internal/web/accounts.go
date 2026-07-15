@@ -192,7 +192,7 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 			Depth:        depth[row.ID],
 		}
 		for _, c := range bals[row.ID] {
-			ar.Balances = append(ar.Balances, c.Currency+" "+money.Format(c.Minor, c.Exponent, opts))
+			ar.Balances = append(ar.Balances, money.FormatMoney(c.Minor, c.Currency, c.Exponent, opts))
 		}
 		model.Rows = append(model.Rows, ar)
 	}

@@ -173,7 +173,7 @@ func (s *server) reportDrill(w http.ResponseWriter, r *http.Request) {
 
 	figureFmt := ""
 	if d.Currency != "" {
-		figureFmt = d.Currency + " " + money.Format(sum, exps[d.Currency], opts)
+		figureFmt = money.FormatMoney(sum, d.Currency, exps[d.Currency], opts)
 	}
 
 	model := drillPageModel{
@@ -263,7 +263,7 @@ func (s *server) renderDrillRows(
 			CounterAccount: ca.name,
 			IsSplit:        ca.isSplit,
 			FundName:       fund,
-			AmountFmt:      rw.Currency + " " + money.Format(rw.Amount, exp, opts),
+			AmountFmt:      money.FormatMoney(rw.Amount, rw.Currency, exp, opts),
 		})
 	}
 	return out, sum, nil

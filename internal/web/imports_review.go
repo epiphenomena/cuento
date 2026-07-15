@@ -121,7 +121,7 @@ func (s *server) buildImportQueue(r *http.Request, batchID int64, errKey, errArg
 		qr := importQueueRow{
 			ID:          row.ID,
 			Date:        money.FormatDate(parseISOForDisplay(row.Date), df),
-			AmountFmt:   currency + " " + money.Format(amt, exp, opts),
+			AmountFmt:   money.FormatMoney(amt, currency, exp, opts),
 			Description: row.Description,
 			Memo:        row.Memo,
 			Status:      row.Status,

@@ -38,7 +38,7 @@ var GoldenMoneyOpts = money.FormatOpts{
 // DumpTable renders a Table to a stable, aligned, fixed-width text block for the
 // golden .txt artifact: a header row, a rule, then one line per row. LABEL cells are
 // localized via localize (the golden pins lang=en); TEXT cells render verbatim; MONEY
-// cells use GoldenMoneyOpts with the currency code prefixed (so native vs converted is
+// cells use GoldenMoneyOpts with the currency code prefixed and the per-currency symbol (so native vs converted is
 // unambiguous even in the text dump); a Blank money cell is empty. Subtotal/total/
 // warning rows carry a leading marker column so the reviewer sees the row kind. Column
 // widths are computed from the content so columns align regardless of value length.
@@ -128,7 +128,10 @@ func dumpCell(c Cell, localize func(key string) string, exps map[string]int) str
 		if c.Blank {
 			return ""
 		}
-		return c.Currency + " " + money.Format(c.Minor, exps[c.Currency], GoldenMoneyOpts)
+		// Keep the ISO code prefix (native vs converted disambiguation) AND add
+		// the per-currency symbol via FormatMoney, so the golden shows every cell
+		// gaining its symbol while USD/MXN (both "$") stay distinguishable.
+		return c.Currency + " " + money.FormatMoney(c.Minor, c.Currency, exps[c.Currency], GoldenMoneyOpts)
 	case CellLabel:
 		return localize(c.Text)
 	default: // CellText, CellDate

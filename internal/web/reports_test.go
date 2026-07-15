@@ -175,9 +175,9 @@ func TestTrialBalanceReportRenders(t *testing.T) {
 	if !strings.Contains(body, "report-table") {
 		t.Errorf("trial balance page missing the report table")
 	}
-	// A money cell with the currency prefix (the seeded 250.00 Cash balance).
-	if !strings.Contains(body, "USD 250.00") {
-		t.Errorf("trial balance missing formatted money cell USD 250.00; body:\n%s", body)
+	// A money cell with the per-currency symbol (the seeded 250.00 Cash balance, USD prefix "$", p26.24).
+	if !strings.Contains(body, "$250.00") {
+		t.Errorf("trial balance missing formatted money cell $250.00; body:\n%s", body)
 	}
 	// A resolved account name (a stored proper noun, verbatim).
 	if !strings.Contains(body, "Cash") {
@@ -448,9 +448,10 @@ func TestAccountLedgerReportRenders(t *testing.T) {
 		t.Fatalf("account ledger (Cash) status = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	// The formatted seeded amount (+250.00) appears on the line and the closing balance.
-	if !strings.Contains(body, "USD 250.00") {
-		t.Errorf("account ledger missing the 250.00 line/balance; body:\n%s", body)
+	// The formatted seeded amount (+250.00) appears on the line and the closing balance
+	// with the per-currency symbol (USD prefix "$", p26.24).
+	if !strings.Contains(body, "$250.00") {
+		t.Errorf("account ledger missing the $250.00 line/balance; body:\n%s", body)
 	}
 	// The line links to the transaction editor (Cell.TxnID -> /transactions/{id}/edit).
 	if !strings.Contains(body, "/transactions/") || !strings.Contains(body, "/edit") {

@@ -1,6 +1,6 @@
-   Date        Description                           Fund                   Amount         Balance
--  ----------  ------------------------------------  --------------  -------------  --------------
->  2025-04-30  Opening balance                                                      MXN 400,000.00
-   2025-05-10  Water filters (grant-funded portion)  Beca Agua 2025  MXN -3,000.00  MXN 397,000.00
-   2025-05-10  Water filters (general portion)       Unrestricted    MXN -2,000.00  MXN 395,000.00
-=  2026-06-30  Closing balance                                                      MXN 395,000.00
+   Date        Description                           Fund                    Amount          Balance
+-  ----------  ------------------------------------  --------------  --------------  ---------------
+>  2025-04-30  Opening balance                                                       MXN $400,000.00
+   2025-05-10  Water filters (grant-funded portion)  Beca Agua 2025  MXN -$3,000.00  MXN $397,000.00
+   2025-05-10  Water filters (general portion)       Unrestricted    MXN -$2,000.00  MXN $395,000.00
+=  2026-06-30  Closing balance                                                       MXN $395,000.00

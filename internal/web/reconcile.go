@@ -162,7 +162,7 @@ func (s *server) reconList(w http.ResponseWriter, r *http.Request) {
 			}
 			if rc.Status == "finalized" && row.LastDate == "" {
 				row.LastDate = money.FormatDate(parseISOForDisplay(rc.StatementDate), df)
-				row.LastBalanceFmt = rc.Currency + " " + money.Format(rc.StatementBalance, exps[rc.Currency], opts)
+				row.LastBalanceFmt = money.FormatMoney(rc.StatementBalance, rc.Currency, exps[rc.Currency], opts)
 			}
 		}
 		row.StartForm = reconStartForm{
@@ -186,7 +186,7 @@ func (s *server) reconList(w http.ResponseWriter, r *http.Request) {
 			row.History = append(row.History, reconHistoryRow{
 				ReconID:       fr.ID,
 				StatementDate: money.FormatDate(parseISOForDisplay(fr.StatementDate), df),
-				BalanceFmt:    fr.Currency + " " + money.Format(fr.StatementBalance, exps[fr.Currency], opts),
+				BalanceFmt:    money.FormatMoney(fr.StatementBalance, fr.Currency, exps[fr.Currency], opts),
 				Currency:      fr.Currency,
 				FinalizedDate: finDate,
 				ReportHref:    reconStatementReportHref(fr.ID),
@@ -401,7 +401,7 @@ func (s *server) buildWorkspace(ctx context.Context, reconID int64) (reconWorksp
 			Description: sp.Description,
 			Memo:        memo,
 			FundName:    fund,
-			AmountFmt:   recon.Currency + " " + money.Format(sp.Amount, exp, opts),
+			AmountFmt:   money.FormatMoney(sp.Amount, recon.Currency, exp, opts),
 			Cleared:     sp.Cleared,
 		})
 	}
@@ -412,10 +412,10 @@ func (s *server) buildWorkspace(ctx context.Context, reconID int64) (reconWorksp
 	})
 
 	model.Summary = reconSummary{
-		StatementFmt:  recon.Currency + " " + money.Format(sum.StatementBalance, exp, opts),
-		OpeningFmt:    recon.Currency + " " + money.Format(sum.Opening, exp, opts),
-		ClearedFmt:    recon.Currency + " " + money.Format(sum.Cleared, exp, opts),
-		DifferenceFmt: recon.Currency + " " + money.Format(sum.Difference, exp, opts),
+		StatementFmt:  money.FormatMoney(sum.StatementBalance, recon.Currency, exp, opts),
+		OpeningFmt:    money.FormatMoney(sum.Opening, recon.Currency, exp, opts),
+		ClearedFmt:    money.FormatMoney(sum.Cleared, recon.Currency, exp, opts),
+		DifferenceFmt: money.FormatMoney(sum.Difference, recon.Currency, exp, opts),
 		Finalizable:   sum.Difference == 0,
 	}
 	return model, nil

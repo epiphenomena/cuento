@@ -116,7 +116,7 @@ func (s *server) renderHistory(ctx context.Context, u *store.CurrentUser, lang s
 			if v.Amount == 0 {
 				return ""
 			}
-			return currency + " " + money.Format(v.Amount, exp, opts)
+			return money.FormatMoney(v.Amount, currency, exp, opts)
 		case store.FieldSubsidiary:
 			return nameOr(subs, v.ID)
 		case store.FieldAccount:

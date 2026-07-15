@@ -143,7 +143,7 @@ func (s *server) buildVoidReview(ctx context.Context, u *store.CurrentUser, lang
 	for _, sp := range splits {
 		line := voidLine{
 			Account: accounts[sp.AccountID],
-			Amount:  hdr.Currency + " " + money.Format(sp.Amount, exp, opts),
+			Amount:  money.FormatMoney(sp.Amount, hdr.Currency, exp, opts),
 		}
 		if sp.FundID.Valid {
 			line.Fund = funds[sp.FundID.Int64]
