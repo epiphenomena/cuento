@@ -114,12 +114,13 @@ func (e *txnWebEnv) balancedForm(debitAmt, creditAmt string) url.Values {
 	f.Set("date", "2025-03-01")
 	f.Set("currency", "USD")
 	f.Set("memo", "")
-	// row 0: salaries (expense) debit
+	// row 0: salaries (expense) debit -- p26.41 combined control: a program pick
+	// (p:<progRoot>) decodes to program=progRoot + class=program on the expense row.
 	f.Set("split_id_0", "")
 	f.Set("account_0", itoa(e.salaries))
 	f.Set("amount_0", debitAmt)
 	f.Set("fund_0", "")
-	f.Set("class_0", "program")
+	f.Set("progclass_0", "p:"+itoa(e.progRoot))
 	f.Set("program_0", itoa(e.progRoot))
 	// row 1: checking (asset) credit
 	f.Set("split_id_1", "")
@@ -303,11 +304,15 @@ func TestTxnEditSplitIDRoundTrip(t *testing.T) {
 		} else {
 			f.Set("fund_"+itoa(int64(i)), "")
 		}
+		// p26.41: encode (program, class) into progclass_i + the hidden program_i carrier.
 		if s.ProgramID.Valid {
 			f.Set("program_"+itoa(int64(i)), itoa(s.ProgramID.Int64))
 		}
-		if s.FunctionalClass.Valid {
-			f.Set("class_"+itoa(int64(i)), s.FunctionalClass.String)
+		switch {
+		case s.FunctionalClass.Valid && s.FunctionalClass.String != "program":
+			f.Set("progclass_"+itoa(int64(i)), "c:"+s.FunctionalClass.String)
+		case s.ProgramID.Valid:
+			f.Set("progclass_"+itoa(int64(i)), "p:"+itoa(s.ProgramID.Int64))
 		}
 		// change ONLY the salaries row memo
 		if s.AccountID == e.salaries {
@@ -560,9 +565,12 @@ func TestTxnStableInputIDsAcrossAllSwaps(t *testing.T) {
 
 	// The stable ids the fresh new form emits on row 0 (the keys the client and focus
 	// logic depend on).
+	// p26.41: the separate program + class selects merged into ONE combined control
+	// (#txn-progclass-0); the hidden program carrier (#txn-program-0) round-trips the
+	// stored program for idempotency.
 	wantIDs := []string{
 		`id="txn-account-0"`, `id="txn-amount-0"`, `id="txn-fund-0"`,
-		`id="txn-program-0"`, `id="txn-class-0"`, `id="txn-memo-0"`,
+		`id="txn-program-0"`, `id="txn-progclass-0"`, `id="txn-memo-0"`,
 		`id="txn-splitid-0"`,
 	}
 	base := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/new", nil)
@@ -762,8 +770,9 @@ func TestTxnAccountOptionsCarryGatingMetadata(t *testing.T) {
 	if !strings.Contains(body, `value="`+itoa(e.grantRev)+`"`) || !strings.Contains(body, `data-type="revenue"`) {
 		t.Fatalf("grantRev option missing revenue gating metadata")
 	}
-	if !strings.Contains(body, `id="txn-program-0"`) || !strings.Contains(body, `id="txn-class-0"`) {
-		t.Fatalf("program/class selects not rendered on row 0")
+	// p26.41: the hidden program carrier + the combined program/class control render on row 0.
+	if !strings.Contains(body, `id="txn-program-0"`) || !strings.Contains(body, `id="txn-progclass-0"`) {
+		t.Fatalf("program carrier / combined progclass control not rendered on row 0")
 	}
 }
 
@@ -907,11 +916,18 @@ func mainHeaderForm(sub int64, main splitFull, body []splitFull) url.Values {
 		} else {
 			f.Set("fund_"+si, "")
 		}
+		// p26.41 combined control: encode the body row's (program, class) into progclass_i +
+		// the hidden program_i carrier, exactly as the client would.
 		if b.ProgramID.Valid {
 			f.Set("program_"+si, itoa(b.ProgramID.Int64))
 		}
-		if b.FunctionalClass.Valid {
-			f.Set("class_"+si, b.FunctionalClass.String)
+		switch {
+		case b.FunctionalClass.Valid && b.FunctionalClass.String != "program":
+			// Admin / Fundraising: c:<class>; the program rides in the hidden carrier.
+			f.Set("progclass_"+si, "c:"+b.FunctionalClass.String)
+		case b.ProgramID.Valid:
+			// A program-class expense OR a revenue split: p:<programID>.
+			f.Set("progclass_"+si, "p:"+itoa(b.ProgramID.Int64))
 		}
 		f.Set("memo_"+si, b.Memo)
 		f.Set("description_"+si, b.Description)
@@ -1310,5 +1326,124 @@ func setDefaultSub(t *testing.T, e *txnWebEnv, userID, subID int64) {
 	t.Helper()
 	if _, err := e.db.Exec(`UPDATE users SET default_subsidiary_id = ? WHERE id = ?`, subID, userID); err != nil {
 		t.Fatalf("set default sub: %v", err)
+	}
+}
+
+// --- p26.41 combined program/class control -------------------------------
+
+// TestDecodeProgClass unit-tests the combined-control decode: a program pick becomes
+// program=id (+ class=program on an EXPENSE row, "" elsewhere); a c:<class> pick becomes
+// that class with the program taken from the hidden carrier (verbatim, preserving a
+// non-root program). Unrecognized/empty falls back to the carrier with no class.
+func TestDecodeProgClass(t *testing.T) {
+	cases := []struct {
+		name      string
+		encoded   string
+		carrier   int64
+		acctType  string
+		wantProg  int64
+		wantClass string
+	}{
+		{"program pick on expense", "p:7", 3, "expense", 7, "program"},
+		{"program pick on revenue", "p:7", 3, "revenue", 7, ""},
+		{"program pick unknown type", "p:7", 3, "", 7, ""},
+		{"management keeps carrier", "c:management", 42, "expense", 42, "management"},
+		{"fundraising keeps carrier", "c:fundraising", 42, "expense", 42, "fundraising"},
+		{"management non-root carrier preserved", "c:management", 99, "expense", 99, "management"},
+		{"empty falls back to carrier", "", 5, "expense", 5, ""},
+		{"garbage falls back to carrier", "x:1", 5, "expense", 5, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gotProg, gotClass := decodeProgClass(tc.encoded, tc.carrier, tc.acctType)
+			if gotProg != tc.wantProg || gotClass != tc.wantClass {
+				t.Fatalf("decodeProgClass(%q, %d, %q) = (%d, %q), want (%d, %q)",
+					tc.encoded, tc.carrier, tc.acctType, gotProg, gotClass, tc.wantProg, tc.wantClass)
+			}
+		})
+	}
+}
+
+// TestTxnProgClassNonRootIdempotent is the p26.41 idempotency requirement: an EXISTING
+// management-expense split whose program is a SPECIFIC NON-ROOT program (Educacion), loaded
+// into the editor and re-submitted UNCHANGED via the combined control (Admin => c:management,
+// the program riding only in the hidden carrier), reproduces byte-identical stored splits and
+// churns NO new splits_versions row. This proves the hidden carrier prevents the Restore-the-
+// Way management/fundraising splits (which carry a non-root program) from silently losing it.
+func TestTxnProgClassNonRootIdempotent(t *testing.T) {
+	e := newTxnWebEnv(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// Seed: Salaries (expense) 100 with class=management AND a NON-ROOT program (Educacion),
+	// balanced by Checking -100. Unrestricted fund, so the non-root program is allowed.
+	prog := e.progEdu
+	id, err := e.st.PostTransaction(ctx, store.PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.sub1, Currency: "USD",
+		Splits: []store.SplitInput{
+			{AccountID: e.salaries, Amount: 10000, ProgramID: &prog, FunctionalClass: strptr("management"), Memo: "Admin payroll", Position: 0},
+			{AccountID: e.checking, Amount: -10000, Position: 1},
+		},
+	})
+	must(t, err, "seed management non-root txn")
+
+	before := splitStatesByPosition(t, e, id)
+	if len(before) != 2 {
+		t.Fatalf("want 2 seeded splits, got %d", len(before))
+	}
+	// The salaries split must carry the NON-ROOT program (the discriminator: a naive re-save
+	// that dropped the carrier would default it back to root and corrupt this).
+	sal := before[0]
+	if sal.AccountID != e.salaries || !sal.ProgramID.Valid || sal.ProgramID.Int64 != e.progEdu ||
+		!sal.FunctionalClass.Valid || sal.FunctionalClass.String != "management" {
+		t.Fatalf("seed split 0 not management/non-root program: %+v", sal)
+	}
+	beforeVer := map[int64]int{}
+	for _, s := range before {
+		beforeVer[s.ID] = splitVersionCountWeb(t, e, s.ID)
+	}
+
+	// LOAD: the edit GET decomposes into header (Checking asset, split1) + body (Salaries,
+	// split0)? No -- the header is the balancing (asset) account; but the store returns splits
+	// in position order (salaries pos0, checking pos1), so decomposeMain lifts split0 (salaries)
+	// to the header. Either way, re-submit via the FLAT body grid to exercise the combined
+	// control's decode directly (main_present omitted): both splits as body rows, the salaries
+	// row's combined control set to Admin (c:management) with the program in the hidden carrier.
+	f := url.Values{}
+	f.Set("subsidiary", itoa(e.sub1))
+	f.Set("date", "2025-03-01")
+	f.Set("currency", "USD")
+	f.Set("rows", "2")
+	// Row 0: salaries, Admin (c:management), program carrier = Educacion (the stored program).
+	f.Set("split_id_0", itoa(sal.ID))
+	f.Set("account_0", itoa(e.salaries))
+	f.Set("amount_0", "100.00")
+	f.Set("fund_0", "")
+	f.Set("progclass_0", "c:management")
+	f.Set("program_0", itoa(e.progEdu))
+	f.Set("memo_0", "Admin payroll")
+	// Row 1: checking, no program/class (asset).
+	f.Set("split_id_1", itoa(before[1].ID))
+	f.Set("account_1", itoa(e.checking))
+	f.Set("amount_1", "-100.00")
+	f.Set("fund_1", "")
+
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(id), f)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("save: status=%d, body=%s", rec.Code, rec.Body.String())
+	}
+
+	after := splitStatesByPosition(t, e, id)
+	if len(after) != len(before) {
+		t.Fatalf("split count changed: before=%d after=%d", len(before), len(after))
+	}
+	for i := range before {
+		if before[i] != after[i] {
+			t.Fatalf("split %d not byte-identical after combined-control round-trip:\n before=%+v\n after =%+v", i, before[i], after[i])
+		}
+	}
+	for _, s := range after {
+		if n := splitVersionCountWeb(t, e, s.ID); n != beforeVer[s.ID] {
+			t.Fatalf("split %d version churned: before=%d after=%d (the hidden carrier failed to preserve the non-root program)", s.ID, beforeVer[s.ID], n)
+		}
 	}
 }

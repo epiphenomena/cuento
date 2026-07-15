@@ -142,7 +142,7 @@ func TestImportRowPostCreatesTxnAndLinks(t *testing.T) {
 	form.Set("amount_0", "-42.00")
 	form.Set("account_1", strconv.FormatInt(env.expense, 10))
 	form.Set("amount_1", "42.00")
-	form.Set("class_1", "program")
+	form.Set("progclass_1", "p:1") // p26.41 combined control: program node (root) -> class program on expense
 
 	rec := asUser(t, h, sm, book, http.MethodPost, "/import/rows/"+strconv.FormatInt(env.rowID, 10)+"/post", form)
 	if rec.Code != http.StatusSeeOther {
@@ -200,8 +200,8 @@ func TestImportRowPostUnbalancedRerenders422(t *testing.T) {
 	form.Set("account_0", strconv.FormatInt(env.checking, 10))
 	form.Set("amount_0", "-42.00")
 	form.Set("account_1", strconv.FormatInt(env.expense, 10))
-	form.Set("amount_1", "40.00") // does not balance
-	form.Set("class_1", "program")
+	form.Set("amount_1", "40.00")  // does not balance
+	form.Set("progclass_1", "p:1") // p26.41 combined control: program node (root) -> class program on expense
 
 	rec := asUser(t, h, sm, book, http.MethodPost, "/import/rows/"+strconv.FormatInt(env.rowID, 10)+"/post", form)
 	if rec.Code != http.StatusUnprocessableEntity {

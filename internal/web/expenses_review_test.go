@@ -105,7 +105,7 @@ func TestReviewPostCreatesBalancedTxnAndConverts(t *testing.T) {
 	unbalanced.Set("account_0", itoa(env.expense))
 	unbalanced.Set("amount_0", "20.00")
 	unbalanced.Set("program_0", "1")
-	unbalanced.Set("class_0", "program")
+	unbalanced.Set("progclass_0", "p:1") // p26.41 combined control encoding
 	unbalanced.Set("account_1", itoa(env.cash))
 	unbalanced.Set("amount_1", "-15.00") // does not balance
 	rec = asUser(t, h, sm, book, http.MethodPost, "/expenses/review/post/"+itoa(env.reportID), unbalanced)
@@ -128,7 +128,7 @@ func TestReviewPostCreatesBalancedTxnAndConverts(t *testing.T) {
 	balanced.Set("account_0", itoa(env.expense))
 	balanced.Set("amount_0", "20.00")
 	balanced.Set("program_0", "1")
-	balanced.Set("class_0", "program")
+	balanced.Set("progclass_0", "p:1") // p26.41 combined control encoding
 	balanced.Set("account_1", itoa(env.cash))
 	balanced.Set("amount_1", "-20.00")
 	rec = asUser(t, h, sm, book, http.MethodPost, "/expenses/review/post/"+itoa(env.reportID), balanced)
@@ -184,7 +184,7 @@ func TestReviewPostImmutableConverted(t *testing.T) {
 		form.Set("account_0", itoa(env.expense))
 		form.Set("amount_0", "20.00")
 		form.Set("program_0", "1")
-		form.Set("class_0", "program")
+		form.Set("progclass_0", "p:1") // p26.41 combined control encoding
 		form.Set("account_1", itoa(env.cash))
 		form.Set("amount_1", "-20.00")
 		asUser(t, h, sm, book, http.MethodPost, "/expenses/review/post/"+itoa(env.reportID), form)

@@ -87,58 +87,82 @@ function initEditor(form) {
     return `${label}: ${formatSignedMinor(minor, exp)}`;
   }
 
-  // --- program / class gating per account ---------------------------------
+  // --- combined program/class gating per account (p26.41) -----------------
   // rowReveal is the SINGLE source of truth for which conditional cells a row shows,
   // derived from the chosen account's type. gateRow uses it to toggle visibility;
   // the keyboard grid's isVisible() (below) uses it to skip hidden cells. `i` is the
-  // row's dataset.row index.
+  // row's dataset.row index. The combined program/class control is a SINGLE cell shown on
+  // R/E rows (the `progclass` reveal); its Admin/Fundraising "class" options are shown
+  // only on EXPENSE rows.
   function rowReveal(i) {
     const acctSel = form.querySelector(`#txn-account-${i}`);
     const opt = acctSel ? acctSel.selectedOptions[0] : null;
     const type = opt ? opt.dataset.type : '';
     const isRE = type === 'revenue' || type === 'expense';
     const isExpense = type === 'expense';
-    return { isRE, isExpense, program: isRE, class: isExpense };
+    return { isRE, isExpense, progclass: isRE };
+  }
+
+  // programValue encodes a program id as the combined control's option value (p:<programID>),
+  // mirroring the server's decodeProgClass. The c:<class> values are literal option values.
+  function programValue(programID) {
+    return `p:${programID}`;
   }
 
   function gateRow(row) {
     const i = row.dataset.row;
     const acctSel = form.querySelector(`#txn-account-${i}`);
-    const progCell = row.querySelector('.txn-program-cell');
-    const classCell = row.querySelector('.txn-class-cell');
-    const progSel = form.querySelector(`#txn-program-${i}`);
-    const classSel = form.querySelector(`#txn-class-${i}`);
+    const pcCell = row.querySelector('.txn-progclass-cell');
+    const pcSel = form.querySelector(`#txn-progclass-${i}`);
+    const progCarrier = form.querySelector(`#txn-program-${i}`);
     if (!acctSel) return;
     const opt = acctSel.selectedOptions[0];
     const { isRE, isExpense } = rowReveal(i);
 
-    if (progCell) progCell.style.visibility = isRE ? 'visible' : 'hidden';
-    if (classCell) classCell.style.visibility = isExpense ? 'visible' : 'hidden';
+    if (pcCell) pcCell.style.visibility = isRE ? 'visible' : 'hidden';
 
-    // Prefill defaults from the account data-* (server re-defaults authoritatively).
-    // Precedence (p26.5): the account's own default_program wins; else the user's
-    // default_program (data-user-program); else the root program fallback (D24).
-    if (isRE && progSel && opt) {
-      const def = opt.dataset.defaultProgram;
-      const userDef = form.dataset.userProgram;
-      if (!progSel.value || progSel.value === '0') {
-        if (def && def !== '0') progSel.value = def;
-        else if (userDef && userDef !== '0') progSel.value = userDef;
-        else progSel.value = form.dataset.rootProgram || '';
+    // Show/hide the two "class" entries (Admin / Fundraising, data-class="1") -- expense
+    // rows offer them above the program tree; a revenue row offers programs ONLY (rule 7).
+    if (pcSel) {
+      [...pcSel.options].forEach((o) => {
+        if (o.dataset.class === '1') o.hidden = !isExpense;
+      });
+    }
+
+    if (isRE && pcSel && opt) {
+      // Prefill default (never override a value the user / server round-trip already set).
+      // A program pick is the default for BOTH revenue and expense; precedence (p26.5): the
+      // account's own default_program wins; else the user's default_program; else root (D24).
+      const isClassPick = pcSel.value.startsWith('c:');
+      const isProgPick = pcSel.value.startsWith('p:');
+      if (!isClassPick && !isProgPick) {
+        const def = opt.dataset.defaultProgram;
+        const userDef = form.dataset.userProgram;
+        let prog = '';
+        if (def && def !== '0') prog = def;
+        else if (userDef && userDef !== '0') prog = userDef;
+        else prog = form.dataset.rootProgram || '';
+        // p26.39: an expense account with a default CLASS (management/fundraising) starts on
+        // that class instead of a program; else default to the program node.
+        const defClass = isExpense ? opt.dataset.defaultClass : '';
+        if (defClass && defClass !== '' && defClass !== 'program') pcSel.value = `c:${defClass}`;
+        else if (prog !== '') pcSel.value = programValue(prog);
+        if (prog !== '' && progCarrier && (!progCarrier.value || progCarrier.value === '0')) {
+          progCarrier.value = prog; // seed the hidden carrier so a later Admin pick keeps it
+        }
+      } else if (isProgPick && progCarrier) {
+        // Keep the hidden carrier in step with a program pick (so switching to Admin keeps it).
+        progCarrier.value = pcSel.value.slice('p:'.length);
       }
     }
-    if (isExpense && classSel && opt) {
-      // p26.39: an expense split defaults to Program (expense splits REQUIRE a class, rule 7).
-      // Precedence: the account's own default class wins; else Program is preselected, with
-      // Management & general ("Admin") and Fundraising the ready alternates. Never overrides
-      // a value the user (or the server round-trip) already set.
-      const def = opt.dataset.defaultClass;
-      if (!classSel.value) classSel.value = def && def !== '' ? def : 'program';
+    if (!isRE) {
+      // A/L/E row: no program/class. Clear the combined pick AND the hidden carrier so the
+      // server (which defaults program on R/E, forbids it elsewhere) gets a clean row.
+      if (pcSel) pcSel.value = '';
+      if (progCarrier) progCarrier.value = '';
     }
-    if (!isExpense && classSel) classSel.value = '';
-    if (!isRE && progSel) progSel.value = '';
-    // The program (and class) selects were set directly above -> refresh their combo
-    // overlays so the visible label matches (program is a combo; class is not, no-op).
+    // The combined select was set directly above -> refresh its combo overlay so the
+    // visible label matches (no `change` fired by a .value= assignment).
     resyncCombos(row);
   }
 
@@ -318,6 +342,15 @@ function initEditor(form) {
     });
     const fundSel = form.querySelector(`#txn-fund-${i}`);
     if (fundSel) fundSel.addEventListener('change', recompute);
+    // p26.41: a combined program/class pick keeps the hidden program carrier in step so a
+    // later switch to Admin/Fundraising retains the last-chosen program.
+    const pcSel = form.querySelector(`#txn-progclass-${i}`);
+    if (pcSel) {
+      pcSel.addEventListener('change', () => {
+        const progCarrier = form.querySelector(`#txn-program-${i}`);
+        if (progCarrier && pcSel.value.startsWith('p:')) progCarrier.value = pcSel.value.slice('p:'.length);
+      });
+    }
   }
 
   // --- keyboard grid (Appendix C, p12.6) ----------------------------------
@@ -334,8 +367,7 @@ function initEditor(form) {
         { field: 'dr', always: true },
         { field: 'cr', always: true },
         { field: 'fund', always: true },
-        { field: 'program', reveal: 'program' },
-        { field: 'class', reveal: 'class' },
+        { field: 'progclass', reveal: 'progclass' },
         { field: 'memo', always: true },
       ]
     : [
@@ -343,8 +375,7 @@ function initEditor(form) {
         { field: 'account', always: true },
         { field: 'amount', always: true },
         { field: 'fund', always: true },
-        { field: 'program', reveal: 'program' },
-        { field: 'class', reveal: 'class' },
+        { field: 'progclass', reveal: 'progclass' },
         { field: 'memo', always: true },
       ];
 
@@ -374,8 +405,8 @@ function initEditor(form) {
   // hidden signed-amount and split-id sinks, then re-gates/recomputes.
   function swapRowValues(a, b) {
     const fields = drcr
-      ? ['account', 'dr', 'cr', 'amount', 'fund', 'program', 'class', 'desc', 'memo', 'splitid']
-      : ['account', 'amount', 'fund', 'program', 'class', 'desc', 'memo', 'splitid'];
+      ? ['account', 'dr', 'cr', 'amount', 'fund', 'progclass', 'program', 'desc', 'memo', 'splitid']
+      : ['account', 'amount', 'fund', 'progclass', 'program', 'desc', 'memo', 'splitid'];
     fields.forEach((f) => {
       const ea = form.querySelector(`#txn-${f}-${a}`);
       const eb = form.querySelector(`#txn-${f}-${b}`);

@@ -842,6 +842,13 @@ other = "Program"
 other = "Management & general"
 [txn.class.fundraising]
 other = "Fundraising"
+# p26.41 combined program/class control labels: the two "class" alternates offered above the
+# program tree on an expense row (management is called "Admin" HERE for brevity; reports keep
+# the formal 990 term "Management & general" from functional.management).
+[txn.progclass.admin]
+other = "Admin"
+[txn.progclass.fundraising]
+other = "Fundraising"
 [txn.col.account]
 other = "Account"
 [txn.col.amount]

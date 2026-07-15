@@ -836,6 +836,13 @@ other = "Programa"
 other = "Administracion y general"
 [txn.class.fundraising]
 other = "Recaudacion de fondos"
+# p26.41 etiquetas del control combinado programa/clase: las dos alternativas de "clase"
+# ofrecidas sobre el arbol de programas en una fila de gasto (aqui "management" se abrevia
+# como "Admin"; los informes conservan el termino formal 990 de functional.management).
+[txn.progclass.admin]
+other = "Admin"
+[txn.progclass.fundraising]
+other = "Recaudacion de fondos"
 [txn.col.account]
 other = "Cuenta"
 [txn.col.amount]

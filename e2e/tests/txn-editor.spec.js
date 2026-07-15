@@ -167,7 +167,11 @@ test.describe('transaction editor', () => {
     ).toBeVisible();
   });
 
-  test('shows the program/class selects only on R/E rows, prefilled from the account default', async ({ page, server }) => {
+  // p26.41: the program select AND the functional-class select MERGED into ONE combined
+  // control (#txn-progclass-<i>) shown only on R/E rows. Its values are ENCODED: c:<class>
+  // (Admin/Fundraising) or p:<programID>. An expense account with a default class starts on
+  // that class (c:management here); an asset row hides the whole control.
+  test('shows the combined program/class control only on R/E rows, prefilled from the account default', async ({ page, server }) => {
     await login(page, server);
 
     // A checking account, then an expense account with a default functional class
@@ -193,23 +197,22 @@ test.describe('transaction editor', () => {
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
 
-    // Row 0: pick the ASSET account -> program + class selects stay hidden.
+    // Row 0: pick the ASSET account -> the combined control stays hidden.
     await page.locator('#txn-account-0').selectOption({ label: 'Editor Bank' });
-    await expect(page.locator('#txn-class-0')).toBeHidden();
+    await expect(page.locator('#txn-progclass-0')).toBeHidden();
 
-    // Row 1: pick the EXPENSE account -> the class select becomes visible and is
-    // prefilled from the account's default (management); the program select shows.
+    // Row 1: pick the EXPENSE account -> the combined control becomes visible and is
+    // prefilled from the account's default class (c:management, "Admin").
     await page.locator('#txn-account-1').selectOption({ label: 'Editor Rent' });
-    await expect(page.locator('#txn-class-1')).toBeVisible();
-    await expect(page.locator('#txn-class-1')).toHaveValue('management');
-    await expect(page.locator('#txn-program-1')).toBeVisible();
+    await expect(page.locator('#txn-progclass-1')).toBeVisible();
+    await expect(page.locator('#txn-progclass-1')).toHaveValue('c:management');
   });
 
-  // p26.39: an expense split defaults the functional class to Program (expense splits
-  // REQUIRE a class, rule 7) with Management & general + Fundraising as the ready
-  // alternates. An expense account with NO default class -> the class preselects "program",
-  // and the option order is program, management, fundraising.
-  test('an expense split defaults its functional class to Program (no account default)', async ({
+  // p26.41 (SUPERSEDES p26.39): an expense split with NO account default class defaults to a
+  // PROGRAM pick (p:<programID>) in the combined control, never blank. The two "class" entries
+  // (Admin / Fundraising) are offered above the program tree on an expense row; a picking Admin
+  // sets the class in ONE choice (no separate class select).
+  test('an expense split defaults to a program pick, and offers Admin/Fundraising', async ({
     page,
     server,
   }) => {
@@ -230,21 +233,28 @@ test.describe('transaction editor', () => {
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
     await page.locator('#txn-account-0').selectOption({ label: 'Prog Supplies' });
-    await expect(page.locator('#txn-class-0')).toBeVisible();
-    // Defaults to Program even though the account has no default class.
-    await expect(page.locator('#txn-class-0')).toHaveValue('program');
+    const pc0 = page.locator('#txn-progclass-0');
+    await expect(pc0).toBeVisible();
+    // Defaults to a PROGRAM pick (p:<id>), never blank, even without an account default class.
+    await expect(pc0).toHaveValue(/^p:\d+$/);
 
-    // The three functional-class alternates are present in order (Program, Management &
-    // general, Fundraising) after the "No class" placeholder, with the formal
-    // "Management & general" label kept (not renamed to "Admin").
-    const values = await page.locator('#txn-class-0 option').evaluateAll((os) =>
-      os.map((o) => o.value),
-    );
-    expect(values).toEqual(['', 'program', 'management', 'fundraising']);
-    const mgmtLabel = await page
-      .locator('#txn-class-0 option[value="management"]')
-      .textContent();
-    expect(mgmtLabel.trim()).toBe('Management & general');
+    // The two class alternates (Admin, Fundraising) are the first two options (data-class="1")
+    // and are VISIBLE (not hidden) on an expense row; the program tree follows as p:<id>.
+    const adminOpt = pc0.locator('option[value="c:management"]');
+    const fundOpt = pc0.locator('option[value="c:fundraising"]');
+    expect((await adminOpt.textContent()).trim()).toBe('Admin');
+    expect((await fundOpt.textContent()).trim()).toBe('Fundraising');
+    await expect(adminOpt).not.toHaveAttribute('hidden', /.*/);
+    // Picking Admin sets the class in ONE choice (the combined control), no second select.
+    await pc0.selectOption('c:management');
+    await expect(pc0).toHaveValue('c:management');
+
+    // A REVENUE row offers the program tree ONLY (no c:<class> entries) -- rule 7: revenue
+    // splits carry a program but no functional class.
+    // (Reuse the seeded grant-revenue kind is not available here; assert the class options are
+    // HIDDEN once the row's account is not expense by re-picking the asset on this row instead.)
+    await page.locator('#txn-account-0').selectOption({ label: 'Prog Bank' });
+    await expect(pc0).toBeHidden();
   });
 
   // p26.2: the account select is enhanced into a fuzzy-filter combobox (combobox.js +
@@ -290,8 +300,8 @@ test.describe('transaction editor', () => {
     await list0.locator('.combo-option', { hasText: 'Combo Rent' }).click();
     await expect(page.locator('#txn-account-0')).toHaveValue(/\d+/);
     await expect(input0).toHaveValue(/Combo Rent/);
-    await expect(page.locator('#txn-class-0')).toBeVisible();
-    await expect(page.locator('#txn-class-0')).toHaveValue('management');
+    await expect(page.locator('#txn-progclass-0')).toBeVisible();
+    await expect(page.locator('#txn-progclass-0')).toHaveValue('c:management');
 
     // Picking in the last row grew a fresh trailing row (auto-append via the bubbled
     // change). Its account cell is ALSO an enhanced combobox (the clone contract).
@@ -305,8 +315,8 @@ test.describe('transaction editor', () => {
     await list1.locator('.combo-option', { hasText: 'Combo Checking' }).click();
     await expect(page.locator('#txn-account-1')).toHaveValue(/\d+/);
     await expect(input1).toHaveValue(/Combo Checking/);
-    // Asset pick -> class cell hidden (gating fired on the CLONED row's select).
-    await expect(page.locator('#txn-class-1')).toBeHidden();
+    // Asset pick -> combined program/class cell hidden (gating fired on the CLONED row's select).
+    await expect(page.locator('#txn-progclass-1')).toBeHidden();
 
     // p26.11: FOCUS RING on the account combo. The native <select> is the Tab stop but the
     // opaque overlay covers its native ring, so the ring is painted on the overlay via
@@ -349,12 +359,14 @@ test.describe('transaction editor', () => {
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
 
-    // Pick the expense account via its combo so the program cell reveals (R/E gating).
+    // Pick the expense account via its combo so the combined program/class cell reveals
+    // (R/E gating). #txn-progclass-0 is the combined control; #txn-program-0 is now the
+    // HIDDEN program carrier (round-trip only).
     const acctCell = page.locator('.txn-row[data-row="0"] .txn-account-cell');
     await acctCell.locator('.combo-text').click();
     await acctCell.locator('.combo-text').fill('supplies');
     await acctCell.locator('.combo-option', { hasText: 'Combo Supplies' }).click();
-    await expect(page.locator('#txn-program-0')).toBeVisible();
+    await expect(page.locator('#txn-progclass-0')).toBeVisible();
 
     // Fund combo: type-filter to the created fund and pick it -> the native select gets
     // its value AND the overlay shows the label.
@@ -368,15 +380,18 @@ test.describe('transaction editor', () => {
     await expect(page.locator('#txn-fund-0')).toHaveValue(/\d+/);
     await expect(fundInput).toHaveValue(/Water Grant Combo/);
 
-    // Program combo: filter to "General" (the seeded root program) and pick it.
-    const progCell = page.locator('.txn-row[data-row="0"] .txn-program-cell');
-    const progInput = progCell.locator('.combo-text');
-    await progInput.click();
-    await progInput.fill('gene');
-    await expect(progCell.locator('.combo-option', { hasText: 'General' })).toBeVisible();
-    await progCell.locator('.combo-option', { hasText: 'General' }).click();
+    // Combined program/class combo: filter to "General" (the seeded root program) and pick
+    // it -> the native combined select gets the encoded p:<id> value AND the overlay shows
+    // the program label. Picking a program node also seeds the hidden #txn-program-0 carrier.
+    const pcCell = page.locator('.txn-row[data-row="0"] .txn-progclass-cell');
+    const pcInput = pcCell.locator('.combo-text');
+    await pcInput.click();
+    await pcInput.fill('gene');
+    await expect(pcCell.locator('.combo-option', { hasText: 'General' })).toBeVisible();
+    await pcCell.locator('.combo-option', { hasText: 'General' }).click();
+    await expect(page.locator('#txn-progclass-0')).toHaveValue(/^p:\d+$/);
     await expect(page.locator('#txn-program-0')).toHaveValue(/\d+/);
-    await expect(progInput).toHaveValue(/General/);
+    await expect(pcInput).toHaveValue(/General/);
   });
 
   // p26.10: editing a transaction whose split references a now-INACTIVE account must

@@ -206,18 +206,17 @@ test.describe('keyboard-only entry', () => {
     await page.keyboard.press('Enter');
     await expect(page.locator('#txn-fund-0')).toBeFocused();
 
-    // fund -> memo via Enter: the program(5)/class(6) cells are hidden on this asset row,
-    // so the wired traversal SKIPS them and lands on the memo cell -- never a hidden
+    // fund -> memo via Enter: the combined program/class cell (5) is hidden on this asset
+    // row, so the wired traversal SKIPS it and lands on the memo cell -- never a hidden
     // <select>. p26.23 moved description to the FIRST column, so it is no longer between
     // fund and memo (the asset-row always-visible order is desc -> account -> amount ->
-    // fund -> memo).
+    // fund -> memo). p26.41 merged program+class into ONE combined cell.
     await page.keyboard.press('Enter');
     await expect(page.locator('#txn-memo-0')).toBeFocused();
-    // Explicitly assert focus never sat on the hidden cells.
-    await expect(page.locator('#txn-program-0')).not.toBeFocused();
-    await expect(page.locator('#txn-class-0')).not.toBeFocused();
+    // Explicitly assert focus never sat on the hidden combined cell.
+    await expect(page.locator('#txn-progclass-0')).not.toBeFocused();
 
-    // Shift+Tab backward from memo -> (skip hidden program/class) fund.
+    // Shift+Tab backward from memo -> (skip the hidden combined program/class cell) fund.
     await page.keyboard.press('Shift+Tab');
     await expect(page.locator('#txn-fund-0')).toBeFocused();
 

@@ -287,6 +287,7 @@ func accountIDFromRegisterPath(origin string) int64 {
 // options (no re-derivation) to decide membership.
 func (s *server) echoRowsFromQuery(r *http.Request, model txnEditorModel) []txnRowModel {
 	inSub := make(map[int64]bool, len(model.Accounts))
+	acctType := model.acctTypeMap()
 	for _, a := range model.Accounts {
 		inSub[a.ID] = true
 	}
@@ -299,6 +300,9 @@ func (s *server) echoRowsFromQuery(r *http.Request, model txnEditorModel) []txnR
 		si := strconv.Itoa(i)
 		q := r.URL.Query()
 		acct := parseID(q.Get("account_" + si))
+		// p26.41: decode the combined program/class control (progclass_i) + its hidden
+		// program_i carrier so the re-filtered rows keep the user's pick.
+		prog, class := decodeProgClass(q.Get("progclass_"+si), parseID(q.Get("program_"+si)), acctType[acct])
 		row := txnRowModel{
 			Index:       i,
 			SplitID:     q.Get("split_id_" + si),
@@ -307,8 +311,8 @@ func (s *server) echoRowsFromQuery(r *http.Request, model txnEditorModel) []txnR
 			AmountDR:    q.Get("dr_" + si),
 			AmountCR:    q.Get("cr_" + si),
 			Fund:        parseID(q.Get("fund_" + si)),
-			Program:     parseID(q.Get("program_" + si)),
-			Class:       q.Get("class_" + si),
+			Program:     prog,
+			Class:       class,
 			Description: q.Get("description_" + si),
 			Memo:        q.Get("memo_" + si),
 		}
@@ -509,7 +513,7 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 	dateISO, dateOK := parseEditorDate(r.FormValue("date"), dateFormatFor(u), s.now())
 	model.Date = r.FormValue("date")
 
-	rows, splits := s.parseSplitForms(r, s.currencyExponent(ctx, currency))
+	rows, splits := s.parseSplitForms(r, s.currencyExponent(ctx, currency), model.acctTypeMap())
 	model.Rows = rows
 	// A submitted row may reference an inactive / out-of-sub account (e.g. editing a
 	// pre-existing split whose account was deactivated); a 422 re-render must keep it
@@ -759,13 +763,20 @@ func txnErrorKey(err error) string {
 
 // --- parsing --------------------------------------------------------------
 
-// parseSplitForms reads the per-row fields (account_i, amount_i, fund_i, program_i,
-// class_i, memo_i, split_id_i) up to the `rows` count, returning both the echo model
-// rows and the store SplitInputs. Row order == position. The SIGNED amount_i field is
-// parsed with money.Parse (the client already normalized DR/CR into it, trap 3); an
-// empty/blank row (no account AND no amount) is skipped so a trailing empty row is
-// not submitted.
-func (s *server) parseSplitForms(r *http.Request, exp int) ([]txnRowModel, []store.SplitInput) {
+// parseSplitForms reads the per-row fields (account_i, amount_i, fund_i, the combined
+// progclass_i + its hidden program_i carrier, memo_i, split_id_i) up to the `rows` count,
+// returning both the echo model rows and the store SplitInputs. Row order == position. The
+// SIGNED amount_i field is parsed with money.Parse (the client already normalized DR/CR
+// into it, trap 3); an empty/blank row (no account AND no amount) is skipped so a trailing
+// empty row is not submitted.
+//
+// p26.41: the row's program AND functional class come from ONE combined control
+// (progclass_i), decoded by decodeProgClass into the existing Program + Class inputs (the
+// store's SplitInput contract is UNCHANGED). acctType maps an account id to its type so a
+// p:<program> pick becomes class=program on an EXPENSE row but carries no class on a revenue
+// row (rule 7). A hidden program_i carrier round-trips the stored program verbatim so an
+// Admin/Fundraising split keeps its (possibly non-root) program on a load->save-unchanged.
+func (s *server) parseSplitForms(r *http.Request, exp int, acctType map[int64]string) ([]txnRowModel, []store.SplitInput) {
 	n := int(parseID(r.FormValue("rows")))
 	if n <= 0 {
 		n = 0
@@ -778,8 +789,11 @@ func (s *server) parseSplitForms(r *http.Request, exp int) ([]txnRowModel, []sto
 		acct := parseID(r.FormValue("account_" + si))
 		amountStr := r.FormValue("amount_" + si)
 		fund := parseID(r.FormValue("fund_" + si))
-		prog := parseID(r.FormValue("program_" + si))
-		class := r.FormValue("class_" + si)
+		// p26.41: decode the combined program/class control. progclass_i holds the encoded
+		// pick (c:<class> or p:<programID>); program_i is the hidden carrier of the STORED
+		// program (round-tripped verbatim, so a c:<class> pick keeps its existing program).
+		// A no-JS submit still sends a decodable progclass_i (the raw <select>).
+		prog, class := decodeProgClass(r.FormValue("progclass_"+si), parseID(r.FormValue("program_"+si)), acctType[acct])
 		desc := r.FormValue("description_" + si)
 		memo := r.FormValue("memo_" + si)
 		splitID := r.FormValue("split_id_" + si)
@@ -840,6 +854,36 @@ func (s *server) parseSplitForms(r *http.Request, exp int) ([]txnRowModel, []sto
 		splits = append(splits, sp)
 	}
 	return rows, splits
+}
+
+// decodeProgClass decodes the p26.41 combined program/class control value into the
+// SplitInput's (program, class) pair, preserving the store's rule-7 contract:
+//
+//   - "c:management" / "c:fundraising"  -> class = that; program = carrier (the hidden
+//     program_i, i.e. the STORED program round-tripped verbatim). An Admin/Fundraising
+//     expense split thus KEEPS its (possibly non-root) program, so a load->save-unchanged
+//     is byte-identical (no version churn). The store also re-defaults program on R/E when
+//     the carrier is 0, so a brand-new Admin row with no carrier is fine too.
+//   - "p:<id>" -> program = id; class = "program" on an EXPENSE row (expense splits REQUIRE
+//     a class, rule 7), else "" (a revenue split carries a program but NO class).
+//   - anything else (empty / unrecognized) -> program = carrier, class = "" (the store
+//     defaults/validates authoritatively). This is the safe fallback for a stray value.
+//
+// acctType is the chosen account's type ("expense"/"revenue"/...); "" (unknown) is treated
+// as non-expense so a p:<id> pick does not force a class the store would reject.
+func decodeProgClass(encoded string, carrier int64, acctType string) (program int64, class string) {
+	switch {
+	case strings.HasPrefix(encoded, "c:"):
+		return carrier, encoded[len("c:"):]
+	case strings.HasPrefix(encoded, "p:"):
+		prog := parseID(encoded[len("p:"):])
+		if acctType == "expense" {
+			return prog, "program"
+		}
+		return prog, ""
+	default:
+		return carrier, ""
+	}
 }
 
 // mainHeaderInput is the parsed position-0 header (p26.34): the account/desc/memo the
@@ -1196,6 +1240,18 @@ func (s *server) currencyExponent(ctx context.Context, code string) int {
 
 // --- template funcs -------------------------------------------------------
 
+// acctTypeMap builds an account-id -> type lookup from the model's loaded account options
+// (p26.41: decodeProgClass needs the row account's type to decide whether a p:<program>
+// pick carries class=program). Includes Unavailable (force-included) options so an edited
+// split on a now-inactive expense account still decodes to class=program.
+func (m txnEditorModel) acctTypeMap() map[int64]string {
+	out := make(map[int64]string, len(m.Accounts))
+	for _, a := range m.Accounts {
+		out[a.ID] = a.Type
+	}
+	return out
+}
+
 // txnRowCtx pairs a split row with the page model so the shared "txn-row" template
 // (used by the full page and the 422 re-render) can reach the option lists and the
 // display mode without the row model carrying them. It is the `txnRowCtx` func.
@@ -1207,6 +1263,15 @@ type txnRowCtx struct {
 // makeTxnRowCtx is the `txnRowCtx` template func: {{txnRowCtx $.Page .}}.
 func makeTxnRowCtx(m txnEditorModel, row txnRowModel) txnRowCtx {
 	return txnRowCtx{Page: m, Row: row}
+}
+
+// progclassProgramSelected is the `progclassProgramSelected` template func (p26.41): for
+// the combined program/class control, the p:<program> option is the SELECTED one whenever
+// the row's functional class is NOT one of the management/fundraising "class" entries --
+// i.e. a program-class expense split OR a revenue split (which carries a program but no
+// class). management/fundraising rows select their c:<class> entry instead.
+func progclassProgramSelected(class string) bool {
+	return class != "management" && class != "fundraising"
 }
 
 // txnTitleKey is the `txnTitleKey` template func: the head/heading i18n key for the

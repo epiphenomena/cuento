@@ -459,8 +459,8 @@ test('reports: open the functional expenses (990 Part IX), see the 990-line rows
   await expect(page.locator('form#txn-form')).toBeVisible();
   await page.locator('#txn-main-account').selectOption({ label: 'FE Bank' });
   await page.locator('#txn-account-0').selectOption({ label: 'FE Rent' });
-  await expect(page.locator('#txn-class-0')).toBeVisible();
-  await expect(page.locator('#txn-class-0')).toHaveValue('management');
+  await expect(page.locator('#txn-progclass-0')).toBeVisible();
+  await expect(page.locator('#txn-progclass-0')).toHaveValue('c:management');
   await page.locator('#txn-amount-0').fill('75.00');
   await page.getByRole('button', { name: /^save$/i }).click();
   await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
@@ -843,8 +843,10 @@ test('reports: open the program statement (comparative), see program columns + a
   await expect(page.locator('form#txn-form')).toBeVisible();
   await page.locator('#txn-main-account').selectOption({ label: 'PS Cash E2E' });
   await page.locator('#txn-account-0').selectOption({ label: 'PS Cost E2E' });
-  await expect(page.locator('#txn-program-0')).toBeVisible();
-  await page.locator('#txn-program-0').selectOption({ label: 'PS Outreach E2E' });
+  // p26.41: the combined program/class control -- pick the program node by label (its value
+  // is p:<id>, which decodes to program=PS Outreach + class=program on this expense row).
+  await expect(page.locator('#txn-progclass-0')).toBeVisible();
+  await page.locator('#txn-progclass-0').selectOption({ label: 'PS Outreach E2E' });
   await page.locator('#txn-amount-0').fill('80.00');
   await page.getByRole('button', { name: /^save$/i }).click();
   await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
@@ -961,7 +963,7 @@ test('reports: open the 990 package, see the four Parts + Unmapped buckets + tot
   // Header = F990 Bank (-30 residual); body = F990 Rent +30 (expense, class management).
   await page.locator('#txn-main-account').selectOption({ label: 'F990 Bank E2E' });
   await page.locator('#txn-account-0').selectOption({ label: 'F990 Rent E2E' });
-  await expect(page.locator('#txn-class-0')).toHaveValue('management');
+  await expect(page.locator('#txn-progclass-0')).toHaveValue('c:management');
   await page.locator('#txn-amount-0').fill('30.00');
   await page.getByRole('button', { name: /^save$/i }).click();
   await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));

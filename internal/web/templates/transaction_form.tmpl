@@ -95,20 +95,23 @@
       </select>
     </td>
 
-    <td class="txn-cell txn-program-cell" colspan="3">
-      {{/* Program select -- shown by the JS only on R/E rows (Appendix C); rendered
-           always so ids stay stable, gated visually by the client. */}}
-      <select name="program_{{.Index}}" id="txn-program-{{.Index}}" class="txn-program combo-input">
-        {{range $.Page.Programs}}<option value="{{.ID}}"{{if eq .ID $.Row.Program}} selected{{end}}>{{.Name}}</option>
-        {{end}}
-      </select>
-    </td>
-
-    <td class="txn-cell txn-class-cell" colspan="2">
-      {{/* Functional class -- shown by the JS only on expense rows; P/M/F. */}}
-      <select name="class_{{.Index}}" id="txn-class-{{.Index}}" class="txn-class">
-        <option value="">{{t "txn.class.none"}}</option>
-        {{range $.Page.Classes}}<option value="{{.}}"{{if eq . $.Row.Class}} selected{{end}}>{{t (printf "txn.class.%s" .)}}</option>
+    {{/* p26.41 COMBINED program/class control (one pick per row instead of a program
+         select AND a functional-class select). Values are ENCODED so the server decodes
+         them into the existing Program + Class inputs (SplitInput contract unchanged):
+           c:management  -> Admin (class management; program kept from the hidden carrier)
+           c:fundraising -> Fundraising (class fundraising; program from the carrier)
+           p:<programID> -> that program node (+ class program on expense rows)
+         The two class entries (data-class="1") are shown by the JS only on EXPENSE rows;
+         the program nodes always. Shown at all on R/E rows only (gated like the old pair).
+         A HIDDEN program_{i} carrier round-trips the STORED program verbatim so an
+         Admin/Fundraising split KEEPS its (possibly non-root) program on load->save --
+         load->save-unchanged is byte-identical (no spurious splits_versions row). */}}
+    <td class="txn-cell txn-progclass-cell" colspan="5">
+      <input type="hidden" name="program_{{.Index}}" id="txn-program-{{.Index}}" value="{{.Program}}">
+      <select name="progclass_{{.Index}}" id="txn-progclass-{{.Index}}" class="txn-progclass combo-input">
+        <option value="c:management" data-class="1"{{if eq .Class "management"}} selected{{end}}>{{t "txn.progclass.admin"}}</option>
+        <option value="c:fundraising" data-class="1"{{if eq .Class "fundraising"}} selected{{end}}>{{t "txn.progclass.fundraising"}}</option>
+        {{range $.Page.Programs}}<option value="p:{{.ID}}"{{if and (eq .ID $.Row.Program) (progclassProgramSelected $.Row.Class)}} selected{{end}}>{{.Name}}</option>
         {{end}}
       </select>
     </td>

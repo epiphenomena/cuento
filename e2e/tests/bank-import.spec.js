@@ -172,10 +172,12 @@ test('bank import: review queue -> edit&post one row and discard another', async
   await expect(page.locator('#txn-subsidiary')).toBeDisabled();
   await expect(page.locator('#txn-account-0')).toHaveValue(/\d+/);
 
-  // Add the counter split (the expense account, +30.00, class program) so it balances.
+  // Add the counter split (the expense account, +30.00) so it balances. p26.41: picking the
+  // expense account auto-defaults the combined program/class control to a program pick
+  // (p:<id>), which decodes to class=program server-side -- no separate class choice needed.
   await page.locator('#txn-account-1').selectOption({ label: expenseName });
   await page.locator('#txn-amount-1').fill('30.00');
-  await page.locator('#txn-class-1').selectOption('program');
+  await expect(page.locator('#txn-progclass-1')).toHaveValue(/^p:\d+$/);
 
   // Post: the editor submits via hx-post and gets an HX-Redirect back to the batch
   // queue (a client navigation). Wait for the queue GET reload response so the posted

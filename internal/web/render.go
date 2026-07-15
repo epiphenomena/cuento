@@ -29,19 +29,20 @@ func mustParseTemplates() *template.Template {
 	// only so parsing type-checks a template calling {{t}} or {{asset}}; neither
 	// stub actually runs.
 	stub := template.FuncMap{
-		"t":               func(key string, _ ...any) string { return key },
-		"tn":              func(key string, _ int, _ ...any) string { return key },
-		"asset":           func(name string) string { return name },
-		"shellTitle":      shellTitle,
-		"strs":            strs,
-		"regRowCtx":       makeRegRowCtx,       // p12.1 register: pair a row with the page-level column gates
-		"regColspan":      regColspan,          // p12.1 register: full-width colspan for empty/sentinel cells
-		"regMoreURL":      regMoreURL,          // p12.1 register: the sentinel's next-page hx-get URL
-		"txnRowCtx":       makeTxnRowCtx,       // p12.2 editor: pair a split row with the page model
-		"txnTitleKey":     txnTitleKey,         // p12.2 editor: new vs edit head/heading key
-		"reconRowCtx":     makeReconRowCtx,     // p16.3 recon: pair a split row with the toggle base + finalized gate
-		"reconSummaryCtx": makeReconSummaryCtx, // p16.3 recon: wrap the sticky summary (OOB flag + finalize path)
-		"ordKey":          ordKey,              // p19.3 schedule form: ordinal value -> i18n sub-key
+		"t":                        func(key string, _ ...any) string { return key },
+		"tn":                       func(key string, _ int, _ ...any) string { return key },
+		"asset":                    func(name string) string { return name },
+		"shellTitle":               shellTitle,
+		"strs":                     strs,
+		"regRowCtx":                makeRegRowCtx,            // p12.1 register: pair a row with the page-level column gates
+		"regColspan":               regColspan,               // p12.1 register: full-width colspan for empty/sentinel cells
+		"regMoreURL":               regMoreURL,               // p12.1 register: the sentinel's next-page hx-get URL
+		"txnRowCtx":                makeTxnRowCtx,            // p12.2 editor: pair a split row with the page model
+		"txnTitleKey":              txnTitleKey,              // p12.2 editor: new vs edit head/heading key
+		"progclassProgramSelected": progclassProgramSelected, // p26.41 editor: is the p:<program> option the selected one for this row's class?
+		"reconRowCtx":              makeReconRowCtx,          // p16.3 recon: pair a split row with the toggle base + finalized gate
+		"reconSummaryCtx":          makeReconSummaryCtx,      // p16.3 recon: wrap the sticky summary (OOB flag + finalize path)
+		"ordKey":                   ordKey,                   // p19.3 schedule form: ordinal value -> i18n sub-key
 	}
 	t, err := template.New("").Funcs(stub).ParseFS(templatesFS, "templates/*.tmpl")
 	if err != nil {

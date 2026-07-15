@@ -352,7 +352,7 @@ func (s *server) expenseReviewPost(w http.ResponseWriter, r *http.Request) {
 	dateISO, dateOK := parseEditorDate(r.FormValue("date"), dateFormatFor(u), s.now())
 	model.Date = r.FormValue("date")
 
-	rows, splits := s.parseSplitForms(r, s.currencyExponent(ctx, currency))
+	rows, splits := s.parseSplitForms(r, s.currencyExponent(ctx, currency), model.acctTypeMap())
 	model.Rows = rows
 	_ = s.injectRowAccounts(ctx, &model) // p26.10: keep a referenced account SELECTED on 422
 
