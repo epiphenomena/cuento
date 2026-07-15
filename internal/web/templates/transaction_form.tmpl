@@ -221,6 +221,24 @@
              placeholder="{{t "txn.date_hint"}}"
              {{if eq $.Page.FirstErrorRow -2}}autofocus{{end}}>
     </div>
+    {{/* p26.36: the main-split DESCRIPTION field sits immediately after the date (date ->
+         description -> memo), so it reads left-to-right in transaction-header order and its
+         header autocomplete/prefill drives all splits. Same id/name/wiring as before (only
+         moved out of .txn-main-header); the hidden main_* carriers + the main account/amount
+         stay below. Rendered only in the normal editor (MainPresent). */}}
+    {{if .MainPresent}}
+    <div class="txn-field txn-field-grow txn-main-desc-field">
+      <label for="txn-main-desc">{{t "txn.main.description"}}</label>
+      <div class="desc-field">
+        <input type="text" name="main_description" id="txn-main-desc" class="txn-desc js-descfield"
+               value="{{.MainDescription}}" autocomplete="off"
+               data-desc-container="txn-main-desc-list"
+               data-desc-mode="{{if .DisplayDRCR}}drcr{{else}}signed{{end}}"
+               placeholder="{{t "txn.description_hint"}}">
+        <div class="desc-suggest-box" id="txn-main-desc-list" hidden></div>
+      </div>
+    </div>
+    {{end}}
     {{/* The per-transaction payee header was removed (p26.19) -- the per-split free-text
          description (in each grid row) replaces it, autocompleting + prefilling per row.
          The payee data/columns/routes were physically removed in p26.20. */}}
@@ -237,10 +255,11 @@
     <input type="hidden" name="from" id="txn-origin" value="{{.Origin}}">
   </div>
 
-  {{/* p26.34 main-split header: the position-0 split presented at the transaction level --
-       its DESCRIPTION (fuels descfield autocomplete for ALL splits) and ACCOUNT are visible;
-       its AMOUNT is the auto-balanced per-fund residual of the body splits, DISPLAY-ONLY
-       (no name -> never submitted; the server recomputes it authoritatively). The main
+  {{/* p26.34 main-split header: the position-0 split presented at the transaction level.
+       p26.36: its DESCRIPTION now lives up in the .txn-header row (date -> description ->
+       memo); this block holds the hidden main_* carriers plus the visible ACCOUNT and the
+       DISPLAY-ONLY balancing AMOUNT (the auto-balanced per-fund residual of the body splits;
+       no name -> never submitted; the server recomputes it authoritatively). The main
        program/class/memo/split-id ride as hidden fields so the reconstruction loses nothing
        (idempotent load->save). Rendered only in the normal editor (MainPresent); import /
        expense-review and the multi-fund flat fallback keep the flat grid (main_present=0). */}}
@@ -251,17 +270,6 @@
     <input type="hidden" name="main_memo" id="txn-main-memo" value="{{.MainMemo}}">
     <input type="hidden" name="main_program" id="txn-main-program" value="{{.MainProgram}}">
     <input type="hidden" name="main_class" id="txn-main-class" value="{{.MainClass}}">
-    <div class="txn-field txn-field-grow">
-      <label for="txn-main-desc">{{t "txn.main.description"}}</label>
-      <div class="desc-field">
-        <input type="text" name="main_description" id="txn-main-desc" class="txn-desc js-descfield"
-               value="{{.MainDescription}}" autocomplete="off"
-               data-desc-container="txn-main-desc-list"
-               data-desc-mode="{{if .DisplayDRCR}}drcr{{else}}signed{{end}}"
-               placeholder="{{t "txn.description_hint"}}">
-        <div class="desc-suggest-box" id="txn-main-desc-list" hidden></div>
-      </div>
-    </div>
     <div class="txn-field txn-main-account-field">
       <label for="txn-main-account">{{t "txn.main.account"}}</label>
       <select name="main_account" id="txn-main-account" class="txn-account combo-input">

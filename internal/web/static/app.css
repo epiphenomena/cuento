@@ -749,6 +749,11 @@ input[aria-invalid="true"] {
    own line at narrow widths. */
 .txn-header .txn-field-grow { flex: 1 1 20rem; }
 .txn-header .txn-field-grow .txn-memo-header { width: 100%; }
+/* p26.36: the main-split description moved up into the header row (date -> description ->
+   memo). It is a grow field whose .desc-field wrapper + input fill the column width, matching
+   the memo-header grow behaviour. */
+.txn-header .txn-main-desc-field .desc-field { width: 100%; position: relative; }
+.txn-header .txn-main-desc-field .txn-desc { width: 100%; }
 
 /* p26.34 main-split header: the position-0 split presented at the transaction level
    (description + account, and the auto-balanced residual amount, display-only). It mirrors

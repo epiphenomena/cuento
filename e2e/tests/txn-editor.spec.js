@@ -144,6 +144,21 @@ test.describe('transaction editor', () => {
     // New entry: type a prefix into the HEADER description -> a suggestion appears.
     await page.goto('/transactions/new');
     await expect(page.locator('#txn-main-desc')).toBeVisible();
+
+    // p26.36: the header reads date -> description -> memo. Assert the description field sits
+    // AFTER the date and BEFORE the memo in document order (DOCUMENT_POSITION_FOLLOWING = 4).
+    const order = await page.evaluate(() => {
+      const date = document.querySelector('#txn-date');
+      const desc = document.querySelector('#txn-main-desc');
+      const memo = document.querySelector('#txn-memo');
+      return {
+        dateBeforeDesc: !!(date.compareDocumentPosition(desc) & Node.DOCUMENT_POSITION_FOLLOWING),
+        descBeforeMemo: !!(desc.compareDocumentPosition(memo) & Node.DOCUMENT_POSITION_FOLLOWING),
+      };
+    });
+    expect(order.dateBeforeDesc).toBe(true);
+    expect(order.descBeforeMemo).toBe(true);
+
     const hdrDesc = page.locator('#txn-main-desc');
     await hdrDesc.click();
     await hdrDesc.fill('Header recall');
