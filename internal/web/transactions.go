@@ -234,8 +234,50 @@ func (s *server) txnNewForm(w http.ResponseWriter, r *http.Request) {
 		// server drops the trailing empty row on submit (parseSplitForms).
 		model.Date = money.FormatDate(time.Now(), dateFormatFor(u))
 		model.Rows = []txnRowModel{{Index: 0}}
+		// p26.37: prefill the header (balancing / position-0) account. From a register
+		// (?from=/accounts/<id>/register) use THAT register's account; from the top nav (no
+		// register origin) use the user's last-used header account (0 = none -> leave blank).
+		// injectMainAccount makes it selectable even if it is now inactive / out-of-sub (p26.10).
+		model.MainAccount = s.prefillHeaderAccount(ctx, u, model.Origin)
+		s.injectMainAccount(ctx, &model)
 	}
 	s.renderEditor(w, r, model)
+}
+
+// prefillHeaderAccount picks the NEW-transaction header (position-0) account (p26.37):
+// the account of the register the user came from (parsed from the sanitized origin path
+// /accounts/<id>/register), else -- entering from the top nav with no register origin --
+// the user's last-used header account from the store. Returns 0 (leave blank) when
+// neither applies (no origin + no prior transaction, or a lookup miss).
+func (s *server) prefillHeaderAccount(ctx context.Context, u *store.CurrentUser, origin string) int64 {
+	if id := accountIDFromRegisterPath(origin); id != 0 {
+		return id
+	}
+	if u == nil {
+		return 0
+	}
+	acct, err := s.store.LastHeaderAccountForActor(ctx, u.ID)
+	if err != nil {
+		return 0 // best-effort convenience; a lookup failure just leaves the header blank
+	}
+	return acct
+}
+
+// accountIDFromRegisterPath extracts <id> from a same-site register origin path of the
+// exact form "/accounts/<id>/register" (the shape the register's new/edit links thread as
+// ?from=, already sanitized by sanitizeOrigin). Returns 0 for any other path (an unrelated
+// origin never prefills a header account).
+func accountIDFromRegisterPath(origin string) int64 {
+	const prefix = "/accounts/"
+	const suffix = "/register"
+	if !strings.HasPrefix(origin, prefix) || !strings.HasSuffix(origin, suffix) {
+		return 0
+	}
+	mid := origin[len(prefix) : len(origin)-len(suffix)]
+	if mid == "" {
+		return 0
+	}
+	return parseID(mid)
 }
 
 // echoRowsFromQuery rebuilds the editor rows from the GET query (the subsidiary

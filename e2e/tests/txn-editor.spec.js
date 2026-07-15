@@ -532,4 +532,52 @@ test.describe('transaction editor', () => {
     await page.locator('.txn-submit a.btn-ghost').click();
     await expect(page).toHaveURL(new RegExp(`${registerURL}$`));
   });
+
+  // p26.37: opening a NEW transaction prefills the header (balancing) account -- from a
+  // register it is THAT register's account; from the top nav it is the user's LAST-USED
+  // header account (the position-0 account of their most recent transaction).
+  test('the header account is prefilled from the register origin, then from the last-used account via the nav', async ({
+    page,
+    server,
+  }) => {
+    await login(page, server);
+    await createAsset(page, 'Prefill Checking');
+    await createAsset(page, 'Prefill Savings');
+
+    // Enter from Prefill Checking's register -> the header account is prefilled to it.
+    await page.goto('/accounts');
+    await page
+      .locator('tr.acct-row', { hasText: 'Prefill Checking' })
+      .getByRole('link', { name: 'Prefill Checking' })
+      .click();
+    await page.waitForURL('**/register');
+    await page.locator('main a.btn-primary', { hasText: /new transaction/i }).click();
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    const checkingVal = await page
+      .locator('#txn-main-account option', { hasText: 'Prefill Checking' })
+      .getAttribute('value');
+    await expect(page.locator('#txn-main-account')).toHaveValue(checkingVal);
+
+    // Post a transaction whose HEADER account is Prefill Savings, so the last-used header
+    // account becomes Savings.
+    await page.goto('/transactions/new');
+    await page.locator('#txn-main-account').selectOption({ label: 'Prefill Savings' });
+    await page.locator('#txn-account-0').selectOption({ label: 'Prefill Checking' });
+    await page.locator('#txn-amount-0').fill('50.00');
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+    // Open a NEW transaction from the top nav (no register origin) -> the header account is
+    // prefilled to the last-used account (Savings), not blank.
+    await page.locator('.app-nav a', { hasText: /new transaction/i }).click();
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    const savingsVal = await page
+      .locator('#txn-main-account option', { hasText: 'Prefill Savings' })
+      .getAttribute('value');
+    await expect(page.locator('#txn-main-account')).toHaveValue(savingsVal);
+    // The header combobox overlay shows the prefilled account label (JS synced on init).
+    await expect(page.locator('#txn-main-account-wrap .combo-text, .txn-main-account-field .combo-text')).toHaveValue(
+      /Prefill Savings/,
+    );
+  });
 });
