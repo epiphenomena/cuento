@@ -476,6 +476,25 @@ test.describe('transaction editor', () => {
     await expect(navNew).toHaveCount(1);
     await navNew.click();
     await expect(page.locator('form#txn-form')).toBeVisible();
+
+    // p26.35: the BOOSTED nav click must render the FULL shell (nav + editor JS), not the
+    // bare partial. Assert the nav shell is still present AND the editor JS wired up -- the
+    // account combobox overlay exists and accepts typing (proves htmx:afterSwap re-init ran,
+    // identical to entering from a register).
+    await expect(page.locator('.app-nav a', { hasText: /new transaction/i })).toHaveCount(1);
+    const navCombo = page.locator('.txn-row[data-row="0"] .txn-account-cell .combo-text');
+    await expect(navCombo).toBeVisible();
+    await navCombo.click();
+    await navCombo.fill('origin');
+    await expect(
+      page.locator('.txn-row[data-row="0"] .txn-account-cell .combo-list'),
+    ).toBeVisible();
+    await expect(
+      page.locator('.txn-row[data-row="0"] .txn-account-cell .combo-option', {
+        hasText: 'Origin Checking',
+      }),
+    ).toBeVisible();
+
     // From the bare nav entry (no origin) Cancel falls back to the chart of accounts.
     await expect(page.locator('.txn-submit a.btn-ghost')).toHaveAttribute('href', '/accounts');
 

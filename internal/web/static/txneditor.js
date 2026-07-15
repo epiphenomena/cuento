@@ -584,6 +584,12 @@ if (typeof document !== 'undefined' && typeof document.addEventListener === 'fun
       }
     });
   });
+  // p26.35: a BOOSTED nav ("New transaction") swaps <body> then injects THIS module for the
+  // first time in the document. The swap's htmx:afterSwap already fired (before the listener
+  // above was attached) and DOMContentLoaded fired on the ORIGINAL page, so neither re-runs
+  // -- the grid would stay un-enhanced. When the DOM is already parsed at module-eval time,
+  // enhance immediately (idempotent via data-wired) so the boost-entered editor wires up.
+  if (document.readyState !== 'loading') init();
 }
 
 export { initEditor };

@@ -404,11 +404,18 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 }
 
 // renderEditor renders the editor: the full shell page normally, or JUST the
-// transaction-form partial for an htmx request (the subsidiary-change re-filter swaps
-// #txn-form, so it must not nest a whole page inside it -- Appendix C anti-jank). Both
-// paths render the SAME single-sourced partial, so input ids stay stable (trap 4).
+// transaction-form partial for the GENUINE partial swap (the subsidiary-change
+// re-filter swaps #txn-form, so it must not nest a whole page inside it -- Appendix C
+// anti-jank). Both paths render the SAME single-sourced partial, so input ids stay
+// stable (trap 4).
+//
+// p26.35: a BOOSTED top-nav click ("New transaction") sends BOTH HX-Request:true AND
+// HX-Boosted:true; it expects a FULL page (boost swaps <body>), so returning the bare
+// partial there drops the nav shell and never re-inits the editor JS. Only the genuine
+// partial swap -- a non-boosted hx-get targeting #txn-form (the subsidiary re-filter) --
+// carries HX-Request without HX-Boosted, so gate the partial on that combination.
 func (s *server) renderEditor(w http.ResponseWriter, r *http.Request, model txnEditorModel) {
-	if r.Header.Get("HX-Request") == "true" {
+	if r.Header.Get("HX-Request") == "true" && r.Header.Get("HX-Boosted") != "true" {
 		s.render(w, r, http.StatusOK, "transaction-form", s.newShellPage(r, model))
 		return
 	}
