@@ -252,7 +252,7 @@ test('reports: drill a trial-balance figure to its transactions (each linking to
   await page.locator('#txn-account-1').selectOption({ label: 'Drill Checking' });
   await page.locator('#txn-amount-1').fill('-42.00');
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/register**');
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
   // Open the trial balance at the DEFAULT as-of (today), so the just-posted txn (its
   // date defaults to today) is included -- a pinned past as-of would exclude it and
@@ -312,7 +312,7 @@ test('reports: the trial balance nests accounts and the tree collapse/expand con
   await page.locator('#txn-account-1').selectOption({ label: 'TB Nest Counter' });
   await page.locator('#txn-amount-1').fill('-75.00');
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/register**');
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
   // Open the trial balance at the default as-of (today) so the just-posted txn counts.
   await page.goto(`${TB}?scope=1`);
@@ -372,7 +372,7 @@ test('reports: open the account ledger, pick an account + range, see opening/lin
   await page.locator('#txn-account-1').selectOption({ label: 'Ledger Savings' });
   await page.locator('#txn-amount-1').fill('-55.00');
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/register**');
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
   // --- open the account ledger; the account SELECTOR (report-specific control) is present ---
   await page.goto(AL);
@@ -467,7 +467,7 @@ test('reports: open the functional expenses (990 Part IX), see the 990-line rows
   await page.locator('#txn-account-1').selectOption({ label: 'FE Bank' });
   await page.locator('#txn-amount-1').fill('-75.00');
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/register**');
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
   // --- open the functional-expenses report at the root scope over a wide period ---
   await page.goto(`${FE}?scope=1&from=2025-01-01&to=2030-12-31&currency=USD`);
@@ -663,7 +663,7 @@ test('reports: open the fund report (list), pick a fund, see its period statemen
   await page.locator('#txn-amount-1').fill('-100.00');
   await page.locator('#txn-fund-1').selectOption({ label: 'Stmt Fund E2E' });
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/register**');
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
   // Capital-asset PURCHASE applying the fund (the NON-EXPENSE application): DR Stmt
   // Building 40.00 (fund), CR Stmt Cash 40.00 (fund). Both asset splits, fund-tagged.
@@ -676,7 +676,7 @@ test('reports: open the fund report (list), pick a fund, see its period statemen
   await page.locator('#txn-amount-1').fill('-40.00');
   await page.locator('#txn-fund-1').selectOption({ label: 'Stmt Fund E2E' });
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/register**');
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
   // --- LIST view: the fund roster with the report-specific FUND selector ---
   await page.goto(`${FA}?scope=1`);
@@ -753,7 +753,7 @@ test('reports: open the activities-by-restriction statement, see the two restric
   await page.locator('#txn-amount-1').fill('-100.00');
   await page.locator('#txn-fund-1').selectOption({ label: 'Restr Fund E2E' });
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/register**');
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
   // An UNRESTRICTED expense (no fund): DR Restr Cost 30.00, CR Restr Cash 30.00. Its
   // functional class + program prefill from the form defaults (expense splits need both).
@@ -764,7 +764,7 @@ test('reports: open the activities-by-restriction statement, see the two restric
   await page.locator('#txn-account-1').selectOption({ label: 'Restr Cash E2E' });
   await page.locator('#txn-amount-1').fill('-30.00');
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/register**');
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
   // --- open the statement over a wide period, root scope ---
   await page.goto(`${ABR}?scope=1`);
@@ -854,7 +854,7 @@ test('reports: open the program statement (comparative), see program columns + a
   await page.locator('#txn-account-1').selectOption({ label: 'PS Cash E2E' });
   await page.locator('#txn-amount-1').fill('-80.00');
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/register**');
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
   // --- COMPARATIVE view (no program chosen): the program selector + program columns ---
   await page.goto(`${PS}?scope=1&from=2025-01-01&to=2030-12-31`);
@@ -960,7 +960,7 @@ test('reports: open the 990 package, see the four Parts + Unmapped buckets + tot
   await page.locator('#txn-account-1').selectOption({ label: 'F990 Gift E2E' });
   await page.locator('#txn-amount-1').fill('-90.00');
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/register**');
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
   // An expense: DR F990 Rent 30.00 (class management, program prefilled), CR F990 Bank 30.00.
   await page.goto('/transactions/new');
@@ -971,7 +971,7 @@ test('reports: open the 990 package, see the four Parts + Unmapped buckets + tot
   await page.locator('#txn-account-1').selectOption({ label: 'F990 Bank E2E' });
   await page.locator('#txn-amount-1').fill('-30.00');
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/register**');
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
   // --- open the 990 package over the fiscal year (from/to), root scope, USD ---
   await page.goto(`${F990}?scope=1&from=2025-01-01&to=2030-12-31&currency=USD`);

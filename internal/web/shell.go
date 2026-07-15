@@ -50,6 +50,12 @@ func navSections() []navEntry {
 		// p23.8: the brand logo is "home" (-> the chart of accounts); no separate
 		// Home entry. Accounts leads the nav and is the landing.
 		{"nav.accounts", "/accounts", TxnRead},
+		// p26.33: "New transaction" is a canonical top-nav action (TxnWrite), the
+		// primary entry point for daily data entry -- previously it only lived inside
+		// register pages. Perm-gated like the rest; visibleNav drops it for a user who
+		// cannot write (and if the route were ever unregistered). isCurrentNav lights it
+		// only on /transactions/new, never Accounts.
+		{"nav.new_txn", "/transactions/new", TxnWrite},
 		{"nav.reports", "/reports", ReportGroup("")},
 		// p24: ONE top-level "Expenses" section consolidating the submit workspace
 		// (p20.2) and the review queue (p20.3); the section bar (subNavGroups) carries

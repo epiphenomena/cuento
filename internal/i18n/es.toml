@@ -50,6 +50,8 @@ other = "Presupuestos"
 other = "Importar"
 [nav.reports]
 other = "Informes"
+[nav.new_txn]
+other = "Nueva transaccion"
 [nav.settings]
 other = "Ajustes"
 [nav.admin]

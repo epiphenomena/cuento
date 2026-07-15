@@ -170,9 +170,9 @@ test.describe('keyboard-only entry', () => {
     await expect(page.locator('#txn-date')).not.toHaveValue('');
 
     // Save. A successful htmx submit returns HX-Redirect to the first split's register;
-    // waitForURL('**/register**') tracks that full-page navigation.
+    // waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname)) tracks that full-page navigation.
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL('**/register**');
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
     await expect(page.locator('table.register-table')).toBeVisible();
 
     // The posted entry is visible: the 40.00 leg appears in the register we land on
@@ -260,7 +260,7 @@ test.describe('keyboard-only entry', () => {
 
     await page.locator('#txn-memo-1').focus();
     await page.keyboard.press('Control+Enter');
-    await page.waitForURL('**/register**');
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
     await expect(page.locator('table.register-table')).toBeVisible();
     await expect(page.locator('table.register-table')).toContainText('40.00');
   });

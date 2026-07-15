@@ -92,8 +92,8 @@ test.describe('account register', () => {
     await page.locator('tr.acct-row', { hasText: 'WF P26' })
       .getByRole('link', { name: 'WF P26' }).click();
     await page.waitForURL('**/register');
-    await page.getByRole('link', { name: /new transaction/i }).click();
-    await page.waitForURL('**/transactions/new');
+    await page.locator('main a.btn-primary', { hasText: /new transaction/i }).click();
+    await page.waitForURL(/\/transactions\/new/);
     await expect(page.locator('form#txn-form')).toBeVisible();
     // p26.1: the split <option> label is the dotted ancestor path (Parent.Leaf), so a
     // child account is selected by its full path, not its bare name.
@@ -103,7 +103,7 @@ test.describe('account register', () => {
     await page.locator('#txn-amount-1').fill('-12.00');
     await page.locator('#txn-memo').fill('rollup transfer');
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL('**/register**');
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
     // Open the PARENT register. A leaf holds the splits; the parent register must show
     // BOTH descendant rows (one per child) rolled up, even though the parent itself
@@ -144,8 +144,8 @@ test.describe('account register', () => {
       await page.locator('tr.acct-row', { hasText: 'Cash P269' })
         .getByRole('link', { name: 'Cash P269' }).click();
       await page.waitForURL('**/register');
-      await page.getByRole('link', { name: /new transaction/i }).click();
-      await page.waitForURL('**/transactions/new');
+      await page.locator('main a.btn-primary', { hasText: /new transaction/i }).click();
+      await page.waitForURL(/\/transactions\/new/);
       await expect(page.locator('form#txn-form')).toBeVisible();
       await page.locator('#txn-date').fill(date);
       // Filling row 0 auto-appends row 1 (p25.2), so select account 0 first.
@@ -156,7 +156,7 @@ test.describe('account register', () => {
       await page.locator('#txn-amount-1').fill(amount);
       await page.locator('#txn-memo').fill(memo);
       await page.getByRole('button', { name: /^save$/i }).click();
-      await page.waitForURL('**/register**');
+      await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
     };
 
     // Post the OLDER one first, then the NEWER one, so insertion order (split id)

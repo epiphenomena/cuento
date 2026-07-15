@@ -231,6 +231,10 @@
       <input type="text" name="memo" id="txn-memo" class="txn-memo-header" value="{{.Memo}}">
     </div>
     <input type="hidden" name="currency" value="{{.Currency}}">
+    {{/* p26.33: the Cancel origin (the register the user came from). Hidden so it posts
+         with the form (survives a 422) and rides the subsidiary re-filter via hx-include.
+         Server-sanitized to a same-site path; empty => Cancel falls back to /accounts. */}}
+    <input type="hidden" name="from" id="txn-origin" value="{{.Origin}}">
   </div>
 
   {{/* p26.32 two-row split layout: each split is its OWN <tbody class="txn-row"> (see
@@ -274,7 +278,9 @@
 
   <div class="txn-submit">
     <button type="submit" class="btn btn-primary">{{if .ImportRowID}}{{t "import.posthdr_btn"}}{{else if .ExpenseReportID}}{{t "expreview.post_btn"}}{{else}}{{t "common.save"}}{{end}}</button>
-    <a href="{{if .ImportRowID}}/import/batches/{{.ImportBatchID}}{{else if .ExpenseReportID}}/expenses/review{{else}}/accounts{{end}}" class="btn btn-ghost">{{t "common.cancel"}}</a>
+    {{/* p26.33: Cancel returns to the origin register (`from`, sanitized server-side) for a
+         normal txn, else /accounts. Import/expense-review keep their dedicated destinations. */}}
+    <a href="{{if .ImportRowID}}/import/batches/{{.ImportBatchID}}{{else if .ExpenseReportID}}/expenses/review{{else if .Origin}}{{.Origin}}{{else}}/accounts{{end}}" class="btn btn-ghost">{{t "common.cancel"}}</a>
   </div>
 </form>
 {{- end}}

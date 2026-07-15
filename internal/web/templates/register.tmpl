@@ -86,7 +86,8 @@
   {{/* p12.4 per-row entry points: edit / duplicate / void / history. Plain links
        (full-page nav) so the CSP stays trivial and no htmx-settle dance is needed. */}}
   <td class="reg-actions">
-    <a href="/transactions/{{.TxnID}}/edit">{{t "register.action.edit"}}</a>
+    {{/* p26.33: thread the origin so the editor's Cancel returns to THIS register. */}}
+    <a href="/transactions/{{.TxnID}}/edit?from=/accounts/{{$.AccountID}}/register">{{t "register.action.edit"}}</a>
     <a href="/transactions/{{.TxnID}}/duplicate">{{t "register.action.duplicate"}}</a>
     <a href="/transactions/{{.TxnID}}/void">{{t "register.action.void"}}</a>
     <a href="/transactions/{{.TxnID}}/history">{{t "register.action.history"}}</a>
@@ -164,7 +165,7 @@
   <p><a href="/accounts">{{t "register.back_to_accounts"}}</a>
      {{/* p12.2: open the transaction editor for a new entry (the register is the
           everyday landing for data entry, W3). Edit links live per-row in p12.4. */}}
-     · <a href="/transactions/new" class="btn btn-primary">{{t "register.new_txn"}}</a></p>
+     · <a href="/transactions/new?from=/accounts/{{.AccountID}}/register" class="btn btn-primary">{{t "register.new_txn"}}</a></p>
 
   {{/* The filter form lives in the section bar (register-controls, p23.12); the
        results swap in here on a filter change. */}}

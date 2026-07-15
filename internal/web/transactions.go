@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"cuento/internal/money"
@@ -123,6 +124,13 @@ type txnEditorModel struct {
 	RootProgram int64 // the program-defaulting fallback (D24)
 	UserProgram int64 // the user's default_program (p26.5); 0 = unset. Prefill tier BELOW an account's own default_program and ABOVE RootProgram.
 
+	// Origin is where Cancel returns for a NORMAL (non-import / non-expense) txn: the
+	// account register the user came from (p26.33), threaded as a `from` query param
+	// from the register's new/edit links and round-tripped on a 422 re-render. Empty
+	// (or an off-site value) falls back to /accounts. Import/expense modes have their
+	// own dedicated cancel destinations and ignore this.
+	Origin string
+
 	// Errors (trap 5). TotalsError is the overall/fund-imbalance key rendered in the
 	// sticky totals bar; row errors live on each row's ErrorKey.
 	TotalsError string
@@ -161,6 +169,10 @@ func (s *server) txnNewForm(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
+	// p26.33: Cancel returns to the register the user came from. On the re-filter the
+	// origin rides in via hx-include (the hidden #txn-origin field), so read the query
+	// either way.
+	model.Origin = sanitizeOrigin(r.URL.Query().Get("from"))
 
 	if reFilter {
 		// Echo the included rows (the user's typed entries survive the re-filter) and
@@ -261,6 +273,8 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 	model.Date = money.FormatDate(parseISOForDisplay(hdr.Date), dateFormatFor(u))
 	model.Memo = hdr.Memo
 	model.Notes = hdr.Notes
+	// p26.33: Cancel returns to the register the edit link came from (`from` query param).
+	model.Origin = sanitizeOrigin(r.URL.Query().Get("from"))
 
 	exp := s.currencyExponent(ctx, hdr.Currency)
 	// The prefilled amount MUST use the user's NUMBER format (rule 10) so that a
@@ -352,6 +366,9 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 	model.Currency = currency
 	model.Memo = r.FormValue("memo")
 	model.Notes = r.FormValue("notes")
+	// p26.33: preserve the Cancel origin across a 422 re-render (the hidden #txn-origin
+	// field posts with the form).
+	model.Origin = sanitizeOrigin(r.FormValue("from"))
 	model.FirstErrorRow = -1
 
 	// Parse the date input honoring the user's format (ISO always accepted, D16). A
@@ -798,6 +815,25 @@ func userDefaultProgram(u *store.CurrentUser) *int64 {
 		return nil
 	}
 	return u.DefaultProgramID
+}
+
+// sanitizeOrigin validates a `from`/origin value for the Cancel link (p26.33). To avoid
+// an open redirect it accepts ONLY a same-site absolute PATH: it must begin with a single
+// "/" (not "//..." which browsers treat as a protocol-relative cross-origin URL) and carry
+// no scheme. Anything else returns "" (the caller falls back to /accounts). The value is
+// rendered into an href attribute (html/template escapes it); this guard keeps it a
+// local navigation, not an escape hatch off the app.
+func sanitizeOrigin(v string) string {
+	if v == "" || len(v) < 1 || v[0] != '/' {
+		return ""
+	}
+	if strings.HasPrefix(v, "//") { // protocol-relative -> cross-origin
+		return ""
+	}
+	if strings.ContainsAny(v, "\\\n\r") { // backslash / control chars
+		return ""
+	}
+	return v
 }
 
 // defaultSubsidiary resolves the editor's default header subsidiary: the user's

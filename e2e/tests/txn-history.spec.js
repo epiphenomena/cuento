@@ -44,8 +44,8 @@ async function postTransfer(page, srcName, dstName, amt) {
   const row = page.locator('tr.acct-row', { hasText: srcName });
   await row.getByRole('link', { name: srcName }).click();
   await page.waitForURL('**/register');
-  await page.getByRole('link', { name: /new transaction/i }).click();
-  await page.waitForURL('**/transactions/new');
+  await page.locator('main a.btn-primary', { hasText: /new transaction/i }).click();
+  await page.waitForURL(/\/transactions\/new/);
   await expect(page.locator('form#txn-form')).toBeVisible();
   await page.locator('#txn-account-0').selectOption({ label: dstName });
   await page.locator('#txn-amount-0').fill(amt);
@@ -53,7 +53,7 @@ async function postTransfer(page, srcName, dstName, amt) {
   await page.locator('#txn-amount-1').fill('-' + amt);
   await page.locator('#txn-memo').fill('original memo');
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/register**');
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 }
 
 test.describe('transaction history / void / duplicate', () => {
@@ -70,13 +70,13 @@ test.describe('transaction history / void / duplicate', () => {
     await page.waitForURL('**/register');
     await page.locator('tr.reg-row').first()
       .getByRole('link', { name: /^edit$/i }).click();
-    await page.waitForURL('**/transactions/*/edit');
+    await page.waitForURL((u) => /\/transactions\/\d+\/edit/.test(u.pathname));
     await expect(page.locator('form#txn-form')).toBeVisible();
 
     // Change the memo and save.
     await page.locator('#txn-memo').fill('edited memo');
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL('**/register**');
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
     // Open the history for that row and assert the timeline shows both ops and the
     // edited memo value.
@@ -147,7 +147,7 @@ test.describe('transaction history / void / duplicate', () => {
     // It is a create: saving posts to /transactions and lands on a register (a NEW
     // second transaction now exists).
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL('**/register**');
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
     await expect(page.locator('table.register-table')).toContainText('55.00');
   });
 });

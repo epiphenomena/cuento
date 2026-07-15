@@ -481,11 +481,14 @@ type regRowCtx struct {
 	Row          regRow
 	ShowSubBadge bool
 	Reconcilable bool
+	// AccountID is this register's account, so the per-row edit link can thread a
+	// `from=/accounts/<id>/register` origin for the editor's Cancel (p26.33).
+	AccountID int64
 }
 
 // makeRegRowCtx is the `regRowCtx` template func: {{regRowCtx $.Page .}}.
 func makeRegRowCtx(m registerPageModel, row regRow) regRowCtx {
-	return regRowCtx{Row: row, ShowSubBadge: m.ShowSubBadge, Reconcilable: m.Reconcilable}
+	return regRowCtx{Row: row, ShowSubBadge: m.ShowSubBadge, Reconcilable: m.Reconcilable, AccountID: m.AccountID}
 }
 
 // regColspan is the `regColspan` template func: the register table's column count,

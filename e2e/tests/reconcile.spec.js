@@ -70,7 +70,7 @@ async function postDeposit(page, checkingName, incomeName, amount) {
   await page.locator('#txn-account-1').selectOption({ label: incomeName });
   await page.locator('#txn-amount-1').fill(`-${amount}`);
   await page.getByRole('button', { name: /^save$/i }).click();
-  await page.waitForURL('**/register**');
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 }
 
 test('reconcile: start, toggle splits (targeted swap), reach zero, finalize', async ({

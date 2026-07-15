@@ -73,8 +73,8 @@ test.describe('transaction editor', () => {
     const row = page.locator('tr.acct-row', { hasText: 'Editor Checking' });
     await row.getByRole('link', { name: 'Editor Checking' }).click();
     await page.waitForURL('**/register');
-    await page.getByRole('link', { name: /new transaction/i }).click();
-    await page.waitForURL('**/transactions/new');
+    await page.locator('main a.btn-primary', { hasText: /new transaction/i }).click();
+    await page.waitForURL(/\/transactions\/new/);
 
     // The grid renders with its header and a single starter row (p25.2: it auto-appends
     // a fresh trailing row as each row is filled, no "Add row" button).
@@ -117,7 +117,7 @@ test.describe('transaction editor', () => {
 
     // We land on a register; the transfer is posted. Navigate to Editor Savings'
     // register and assert a row with the 25.00 amount is present (the entry exists).
-    await page.waitForURL('**/register**');
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
     await expect(page.locator('table.register-table')).toBeVisible();
 
     // The saved amount appears somewhere in the register table.
@@ -308,15 +308,15 @@ test.describe('transaction editor', () => {
     const row = page.locator('tr.acct-row', { hasText: 'Live Savings' });
     await row.getByRole('link', { name: 'Live Savings' }).click();
     await page.waitForURL('**/register');
-    await page.getByRole('link', { name: /new transaction/i }).click();
-    await page.waitForURL('**/transactions/new');
+    await page.locator('main a.btn-primary', { hasText: /new transaction/i }).click();
+    await page.waitForURL(/\/transactions\/new/);
     await page.locator('#txn-account-0').selectOption({ label: 'Live Savings' });
     await expect(page.locator('#txn-account-1')).toBeVisible();
     await page.locator('#txn-amount-0').fill('40.00');
     await page.locator('#txn-account-1').selectOption({ label: 'Gone Checking' });
     await page.locator('#txn-amount-1').fill('-40.00');
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL('**/register**');
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
     // Deactivate Gone Checking from the accounts list (a plain POST form).
     await page.goto('/accounts');
@@ -329,7 +329,7 @@ test.describe('transaction editor', () => {
     await page.locator('tr.acct-row', { hasText: 'Live Savings' }).getByRole('link', { name: 'Live Savings' }).click();
     await page.waitForURL('**/register');
     await page.getByRole('link', { name: /edit/i }).first().click();
-    await page.waitForURL('**/transactions/*/edit');
+    await page.waitForURL((u) => /\/transactions\/\d+\/edit/.test(u.pathname));
     await expect(page.locator('form#txn-form')).toBeVisible();
 
     // Every row's account select carries the full option list, so the injected
@@ -434,5 +434,39 @@ test.describe('transaction editor', () => {
     await expect(page.locator('#txn-account-0')).toHaveValue('0');
     await expect(page.locator('#txn-memo-0')).toHaveValue('');
     await expect(page.locator('#txn-rows-count')).toHaveValue('1');
+  });
+
+  // p26.33: the top-nav "New transaction" action is the canonical entry point, and Cancel
+  // returns to the account register the user came from (threaded via ?from=).
+  test('the New-transaction nav button opens the editor, and Cancel returns to the origin register', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'Origin Checking');
+
+    // The top nav carries a "New transaction" link (perm-gated; admin has TxnWrite).
+    const navNew = page.locator('.app-nav a', { hasText: /new transaction/i });
+    await expect(navNew).toHaveCount(1);
+    await navNew.click();
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    // From the bare nav entry (no origin) Cancel falls back to the chart of accounts.
+    await expect(page.locator('.txn-submit a.btn-ghost')).toHaveAttribute('href', '/accounts');
+
+    // Open the register for the account and use ITS new-transaction link: Cancel now
+    // returns to that register (origin threaded through the `from` param, echoed in the
+    // hidden #txn-origin field). Navigate back to the chart of accounts first (we are on
+    // the editor after the nav-button check above).
+    await page.goto('/accounts');
+    const row = page.locator('tr.acct-row', { hasText: 'Origin Checking' });
+    await row.getByRole('link', { name: 'Origin Checking' }).click();
+    await page.waitForURL('**/register');
+    const registerURL = new URL(page.url()).pathname;
+    // The register's own in-page new-transaction button (scoped to <main> so it is not
+    // the identically-labeled nav link).
+    await page.locator('main a.btn-primary', { hasText: /new transaction/i }).click();
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await expect(page.locator('#txn-origin')).toHaveValue(registerURL);
+    await expect(page.locator('.txn-submit a.btn-ghost')).toHaveAttribute('href', registerURL);
+    // Cancel navigates back to that register.
+    await page.locator('.txn-submit a.btn-ghost').click();
+    await expect(page).toHaveURL(new RegExp(`${registerURL}$`));
   });
 });

@@ -98,7 +98,7 @@ test.describe('per-split description autocomplete + prefill', () => {
     await page.locator('#txn-account-1').selectOption({ label: 'Desc Checking' });
     await page.locator('#txn-amount-1').fill('-40.00');
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL('**/register**');
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
     // Second entry: type a prefix of the description on row 0, the suggestion appears,
     // pick it, and the prior split's fields prefill THIS (empty) row.
@@ -132,7 +132,7 @@ test.describe('per-split description autocomplete + prefill', () => {
     await page.locator('#txn-account-1').selectOption({ label: 'Guard Checking' });
     await page.locator('#txn-amount-1').fill('-15.00');
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL('**/register**');
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
     // New entry: TYPE an amount on row 0 FIRST (row is non-empty), then pick the
     // description -> the prefill must NOT clobber the typed amount.
@@ -164,7 +164,7 @@ test.describe('per-split description autocomplete + prefill', () => {
     await page.locator('#txn-account-1').selectOption({ label: 'Clone Checking' });
     await page.locator('#txn-amount-1').fill('-22.00');
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL('**/register**');
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
     // New entry: fill row 0 to trigger the auto-append of row 1, then drive row 1's
     // (cloned) description input -> it must autocomplete + prefill just like a page-
@@ -200,7 +200,7 @@ test.describe('per-split description autocomplete + prefill', () => {
     await page.locator('#txn-account-1').selectOption({ label: 'Exp Cash' });
     await page.locator('#txn-amount-1').fill('-33.00');
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL('**/register**');
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
     // Open an expense report's line grid, type the description prefix on line 0 -> the
     // suggestion appears; pick it -> the matched split's amount prefills as a POSITIVE

@@ -73,7 +73,7 @@ test.describe('combobox + description prefill row-targeting', () => {
     await page.locator('#txn-account-1').selectOption({ label: 'Rowtgt Checking' });
     await page.locator('#txn-amount-1').fill('-40.00');
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL('**/register**');
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
     // New entry: FILL row 0 first (so a trailing empty row 1 exists), then type+pick the
     // description on row 1 -- the "next row down" case the user hit.
@@ -123,7 +123,7 @@ test.describe('combobox + description prefill row-targeting', () => {
     await page.locator('#txn-account-1').selectOption({ label: 'Blur Checking' });
     await page.locator('#txn-amount-1').fill('-18.00');
     await page.getByRole('button', { name: /^save$/i }).click();
-    await page.waitForURL('**/register**');
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
