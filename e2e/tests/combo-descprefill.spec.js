@@ -64,14 +64,14 @@ test.describe('combobox + description prefill row-targeting', () => {
     await createAsset(page, 'Rowtgt Checking');
     await createAsset(page, 'Rowtgt Savings');
 
-    // Seed a split carrying a description on a prior transaction.
+    // Seed a BODY split carrying a description on a prior transaction (header = Checking,
+    // body row 0 = Savings 40 with the description to recall).
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
+    await page.locator('#txn-main-account').selectOption({ label: 'Rowtgt Checking' });
     await page.locator('#txn-account-0').selectOption({ label: 'Rowtgt Savings' });
     await page.locator('#txn-amount-0').fill('40.00');
     await page.locator('#txn-desc-0').fill('Rowtarget recall');
-    await page.locator('#txn-account-1').selectOption({ label: 'Rowtgt Checking' });
-    await page.locator('#txn-amount-1').fill('-40.00');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
@@ -117,11 +117,11 @@ test.describe('combobox + description prefill row-targeting', () => {
 
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
+    // p26.34: header = Checking; body row 0 = Savings 18 with the description to recall.
+    await page.locator('#txn-main-account').selectOption({ label: 'Blur Checking' });
     await page.locator('#txn-account-0').selectOption({ label: 'Blur Savings' });
     await page.locator('#txn-amount-0').fill('18.00');
     await page.locator('#txn-desc-0').fill('Blur commit recall');
-    await page.locator('#txn-account-1').selectOption({ label: 'Blur Checking' });
-    await page.locator('#txn-amount-1').fill('-18.00');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 

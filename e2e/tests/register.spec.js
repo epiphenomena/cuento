@@ -97,10 +97,10 @@ test.describe('account register', () => {
     await expect(page.locator('form#txn-form')).toBeVisible();
     // p26.1: the split <option> label is the dotted ancestor path (Parent.Leaf), so a
     // child account is selected by its full path, not its bare name.
-    await page.locator('#txn-account-0').selectOption({ label: 'Cash P26.WF P26' });
-    await page.locator('#txn-amount-0').fill('12.00');
-    await page.locator('#txn-account-1').selectOption({ label: 'Cash P26.BOA P26' });
-    await page.locator('#txn-amount-1').fill('-12.00');
+    // p26.34: WF is the header (balancing) account; BOA -12.00 is the body row.
+    await page.locator('#txn-main-account').selectOption({ label: 'Cash P26.WF P26' });
+    await page.locator('#txn-account-0').selectOption({ label: 'Cash P26.BOA P26' });
+    await page.locator('#txn-amount-0').fill('-12.00');
     await page.locator('#txn-memo').fill('rollup transfer');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
@@ -148,12 +148,10 @@ test.describe('account register', () => {
       await page.waitForURL(/\/transactions\/new/);
       await expect(page.locator('form#txn-form')).toBeVisible();
       await page.locator('#txn-date').fill(date);
-      // Filling row 0 auto-appends row 1 (p25.2), so select account 0 first.
-      await page.locator('#txn-account-0').selectOption({ label: 'Cash P269' });
-      await expect(page.locator('#txn-account-1')).toBeVisible();
-      await page.locator('#txn-amount-0').fill('-' + amount);
-      await page.locator('#txn-account-1').selectOption({ label: 'Savings P269' });
-      await page.locator('#txn-amount-1').fill(amount);
+      // p26.34: Cash is the header (balancing) account; Savings +amount is the body row.
+      await page.locator('#txn-main-account').selectOption({ label: 'Cash P269' });
+      await page.locator('#txn-account-0').selectOption({ label: 'Savings P269' });
+      await page.locator('#txn-amount-0').fill(amount);
       await page.locator('#txn-memo').fill(memo);
       await page.getByRole('button', { name: /^save$/i }).click();
       await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));

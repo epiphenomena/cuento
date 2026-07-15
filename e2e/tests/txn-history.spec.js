@@ -47,10 +47,11 @@ async function postTransfer(page, srcName, dstName, amt) {
   await page.locator('main a.btn-primary', { hasText: /new transaction/i }).click();
   await page.waitForURL(/\/transactions\/new/);
   await expect(page.locator('form#txn-form')).toBeVisible();
+  // p26.34: src is the header (balancing) account; dst is the single body row. The header
+  // amount auto-balances to -amt.
+  await page.locator('#txn-main-account').selectOption({ label: srcName });
   await page.locator('#txn-account-0').selectOption({ label: dstName });
   await page.locator('#txn-amount-0').fill(amt);
-  await page.locator('#txn-account-1').selectOption({ label: srcName });
-  await page.locator('#txn-amount-1').fill('-' + amt);
   await page.locator('#txn-memo').fill('original memo');
   await page.getByRole('button', { name: /^save$/i }).click();
   await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));

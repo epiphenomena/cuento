@@ -237,6 +237,52 @@
     <input type="hidden" name="from" id="txn-origin" value="{{.Origin}}">
   </div>
 
+  {{/* p26.34 main-split header: the position-0 split presented at the transaction level --
+       its DESCRIPTION (fuels descfield autocomplete for ALL splits) and ACCOUNT are visible;
+       its AMOUNT is the auto-balanced per-fund residual of the body splits, DISPLAY-ONLY
+       (no name -> never submitted; the server recomputes it authoritatively). The main
+       program/class/memo/split-id ride as hidden fields so the reconstruction loses nothing
+       (idempotent load->save). Rendered only in the normal editor (MainPresent); import /
+       expense-review and the multi-fund flat fallback keep the flat grid (main_present=0). */}}
+  {{if .MainPresent}}
+  <div class="txn-main-header" id="txn-main-header">
+    <input type="hidden" name="main_present" value="1">
+    <input type="hidden" name="main_split_id" id="txn-main-splitid" value="{{.MainSplitID}}">
+    <input type="hidden" name="main_memo" id="txn-main-memo" value="{{.MainMemo}}">
+    <input type="hidden" name="main_program" id="txn-main-program" value="{{.MainProgram}}">
+    <input type="hidden" name="main_class" id="txn-main-class" value="{{.MainClass}}">
+    <div class="txn-field txn-field-grow">
+      <label for="txn-main-desc">{{t "txn.main.description"}}</label>
+      <div class="desc-field">
+        <input type="text" name="main_description" id="txn-main-desc" class="txn-desc js-descfield"
+               value="{{.MainDescription}}" autocomplete="off"
+               data-desc-container="txn-main-desc-list"
+               data-desc-mode="{{if .DisplayDRCR}}drcr{{else}}signed{{end}}"
+               placeholder="{{t "txn.description_hint"}}">
+        <div class="desc-suggest-box" id="txn-main-desc-list" hidden></div>
+      </div>
+    </div>
+    <div class="txn-field txn-main-account-field">
+      <label for="txn-main-account">{{t "txn.main.account"}}</label>
+      <select name="main_account" id="txn-main-account" class="txn-account combo-input">
+        <option value="0">{{t "txn.account.choose"}}</option>
+        {{range .Accounts}}<option data-account-option value="{{.ID}}"
+          data-type="{{.Type}}" data-default-program="{{.DefaultProgram}}"
+          data-default-class="{{.DefaultClass}}" data-subsidiaries="{{.SubsCSV}}"
+          {{if .Unavailable}}data-unavailable="1" data-path="{{.Path}} {{t "txn.account.unavailable_suffix"}}"{{else}}data-path="{{.Path}}"{{end}}
+          {{if eq .ID $.Page.MainAccount}} selected{{end}}>{{.Path}}{{if .Unavailable}} {{t "txn.account.unavailable_suffix"}}{{end}}</option>
+        {{end}}
+      </select>
+    </div>
+    <div class="txn-field txn-main-amount-field">
+      <label for="txn-main-amount">{{t "txn.main.amount"}}</label>
+      {{/* Display-only: NO name attribute so it never posts; the server computes the
+           residual. The client keeps this in sync as a live preview. */}}
+      <input type="text" id="txn-main-amount" class="txn-amount amount txn-main-amount" value="{{.MainAmount}}" readonly tabindex="-1" aria-live="polite">
+    </div>
+  </div>
+  {{end}}
+
   {{/* p26.32 two-row split layout: each split is its OWN <tbody class="txn-row"> (see
        "txn-row"), so the grid's rows are tbodies, not a single wrapping tbody. The thead
        labels row 1's three wide columns (description / account / amount); row 2's packed

@@ -65,10 +65,11 @@ async function createAccount(page, name, type, reconcilable) {
 async function postDeposit(page, checkingName, incomeName, amount) {
   await page.goto('/transactions/new');
   await expect(page.locator('form#txn-form')).toBeVisible();
-  await page.locator('#txn-account-0').selectOption({ label: checkingName });
-  await page.locator('#txn-amount-0').fill(amount);
-  await page.locator('#txn-account-1').selectOption({ label: incomeName });
-  await page.locator('#txn-amount-1').fill(`-${amount}`);
+  // p26.34: checking is the HEADER (balancing) account (+amount, the residual); income
+  // (revenue, program auto-defaults) is the single body row.
+  await page.locator('#txn-main-account').selectOption({ label: checkingName });
+  await page.locator('#txn-account-0').selectOption({ label: incomeName });
+  await page.locator('#txn-amount-0').fill(`-${amount}`);
   await page.getByRole('button', { name: /^save$/i }).click();
   await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 }

@@ -91,12 +91,12 @@ test.describe('per-split description autocomplete + prefill', () => {
     // description "Autofill transfer" so a later entry can recall it.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
+    // p26.34: header = Checking (balancing); body row 0 = Savings 40 with desc + memo.
+    await page.locator('#txn-main-account').selectOption({ label: 'Desc Checking' });
     await page.locator('#txn-account-0').selectOption({ label: 'Desc Savings' });
     await page.locator('#txn-amount-0').fill('40.00');
     await page.locator('#txn-desc-0').fill('Autofill transfer');
     await page.locator('#txn-memo-0').fill('first memo');
-    await page.locator('#txn-account-1').selectOption({ label: 'Desc Checking' });
-    await page.locator('#txn-amount-1').fill('-40.00');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
@@ -126,11 +126,10 @@ test.describe('per-split description autocomplete + prefill', () => {
     // Seed a split WITH a description on a prior transaction.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
+    await page.locator('#txn-main-account').selectOption({ label: 'Guard Checking' });
     await page.locator('#txn-account-0').selectOption({ label: 'Guard Savings' });
     await page.locator('#txn-amount-0').fill('15.00');
     await page.locator('#txn-desc-0').fill('Guard payment');
-    await page.locator('#txn-account-1').selectOption({ label: 'Guard Checking' });
-    await page.locator('#txn-amount-1').fill('-15.00');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
@@ -158,11 +157,10 @@ test.describe('per-split description autocomplete + prefill', () => {
     // Seed a split with a description.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
+    await page.locator('#txn-main-account').selectOption({ label: 'Clone Checking' });
     await page.locator('#txn-account-0').selectOption({ label: 'Clone Savings' });
     await page.locator('#txn-amount-0').fill('22.00');
     await page.locator('#txn-desc-0').fill('Clone recall');
-    await page.locator('#txn-account-1').selectOption({ label: 'Clone Checking' });
-    await page.locator('#txn-amount-1').fill('-22.00');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
@@ -194,11 +192,12 @@ test.describe('per-split description autocomplete + prefill', () => {
     // expense row auto-defaults program + class from the account so the txn posts.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
+    // p26.34: header = Exp Cash (balancing asset); body row 0 = Exp Supplies (expense,
+    // auto-defaults program/class) 33 with the description to recall.
+    await page.locator('#txn-main-account').selectOption({ label: 'Exp Cash' });
     await page.locator('#txn-account-0').selectOption({ label: 'Exp Supplies' });
     await page.locator('#txn-amount-0').fill('33.00');
     await page.locator('#txn-desc-0').fill('Printer paper');
-    await page.locator('#txn-account-1').selectOption({ label: 'Exp Cash' });
-    await page.locator('#txn-amount-1').fill('-33.00');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 

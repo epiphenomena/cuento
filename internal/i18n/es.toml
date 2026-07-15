@@ -840,6 +840,12 @@ other = "Recaudacion de fondos"
 other = "Cuenta"
 [txn.col.amount]
 other = "Importe"
+[txn.main.description]
+other = "Descripcion"
+[txn.main.account]
+other = "Cuenta principal"
+[txn.main.amount]
+other = "Importe de balance"
 [txn.col.debit]
 other = "Debe"
 [txn.col.credit]

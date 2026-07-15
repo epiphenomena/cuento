@@ -74,6 +74,13 @@ function initEditor(form) {
         chips.appendChild(span);
       });
     }
+    // p26.34: the header main split's amount is the auto-balanced residual -(body sum).
+    // Display-only preview -- the server recomputes the authoritative per-fund residual on
+    // save (rules 3+12: money math in Go). Blank when the body is empty/zero.
+    const mainAmt = form.querySelector('#txn-main-amount');
+    if (mainAmt) {
+      mainAmt.value = total === 0 ? '' : formatSignedMinor(-total, exp);
+    }
   }
 
   function fmtChip(label, minor) {

@@ -846,6 +846,12 @@ other = "Fundraising"
 other = "Account"
 [txn.col.amount]
 other = "Amount"
+[txn.main.description]
+other = "Description"
+[txn.main.account]
+other = "Main account"
+[txn.main.amount]
+other = "Balancing amount"
 [txn.col.debit]
 other = "Debit"
 [txn.col.credit]

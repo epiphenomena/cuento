@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"cuento/internal/db/sqlc"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -124,6 +125,27 @@ type txnEditorModel struct {
 	RootProgram int64 // the program-defaulting fallback (D24)
 	UserProgram int64 // the user's default_program (p26.5); 0 = unset. Prefill tier BELOW an account's own default_program and ABOVE RootProgram.
 
+	// --- p26.34 main-split header ---------------------------------------------
+	// The position-0 split is presented as a transaction-level HEADER (desc + account)
+	// whose amount is the auto-balanced per-fund residual of the body splits (computed
+	// SERVER-SIDE). MainPresent gates the whole feature: it is true for a normal txn
+	// editor; false for import / expense-review (their grids stay flat) and for the
+	// multi-fund reload FALLBACK (FlatFallback), which renders every split as a body row.
+	MainPresent bool
+	// FlatFallback is set when a LOADED txn has >=2 distinct fund groups: the header
+	// decomposition/fan-out is skipped and every split renders as a flat body row (the
+	// pre-p26.34 grid), saved as-is. Multi-fund reload is a zero-instance case today; this
+	// guard keeps the fragile reconstruction out of the load path (see decomposeMain).
+	FlatFallback    bool
+	MainAccount     int64  // the main (position-0) split's account
+	MainDescription string // header description (fuels descfield autocomplete for all splits)
+	MainMemo        string
+	MainProgram     int64  // round-tripped when the main account is R/E
+	MainClass       string // round-tripped when the main account is expense
+	MainFund        int64  // display-only gating; the SAVED main fund is DERIVED from the body
+	MainSplitID     string // existing split0 id (round-tripped so UpdateTransaction diffs by id)
+	MainAmount      string // the auto-balanced residual, formatted for DISPLAY (server recomputes on save)
+
 	// Origin is where Cancel returns for a NORMAL (non-import / non-expense) txn: the
 	// account register the user came from (p26.33), threaded as a `from` query param
 	// from the register's new/edit links and round-tripped on a 422 re-render. Empty
@@ -173,6 +195,9 @@ func (s *server) txnNewForm(w http.ResponseWriter, r *http.Request) {
 	// origin rides in via hx-include (the hidden #txn-origin field), so read the query
 	// either way.
 	model.Origin = sanitizeOrigin(r.URL.Query().Get("from"))
+	// p26.34: a NEW normal txn uses the header-main mode (the position-0 split is the
+	// header desc + account, its amount the auto-balanced residual of the body).
+	model.MainPresent = true
 
 	if reFilter {
 		// Echo the included rows (the user's typed entries survive the re-filter) and
@@ -190,8 +215,20 @@ func (s *server) txnNewForm(w http.ResponseWriter, r *http.Request) {
 		}
 		model.Memo = r.URL.Query().Get("memo")
 		model.Notes = r.URL.Query().Get("notes")
+		// p26.34: echo the header main fields across the subsidiary re-filter (they ride in
+		// via the hidden main_* inputs on hx-include). The header account keeps its value even
+		// if it left the new sub (the store re-validates on save; the p26.10 inject shows it).
+		if mh, ok := parseMainHeader(r); ok {
+			model.MainAccount = mh.AccountID
+			model.MainDescription = mh.Description
+			model.MainMemo = mh.Memo
+			model.MainProgram = mh.ProgramID
+			model.MainClass = mh.Class
+			model.MainSplitID = mh.SplitID
+			s.injectMainAccount(ctx, &model)
+		}
 	} else {
-		// First load: today's date (Appendix C `t` = today) and ONE empty row. The
+		// First load: today's date (Appendix C `t` = today) and ONE empty body row. The
 		// client auto-appends a fresh trailing row as soon as the last row is edited
 		// (p25.2), so there is always exactly one empty row and no "Add row" button; the
 		// server drops the trailing empty row on submit (parseSplitForms).
@@ -283,9 +320,29 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 	// stays Signed (the hidden signed field is always net-debit); NegStyle is irrelevant
 	// to the magnitudes/DR-CR columns.
 	fmtOpts := money.FormatOpts{Number: numberFormatFor(u)}
-	for i, sp := range splits {
+
+	// p26.34: DECOMPOSE the loaded splits into the header main (position 0) + body (the
+	// rest). Splits arrive in position order (SplitsByTransaction ORDER BY position, id).
+	// A MULTI-FUND stored txn (>=2 distinct fund groups) is a zero-instance case today; to
+	// keep the fragile fan-out reconstruction OUT of the load path, we FALL BACK to the flat
+	// grid (every split a body row, no header) -- so a re-save posts the splits as-is via the
+	// pre-p26.34 path (main_present=0), never re-fanning-out and never double-counting.
+	distinctFunds := make(map[int64]bool)
+	for _, sp := range splits {
+		key := int64(0)
+		if sp.FundID.Valid {
+			key = sp.FundID.Int64
+		}
+		distinctFunds[key] = true
+	}
+	// log-comment (task cap-guard rule): multi-fund reload takes the flat fallback.
+	flat := len(distinctFunds) >= 2
+	model.MainPresent = !flat
+	model.FlatFallback = flat
+
+	bodyRow := func(idx int, sp sqlc.Split) txnRowModel {
 		row := txnRowModel{
-			Index:       i,
+			Index:       idx,
 			SplitID:     strconv.FormatInt(sp.ID, 10),
 			Account:     sp.AccountID,
 			Amount:      money.Format(sp.Amount, exp, fmtOpts),
@@ -301,15 +358,42 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 		if sp.FunctionalClass.Valid {
 			row.Class = sp.FunctionalClass.String
 		}
-		// DR/CR display columns (client can also derive; prefilled for no-JS parity),
-		// same number format as the signed field.
 		if sp.Amount >= 0 {
 			row.AmountDR = money.Format(sp.Amount, exp, fmtOpts)
 		} else {
 			row.AmountCR = money.Format(-sp.Amount, exp, fmtOpts)
 		}
-		model.Rows = append(model.Rows, row)
+		return row
 	}
+
+	if model.MainPresent && len(splits) > 0 {
+		// Header = split0; body = split1..n (re-indexed 0-based body rows).
+		m := splits[0]
+		model.MainAccount = m.AccountID
+		model.MainDescription = m.Description
+		model.MainMemo = m.Memo
+		model.MainSplitID = strconv.FormatInt(m.ID, 10)
+		model.MainAmount = money.Format(m.Amount, exp, fmtOpts)
+		if m.FundID.Valid {
+			model.MainFund = m.FundID.Int64
+		}
+		if m.ProgramID.Valid {
+			model.MainProgram = m.ProgramID.Int64
+		}
+		if m.FunctionalClass.Valid {
+			model.MainClass = m.FunctionalClass.String
+		}
+		s.injectMainAccount(ctx, &model)
+		for i, sp := range splits[1:] {
+			model.Rows = append(model.Rows, bodyRow(i, sp))
+		}
+	} else {
+		// Flat fallback (multi-fund) or an empty txn: every split is a body row.
+		for i, sp := range splits {
+			model.Rows = append(model.Rows, bodyRow(i, sp))
+		}
+	}
+
 	// Ensure every split's account (even a now-inactive / out-of-sub one) renders as a
 	// SELECTED option rather than a blank select (p26.10).
 	if err := s.injectRowAccounts(ctx, &model); err != nil {
@@ -384,6 +468,29 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 	// its raw value and the store stays the authoritative validator.
 	_ = s.injectRowAccounts(ctx, &model)
 
+	// p26.34: when the header-main mode is active, the position-0 split arrives via the
+	// header main_* fields and its amount is OMITTED -- the server computes the per-fund
+	// residual and constructs the main split(s) (single fund → one; multi-fund → fan out).
+	// The body `splits` become positions 1..m. Echo the header onto the model so a 422
+	// re-render keeps it, and expose the residual for display.
+	exp := s.currencyExponent(ctx, currency)
+	numMains := 0 // p26.34: split-index offset for error attribution (mains are prepended)
+	if mh, ok := parseMainHeader(r); ok {
+		model.MainPresent = true
+		model.MainAccount = mh.AccountID
+		model.MainDescription = mh.Description
+		model.MainMemo = mh.Memo
+		model.MainProgram = mh.ProgramID
+		model.MainClass = mh.Class
+		model.MainSplitID = mh.SplitID
+		s.injectMainAccount(ctx, &model)
+		splits, numMains = autoBalanceMain(mh, splits)
+		// The main residual for the header amount display (recomputed live client-side too).
+		if len(splits) > 0 {
+			model.MainAmount = money.Format(splits[0].Amount, exp, money.FormatOpts{Number: numberFormatFor(u)})
+		}
+	}
+
 	if !dateOK {
 		model.TotalsError = "error.txn.bad_date"
 		s.renderFormError(w, r, "transaction-form", s.newShellPage(r, model))
@@ -408,7 +515,7 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 		postErr = s.store.UpdateTransaction(wctx, txnID, in)
 	}
 	if postErr != nil {
-		s.routeTxnError(&model, postErr, splits)
+		s.routeTxnError(&model, postErr, splits, numMains)
 		s.renderFormError(w, r, "transaction-form", s.newShellPage(r, model))
 		return
 	}
@@ -436,7 +543,11 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 // inputs) -- never by re-running balance/scope logic. The attribution is best-effort:
 // the listed test requires the error to land on A ROW (not a page alert), which the
 // first-matching-row heuristic satisfies deterministically.
-func (s *server) routeTxnError(model *txnEditorModel, err error, splits []store.SplitInput) {
+// routeTxnError takes numMains = the count of MAIN (header) splits PREPENDED to `splits`
+// by autoBalanceMain (0 in the flat / import / expense paths). A store error whose split
+// index falls in the main range (< numMains) is a HEADER error and is routed to the totals
+// bar (the header has no per-row error cell); a body index maps to model.Rows[idx-numMains].
+func (s *server) routeTxnError(model *txnEditorModel, err error, splits []store.SplitInput, numMains int) {
 	key := txnErrorKey(err)
 
 	// Totals-bar errors: overall or per-fund imbalance, and the header date.
@@ -445,12 +556,26 @@ func (s *server) routeTxnError(model *txnEditorModel, err error, splits []store.
 		return
 	}
 
-	// Row-scoped errors. Attribute to the first row that STRUCTURALLY matches the
-	// error, from data already loaded -- no validation is re-derived.
-	row := s.attributeRowError(model, err, splits)
-	if row < 0 {
+	// Row-scoped errors. Attribute to the first split that STRUCTURALLY matches the
+	// error, from data already loaded -- no validation is re-derived. The returned index
+	// is into the FULL split list (mains prepended).
+	idx := s.attributeRowError(model, err, splits)
+	if idx < 0 {
 		// Unattributable typed error (should not happen for the mapped set): fall
 		// back to the totals bar so it is never silently dropped.
+		model.TotalsError = key
+		return
+	}
+	// A MAIN (header) split error has no per-row cell -> surface on the totals bar (the
+	// header region). This includes the accountless-header case (main account 0).
+	if idx < numMains {
+		model.TotalsError = key
+		return
+	}
+	row := idx - numMains
+	if row >= len(model.Rows) {
+		// Defensive: an out-of-range body index (should not happen once numMains is
+		// subtracted) falls back to the totals bar rather than panicking.
 		model.TotalsError = key
 		return
 	}
@@ -668,6 +793,142 @@ func (s *server) parseSplitForms(r *http.Request, exp int) ([]txnRowModel, []sto
 	return rows, splits
 }
 
+// mainHeaderInput is the parsed position-0 header (p26.34): the account/desc/memo the
+// user sees in the header, plus the round-tripped program/class/split-id. The amount is
+// NEVER submitted -- it is the auto-balanced residual computed by autoBalanceMain.
+type mainHeaderInput struct {
+	AccountID   int64
+	Description string
+	Memo        string
+	ProgramID   int64
+	Class       string
+	SplitID     string
+}
+
+// parseMainHeader reads the header main_* fields (p26.34). Present reports whether the
+// header-main mode is active (main_present=1); when false the caller uses the flat grid
+// (import / expense / multi-fund fallback).
+func parseMainHeader(r *http.Request) (mainHeaderInput, bool) {
+	if r.FormValue("main_present") != "1" {
+		return mainHeaderInput{}, false
+	}
+	return mainHeaderInput{
+		AccountID:   parseID(r.FormValue("main_account")),
+		Description: r.FormValue("main_description"),
+		Memo:        r.FormValue("main_memo"),
+		ProgramID:   parseID(r.FormValue("main_program")),
+		Class:       r.FormValue("main_class"),
+		SplitID:     r.FormValue("main_split_id"),
+	}, true
+}
+
+// autoBalanceMain constructs the MAIN split(s) from the header + the parsed BODY splits
+// (p26.34, rules 3+12: money math in Go). The body splits are the positions AFTER the
+// main run; this function PREPENDS the main split(s) at positions 0..k-1 and returns the
+// full split list (main first, body shifted after) ready for the store.
+//
+//   - Single fund among the body → ONE main split: amount = -(sum of body), fund = that
+//     single fund, program/class/memo/description/split-id from the header. Idempotent:
+//     loading a single-fund txn into the header then saving reproduces byte-identical
+//     splits (the residual reconstructs split0's amount; the id round-trips).
+//   - Multi-fund body → FAN OUT: one main split per fund with a NONZERO residual, each at
+//     the header account, positions 0..k-1. A fund whose body already nets to zero gets NO
+//     main (an amount=0 split is rejected by the store). The store's per-fund zero-sum then
+//     validates the result. The single main split id is round-tripped only when there is
+//     exactly ONE main (k==1); a fan-out's extra mains are new (no id to reuse).
+//
+// The header account being 0 (unset) while the body has content is NOT special-cased here:
+// a main split with account 0 is emitted so the store returns ErrAccountMissing (never
+// silently dropped -- do not regress "every split needs an account").
+//
+// Returns the full split list AND the number of MAIN splits (k) prepended, so the caller
+// can map a store error's split index back to the right slot: index < k is a MAIN (header)
+// error; index >= k maps to body row (index - k).
+func autoBalanceMain(main mainHeaderInput, body []store.SplitInput) ([]store.SplitInput, int) {
+	// Per-fund residual over the body (fund key 0 == unrestricted group), in first-seen
+	// order so the fan-out is deterministic.
+	residual := make(map[int64]int64)
+	var order []int64
+	seen := make(map[int64]bool)
+	for _, b := range body {
+		key := int64(0)
+		if b.FundID != nil {
+			key = *b.FundID
+		}
+		if !seen[key] {
+			seen[key] = true
+			order = append(order, key)
+		}
+		residual[key] += b.Amount
+	}
+
+	// The main split(s), one per fund with a nonzero residual.
+	var mains []store.SplitInput
+	for _, key := range order {
+		amt := -residual[key]
+		if amt == 0 {
+			continue // fund already balanced within the body: no main split needed
+		}
+		sp := store.SplitInput{
+			AccountID:   main.AccountID,
+			Amount:      amt,
+			Memo:        main.Memo,
+			Description: main.Description,
+		}
+		if key != 0 {
+			k := key
+			sp.FundID = &k
+		}
+		if main.ProgramID != 0 {
+			p := main.ProgramID
+			sp.ProgramID = &p
+		}
+		if main.Class != "" {
+			c := main.Class
+			sp.FunctionalClass = &c
+		}
+		mains = append(mains, sp)
+	}
+	// A body with ZERO nonzero-residual funds (already balanced, or empty) yields no main;
+	// still emit ONE main carrying the header account so the store sees the header content
+	// (and rejects an unbalanced / accountless / too-few-splits txn rather than silently
+	// dropping the header). amount 0 -> the store's balance check rejects.
+	if len(mains) == 0 {
+		sp := store.SplitInput{AccountID: main.AccountID, Amount: 0, Memo: main.Memo, Description: main.Description}
+		if main.ProgramID != 0 {
+			p := main.ProgramID
+			sp.ProgramID = &p
+		}
+		if main.Class != "" {
+			c := main.Class
+			sp.FunctionalClass = &c
+		}
+		mains = append(mains, sp)
+	}
+	// Round-trip the split id ONLY when there is exactly one main (single-fund / the common
+	// idempotent case). A fan-out's extra mains are new inserts.
+	if len(mains) == 1 {
+		if id := parseID(main.SplitID); id != 0 {
+			mains[0].ID = &id
+		}
+	}
+
+	// Assemble: mains at positions 0..k-1, body shifted to k..k+m-1.
+	out := make([]store.SplitInput, 0, len(mains)+len(body))
+	pos := int64(0)
+	for i := range mains {
+		mains[i].Position = pos
+		pos++
+		out = append(out, mains[i])
+	}
+	for i := range body {
+		body[i].Position = pos
+		pos++
+		out = append(out, body[i])
+	}
+	return out, len(mains)
+}
+
 // parseEditorDate parses the editor's date input honoring df (ISO always accepted,
 // D16), returning the ISO string and whether it parsed. An empty input is invalid
 // (a transaction needs a date).
@@ -805,6 +1066,27 @@ func (s *server) injectRowAccounts(ctx context.Context, model *txnEditorModel) e
 	}
 	model.Accounts = toTxnAccountOptions(accts)
 	return nil
+}
+
+// injectMainAccount ensures the HEADER main account (p26.34) is a selectable option, the
+// same p26.10 guard as injectRowAccounts but for the header select: an edited/loaded txn
+// whose position-0 account is now inactive / a placeholder / out-of-sub must still render
+// SELECTED in the header, not blank. Best-effort (no-op when the account is already
+// offered or unset); the store stays the authoritative validator on save.
+func (s *server) injectMainAccount(ctx context.Context, model *txnEditorModel) {
+	if model.MainAccount == 0 {
+		return
+	}
+	for _, a := range model.Accounts {
+		if a.ID == model.MainAccount {
+			return // already offered
+		}
+	}
+	accts, err := s.store.AccountEditorOptionsWith(ctx, langOf(ctx), model.Subsidiary, []int64{model.MainAccount})
+	if err != nil {
+		return
+	}
+	model.Accounts = toTxnAccountOptions(accts)
 }
 
 // userDefaultProgram returns the user's default_program_id (p26.5), nil-safe: nil for

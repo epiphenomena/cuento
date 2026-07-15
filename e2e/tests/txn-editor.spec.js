@@ -102,26 +102,54 @@ test.describe('transaction editor', () => {
     // assert the input is present + typable as the first cell.
     await expect(page.locator('#txn-desc-0')).toBeVisible();
 
-    // Fill a balanced transfer: DR Editor Savings 25.00, CR Editor Checking 25.00.
-    // The account combobox is a real <select> (ARIA listbox enhancement is progressive
-    // -- selectOption drives the underlying control). Amounts are the SIGNED column
-    // (signed display mode; the admin's default). Filling row 0 grows row 1.
+    // p26.34: the MAIN (balancing) account is entered in the HEADER; its amount is the
+    // auto-balanced residual of the body splits (the user never types it). Header account
+    // = Editor Checking; ONE body row = Editor Savings 25.00 -> the header amount shows
+    // -25.00 automatically. (Header presence is asserted separately below.)
+    await expect(page.locator('#txn-main-account')).toBeVisible();
+    await page.locator('#txn-main-account').selectOption({ label: 'Editor Checking' });
     await page.locator('#txn-account-0').selectOption({ label: 'Editor Savings' });
-    await expect(page.locator('#txn-account-1')).toBeVisible();
     await page.locator('#txn-amount-0').fill('25.00');
-    await page.locator('#txn-account-1').selectOption({ label: 'Editor Checking' });
-    await page.locator('#txn-amount-1').fill('-25.00');
+    // test (c): the header balancing amount auto-fills WITHOUT the user typing it.
+    await expect(page.locator('#txn-main-amount')).toHaveValue('-25.00');
 
-    // Save (a plain submit; success redirects to the first split's register).
+    // Save (a plain submit; success redirects to the first split's register -- the main).
     await page.getByRole('button', { name: /^save$/i }).click();
 
-    // We land on a register; the transfer is posted. Navigate to Editor Savings'
-    // register and assert a row with the 25.00 amount is present (the entry exists).
+    // We land on a register; the transfer is posted. The 25.00 side appears in a register.
     await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
     await expect(page.locator('table.register-table')).toBeVisible();
-
-    // The saved amount appears somewhere in the register table.
     await expect(page.locator('table.register-table')).toContainText('25.00');
+  });
+
+  // p26.34: the MAIN (header) description fuels descfield autocomplete for all splits -- it
+  // must SUGGEST prior descriptions like a body row's desc field. (Prefill on the header is
+  // intentionally a no-op: the header has no fund/program/amount cells to fill.)
+  test('the header description field autocompletes prior descriptions', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'HdrDesc Checking');
+    await createAsset(page, 'HdrDesc Savings');
+
+    // Seed a prior split carrying a description (header = Checking, body row 0 = Savings 40
+    // with the description to recall).
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await page.locator('#txn-main-account').selectOption({ label: 'HdrDesc Checking' });
+    await page.locator('#txn-account-0').selectOption({ label: 'HdrDesc Savings' });
+    await page.locator('#txn-amount-0').fill('40.00');
+    await page.locator('#txn-desc-0').fill('Header recall demo');
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+    // New entry: type a prefix into the HEADER description -> a suggestion appears.
+    await page.goto('/transactions/new');
+    await expect(page.locator('#txn-main-desc')).toBeVisible();
+    const hdrDesc = page.locator('#txn-main-desc');
+    await hdrDesc.click();
+    await hdrDesc.fill('Header recall');
+    await expect(
+      page.locator('#txn-main-desc-list .desc-suggestion', { hasText: 'Header recall demo' }),
+    ).toBeVisible();
   });
 
   test('shows the program/class selects only on R/E rows, prefilled from the account default', async ({ page, server }) => {
@@ -310,11 +338,12 @@ test.describe('transaction editor', () => {
     await page.waitForURL('**/register');
     await page.locator('main a.btn-primary', { hasText: /new transaction/i }).click();
     await page.waitForURL(/\/transactions\/new/);
-    await page.locator('#txn-account-0').selectOption({ label: 'Live Savings' });
-    await expect(page.locator('#txn-account-1')).toBeVisible();
-    await page.locator('#txn-amount-0').fill('40.00');
-    await page.locator('#txn-account-1').selectOption({ label: 'Gone Checking' });
-    await page.locator('#txn-amount-1').fill('-40.00');
+    // p26.34: main (Live Savings) in the header; Gone Checking -40 in the body row. The
+    // header auto-balances to +40. Gone Checking (the to-be-deactivated account) is the
+    // BODY split whose row must later render it as a selected unavailable option.
+    await page.locator('#txn-main-account').selectOption({ label: 'Live Savings' });
+    await page.locator('#txn-account-0').selectOption({ label: 'Gone Checking' });
+    await page.locator('#txn-amount-0').fill('-40.00');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 

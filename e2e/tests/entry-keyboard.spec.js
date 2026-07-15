@@ -111,7 +111,13 @@ test.describe('keyboard-only entry', () => {
     await expect(page.locator('#txn-account-0')).toBeVisible();
     await expect(page.locator('#txn-account-1')).toHaveCount(0);
 
-    // --- Row 0: KB Savings +40.00, fund KB Water Grant --------------------------
+    // p26.34: KB Checking is the HEADER (balancing) account. The two body rows touch two
+    // funds (grant + unrestricted), so the header FANS OUT into one balancing split per
+    // fund server-side (-40 grant, -10 unrestricted). The header account is entered by
+    // keyboard too (the combobox is a real select).
+    await selectByKeyboard(page, '#txn-main-account', 'KB Checking');
+
+    // --- Body row 0: KB Savings +40.00, fund KB Water Grant ---------------------
     // Drive each field by keyboard. Selects are operated by Arrow keys (real keyboard),
     // amounts by typing, and we Tab between fields to prove linear reachability. Filling
     // row 0's account grows row 1 (the auto-append).
@@ -138,29 +144,13 @@ test.describe('keyboard-only entry', () => {
     await page.keyboard.press('Shift+Tab');
     await expect(page.locator('#txn-desc-0')).toBeFocused();
 
-    // --- Row 1: KB Checking -40.00, fund KB Water Grant -------------------------
-    await selectByKeyboard(page, '#txn-account-1', 'KB Checking');
+    // --- Body row 1: KB Savings +10.00, Unrestricted ----------------------------
+    await selectByKeyboard(page, '#txn-account-1', 'KB Savings');
     await expect(page.locator('#txn-account-2')).toBeVisible();
     await page.keyboard.press('Tab');
     await expect(page.locator('#txn-amount-1')).toBeFocused();
-    await page.keyboard.type('-40.00');
-    await page.keyboard.press('Tab');
-    await expect(page.locator('#txn-fund-1')).toBeFocused();
-    await selectByKeyboard(page, '#txn-fund-1', 'KB Water Grant');
-
-    // --- Row 2: KB Savings +10.00, Unrestricted ---------------------------------
-    await selectByKeyboard(page, '#txn-account-2', 'KB Savings');
-    await expect(page.locator('#txn-account-3')).toBeVisible();
-    await page.keyboard.press('Tab');
-    await expect(page.locator('#txn-amount-2')).toBeFocused();
     await page.keyboard.type('10.00');
-    // Leave fund 2 at Unrestricted (the default option).
-
-    // --- Row 3: KB Checking -10.00, Unrestricted --------------------------------
-    await selectByKeyboard(page, '#txn-account-3', 'KB Checking');
-    await page.keyboard.press('Tab');
-    await expect(page.locator('#txn-amount-3')).toBeFocused();
-    await page.keyboard.type('-10.00');
+    // Leave fund 1 at Unrestricted (the default option).
 
     // Set the date via the header field's keyboard shortcut ('t' = today) so the whole
     // entry is keyboard-driven. (Date defaults to today already; 't' proves the
@@ -191,9 +181,13 @@ test.describe('keyboard-only entry', () => {
     await login(page, server);
     await createAsset(page, 'KB2 Checking');
     await createAsset(page, 'KB2 Savings');
+    await createAsset(page, 'KB2 Reserve');
 
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
+    // p26.34: KB2 Checking is the HEADER (balancing) account; the two body rows are the
+    // other legs, so on save the header takes the single-fund residual (-50).
+    await selectByKeyboard(page, '#txn-main-account', 'KB2 Checking');
     // p25.2: starts with a single empty row; filling row 0 auto-appends row 1.
     await expect(page.locator('#txn-account-0')).toBeVisible();
 
@@ -236,10 +230,10 @@ test.describe('keyboard-only entry', () => {
     await page.keyboard.press('Tab');
     await expect(page.locator('#txn-account-0')).toBeFocused();
 
-    // --- Row 1: complete a balancing leg -------------------------------------
-    await selectByKeyboard(page, '#txn-account-1', 'KB2 Checking');
+    // --- Row 1: a second body leg (distinct account so the reorder is observable) ----
+    await selectByKeyboard(page, '#txn-account-1', 'KB2 Reserve');
     await page.locator('#txn-amount-1').focus();
-    await page.keyboard.type('-40.00');
+    await page.keyboard.type('10.00');
 
     // --- Alt+ArrowDown reorders rows 0 and 1 ---------------------------------
     // Focus row 0's account (KB2 Savings) and move the row down; its values land in
@@ -262,6 +256,8 @@ test.describe('keyboard-only entry', () => {
     await page.keyboard.press('Control+Enter');
     await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
     await expect(page.locator('table.register-table')).toBeVisible();
-    await expect(page.locator('table.register-table')).toContainText('40.00');
+    // p26.34: the save lands on the MAIN split's register (KB2 Checking, the header
+    // balancing account), which carries the -50.00 residual of the two body legs.
+    await expect(page.locator('table.register-table')).toContainText('50.00');
   });
 });

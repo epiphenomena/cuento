@@ -750,6 +750,40 @@ input[aria-invalid="true"] {
 .txn-header .txn-field-grow { flex: 1 1 20rem; }
 .txn-header .txn-field-grow .txn-memo-header { width: 100%; }
 
+/* p26.34 main-split header: the position-0 split presented at the transaction level
+   (description + account, and the auto-balanced residual amount, display-only). It mirrors
+   the .txn-header band but is visually accented (primary left rule) so it reads as THE
+   transaction line the body splits balance against. */
+.txn-main-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+  background: var(--color-surface-alt);
+  border: var(--border);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius);
+}
+.txn-main-header .txn-field { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; }
+.txn-main-header .txn-field > label { font-weight: 600; font-size: 0.85rem; color: var(--color-text-muted); }
+.txn-main-header .txn-field input,
+.txn-main-header .txn-field select { min-width: 10rem; }
+.txn-main-header .txn-field-grow { flex: 1 1 20rem; }
+.txn-main-header .txn-field-grow .desc-field { width: 100%; }
+.txn-main-header .txn-field-grow .txn-desc { width: 100%; }
+/* The balancing amount is a read-only display figure: right-aligned, muted, non-editable
+   look so it never reads as a fillable field (the server computes it). */
+.txn-main-header .txn-main-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  background: var(--color-bg);
+  color: var(--color-text-muted);
+  cursor: default;
+}
+.txn-main-header .txn-main-amount-field { flex: 0 0 auto; }
+
 /* The split grid: a real table with collapsed borders so every column is ruled. */
 .txn-grid {
   width: 100%;

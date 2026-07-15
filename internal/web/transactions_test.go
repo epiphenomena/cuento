@@ -861,7 +861,386 @@ func TestTxnPerms(t *testing.T) {
 	}
 }
 
+// --- p26.34 main-split header + server-side fan-out auto-balance ----------
+
+// splitFull mirrors a stored split across EVERY business column INCLUDING description
+// (store.SplitState omits it), so the p26.34 idempotency test can assert byte-identity.
+type splitFull struct {
+	ID              int64
+	AccountID       int64
+	Amount          int64
+	FundID          sql.NullInt64
+	ProgramID       sql.NullInt64
+	FunctionalClass sql.NullString
+	Memo            string
+	Description     string
+	Position        int64
+}
+
+// mainHeaderForm builds a POST form in the p26.34 shape: the position-0 (MAIN) split is
+// carried by the header fields (main_account / main_description / main_split_id /
+// main_program / main_class / main_memo); its amount is OMITTED (the server computes the
+// per-fund residual) and its fund is DERIVED from the body. `body` is the list of body
+// rows (positions 1..m as stored). The header is always present, so the client posts
+// main_present=1.
+func mainHeaderForm(sub int64, main splitFull, body []splitFull) url.Values {
+	f := url.Values{}
+	f.Set("subsidiary", itoa(sub))
+	f.Set("date", "2025-03-01")
+	f.Set("currency", "USD")
+	f.Set("main_present", "1")
+	f.Set("main_account", itoa(main.AccountID))
+	f.Set("main_description", main.Description)
+	f.Set("main_memo", main.Memo)
+	if main.ProgramID.Valid {
+		f.Set("main_program", itoa(main.ProgramID.Int64))
+	}
+	if main.FunctionalClass.Valid {
+		f.Set("main_class", main.FunctionalClass.String)
+	}
+	for i, b := range body {
+		si := itoa(int64(i))
+		f.Set("account_"+si, itoa(b.AccountID))
+		f.Set("amount_"+si, signedStr(b.Amount))
+		if b.FundID.Valid {
+			f.Set("fund_"+si, itoa(b.FundID.Int64))
+		} else {
+			f.Set("fund_"+si, "")
+		}
+		if b.ProgramID.Valid {
+			f.Set("program_"+si, itoa(b.ProgramID.Int64))
+		}
+		if b.FunctionalClass.Valid {
+			f.Set("class_"+si, b.FunctionalClass.String)
+		}
+		f.Set("memo_"+si, b.Memo)
+		f.Set("description_"+si, b.Description)
+	}
+	f.Set("rows", itoa(int64(len(body))))
+	return f
+}
+
+// splitStatesByPosition returns the txn's splits as splitFull ordered by position.
+func splitStatesByPosition(t *testing.T, e *txnWebEnv, id int64) []splitFull {
+	t.Helper()
+	sp, err := e.st.TransactionSplits(context.Background(), id)
+	must(t, err, "splits")
+	out := make([]splitFull, len(sp))
+	for i, s := range sp {
+		out[i] = splitFull{
+			ID: s.ID, AccountID: s.AccountID, Amount: s.Amount, FundID: s.FundID,
+			ProgramID: s.ProgramID, FunctionalClass: s.FunctionalClass,
+			Memo: s.Memo, Description: s.Description, Position: s.Position,
+		}
+	}
+	return out
+}
+
+// TestTxnMainHeaderSingleFundIdempotent (p26.34 test a): a single-fund txn with an R/E
+// account at position 0 (expense: program + class + memo + fund) loaded into the header
+// and saved with NO edits reproduces BYTE-IDENTICAL stored splits -- same amounts,
+// dimensions, positions AND the same split ids (no delete-all+recreate). The MAIN split's
+// amount is the auto-balanced residual computed server-side; its program/class/memo/fund
+// and split_id are round-tripped so the reconstruction loses nothing.
+func TestTxnMainHeaderSingleFundIdempotent(t *testing.T) {
+	e := newTxnWebEnv(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// Seed a single-fund txn: MAIN = Salaries (expense, fund=Beca, program=Educacion,
+	// class=program, a memo) at position 0; body = Checking -100 in the SAME fund. The
+	// program is Educacion (the fund's scope), NOT the account/root default -- so a naive
+	// re-default would corrupt it (the discriminator).
+	fund := e.fund
+	prog := e.progEdu
+	id, err := e.st.PostTransaction(ctx, store.PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.sub1, Currency: "USD",
+		Splits: []store.SplitInput{
+			{AccountID: e.salaries, Amount: 10000, FundID: &fund, ProgramID: &prog, FunctionalClass: strptr("program"), Memo: "March payroll", Position: 0},
+			{AccountID: e.checking, Amount: -10000, FundID: &fund, Position: 1},
+		},
+	})
+	must(t, err, "seed single-fund txn")
+
+	before := splitStatesByPosition(t, e, id)
+	if len(before) != 2 {
+		t.Fatalf("want 2 seeded splits, got %d", len(before))
+	}
+	main := before[0]
+	body := before[1:]
+	beforeVer := map[int64]int{}
+	for _, s := range before {
+		beforeVer[s.ID] = splitVersionCountWeb(t, e, s.ID)
+	}
+
+	// LOAD: GET /edit must DECOMPOSE the stored txn into header (split0) + body (rest),
+	// NOT leave split0 in the body too (which would double-count on save). Assert the
+	// header carries split0's id/account/program/class and the body carries ONLY split1.
+	editRec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(id)+"/edit", nil)
+	if editRec.Code != http.StatusOK {
+		t.Fatalf("edit GET: %d", editRec.Code)
+	}
+	eb := editRec.Body.String()
+	if !strings.Contains(eb, `id="txn-main-splitid"`) || !strings.Contains(eb, `value="`+itoa(main.ID)+`"`) {
+		t.Fatalf("edit form did not round-trip the main split id in the header; body:\n%s", eb)
+	}
+	// The main (salaries) account is selected in the header account select.
+	reMainAcct := regexp.MustCompile(`(?s)id="txn-main-account".*?<option[^>]*value="` + itoa(main.AccountID) + `"[^>]*\bselected\b`)
+	if !reMainAcct.MatchString(eb) {
+		t.Fatalf("edit form header account not selected to salaries; body:\n%s", eb)
+	}
+	// The body has EXACTLY the single body split (checking) -- rows=1, no second row.
+	if !strings.Contains(eb, `id="txn-account-0"`) || strings.Contains(eb, `id="txn-account-1"`) {
+		t.Fatalf("edit form body must be exactly one row (split0 must NOT also be a body row); body:\n%s", eb)
+	}
+	if !strings.Contains(eb, `name="rows" id="txn-rows-count" value="1"`) {
+		t.Fatalf("edit form body rows-count should be 1 (split0 lifted to header); body:\n%s", eb)
+	}
+
+	// Re-submit via the header form (main amount OMITTED, fund derived). Round-trip the
+	// main split id so UpdateTransaction diffs by id (no churn).
+	f := mainHeaderForm(e.sub1, main, body)
+	f.Set("main_split_id", itoa(main.ID))
+	for i, b := range body {
+		f.Set("split_id_"+itoa(int64(i)), itoa(b.ID))
+	}
+
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(id), f)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("save: status=%d, body=%s", rec.Code, rec.Body.String())
+	}
+
+	after := splitStatesByPosition(t, e, id)
+	if len(after) != len(before) {
+		t.Fatalf("split count changed: before=%d after=%d", len(before), len(after))
+	}
+	for i := range before {
+		if before[i] != after[i] {
+			t.Fatalf("split %d not byte-identical after header round-trip:\n before=%+v\n after =%+v", i, before[i], after[i])
+		}
+	}
+	// No split gained a version (a no-edit save must be a genuine no-op diff; a
+	// reconstructed-with-new-id main would churn versions).
+	for _, s := range after {
+		if n := splitVersionCountWeb(t, e, s.ID); n != beforeVer[s.ID] {
+			t.Fatalf("split %d version count changed: before=%d after=%d (reconstruction churned the id)", s.ID, beforeVer[s.ID], n)
+		}
+	}
+}
+
+// TestTxnMainHeaderMultiFundFanOut (p26.34 test b): a NEW entry whose body splits touch
+// TWO funds fans the main (header) account out into one balancing split PER fund, each
+// carrying that fund's residual, so the store's per-fund zero-sum accepts the result. The
+// header account is an asset (Checking) with no program/class, so no R/E dimensions are
+// needed on the mains.
+func TestTxnMainHeaderMultiFundFanOut(t *testing.T) {
+	e := newTxnWebEnv(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// A second fund scoped to sub1 (unrestricted-general is fund 0; here we use two named
+	// funds so the body has two DISTINCT nonzero-residual fund groups). Both program-scope
+	// Educacion so the salaries R/E body splits validate.
+	prog := e.progEdu
+	fund2, err := e.st.CreateFund(ctx, store.CreateFundInput{
+		Name: "Beca Dos", Restriction: "purpose", Subsidiaries: []int64{e.sub1}, ProgramID: &prog,
+	})
+	must(t, err, "fund2")
+
+	// Body: Salaries 60 in Beca + Salaries 40 in Beca Dos (both expense, program Educacion,
+	// class program). The header (Checking, asset) must fan out to -60 in Beca and -40 in
+	// Beca Dos so each fund nets to zero.
+	body := []splitFull{
+		{AccountID: e.salaries, Amount: 6000, FundID: ni(e.fund), ProgramID: ni(e.progEdu), FunctionalClass: ns("program")},
+		{AccountID: e.salaries, Amount: 4000, FundID: ni(fund2), ProgramID: ni(e.progEdu), FunctionalClass: ns("program")},
+	}
+	mainHdr := splitFull{AccountID: e.checking, Description: "Multi-fund payroll"}
+	f := mainHeaderForm(e.sub1, mainHdr, body)
+
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions", f)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create multi-fund: status=%d, body=%s", rec.Code, rec.Body.String())
+	}
+
+	id := latestTxnID(t, e)
+	splits := splitStatesByPosition(t, e, id)
+	// Two fanned mains (positions 0,1) on Checking + two body salaries splits = 4 splits.
+	if len(splits) != 4 {
+		t.Fatalf("want 4 splits (2 fanned mains + 2 body), got %d: %+v", len(splits), splits)
+	}
+	// Per-fund zero-sum holds (the store enforces it, so a 303 already proves acceptance);
+	// additionally assert the two mains are the header account with the fund residuals.
+	byFund := map[int64]int64{}
+	mainsOnChecking := map[int64]int64{} // fund key -> main amount
+	for _, s := range splits {
+		key := int64(0)
+		if s.FundID.Valid {
+			key = s.FundID.Int64
+		}
+		byFund[key] += s.Amount
+		if s.AccountID == e.checking {
+			mainsOnChecking[key] = s.Amount
+		}
+	}
+	for key, sum := range byFund {
+		if sum != 0 {
+			t.Fatalf("fund %d does not net to zero: %d", key, sum)
+		}
+	}
+	if mainsOnChecking[e.fund] != -6000 {
+		t.Fatalf("Beca main residual = %d, want -6000", mainsOnChecking[e.fund])
+	}
+	if mainsOnChecking[fund2] != -4000 {
+		t.Fatalf("Beca Dos main residual = %d, want -4000", mainsOnChecking[fund2])
+	}
+}
+
+// TestTxnMultiFundReloadFlatFallback (p26.34 flat-fallback guard): a stored MULTI-FUND txn
+// loaded for edit falls back to the FLAT grid -- no header (main_present=0), every split a
+// body row -- so the fragile fan-out reconstruction stays out of the load path and a
+// re-save cannot double-count. Covers the log-commented cap-guard.
+func TestTxnMultiFundReloadFlatFallback(t *testing.T) {
+	e := newTxnWebEnv(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	prog := e.progEdu
+	fund2, err := e.st.CreateFund(ctx, store.CreateFundInput{
+		Name: "Beca Dos", Restriction: "purpose", Subsidiaries: []int64{e.sub1}, ProgramID: &prog,
+	})
+	must(t, err, "fund2")
+
+	// Seed a 4-split multi-fund txn (two funds), so the reload must NOT decompose.
+	id, err := e.st.PostTransaction(ctx, store.PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.sub1, Currency: "USD",
+		Splits: []store.SplitInput{
+			{AccountID: e.salaries, Amount: 6000, FundID: nn(e.fund), ProgramID: nn(e.progEdu), FunctionalClass: strptr("program"), Position: 0},
+			{AccountID: e.checking, Amount: -6000, FundID: nn(e.fund), Position: 1},
+			{AccountID: e.salaries, Amount: 4000, FundID: nn(fund2), ProgramID: nn(e.progEdu), FunctionalClass: strptr("program"), Position: 2},
+			{AccountID: e.checking, Amount: -4000, FundID: nn(fund2), Position: 3},
+		},
+	})
+	must(t, err, "seed multi-fund txn")
+
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(id)+"/edit", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("edit GET: %d", rec.Code)
+	}
+	body := rec.Body.String()
+	// No header (main_present=0): the main_present hidden flag is absent.
+	if strings.Contains(body, `name="main_present" value="1"`) {
+		t.Fatalf("multi-fund reload rendered the header (should fall back to flat grid); body:\n%s", body)
+	}
+	if strings.Contains(body, `id="txn-main-account"`) {
+		t.Fatalf("multi-fund reload rendered the main-account header select (should be flat)")
+	}
+	// Every split is a body row: 4 rows present (txn-account-0..3), none dropped.
+	for i := 0; i < 4; i++ {
+		if !strings.Contains(body, `id="txn-account-`+itoa(int64(i))+`"`) {
+			t.Fatalf("flat fallback missing body row %d; body:\n%s", i, body)
+		}
+	}
+	if strings.Contains(body, `id="txn-account-4"`) {
+		t.Fatalf("flat fallback rendered an extra row (should be exactly 4)")
+	}
+
+	// A re-save of the flat form (main_present absent) must NOT re-fan-out: post the four
+	// rows as-is and assert the stored splits are unchanged in count.
+	f := url.Values{}
+	f.Set("subsidiary", itoa(e.sub1))
+	f.Set("date", "2025-03-01")
+	f.Set("currency", "USD")
+	live := splitStatesByPosition(t, e, id)
+	for i, s := range live {
+		si := itoa(int64(i))
+		f.Set("split_id_"+si, itoa(s.ID))
+		f.Set("account_"+si, itoa(s.AccountID))
+		f.Set("amount_"+si, signedStr(s.Amount))
+		if s.FundID.Valid {
+			f.Set("fund_"+si, itoa(s.FundID.Int64))
+		} else {
+			f.Set("fund_"+si, "")
+		}
+		if s.ProgramID.Valid {
+			f.Set("program_"+si, itoa(s.ProgramID.Int64))
+		}
+		if s.FunctionalClass.Valid {
+			f.Set("class_"+si, s.FunctionalClass.String)
+		}
+	}
+	f.Set("rows", "4")
+	if rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(id), f); rec.Code != http.StatusSeeOther {
+		t.Fatalf("flat re-save: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	after := splitStatesByPosition(t, e, id)
+	if len(after) != 4 {
+		t.Fatalf("flat re-save changed split count to %d (fan-out leaked into the flat path)", len(after))
+	}
+}
+
+// TestTxnMainHeaderBodyErrorLandsOnRow (p26.34 error attribution): a header-flow POST whose
+// BODY row is invalid must re-render at 422 with the error on the BODY row -- NOT panic.
+// The bug this guards: model.Rows is body-only while the store's split index counts the
+// prepended main(s), so an unadjusted index would run out of range (500). Here the body row
+// is an expense with NO functional class -> ErrExpenseNeedsFunction on body row 0.
+func TestTxnMainHeaderBodyErrorLandsOnRow(t *testing.T) {
+	e := newTxnWebEnv(t)
+
+	// Header = Checking (asset, balancing); body row 0 = Supplies (expense, NO default
+	// class) 50 with NO class chosen -> the store rejects with ErrExpenseNeedsFunction.
+	f := url.Values{}
+	f.Set("subsidiary", itoa(e.sub1))
+	f.Set("date", "2025-03-01")
+	f.Set("currency", "USD")
+	f.Set("main_present", "1")
+	f.Set("main_account", itoa(e.checking))
+	f.Set("account_0", itoa(e.supplies)) // expense, no default class
+	f.Set("amount_0", "50.00")
+	f.Set("program_0", itoa(e.progRoot))
+	// class_0 deliberately omitted.
+	f.Set("rows", "1")
+
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions", f)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422 (not a 500 panic), got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `data-row-error="0"`) {
+		t.Fatalf("expense-needs-class error not on body row 0; body:\n%s", rec.Body.String())
+	}
+}
+
+// TestTxnMainHeaderMissingAccount (p26.34): a header-flow POST with an EMPTY main account
+// but a content body row must re-render at 422 (the store's ErrAccountMissing on the main),
+// surfaced on the header/totals slot -- never a panic, never a silent drop.
+func TestTxnMainHeaderMissingAccount(t *testing.T) {
+	e := newTxnWebEnv(t)
+
+	f := url.Values{}
+	f.Set("subsidiary", itoa(e.sub1))
+	f.Set("date", "2025-03-01")
+	f.Set("currency", "USD")
+	f.Set("main_present", "1")
+	f.Set("main_account", "0") // header account not chosen
+	f.Set("account_0", itoa(e.checking))
+	f.Set("amount_0", "50.00")
+	f.Set("rows", "1")
+
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions", f)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("want 422 (not a 500 panic), got %d: %s", rec.Code, rec.Body.String())
+	}
+	// The header account error surfaces on the totals bar (no per-row cell for the header).
+	if !strings.Contains(rec.Body.String(), "txn-totals-error") {
+		t.Fatalf("missing-main-account error not surfaced; body:\n%s", rec.Body.String())
+	}
+}
+
 // --- helpers --------------------------------------------------------------
+
+// nn/ni/ns build the *int64 (store.SplitInput) / sql.NullInt64 (splitFull) / sql.NullString
+// the tests need for terse table rows.
+func nn(v int64) *int64        { return &v }
+func ni(v int64) sql.NullInt64 { return sql.NullInt64{Int64: v, Valid: true} }
+func ns(s string) sql.NullString {
+	return sql.NullString{String: s, Valid: true}
+}
 
 func must(t *testing.T, err error, what string) {
 	t.Helper()

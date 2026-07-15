@@ -381,7 +381,7 @@ func (s *server) expenseReviewPost(w http.ResponseWriter, r *http.Request) {
 		}
 		// Any ledger-validation error (unbalanced, etc.) re-renders the editor at 422; the
 		// report stays submitted (the store rolled the whole change back).
-		s.routeTxnError(&model, err, splits)
+		s.routeTxnError(&model, err, splits, 0)
 		s.renderFormError(w, r, "transaction-form", s.newShellPage(r, model))
 		return
 	}

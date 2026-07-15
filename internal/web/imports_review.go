@@ -275,7 +275,7 @@ func (s *server) importRowPost(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, dest, http.StatusSeeOther)
 			return
 		}
-		s.routeTxnError(&model, err, splits)
+		s.routeTxnError(&model, err, splits, 0)
 		s.renderFormError(w, r, "transaction-form", s.newShellPage(r, model))
 		return
 	}
