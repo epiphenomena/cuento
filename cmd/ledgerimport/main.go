@@ -193,7 +193,7 @@ func buildCmd(ctx context.Context, args []string) error {
 		log.Printf("WARNING: %s", w)
 	}
 	log.Printf("built %s: %d subsidiaries, %d programs, %d funds, %d accounts",
-		*outPath, len(res.SubsidiaryIDs), len(res.ProgramIDs), len(res.FundIDs), len(res.AccountIDs))
+		*outPath, len(res.SubsidiaryIDs), len(res.ProgramIDs), res.fundCount(), len(res.AccountIDs))
 
 	// Run the integrity suite on the produced db (the D26 rehearsal gate). Errors
 	// mean the import is inconsistent -- exit non-zero so `make fixture` fails loud.
@@ -263,7 +263,7 @@ func scaffoldCmd(ctx context.Context, args []string) error {
 		return err
 	}
 	log.Printf("scaffolded %s: %d subsidiaries, %d programs, %d funds, %d accounts (0 transactions)",
-		*outPath, len(res.SubsidiaryIDs), len(res.ProgramIDs), len(res.FundIDs), len(res.AccountIDs))
+		*outPath, len(res.SubsidiaryIDs), len(res.ProgramIDs), res.fundCount(), len(res.AccountIDs))
 
 	vs, err := ledger.Check(ctx, sqldb)
 	if err != nil {

@@ -34,6 +34,10 @@ type BuildResult struct {
 	AccountIDs    map[string]int64 // source_acct -> account id
 	Warnings      []string
 
+	// CampusFundID is the id of the marker-driven "campus" fund (cfg.CampusFund),
+	// or nil when none is configured. Set in the scaffold and rehydrated on reload.
+	CampusFundID *int64
+
 	// tidTxns records, per source tid, the transaction ids produced (one for a
 	// single-currency group, N for a decomposed multi-currency group).
 	tidTxns map[string][]int64
@@ -42,6 +46,17 @@ type BuildResult struct {
 }
 
 func (r *BuildResult) txnCountForTid(tid string) int { return len(r.tidTxns[tid]) }
+
+// fundCount is the number of funds created: the donor-keyed funds plus the
+// marker-driven campus fund when configured (which is NOT in FundIDs). Used only
+// for the operator summary log so a created campus fund is not undercounted.
+func (r *BuildResult) fundCount() int {
+	n := len(r.FundIDs)
+	if r.CampusFundID != nil {
+		n++
+	}
+	return n
+}
 
 func (r *BuildResult) accountHasSplit(id int64) bool { return r.splitAccounts[id] }
 
@@ -375,6 +390,50 @@ func (b *builder) funds(ctx context.Context) error {
 		}
 		b.res.FundIDs[donor] = id
 	}
+	return b.campusFund(ctx)
+}
+
+// campusFund creates the marker-driven "campus" fund (cfg.CampusFund) if
+// configured, scoping it to ALL configured child subsidiaries -- a superset,
+// computed programmatically (not hardcoded), of every subsidiary that posts a
+// kat=campus split (verified against the go-live data as exactly that child set).
+// Scaffold reads no source rows, so the scope cannot be narrowed to the observed
+// campus subs at scaffold time; the full child set is provably a superset and keeps
+// the store's "txn subsidiary within the fund's subsidiary set" invariant satisfied
+// for every campus posting. Its id is recorded on the builder so resolveSplit can
+// tag campus splits with it (D p26.40).
+func (b *builder) campusFund(ctx context.Context) error {
+	if b.cfg.CampusFund == nil {
+		return nil
+	}
+	fc := b.cfg.CampusFund
+	subs, err := b.subIDs(configuredSubsidiaryNames(b.cfg))
+	if err != nil {
+		return fmt.Errorf("campus fund %q: %w", fc.Name, err)
+	}
+	if len(subs) == 0 {
+		return fmt.Errorf("campus fund %q: no child subsidiaries configured", fc.Name)
+	}
+	var prog *int64
+	if fc.Program != "" {
+		pid, ok := b.res.ProgramIDs[fc.Program]
+		if !ok {
+			return fmt.Errorf("campus fund %q: program %q not configured", fc.Name, fc.Program)
+		}
+		prog = &pid
+	}
+	id, err := b.st.CreateFund(ctx, store.CreateFundInput{
+		Name:         fc.Name,
+		Funder:       fc.Funder,
+		Purpose:      fc.Purpose,
+		Restriction:  fc.Restriction,
+		ProgramID:    prog,
+		Subsidiaries: subs,
+	})
+	if err != nil {
+		return fmt.Errorf("create campus fund %q: %w", fc.Name, err)
+	}
+	b.res.CampusFundID = &id
 	return nil
 }
 
@@ -527,6 +586,17 @@ func (b *builder) reloadState(ctx context.Context, accMap []AccountMap) error {
 	for donor, fc := range b.cfg.Funds {
 		if id, ok := fundByName[fc.Name]; ok {
 			b.res.FundIDs[donor] = id
+		}
+	}
+	// Rehydrate the marker-driven campus fund (created in the scaffold under its
+	// own name, not the donor-keyed map) so a per-subsidiary import running in a
+	// separate process can tag kat=campus splits with it.
+	if b.cfg.CampusFund != nil {
+		if id, ok := fundByName[b.cfg.CampusFund.Name]; ok {
+			campusID := id
+			b.res.CampusFundID = &campusID
+		} else {
+			return fmt.Errorf("reload funds: campus fund %q not in db; scaffold first", b.cfg.CampusFund.Name)
 		}
 	}
 	return b.reloadAccounts(ctx, accMap)

@@ -233,6 +233,16 @@ type Config struct {
 	// entry (or a blank donor) means unrestricted (NULL fund).
 	Funds map[string]FundConfig `json:"funds"`
 
+	// CampusFund, when set, is a single fund assigned to every split whose source
+	// `kat` is "campus" -- a marker-driven fund (NOT donor-driven), so it lives in
+	// its own field, not the donor-keyed Funds map. A campus split takes this fund
+	// regardless of its donor (kat=campus precedence, D p26.40). Its Subsidiaries
+	// (if given) are ignored: the fund is scoped programmatically to ALL configured
+	// child subsidiaries (a superset of every subsidiary that posts a campus split),
+	// so leave it empty in the config. nil = no campus fund (the campus->fund path is
+	// off; kat still feeds program).
+	CampusFund *FundConfig `json:"campus_fund"`
+
 	// FunctionalClasses maps a source `kls` code -> program|management|fundraising
 	// (D21). An unmapped/blank kls leaves the split to the account default.
 	FunctionalClasses map[string]string `json:"functional_classes"`

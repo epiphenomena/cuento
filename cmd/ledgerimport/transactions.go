@@ -196,9 +196,16 @@ func (b *builder) postBucket(
 			// A single-currency, non-opening group whose fund does not net to zero is
 			// a genuine source imbalance. Route it to Opening Balances so a human sees
 			// a real posting, and WARN -- never nudge amounts onto an existing split.
+			// A campus-fund residual carries a distinct "campus-plug" marker so the
+			// operator can COUNT how many campus transactions needed a plug leg
+			// (accepted by the user, D p26.40) apart from other imbalances.
+			marker := ""
+			if b.res.CampusFundID != nil && key == *b.res.CampusFundID {
+				marker = " [campus-plug]"
+			}
 			b.res.Warnings = append(b.res.Warnings,
-				fmt.Sprintf("tid %s (%s): fund-%d residual %d minor units routed to %s for review",
-					tid, currency, key, r, counterAcct))
+				fmt.Sprintf("tid %s (%s): fund-%d residual %d minor units routed to %s for review%s",
+					tid, currency, key, r, counterAcct, marker))
 		}
 		splits = append(splits, store.SplitInput{
 			AccountID: acctID,
@@ -242,8 +249,9 @@ func (b *builder) postBucket(
 }
 
 // resolveSplit turns one source Record into a pending split: exact net-debit from
-// db/cr (rule 3), fund from donor, program from kat (R/E only), functional class
-// from kls (expense only). A zero net-debit yields errSkip (amount <> 0 CHECK).
+// db/cr (rule 3), fund from donor (kat=campus overrides to the campus fund, D
+// p26.40), program from kat (R/E only), functional class from kls (expense only).
+// A zero net-debit yields errSkip (amount <> 0 CHECK).
 func (b *builder) resolveSplit(r Record) (pending, error) {
 	exp, ok := b.exponent[r.Currency]
 	if !ok {
@@ -271,6 +279,13 @@ func (b *builder) resolveSplit(r Record) (pending, error) {
 		if fid, ok := b.res.FundIDs[r.Donor]; ok {
 			s.FundID = &fid
 		}
+	}
+	// A kat=campus split is the "campus" restricted fund, taking PRECEDENCE over the
+	// donor fund (D p26.40): the user directed that every kat=campus row is the campus
+	// fund regardless of donor. The kat->program path above/below is unaffected -- kat
+	// still feeds program; this only adds the fund. nil campusFundID = feature off.
+	if r.Kat == "campus" && b.res.CampusFundID != nil {
+		s.FundID = b.res.CampusFundID
 	}
 	// Program, ONLY on revenue/expense splits (the store rejects a program on an
 	// A/L/E split, ErrProgramOnBalanceSheet). Resolution, finest-first:
