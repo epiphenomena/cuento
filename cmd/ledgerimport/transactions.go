@@ -216,17 +216,14 @@ func (b *builder) postBucket(
 		return nil
 	}
 
-	memo := desc
-	if b.anonymize {
-		memo = hashText(desc)
-	}
-
-	// The importer mints no payees (p26.16); the payee entity is fully removed as of
-	// p26.20. Row descriptions ride on each split's Description (set in resolveSplit).
+	// No memo column in the export -> the transaction-level memo is left BLANK too
+	// (p26.22); the per-split descriptions carry the ledger text. The importer mints no
+	// payees (p26.16); the payee entity is fully removed as of p26.20.
+	_ = desc // desc no longer feeds a memo; retained as a bucket arg for signature stability
 	txnID, err := b.st.PostTransaction(ctx, store.PostTransactionInput{
 		Date:         date,
 		SubsidiaryID: subID,
-		Memo:         memo,
+		Memo:         "",
 		Currency:     currency,
 		Splits:       splits,
 	})
@@ -304,16 +301,16 @@ func (b *builder) resolveSplit(r Record) (pending, error) {
 		}
 	}
 
-	// desc feeds both the (legacy) split memo AND the per-split description (p26.16,
-	// the payee->description migration): a split's description is the description of
-	// the ledger row that produced it. Synthesized counter-legs (FX Clearing /
-	// Opening Balances) have no source row, so they carry an empty description.
-	memo := r.Desc
+	// The export has a `desc` column but NO memo column, so desc feeds ONLY the
+	// per-split description; memo is left BLANK (p26.22). A split's description is the
+	// description of the ledger row that produced it. Synthesized counter-legs (FX
+	// Clearing / Opening Balances) have no source row, so they carry an empty description.
+	descVal := r.Desc
 	if b.anonymize {
-		memo = hashText(r.Desc)
+		descVal = hashText(r.Desc)
 	}
-	s.Memo = memo
-	s.Description = memo
+	s.Memo = ""
+	s.Description = descVal
 
 	return pending{currency: r.Currency, country: r.Country, split: s}, nil
 }

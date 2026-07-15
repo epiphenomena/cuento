@@ -359,7 +359,13 @@ func (s *server) registerPage(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	s.render(w, r, http.StatusOK, "register.tmpl", s.newShellPageControls(r, model, "register"))
+	// The register is a data-dense, many-column table (date/description/memo/counter/
+	// fund/amount/running/actions...); after p26.8 pinned columns to their content
+	// (no wrap), it overflows the centered 60rem reading column and spills right. Opt
+	// into the wide <main> like the transaction editor so it fits and stays centered.
+	page := s.newShellPageControls(r, model, "register")
+	page.Shell.Wide = true
+	s.render(w, r, http.StatusOK, "register.tmpl", page)
 }
 
 // registerFilterEcho carries the filter dates AS THE USER TYPED THEM (their date

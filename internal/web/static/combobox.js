@@ -109,7 +109,12 @@ function enhance(select, opts) {
 
   function currentLabel() {
     const opt = select.selectedOptions[0];
-    if (!opt || opt.value === '' || opt.value === '0') return '';
+    // value="0" is a REAL selectable default (fund "Unrestricted", program "None",
+    // account "Choose account") -- show its label so the box isn't blank. Only the
+    // empty-value placeholder (value="") is treated as "no label". Focus always opens
+    // the list with an EMPTY query (not input.value), so showing a label here never
+    // turns into a stray filter.
+    if (!opt || opt.value === '') return '';
     return optionLabel(opt);
   }
 
