@@ -818,6 +818,8 @@ other = "No payee"
 other = "Search payees..."
 [txn.memo]
 other = "Memo"
+[txn.description_hint]
+other = "Description"
 [txn.notes]
 other = "Notes"
 [txn.account.choose]
@@ -858,6 +860,8 @@ other = "Fund"
 other = "Program"
 [txn.col.class]
 other = "Functional class"
+[txn.col.description]
+other = "Description"
 [txn.col.memo]
 other = "Memo"
 [txn.col.error]
@@ -1952,6 +1956,8 @@ other = "Amount"
 other = "Fund"
 [expense.line.col.program]
 other = "Program"
+[expense.line.col.description]
+other = "Description"
 [expense.line.col.memo]
 other = "Memo"
 [expense.line.unrestricted]

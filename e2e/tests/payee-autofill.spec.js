@@ -1,19 +1,20 @@
 // @ts-check
-// Functional test of payee autocomplete + autofill (p12.3). It drives the REAL
-// /transactions/new grid served by `cuento serve -dev`. Because a fresh -dev db has
-// no payees and there is no payee-management UI, the precondition (a payee WITH a
-// prior transaction) is built THROUGH THE BROWSER via create-on-save: the first saved
-// transaction types a new payee name, which the handler find-or-creates. A later
-// editor then autocompletes that payee, picks it, and the prior transaction's splits
-// prefill the grid. Selectors come from transaction_form.tmpl.
+// Functional test of the per-split DESCRIPTION autocomplete + per-row prefill (p26.19,
+// the payee->description migration's entry-UI cutover). It drives the REAL
+// /transactions/new grid served by `cuento serve -dev`. The old per-transaction payee
+// autofill (a whole-grid template keyed off a picked payee) was REMOVED; each grid row's
+// free-text description now autocompletes from prior splits and, on pick/commit, prefills
+// THAT row from the matched split -- but ONLY when the row is otherwise empty
+// (never-overwrites). Selectors come from transaction_form.tmpl.
 //
-// htmx timing (see txn-editor.spec): a swapped-in node's hx-* triggers are wired on
-// the SETTLE tick, after paint, so a synthetic action right after a swap can beat the
-// wiring. We avoid that here by design -- the suggestion list is filled by an hx-get
-// on a STABLE input (wired at load), and picking a suggestion goes through a delegated
-// click listener + a manual fetch (no hx-* trigger on the freshly-swapped <li>). We
-// still wait for the suggestion <li> to exist before clicking. Strict CSP blocks
-// page.waitForFunction; we use locator waits (auto-retry) instead.
+// Precondition (a split WITH a description on a prior txn) is built THROUGH THE BROWSER:
+// the first saved transaction types a per-split description; a later editor then
+// autocompletes it, picks it, and the prior split's fields prefill that row.
+//
+// htmx timing (see txn-editor.spec): suggestions are filled by a manual debounced fetch
+// on a STABLE (load-wired) input, and pick goes through a delegated mousedown + a manual
+// prefill fetch (no hx-* trigger on the freshly-swapped <li>), so there is no settle-tick
+// race. Strict CSP blocks page.waitForFunction; we use locator waits (auto-retry).
 
 const { test, expect } = require('../fixtures');
 const { openNewAccount, saveAccount } = require('../helpers');
@@ -48,81 +49,177 @@ async function createAsset(page, name) {
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 
-// enterTransfer fills a balanced 2-split transfer (savings +amt / checking -amt) on a
-// blank editor and returns after the fields are set (does NOT save).
-async function enterTransfer(page, savings, checking, amt) {
-  await page.locator('#txn-account-0').selectOption({ label: savings });
-  await page.locator('#txn-amount-0').fill(amt);
-  await page.locator('#txn-account-1').selectOption({ label: checking });
-  await page.locator('#txn-amount-1').fill(`-${amt}`);
+// createExpense makes a leaf EXPENSE account (with a default functional class) in the root
+// subsidiary -- the expense-line grid only offers R/E leaves, and a txn expense split needs
+// a program + class (auto-defaulted from the account) to post.
+async function createExpense(page, name) {
+  await openNewAccount(page);
+  const typeSwapped = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/accounts/new' && r.request().method() === 'GET',
+  );
+  await page.locator('#af-type').selectOption('expense');
+  await typeSwapped;
+  await expect(page.locator('#af-func')).toBeVisible();
+  await page.locator('#af-name-en').fill(name);
+  const rootSub = page.locator('input[name="sub_1"]');
+  if (!(await rootSub.isChecked())) await rootSub.check();
+  await page.locator('#af-func').selectOption('program');
+  await saveAccount(page);
+  await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 
-test.describe('payee autocomplete + autofill', () => {
-  test('creates a payee on save, then autofills its last transaction on a later entry', async ({ page, server }) => {
+test.describe('per-split description autocomplete + prefill', () => {
+  test('the header payee field is GONE', async ({ page, server }) => {
     await login(page, server);
-    await createAsset(page, 'Auto Checking');
-    await createAsset(page, 'Auto Savings');
-
-    // First transaction: a typed NEW payee (create-on-save) + a balanced transfer.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    // p26.3: the payee is ONE combobox over #txn-payee (combo-input). The overlay input
-    // is the .combo-text inside the payee field; the native select is the value sink.
-    const payeeBox = page.locator('.txn-payee-field .combo-text');
-    await expect(payeeBox).toBeVisible();
-    await payeeBox.fill('Autofill Vendor');
-    // A typed brand-new name must survive blur (freeText) and post via payee_name.
-    // Blur onto the memo header input (a plain field, no combo overlay to intercept).
-    await page.locator('#txn-memo').click();
-    await expect(payeeBox).toHaveValue('Autofill Vendor');
-    await expect(page.locator('#txn-payee-name')).toHaveValue('Autofill Vendor');
-    await enterTransfer(page, 'Auto Savings', 'Auto Checking', '40.00');
+    // p26.19: the whole .txn-payee-field header block (native select + combo overlay)
+    // was removed. Its inputs must not exist.
+    await expect(page.locator('.txn-payee-field')).toHaveCount(0);
+    await expect(page.locator('#txn-payee')).toHaveCount(0);
+    await expect(page.locator('#txn-payee-name')).toHaveCount(0);
+    // The per-row description input IS present on row 0.
+    await expect(page.locator('#txn-desc-0')).toBeVisible();
+  });
+
+  test('a typed description autocompletes, picks, and prefills an empty row', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'Desc Checking');
+    await createAsset(page, 'Desc Savings');
+
+    // First transaction: a per-split description + a balanced transfer. Row 0 carries the
+    // description "Autofill transfer" so a later entry can recall it.
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await page.locator('#txn-account-0').selectOption({ label: 'Desc Savings' });
+    await page.locator('#txn-amount-0').fill('40.00');
+    await page.locator('#txn-desc-0').fill('Autofill transfer');
     await page.locator('#txn-memo-0').fill('first memo');
+    await page.locator('#txn-account-1').selectOption({ label: 'Desc Checking' });
+    await page.locator('#txn-amount-1').fill('-40.00');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL('**/register**');
 
-    // Second entry: fuzzy-filter the payee, pick it, and the prior splits prefill.
+    // Second entry: type a prefix of the description on row 0, the suggestion appears,
+    // pick it, and the prior split's fields prefill THIS (empty) row.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    const input = page.locator('.txn-payee-field .combo-text');
-    await input.click();
-    await input.fill('Auto'); // fuzzy match -> the option appears in the combo list
-    const suggestion = page.locator('.txn-payee-field .combo-option', { hasText: 'Autofill Vendor' });
+    const desc0 = page.locator('#txn-desc-0');
+    await desc0.click();
+    await desc0.fill('Autofill');
+    const suggestion = page.locator('#txn-desc-list-0 .desc-suggestion', { hasText: 'Autofill transfer' });
     await expect(suggestion).toBeVisible();
     await suggestion.click();
 
-    // The grid now reflects the prior transaction: savings +40.00 on row 0 (memo too),
-    // checking -40.00 on row 1. (allRowsEmpty was true, so autofill applied.)
+    // The row's description is the picked text and the matched split's fields prefilled:
+    // the Desc Savings account (+40.00 magnitude in the signed field) and the memo.
+    await expect(desc0).toHaveValue('Autofill transfer');
     await expect(page.locator('#txn-amount-0')).toHaveValue('40.00');
     await expect(page.locator('#txn-memo-0')).toHaveValue('first memo');
-    await expect(page.locator('#txn-amount-1')).toHaveValue('-40.00');
   });
 
-  test('does NOT overwrite the grid when the user has already typed a row', async ({ page, server }) => {
+  test('prefill does NOT overwrite a row the user has already typed', async ({ page, server }) => {
     await login(page, server);
     await createAsset(page, 'Guard Checking');
     await createAsset(page, 'Guard Savings');
 
-    // Seed a payee with a prior transaction (create-on-save).
+    // Seed a split WITH a description on a prior transaction.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    await page.locator('.txn-payee-field .combo-text').fill('Guard Vendor');
-    await enterTransfer(page, 'Guard Savings', 'Guard Checking', '15.00');
+    await page.locator('#txn-account-0').selectOption({ label: 'Guard Savings' });
+    await page.locator('#txn-amount-0').fill('15.00');
+    await page.locator('#txn-desc-0').fill('Guard payment');
+    await page.locator('#txn-account-1').selectOption({ label: 'Guard Checking' });
+    await page.locator('#txn-amount-1').fill('-15.00');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL('**/register**');
 
-    // New entry: TYPE a row FIRST, then pick the payee -> autofill must NOT clobber.
+    // New entry: TYPE an amount on row 0 FIRST (row is non-empty), then pick the
+    // description -> the prefill must NOT clobber the typed amount.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
     await page.locator('#txn-amount-0').fill('99.00'); // user input first
-    const input = page.locator('.txn-payee-field .combo-text');
-    await input.click();
-    await input.fill('Guard');
-    const suggestion = page.locator('.txn-payee-field .combo-option', { hasText: 'Guard Vendor' });
+    const desc0 = page.locator('#txn-desc-0');
+    await desc0.click();
+    await desc0.fill('Guard');
+    const suggestion = page.locator('#txn-desc-list-0 .desc-suggestion', { hasText: 'Guard payment' });
     await expect(suggestion).toBeVisible();
     await suggestion.click();
 
     // The typed amount survives (never-overwrites guard); it was NOT replaced by 15.00.
     await expect(page.locator('#txn-amount-0')).toHaveValue('99.00');
+  });
+
+  test('a new auto-appended row also autocompletes + prefills (clone contract)', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'Clone Checking');
+    await createAsset(page, 'Clone Savings');
+
+    // Seed a split with a description.
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await page.locator('#txn-account-0').selectOption({ label: 'Clone Savings' });
+    await page.locator('#txn-amount-0').fill('22.00');
+    await page.locator('#txn-desc-0').fill('Clone recall');
+    await page.locator('#txn-account-1').selectOption({ label: 'Clone Checking' });
+    await page.locator('#txn-amount-1').fill('-22.00');
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL('**/register**');
+
+    // New entry: fill row 0 to trigger the auto-append of row 1, then drive row 1's
+    // (cloned) description input -> it must autocomplete + prefill just like a page-
+    // rendered row (proves stripDescField + initDescField re-wired the clone).
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await page.locator('#txn-account-0').selectOption({ label: 'Clone Checking' });
+    await expect(page.locator('#txn-desc-1')).toBeVisible(); // row 1 auto-appended
+    const desc1 = page.locator('#txn-desc-1');
+    await desc1.click();
+    await desc1.fill('Clone');
+    const suggestion = page.locator('#txn-desc-list-1 .desc-suggestion', { hasText: 'Clone recall' });
+    await expect(suggestion).toBeVisible();
+    await suggestion.click();
+
+    await expect(desc1).toHaveValue('Clone recall');
+    await expect(page.locator('#txn-amount-1')).toHaveValue('22.00');
+  });
+
+  test('the EXPENSE grid description input autocompletes + prefills (magnitude mode)', async ({ page, server }) => {
+    await login(page, server); // admin passes ExpenseSubmit (can_submit OR admin)
+    await createExpense(page, 'Exp Supplies');
+    await createAsset(page, 'Exp Cash');
+
+    // Seed a TRANSACTION split (suggest/prefill read splits, not report lines) on the
+    // expense account, carrying a description the expense grid can later recall. The
+    // expense row auto-defaults program + class from the account so the txn posts.
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await page.locator('#txn-account-0').selectOption({ label: 'Exp Supplies' });
+    await page.locator('#txn-amount-0').fill('33.00');
+    await page.locator('#txn-desc-0').fill('Printer paper');
+    await page.locator('#txn-account-1').selectOption({ label: 'Exp Cash' });
+    await page.locator('#txn-amount-1').fill('-33.00');
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL('**/register**');
+
+    // Open an expense report's line grid, type the description prefix on line 0 -> the
+    // suggestion appears; pick it -> the matched split's amount prefills as a POSITIVE
+    // MAGNITUDE (the expense grid derives the sign from the account type server-side).
+    await page.goto('/expenses');
+    await page.getByRole('button', { name: /new expense report/i }).click();
+    await page.waitForURL('**/expenses/*');
+    await expect(page.locator('form#expense-grid-form')).toBeVisible();
+    const desc0 = page.locator('#el-desc-0');
+    await desc0.click();
+    await desc0.fill('Printer');
+    const suggestion = page.locator('#el-desc-list-0 .desc-suggestion', { hasText: 'Printer paper' });
+    await expect(suggestion).toBeVisible();
+    await suggestion.click();
+
+    await expect(desc0).toHaveValue('Printer paper');
+    // Magnitude mode: the stored -/+ sign is stripped; the amount is the positive figure.
+    await expect(page.locator('#el-amount-0')).toHaveValue('33.00');
+    // The recalled account (an offered R/E leaf) also filled.
+    await expect(page.locator('#el-account-0')).toHaveValue(/\d+/);
   });
 });

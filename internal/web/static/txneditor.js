@@ -19,8 +19,9 @@
 import { parseAmountMinor, drcrToSigned, formatSignedMinor } from './txnamount.js';
 import { fundImbalances, applyFundToAll } from './txnfund.js';
 import { nextCell, invalidRowsForSubsidiary } from './txngrid.js';
-import { allRowsEmpty, isRowEmpty } from './txnpayee.js';
-import { initCombos, stripCombo, resyncCombos, enhance } from './combobox.js';
+import { isRowEmpty } from './txnpayee.js';
+import { initCombos, stripCombo, resyncCombos } from './combobox.js';
+import { initDescField, stripDescField } from './descfield.js';
 
 function initEditor(form) {
   const exp = 2; // currency exponent; USD/MXN are 2. Amounts are display-only here.
@@ -209,6 +210,10 @@ function initEditor(form) {
     // back to a clean native <select> BEFORE the id/name rewrite so the overlay's own
     // nodes aren't re-indexed; initCombos(clone) below re-enhances the fresh select.
     stripCombo(clone);
+    // p26.19: same clone contract for the description field -- its suggest/prefill
+    // listeners were not copied by cloneNode, so strip the marker + empty the cloned
+    // listbox BEFORE the id rewrite; initDescField(clone) below re-wires the fresh input.
+    stripDescField(clone);
     // Rewrite every id/name suffix to the new index; clear values.
     clone.querySelectorAll('[id],[name]').forEach((el) => {
       if (el.id) el.id = el.id.replace(/-\d+$/, `-${idx}`);
@@ -216,11 +221,18 @@ function initEditor(form) {
       if (el.tagName === 'INPUT') el.value = el.type === 'hidden' && el.name.startsWith('split_id') ? '' : '';
       if (el.tagName === 'SELECT') el.selectedIndex = 0;
     });
+    // p26.19: the description input's data-desc-container points at its per-row listbox id
+    // (txn-desc-list-<i>) -- re-index it alongside the id/name suffixes so the clone's
+    // input finds its OWN (re-indexed) listbox, not the template row's.
+    clone.querySelectorAll('[data-desc-container]').forEach((el) => {
+      el.dataset.descContainer = el.dataset.descContainer.replace(/-\d+$/, `-${idx}`);
+    });
     const errCell = clone.querySelector('.txn-row-error');
     if (errCell) errCell.textContent = '';
     tbody.appendChild(clone);
     form.querySelector('#txn-rows-count').value = String(form.querySelectorAll('.txn-row').length);
     initCombos(clone); // enhance the clone's clean account select
+    initDescField(clone); // p26.19: re-wire the clone's clean description input
     wireRow(clone);
     gateRow(clone);
   }
@@ -277,6 +289,7 @@ function initEditor(form) {
         { field: 'fund', always: true },
         { field: 'program', reveal: 'program' },
         { field: 'class', reveal: 'class' },
+        { field: 'desc', always: true },
         { field: 'memo', always: true },
       ]
     : [
@@ -285,6 +298,7 @@ function initEditor(form) {
         { field: 'fund', always: true },
         { field: 'program', reveal: 'program' },
         { field: 'class', reveal: 'class' },
+        { field: 'desc', always: true },
         { field: 'memo', always: true },
       ];
 
@@ -314,8 +328,8 @@ function initEditor(form) {
   // hidden signed-amount and split-id sinks, then re-gates/recomputes.
   function swapRowValues(a, b) {
     const fields = drcr
-      ? ['account', 'dr', 'cr', 'amount', 'fund', 'program', 'class', 'memo', 'splitid']
-      : ['account', 'amount', 'fund', 'program', 'class', 'memo', 'splitid'];
+      ? ['account', 'dr', 'cr', 'amount', 'fund', 'program', 'class', 'desc', 'memo', 'splitid']
+      : ['account', 'amount', 'fund', 'program', 'class', 'desc', 'memo', 'splitid'];
     fields.forEach((f) => {
       const ea = form.querySelector(`#txn-${f}-${a}`);
       const eb = form.querySelector(`#txn-${f}-${b}`);
@@ -385,7 +399,7 @@ function initEditor(form) {
   // htmx submit guard: htmx fires its XHR from its OWN submit listener and does NOT
   // consult defaultPrevented, so a plain preventDefault above does not stop it. The
   // cancelable htmx:beforeRequest is the hook. Filter to THIS form's POST so the
-  // subsidiary re-filter hx-get and the payee-template fetch are untouched.
+  // subsidiary re-filter hx-get (and any GET) is untouched.
   form.addEventListener('htmx:beforeRequest', (evt) => {
     const cfg = evt.detail && evt.detail.requestConfig;
     const verb = cfg && cfg.verb ? String(cfg.verb).toLowerCase() : '';
@@ -397,9 +411,12 @@ function initEditor(form) {
   const grid = form.querySelector('.txn-grid');
   if (grid) {
     grid.addEventListener('keydown', (evt) => {
-      // Scope: only handle keys fired from a real grid input/select. The payee and
-      // date inputs live in .txn-header (outside .txn-grid), so they keep their own
-      // handlers untouched. Ignore keys with no mapped field (defensive).
+      // Scope: only handle keys fired from a real grid input/select. The subsidiary/date
+      // inputs live in .txn-header (outside .txn-grid), so they keep their own handlers.
+      // The per-row description input (#txn-desc-<i>) IS a grid cell (Tab traverses it),
+      // but while its suggestion listbox is open descfield.js stopPropagation's the
+      // ↑/↓/Enter/Esc keys so they never reach this handler (pick != move/save/cancel).
+      // Ignore keys with no mapped field (defensive).
       const el = evt.target;
       if (!el || !el.id) return;
       const m = /^txn-([a-z]+)-(\d+)$/.exec(el.id);
@@ -468,98 +485,11 @@ function initEditor(form) {
     grid.addEventListener('change', ensureTrailingEmptyRow);
   }
 
-  // --- payee combobox + autofill (p12.3, p26.3) ---------------------------
-  // p26.3: the payee is ONE control -- the native <select> enhanced by the SAME combobox
-  // widget as account/fund/program, with two extra behaviors folded in as opts:
-  //   - onInput: a typed name (not yet a real pick) is a NEW payee -> mirror it into the
-  //     hidden #txn-payee-name (posts as payee_name) and reset the id sink to 0 so the
-  //     handler find-or-creates by name (create-on-save). freeText keeps the typed text.
-  //   - onPick: a real payee -> set #txn-payee-name to its name and fetch+apply its last
-  //     transaction template, but ONLY when every current row is empty (never-overwrites,
-  //     allRowsEmpty). The select.value + `change` are handled by the widget.
-  // The template fetch is a manual fetch (not an hx-* trigger) so it never races htmx's
-  // settle-tick wiring.
-  const payeeSelect = form.querySelector('#txn-payee');
-  const payeeField = form.querySelector('.txn-payee-field');
-  const payeeName = form.querySelector('#txn-payee-name');
-  if (payeeSelect && payeeField && payeeName) {
-    function currentRowValues() {
-      return [...form.querySelectorAll('.txn-row')].map((row) => {
-        const i = row.dataset.row;
-        const acct = form.querySelector(`#txn-account-${i}`);
-        const amount = form.querySelector(`#txn-amount-${i}`);
-        const dr = form.querySelector(`#txn-dr-${i}`);
-        const cr = form.querySelector(`#txn-cr-${i}`);
-        const memo = form.querySelector(`#txn-memo-${i}`);
-        return {
-          account: acct ? acct.value : '',
-          amount: amount ? amount.value : '',
-          dr: dr ? dr.value : '',
-          cr: cr ? cr.value : '',
-          memo: memo ? memo.value : '',
-        };
-      });
-    }
-
-    function applyTemplateRows(html) {
-      // The partial is #txn-rows content plus an oob notice; parse and take the rows.
-      const tmp = document.createElement('tbody');
-      tmp.innerHTML = html;
-      const newRows = [...tmp.querySelectorAll('.txn-row')];
-      if (newRows.length === 0) return; // nothing to apply (e.g. all dropped)
-      const tbody = form.querySelector('#txn-rows');
-      tbody.textContent = '';
-      newRows.forEach((r) => tbody.appendChild(r));
-      form.querySelector('#txn-rows-count').value = String(newRows.length);
-      // Re-wire + re-gate + re-enhance the swapped-in rows (they are fresh, unenhanced).
-      initCombos(form);
-      form.querySelectorAll('.txn-row').forEach(wireRow);
-      gateAll();
-      markSubsidiaryConflicts();
-      recompute();
-      ensureTrailingEmptyRow(); // a payee template brings in filled rows -> keep a trailing empty
-    }
-
-    function fetchAndApplyTemplate(id) {
-      // Never overwrite user input: apply only when the grid is entirely empty.
-      if (!allRowsEmpty(currentRowValues())) return;
-      const base = payeeField.dataset.templateUrl || '/payees';
-      const sub = subSel ? subSel.value : '';
-      const url = `${base}/${encodeURIComponent(id)}/template?sub=${encodeURIComponent(sub)}`;
-      // A manual fetch (not htmx) so the request fires immediately on pick, dodging the
-      // settle-tick wiring race; we apply the rows + the out-of-band notice ourselves.
-      fetch(url, { headers: { 'HX-Request': 'true' } })
-        .then((resp) => (resp.ok ? resp.text() : ''))
-        .then((html) => {
-          if (!html) return;
-          const doc = new DOMParser().parseFromString(html, 'text/html');
-          // The notice comes as an oob element; swap it into the live notice region.
-          const oob = doc.querySelector('#txn-autofill-notice');
-          const dest = form.querySelector('#txn-autofill-notice');
-          if (oob && dest) dest.replaceWith(oob);
-          applyTemplateRows(html);
-        })
-        .catch(() => {});
-    }
-
-    // Enhance the payee select into a freeText combobox (skipped by initCombos via
-    // data-combo-manual so ONLY this call, with its opts, wires it).
-    enhance(payeeSelect, {
-      allowFreeText: true,
-      initialText: payeeName.value,
-      onInput: (text) => {
-        // A typed name (no real pick yet) is a NEW payee: mirror it into payee_name and
-        // reset the id sink so the handler find-or-creates by name on save.
-        payeeName.value = text;
-        payeeSelect.value = '0';
-      },
-      onPick: ({ value, label }) => {
-        // A real payee pick: record the name and autofill the grid from its last txn.
-        payeeName.value = label;
-        fetchAndApplyTemplate(value);
-      },
-    });
-  }
+  // p26.19: the per-transaction payee autofill (p12.3/p26.3) was REMOVED. Its whole-grid
+  // "fetch the payee's last transaction and fill every empty row" is replaced by the
+  // per-ROW description prefill (descfield.js): each row's free-text description
+  // autocompletes + prefills THAT row from the matched split. Wired below via
+  // initDescField, alongside the account/fund/program combos.
 
   form.querySelectorAll('.txn-row').forEach(wireRow);
   if (subSel) subSel.addEventListener('change', markSubsidiaryConflicts);
@@ -567,6 +497,9 @@ function initEditor(form) {
   // p26.2: enhance the account combo on every row present on initial render / after a
   // whole-form htmx swap (subsidiary re-filter, 422 re-render). Idempotent.
   initCombos(form);
+  // p26.19: wire the per-row description autocomplete + prefill on every row (idempotent,
+  // like initCombos -- covers initial render, htmx swaps, and clones via addRow).
+  initDescField(form);
 
   gateAll();
   markSubsidiaryConflicts();

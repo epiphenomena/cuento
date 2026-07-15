@@ -261,7 +261,12 @@ func (s *server) prefillExpenseRows(r *http.Request, model txnEditorModel, rep s
 			Index:   i,
 			Account: l.AccountID,
 			Amount:  money.Format(l.Amount, exp, fmtOpts),
-			Memo:    l.Memo,
+			// p26.19: carry the line's free-text description into the review editor row so
+			// it round-trips (description_i -> parseSplitForms -> SplitInput.Description)
+			// into the CREATED split on convert -- the payee->description migration's
+			// "conversion carries description" requirement (p26.15 left this inert).
+			Description: l.Description,
+			Memo:        l.Memo,
 		}
 		if l.Amount >= 0 {
 			row.AmountDR = money.Format(l.Amount, exp, fmtOpts)

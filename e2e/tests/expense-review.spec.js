@@ -97,9 +97,9 @@ async function createSubmitter(page, username, password) {
   await page.waitForURL('**/admin/users/*?saved**');
 }
 
-// submitReport (as the submitter) creates a report, adds one line on acctName, submits,
-// and returns the numeric report id.
-async function submitReport(page, acctName, amount) {
+// submitReport (as the submitter) creates a report, adds one line on acctName (with an
+// optional per-line description, p26.19), submits, and returns the numeric report id.
+async function submitReport(page, acctName, amount, desc) {
   await page.goto('/expenses');
   await page.getByRole('button', { name: /new expense report/i }).click();
   await page.waitForURL('**/expenses/*');
@@ -110,12 +110,17 @@ async function submitReport(page, acctName, amount) {
   await expect(page.locator('form#expense-grid-form')).toBeVisible();
   await page.locator('#el-account-0').selectOption({ label: acctName });
   await page.locator('#el-amount-0').fill(amount);
+  if (desc) await page.locator('#el-desc-0').fill(desc);
   await expect(page.locator('#el-account-1')).toBeVisible();
   const detailReloaded = page.waitForResponse(
     (r) => new URL(r.url()).pathname === `/expenses/${reportID}` && r.request().method() === 'GET',
   );
   await page.locator('#expense-save-lines').click();
   await detailReloaded;
+
+  // p26.19: the per-line description persisted through the bulk save -- the reloaded
+  // (still-editable) grid re-renders it into row 0's description input.
+  if (desc) await expect(page.locator('#el-desc-0')).toHaveValue(desc);
 
   await page.locator('#expense-submit').click();
   await page.waitForURL(`**/expenses/${reportID}`);
@@ -142,7 +147,8 @@ test('expenses review: reviewer posts one report (converts) and rejects another'
 
   // ===== PHASE 2: the submitter files two reports =====
   await login(page, subUser, subPass);
-  const postID = await submitReport(page, expName, '40.00'); // this one gets posted
+  const postDesc = `Conference travel ${suffix}`;
+  const postID = await submitReport(page, expName, '40.00', postDesc); // this one gets posted
   const rejectID = await submitReport(page, expName, '15.00'); // this one gets rejected
   await page.context().clearCookies();
 
@@ -161,6 +167,9 @@ test('expenses review: reviewer posts one report (converts) and rejects another'
   await expect(page.locator('#txn-subsidiary')).toBeDisabled();
   // Row 0 is the prefilled expense line; row 1 is the empty counter row.
   await expect(page.locator('#txn-account-0')).toHaveValue(/\d+/);
+  // p26.19: the line's description was carried into the review editor row (prefillExpenseRows
+  // -> description_0), so it round-trips into the CREATED split on convert.
+  await expect(page.locator('#txn-desc-0')).toHaveValue(postDesc);
 
   // Add the cash counter-side (-40.00) so the txn balances.
   await page.locator('#txn-account-1').selectOption({ label: cashName });
@@ -174,6 +183,10 @@ test('expenses review: reviewer posts one report (converts) and rejects another'
   await historyReloaded;
   // The txn history page renders (the report converted to a real transaction).
   await expect(page.locator('main#main')).toBeVisible();
+  // p26.19: the line's description reached the CREATED split -- the txn history's
+  // create change shows the split's description field. This closes the line->split leg
+  // (the row->split round-trip) end-to-end, not just the line->row prefill above.
+  await expect(page.locator('main#main')).toContainText(postDesc);
 
   // Back on the queue: the posted report is now history (converted) with a txn link,
   // and only the second report remains pending.

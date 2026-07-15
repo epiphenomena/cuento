@@ -124,9 +124,12 @@ test.describe('keyboard-only entry', () => {
     await expect(page.locator('#txn-fund-0')).toBeFocused();
     await selectByKeyboard(page, '#txn-fund-0', 'KB Water Grant');
     // Row 0 is an ASSET account, so its program + class cells are visibility:hidden and
-    // must be SKIPPED by native Tab (no dead stop): fund -> memo directly. This proves
-    // the "hidden cells are skipped" claim in docs/qa-entry.md.
+    // must be SKIPPED by native Tab (no dead stop): fund -> description (p26.19, an always
+    // -visible cell) -> memo. This proves the "hidden cells are skipped" claim in
+    // docs/qa-entry.md while the new per-split description cell is traversed normally.
     await page.locator('#txn-fund-0').focus();
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#txn-desc-0')).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.locator('#txn-memo-0')).toBeFocused();
 
@@ -204,19 +207,27 @@ test.describe('keyboard-only entry', () => {
     await page.keyboard.press('Enter');
     await expect(page.locator('#txn-fund-0')).toBeFocused();
 
-    // fund -> memo via Enter: the program(3)/class(4) cells are hidden on this asset
-    // row, so the wired traversal SKIPS them and lands on memo -- never a hidden cell.
+    // fund -> description via Enter: the program(4)/class(5) cells are hidden on this
+    // asset row, so the wired traversal SKIPS them and lands on the description cell
+    // (p26.19, an always-visible cell) -- never a hidden <select>.
     await page.keyboard.press('Enter');
-    await expect(page.locator('#txn-memo-0')).toBeFocused();
+    await expect(page.locator('#txn-desc-0')).toBeFocused();
     // Explicitly assert focus never sat on the hidden cells.
     await expect(page.locator('#txn-program-0')).not.toBeFocused();
     await expect(page.locator('#txn-class-0')).not.toBeFocused();
+    // description -> memo via Enter (both always-visible).
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#txn-memo-0')).toBeFocused();
 
-    // Shift+Tab backward from memo skips the hidden cells back to fund.
+    // Shift+Tab backward from memo -> description -> (skip hidden) fund.
+    await page.keyboard.press('Shift+Tab');
+    await expect(page.locator('#txn-desc-0')).toBeFocused();
     await page.keyboard.press('Shift+Tab');
     await expect(page.locator('#txn-fund-0')).toBeFocused();
 
-    // Tab forward from fund skips the hidden cells to memo (same skip, forward).
+    // Tab forward from fund skips the hidden cells to description, then memo.
+    await page.keyboard.press('Tab');
+    await expect(page.locator('#txn-desc-0')).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(page.locator('#txn-memo-0')).toBeFocused();
 

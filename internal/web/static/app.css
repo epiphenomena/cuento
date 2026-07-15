@@ -840,6 +840,52 @@ input[aria-invalid="true"] {
 .combo-option:hover,
 .combo-option.active { background: var(--color-primary); color: var(--color-on-primary, #fff); }
 
+/* p26.19 per-split description field: a plain text input (like memo) whose suggestion
+   dropdown mirrors the combobox listbox. The .desc-field wrapper is the positioning
+   context so the absolutely-positioned .desc-suggestions listbox anchors under the input.
+   In a grid cell the input fills the cell like the memo input; the listbox floats above. */
+.desc-field { position: relative; }
+/* A grid dropdown from the LAST row (description suggestions, or a combobox listbox) opens
+   downward and visually overlaps the sticky totals bar (position:sticky, z-index 2). The
+   dropdown's own z-index is trapped inside the table's stacking context, so it cannot beat
+   the totals bar (a root-level sibling of the table). While the user is interacting with the
+   grid (:focus-within), lift the whole grid table into a stacking context ABOVE the totals
+   bar so its dropdowns stay visible + clickable; when idle the bar still covers rows that
+   scroll under it. */
+.txn-editor:focus-within .txn-grid,
+#expense-grid-form:focus-within .txn-grid { position: relative; z-index: 3; }
+.desc-field > .txn-desc,
+.desc-field > .el-desc { width: 100%; }
+/* The .desc-suggest-box is the per-row container the fetched <ul.desc-suggestions>
+   fragment is injected into (a plain box; JS toggles [hidden]). The fetched <ul> is the
+   actual positioned dropdown. */
+.desc-suggest-box[hidden] { display: none; }
+.desc-suggestions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  /* Above the sticky totals bar (z-index 2) AND the combobox listboxes (30) so a
+     description dropdown near the bottom of a short grid is never obscured. */
+  z-index: 50;
+  background: var(--color-surface);
+  border: var(--border);
+  border-radius: var(--radius);
+  max-height: 14rem;
+  overflow-y: auto;
+  min-width: max-content;
+}
+.desc-suggestion {
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.desc-suggestion:hover,
+.desc-suggestion.active { background: var(--color-primary); color: var(--color-on-primary, #fff); }
+
 .txn-actions { margin: var(--space-3) 0; }
 
 /* Totals bar: sticks to the bottom of the viewport so the running imbalance is

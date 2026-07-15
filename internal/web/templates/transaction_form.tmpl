@@ -87,6 +87,21 @@
     </select>
   </td>
 
+  {{/* p26.19: per-split free-text description (replaces the header payee). Autocompletes
+       from prior splits' descriptions and, on pick/commit, prefills THIS row from the
+       matched split when the row is otherwise empty (descfield.js). The listbox lands in
+       the sibling #txn-desc-list-<i> container. */}}
+  <td class="txn-cell txn-desc-cell">
+    <div class="desc-field">
+      <input type="text" name="description_{{.Index}}" id="txn-desc-{{.Index}}" class="txn-desc js-descfield"
+             value="{{.Description}}" autocomplete="off"
+             data-desc-container="txn-desc-list-{{.Index}}"
+             data-desc-mode="{{if $.Page.DisplayDRCR}}drcr{{else}}signed{{end}}"
+             placeholder="{{t "txn.description_hint"}}">
+      <div class="desc-suggest-box" id="txn-desc-list-{{.Index}}" hidden></div>
+    </div>
+  </td>
+
   <td class="txn-cell txn-memo-cell">
     <input type="text" name="memo_{{.Index}}" id="txn-memo-{{.Index}}" class="txn-memo" value="{{.Memo}}">
   </td>
@@ -198,25 +213,9 @@
              placeholder="{{t "txn.date_hint"}}"
              {{if eq $.Page.FirstErrorRow -2}}autofocus{{end}}>
     </div>
-    <div class="txn-field txn-payee-field" data-template-url="/payees">
-      <label for="txn-payee">{{t "txn.payee"}}</label>
-      {{/* p26.3: ONE control -- the native <select> enhanced by the SAME combobox widget
-           as account/fund/program (combo-input), so payee UX matches the grid selects.
-           No-JS fallback: the select posts `payee` (an EXISTING payee id). The combo is
-           enhanced MANUALLY by txneditor.js (data-combo-manual) with freeText opts so a
-           TYPED new name mirrors into #txn-payee-name (posts as payee_name; the handler
-           prefers the id else find-or-creates by name -- create-on-save, DECISIONS p12.3)
-           and a real pick fetches + autofills the grid from the payee's last transaction.
-           No-JS degrades to pick-existing. */}}
-      <select name="payee" id="txn-payee" class="txn-payee combo-input" data-combo-manual="1">
-        <option value="0">{{t "txn.payee_none"}}</option>
-        {{range .Payees}}<option value="{{.ID}}"{{if eq .ID $.Page.Payee}} selected{{end}}>{{.Name}}</option>
-        {{end}}
-      </select>
-      {{/* payee_name carries the typed/picked NAME so a brand-new payee (select id 0) is
-           find-or-created on save. Seeded on a 422 re-render of a typed-new payee. */}}
-      <input type="hidden" name="payee_name" id="txn-payee-name" value="{{.PayeeName}}">
-    </div>
+    {{/* p26.19: the per-transaction payee header was REMOVED -- the per-split free-text
+         description (in each grid row) replaces it, autocompleting + prefilling per row.
+         The payee data/columns/routes are physically removed in the next step. */}}
     <div class="txn-field">
       <label for="txn-memo">{{t "txn.memo"}}</label>
       <input type="text" name="memo" id="txn-memo" class="txn-memo-header" value="{{.Memo}}">
@@ -245,6 +244,7 @@
         <th>{{t "txn.col.fund"}}</th>
         <th>{{t "txn.col.program"}}</th>
         <th>{{t "txn.col.class"}}</th>
+        <th>{{t "txn.col.description"}}</th>
         <th>{{t "txn.col.memo"}}</th>
         <th>{{t "txn.col.error"}}</th>
       </tr>

@@ -199,11 +199,12 @@ type expenseLineRow struct {
 	AmountInput string
 	// Read-only display (non-editable render): resolved proper-noun names + formatted
 	// (positive-magnitude) amount.
-	AcctName  string
-	FundName  string // "" = unrestricted
-	ProgName  string // "" = none
-	AmountFmt string
-	Memo      string
+	AcctName    string
+	FundName    string // "" = unrestricted
+	ProgName    string // "" = none
+	AmountFmt   string
+	Description string // per-line free-text (p26.19; autocomplete + prefill source)
+	Memo        string
 	// ErrorKey is this row's per-row error i18n key on a 422 grid re-render (p25.4);
 	// "" = none. Rendered in the row's error cell via {{t}}.
 	ErrorKey string
@@ -373,11 +374,12 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 	}
 	for _, l := range lines {
 		row := expenseLineRow{
-			ID:        l.ID,
-			AccountID: l.AccountID,
-			AcctName:  acctNames[l.AccountID],
-			AmountFmt: money.Format(displayAmount(l.Amount), exp, opts),
-			Memo:      l.Memo,
+			ID:          l.ID,
+			AccountID:   l.AccountID,
+			AcctName:    acctNames[l.AccountID],
+			AmountFmt:   money.Format(displayAmount(l.Amount), exp, opts),
+			Description: l.Description,
+			Memo:        l.Memo,
 		}
 		if model.Editable {
 			row.AmountInput = money.Format(displayAmount(l.Amount), exp, opts)
@@ -536,6 +538,7 @@ func (s *server) expenseLinesSave(w http.ResponseWriter, r *http.Request) {
 		lineID := parseID(r.PostFormValue("line_id_" + si))
 		fund := parseID(r.PostFormValue("fund_" + si))
 		prog := parseID(r.PostFormValue("program_" + si))
+		desc := strings.TrimSpace(r.PostFormValue("description_" + si))
 		memo := strings.TrimSpace(r.PostFormValue("memo_" + si))
 
 		// Echo the row exactly as typed (the ids + the raw amount text) so the re-render
@@ -547,6 +550,7 @@ func (s *server) expenseLinesSave(w http.ResponseWriter, r *http.Request) {
 			FundID:      fund,
 			ProgramID:   prog,
 			AmountInput: amountStr,
+			Description: desc,
 			Memo:        memo,
 		})
 
@@ -571,9 +575,10 @@ func (s *server) expenseLinesSave(w http.ResponseWriter, r *http.Request) {
 		d := store.ExpenseReportLineDesired{
 			ID: lineID,
 			ExpenseReportLineInput: store.ExpenseReportLineInput{
-				AccountID: acct,
-				Amount:    amount,
-				Memo:      memo,
+				AccountID:   acct,
+				Amount:      amount,
+				Description: desc,
+				Memo:        memo,
 			},
 		}
 		if fund > 0 {

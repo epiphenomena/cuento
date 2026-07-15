@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"regexp"
 	"strings"
@@ -136,62 +135,12 @@ func TestAutofillRespectsSubsidiary(t *testing.T) {
 	}
 }
 
-// TestPayeeCreateOnSave: saving a transaction with a TYPED (new) payee name creates
-// the payee (find-or-create, versioned) and tags the transaction with it. A second
-// save with the same name REUSES the payee (no duplicate).
-func TestPayeeCreateOnSave(t *testing.T) {
-	e := newTxnWebEnv(t)
-
-	f := e.balancedForm("50.00", "-50.00")
-	f.Set("payee", "0") // no existing id chosen
-	f.Set("payee_name", "Brand New Vendor")
-
-	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions", f)
-	if rec.Code != http.StatusSeeOther {
-		t.Fatalf("create: status=%d body=%s", rec.Code, rec.Body.String())
-	}
-
-	// The payee exists and the transaction is tagged with it.
-	id := latestTxnID(t, e)
-	var payeeID sql.NullInt64
-	if err := e.db.QueryRow(`SELECT payee_id FROM transactions WHERE id = ?`, id).Scan(&payeeID); err != nil {
-		t.Fatalf("read txn payee: %v", err)
-	}
-	if !payeeID.Valid {
-		t.Fatalf("transaction not tagged with the created payee")
-	}
-	var name string
-	var pvCount int
-	if err := e.db.QueryRow(`SELECT name FROM payees WHERE id = ?`, payeeID.Int64).Scan(&name); err != nil {
-		t.Fatalf("read payee: %v", err)
-	}
-	if name != "Brand New Vendor" {
-		t.Fatalf("payee name = %q, want Brand New Vendor", name)
-	}
-	// Versioned (rule 5): a create version row exists.
-	if err := e.db.QueryRow(`SELECT COUNT(*) FROM payees_versions WHERE entity_id = ?`, payeeID.Int64).Scan(&pvCount); err != nil {
-		t.Fatalf("count payee versions: %v", err)
-	}
-	if pvCount != 1 {
-		t.Fatalf("payee version rows = %d, want 1", pvCount)
-	}
-
-	// A SECOND save with the same name reuses the payee (no duplicate row).
-	f2 := e.balancedForm("60.00", "-60.00")
-	f2.Set("payee", "0")
-	f2.Set("payee_name", "brand new vendor") // different case -> same payee (NOCASE)
-	rec2 := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions", f2)
-	if rec2.Code != http.StatusSeeOther {
-		t.Fatalf("second create: status=%d body=%s", rec2.Code, rec2.Body.String())
-	}
-	var payeeCount int
-	if err := e.db.QueryRow(`SELECT COUNT(*) FROM payees`).Scan(&payeeCount); err != nil {
-		t.Fatalf("count payees: %v", err)
-	}
-	if payeeCount != 1 {
-		t.Fatalf("payee count = %d, want 1 (reused, not duplicated)", payeeCount)
-	}
-}
+// p26.19 removed TestPayeeCreateOnSave: the transaction ENTRY handler no longer parses
+// payee / payee_name (the header payee field was removed in favor of per-split
+// descriptions), so saving a txn no longer create-on-saves or tags a payee. The
+// find-or-create primitive itself (store.EnsurePayee) stays tested in the store layer
+// (store/payees_test.go TestEnsurePayee). The payee column/route are physically removed
+// in the next step.
 
 // assertSelected checks that some <option value=id ...> in body is marked selected.
 // The account option markup spreads attributes across lines (value then, later,

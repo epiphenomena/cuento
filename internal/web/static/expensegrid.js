@@ -22,6 +22,7 @@
 import { isRowEmpty } from './txnpayee.js';
 import { formatAmountGrouped } from './txnamount.js';
 import { initCombos, stripCombo, resyncCombos } from './combobox.js';
+import { initDescField, stripDescField } from './descfield.js';
 
 // enhance wires ONE grid form: combos, auto-append of a trailing empty row on edit,
 // amount blur-reformat, and per-row delete + re-index.
@@ -68,6 +69,12 @@ function enhance(form) {
       if (el.id) el.id = el.id.replace(/-\d+$/, `-${idx}`);
       if (el.name) el.name = el.name.replace(/_\d+$/, `_${idx}`);
     });
+    // p26.19: keep the description input's data-desc-container (el-desc-list-<i>) pointing
+    // at its OWN (re-indexed) listbox. The combos are closure-bound and survive a
+    // re-index, but the descfield's container lookup is id-based, so re-index it too.
+    rowEl.querySelectorAll('[data-desc-container]').forEach((el) => {
+      el.dataset.descContainer = el.dataset.descContainer.replace(/-\d+$/, `-${idx}`);
+    });
   }
 
   // syncCount rewrites #expense-rows-count from the live row set.
@@ -90,17 +97,25 @@ function enhance(form) {
     // Strip them back to clean native <select>s BEFORE the id/name rewrite so the overlay's
     // own nodes aren't re-indexed; initCombos(clone) below re-enhances the fresh selects.
     stripCombo(clone);
+    // p26.19: same clone contract for the description field (its listeners were not copied
+    // by cloneNode) -- strip the marker + empty the cloned listbox BEFORE the id rewrite.
+    stripDescField(clone);
     clone.querySelectorAll('[id],[name]').forEach((el) => {
       if (el.id) el.id = el.id.replace(/-\d+$/, `-${idx}`);
       if (el.name) el.name = el.name.replace(/_\d+$/, `_${idx}`);
-      if (el.tagName === 'INPUT') el.value = ''; // clears amount/memo AND the hidden line_id
+      if (el.tagName === 'INPUT') el.value = ''; // clears amount/memo/description AND the hidden line_id
       if (el.tagName === 'SELECT') el.selectedIndex = 0;
+    });
+    // Re-index the description input's listbox pointer alongside the id/name suffixes.
+    clone.querySelectorAll('[data-desc-container]').forEach((el) => {
+      el.dataset.descContainer = el.dataset.descContainer.replace(/-\d+$/, `-${idx}`);
     });
     const errCell = clone.querySelector('.el-row-error');
     if (errCell) errCell.textContent = '';
     tbody.appendChild(clone);
     syncCount();
     initCombos(clone); // enhance the clone's clean selects
+    initDescField(clone); // p26.19: re-wire the clone's clean description input
     applyUserProgram(clone); // p26.5: prefill the user's default program on the fresh row
   }
 
@@ -205,6 +220,8 @@ function enhance(form) {
   // Enhance every combo select present on initial render / after a whole-form htmx swap
   // (subsidiary re-scope, 422 re-render). Idempotent.
   initCombos(form);
+  // p26.19: wire the per-line description autocomplete + prefill on every row (idempotent).
+  initDescField(form);
 
   // p26.5: seed the user's default program on any EMPTY row present on load (the server's
   // starter empty row) so a fresh grid opens with the preferred program. Non-empty existing

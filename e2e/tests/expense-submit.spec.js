@@ -269,6 +269,12 @@ test('expenses: subsidiary auto-set, account/fund/program combos, amount blur, d
   await page.locator('#el-amount-0').blur();
   await expect(page.locator('#el-amount-0')).toHaveValue('1,000.00');
 
+  // (p26.19) DESCRIPTION FIELD: the per-line free-text description input is present + typable
+  // (its autocomplete/prefill is the shared descfield module, e2e-covered on the txn grid;
+  // the description round-trip through save is covered in expense-review.spec).
+  await page.locator('#el-desc-0').fill('grid line description');
+  await expect(page.locator('#el-desc-0')).toHaveValue('grid line description');
+
   // (e/f) PROGRAM COMBO + value-0 RE-PICK: pick "General" via the combo, then re-open and
   // pick the "None" (value 0) entry -- proving collectOptions now INCLUDES value 0 so a
   // reset-to-none is re-offerable after a real pick.
@@ -303,13 +309,14 @@ test('expenses: subsidiary auto-set, account/fund/program combos, amount blur, d
   await page.locator('#el-memo-2').fill('row-two-memo');
   await expect(page.locator('#el-account-3')).toBeVisible();
 
-  // (p26.11) COLUMN ORDER: the delete-× cell is now the LAST cell in the row, AFTER the
-  // error column. Assert both header and row cell order so a regression that moves it back
-  // ahead of the error column is caught. Headers: account, amount, fund, program, memo,
-  // error, then the (empty, aria-hidden) delete-action header.
+  // (p26.11) COLUMN ORDER: the delete-× cell is the LAST cell in the row, AFTER the error
+  // column. Assert both header and row cell order so a regression that moves it back ahead
+  // of the error column is caught. Headers (p26.19 adds a description column before memo):
+  // account, amount, fund, program, description, memo, error, then the (empty, aria-hidden)
+  // delete-action header.
   const headerCells = page.locator('#expense-grid-form thead th');
-  await expect(headerCells).toHaveCount(7);
-  await expect(headerCells.nth(5)).toHaveText(/error/i);
+  await expect(headerCells).toHaveCount(8);
+  await expect(headerCells.nth(6)).toHaveText(/error/i);
   await expect(headerCells.last()).toHaveClass(/el-delete-col/);
   // In a data row the error cell precedes the delete cell (the delete is the last td).
   const row0Cells = page.locator('.el-row[data-row="0"] > td, .el-row[data-row="0"] > th');

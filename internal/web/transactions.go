@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"cuento/internal/money"
@@ -45,17 +44,18 @@ import (
 // txnRowModel is one split row in the editor. It carries the row's current values
 // (echoed on a re-render) plus its stable key and any per-row error key (trap 5).
 type txnRowModel struct {
-	Index    int    // 0-based row position -> the stable id/name suffix (trap 4)
-	SplitID  string // existing split id (hidden field, trap 1); "" for a new row
-	Account  int64  // chosen account id (0 = none)
-	AmountDR string // debit magnitude (DR/CR mode display)
-	AmountCR string // credit magnitude (DR/CR mode display)
-	Amount   string // the SIGNED value echoed into the hidden signed field (trap 3)
-	Fund     int64  // chosen fund id (0 = unrestricted)
-	Program  int64  // chosen program id (R/E rows)
-	Class    string // functional class (expense rows)
-	Memo     string
-	ErrorKey string // i18n key of this row's error (trap 5); "" = ok
+	Index       int    // 0-based row position -> the stable id/name suffix (trap 4)
+	SplitID     string // existing split id (hidden field, trap 1); "" for a new row
+	Account     int64  // chosen account id (0 = none)
+	AmountDR    string // debit magnitude (DR/CR mode display)
+	AmountCR    string // credit magnitude (DR/CR mode display)
+	Amount      string // the SIGNED value echoed into the hidden signed field (trap 3)
+	Fund        int64  // chosen fund id (0 = unrestricted)
+	Program     int64  // chosen program id (R/E rows)
+	Class       string // functional class (expense rows)
+	Description string // per-split free-text (p26.19; autocomplete + prefill source)
+	Memo        string
+	ErrorKey    string // i18n key of this row's error (trap 5); "" = ok
 }
 
 // txnAccountOption is one account offered in a row's account combobox. It carries the
@@ -178,7 +178,6 @@ func (s *server) txnNewForm(w http.ResponseWriter, r *http.Request) {
 		}
 		model.Memo = r.URL.Query().Get("memo")
 		model.Notes = r.URL.Query().Get("notes")
-		model.Payee = parseID(r.URL.Query().Get("payee"))
 	} else {
 		// First load: today's date (Appendix C `t` = today) and ONE empty row. The
 		// client auto-appends a fresh trailing row as soon as the last row is edited
@@ -210,16 +209,17 @@ func (s *server) echoRowsFromQuery(r *http.Request, model txnEditorModel) []txnR
 		q := r.URL.Query()
 		acct := parseID(q.Get("account_" + si))
 		row := txnRowModel{
-			Index:    i,
-			SplitID:  q.Get("split_id_" + si),
-			Account:  acct,
-			Amount:   q.Get("amount_" + si),
-			AmountDR: q.Get("dr_" + si),
-			AmountCR: q.Get("cr_" + si),
-			Fund:     parseID(q.Get("fund_" + si)),
-			Program:  parseID(q.Get("program_" + si)),
-			Class:    q.Get("class_" + si),
-			Memo:     q.Get("memo_" + si),
+			Index:       i,
+			SplitID:     q.Get("split_id_" + si),
+			Account:     acct,
+			Amount:      q.Get("amount_" + si),
+			AmountDR:    q.Get("dr_" + si),
+			AmountCR:    q.Get("cr_" + si),
+			Fund:        parseID(q.Get("fund_" + si)),
+			Program:     parseID(q.Get("program_" + si)),
+			Class:       q.Get("class_" + si),
+			Description: q.Get("description_" + si),
+			Memo:        q.Get("memo_" + si),
 		}
 		// A chosen account that left the new sub's set is flagged (its fund options may
 		// also have changed; the store re-validates authoritatively on save).
@@ -282,11 +282,12 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 	fmtOpts := money.FormatOpts{Number: numberFormatFor(u)}
 	for i, sp := range splits {
 		row := txnRowModel{
-			Index:   i,
-			SplitID: strconv.FormatInt(sp.ID, 10),
-			Account: sp.AccountID,
-			Amount:  money.Format(sp.Amount, exp, fmtOpts),
-			Memo:    sp.Memo,
+			Index:       i,
+			SplitID:     strconv.FormatInt(sp.ID, 10),
+			Account:     sp.AccountID,
+			Amount:      money.Format(sp.Amount, exp, fmtOpts),
+			Description: sp.Description,
+			Memo:        sp.Memo,
 		}
 		if sp.FundID.Valid {
 			row.Fund = sp.FundID.Int64
@@ -360,25 +361,13 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 	model.TxnID = txnID
 	model.IsEdit = txnID != 0
 	model.Currency = currency
-	model.Payee = parseID(r.FormValue("payee"))
-	model.PayeeName = strings.TrimSpace(r.FormValue("payee_name"))
+	// p26.19: the per-transaction payee is no longer parsed from the entry form (the header
+	// payee field was removed; per-split descriptions replace it). model.Payee/PayeeName
+	// stay unset here -- the PostTransactionInput leaves PayeeID nil. The payee column/route
+	// are physically removed in the next step.
 	model.Memo = r.FormValue("memo")
 	model.Notes = r.FormValue("notes")
 	model.FirstErrorRow = -1
-
-	// Resolve the payee (p12.3 create-on-save): prefer a picked existing id; else, if a
-	// name was typed, find-or-create it (its OWN change, before the txn write, so a
-	// later txn-validation failure leaves the payee reusable on retry). A create failure
-	// (e.g. a name collision race) surfaces as a server error, not a lost entry.
-	payeeID := model.Payee
-	if payeeID == 0 && model.PayeeName != "" {
-		payeeID, err = s.store.EnsurePayee(s.actorCtx(ctx), model.PayeeName)
-		if err != nil {
-			s.serverError(w)
-			return
-		}
-		model.Payee = payeeID
-	}
 
 	// Parse the date input honoring the user's format (ISO always accepted, D16). A
 	// malformed date is a form error surfaced on the totals bar (a header field).
@@ -406,10 +395,6 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 		Notes:        model.Notes,
 		Currency:     currency,
 		Splits:       splits,
-	}
-	if payeeID != 0 {
-		p := payeeID
-		in.PayeeID = &p
 	}
 
 	// The write funnel needs the current user as the actor (rule 2/5).
@@ -619,20 +604,22 @@ func (s *server) parseSplitForms(r *http.Request, exp int) ([]txnRowModel, []sto
 		fund := parseID(r.FormValue("fund_" + si))
 		prog := parseID(r.FormValue("program_" + si))
 		class := r.FormValue("class_" + si)
+		desc := r.FormValue("description_" + si)
 		memo := r.FormValue("memo_" + si)
 		splitID := r.FormValue("split_id_" + si)
 
 		row := txnRowModel{
-			Index:    i,
-			SplitID:  splitID,
-			Account:  acct,
-			Amount:   amountStr,
-			Fund:     fund,
-			Program:  prog,
-			Class:    class,
-			Memo:     memo,
-			AmountDR: r.FormValue("dr_" + si),
-			AmountCR: r.FormValue("cr_" + si),
+			Index:       i,
+			SplitID:     splitID,
+			Account:     acct,
+			Amount:      amountStr,
+			Fund:        fund,
+			Program:     prog,
+			Class:       class,
+			Description: desc,
+			Memo:        memo,
+			AmountDR:    r.FormValue("dr_" + si),
+			AmountCR:    r.FormValue("cr_" + si),
 		}
 		rows = append(rows, row)
 
@@ -654,10 +641,11 @@ func (s *server) parseSplitForms(r *http.Request, exp int) ([]txnRowModel, []sto
 		}
 
 		sp := store.SplitInput{
-			AccountID: acct,
-			Amount:    amount,
-			Memo:      memo,
-			Position:  pos,
+			AccountID:   acct,
+			Amount:      amount,
+			Memo:        memo,
+			Description: desc,
+			Position:    pos,
 		}
 		pos++
 		if id := parseID(splitID); id != 0 {

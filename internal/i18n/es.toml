@@ -812,6 +812,8 @@ other = "Sin beneficiario"
 other = "Buscar beneficiarios..."
 [txn.memo]
 other = "Nota"
+[txn.description_hint]
+other = "Descripción"
 [txn.notes]
 other = "Observaciones"
 [txn.account.choose]
@@ -852,6 +854,8 @@ other = "Fondo"
 other = "Programa"
 [txn.col.class]
 other = "Clase funcional"
+[txn.col.description]
+other = "Descripción"
 [txn.col.memo]
 other = "Nota"
 [txn.col.error]
@@ -1946,6 +1950,8 @@ other = "Importe"
 other = "Fondo"
 [expense.line.col.program]
 other = "Programa"
+[expense.line.col.description]
+other = "Descripción"
 [expense.line.col.memo]
 other = "Nota"
 [expense.line.unrestricted]
