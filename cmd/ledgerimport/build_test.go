@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -52,6 +53,7 @@ func testAccountMap() string {
 		{SourceAcct: "Revenue", CuentoType: "revenue", CuentoParent: "", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Revenue", NameES: "Ingresos"},
 		{SourceAcct: "Grant Revenue", CuentoType: "revenue", CuentoParent: "Revenue", Subsidiaries: []string{"Test US", "Test MX"}, DefaultProgram: "Education", NameEN: "Grant Revenue", NameES: "Ingreso Beca"},
 		{SourceAcct: "Donations", CuentoType: "revenue", CuentoParent: "Revenue", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Donations", NameES: "Donaciones"},
+		{SourceAcct: "Campus Revenue", CuentoType: "revenue", CuentoParent: "Revenue", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Campus Revenue", NameES: "Ingreso Campus"},
 		{SourceAcct: "Expenses", CuentoType: "expense", CuentoParent: "", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Expenses", NameES: "Gastos"},
 		{SourceAcct: "Supplies", CuentoType: "expense", CuentoParent: "Expenses", Subsidiaries: []string{"Test US", "Test MX"}, FunctionalClass: "program", NameEN: "Supplies", NameES: "Suministros"},
 		{SourceAcct: "Campus Costs", CuentoType: "expense", CuentoParent: "Expenses", Subsidiaries: []string{"Test US", "Test MX"}, FunctionalClass: "program", NameEN: "Campus Costs", NameES: "Costos Campus"},
@@ -117,23 +119,33 @@ func testSource() string {
 		// store rejects a program on a balance-sheet split). US, USD, unrestricted.
 		row("US", "I", "receipt", "Donations", "EDU", "2025-07-01", "PRG", "6", "donation", "", "USD", "1.0", "0", "0", "70.00", "70.00", "Revenue"),
 		row("US", "A", "receipt", "Checking", "EDU", "2025-07-01", "PRG", "6", "donation", "", "USD", "1.0", "70.00", "70.00", "0", "0", "Assets"),
-		// tid 7: a FULLY-CAMPUS, self-balancing txn (both splits kat=campus). Each
-		// split must carry the campus fund ("Restore the Way") AND the account default
-		// program; the campus fund group nets to zero, so NO plug leg. US, USD. The
-		// expense split's kat=campus ALSO drives its program (Campus) -- proving kat
-		// still feeds program while newly feeding the fund. Donor is blank here.
-		row("US", "E", "spend", "Campus Costs", "campus", "2025-08-01", "PRG", "7", "campus supplies", "", "USD", "1.0", "80.00", "80.00", "0", "0", "Expenses"),
-		row("US", "A", "spend", "Checking", "campus", "2025-08-01", "", "7", "campus paid", "", "USD", "1.0", "0", "0", "80.00", "80.00", "Assets"),
-		// tid 8: a MIXED txn whose campus SUBSET does not self-balance. One kat=campus
-		// expense split (campus fund) + one NON-campus asset split (unrestricted). The
-		// txn nets to zero OVERALL but not PER FUND, so each fund group gets an Opening
-		// Balances plug leg (the accepted self-heal, D p26.40); the campus one carries
-		// the distinct [campus-plug] warning marker. The campus split carries the
-		// campus fund and its Campus program; the non-campus split stays unrestricted.
-		// A donor is set on the campus split to prove kat=campus OVERRIDES the donor
-		// fund (it must resolve to Restore the Way, NOT Grant One). US, USD.
-		row("US", "E", "spend", "Campus Costs", "campus", "2025-09-01", "PRG", "8", "campus mixed", "GRANT1", "USD", "1.0", "30.00", "30.00", "0", "0", "Expenses"),
-		row("US", "A", "spend", "Checking", "", "2025-09-01", "", "8", "unrestricted mixed", "", "USD", "1.0", "0", "0", "30.00", "30.00", "Assets"),
+		// --- Campus "Restore the Way" drawdown model (D p26.43) --------------------
+		// The campus fund is a LIVE restricted fund: campus REVENUE grows a per-currency
+		// pool; a campus EXPENSE is RtW only while the pool covers it, else it overflows
+		// to unrestricted. Processed CHRONOLOGICALLY, so dates order the pool events.
+		//
+		// tid 7 (2025-08-01): a campus REVENUE receipt of 100. The revenue split (I,
+		// campus) grows the pool to 100 and is RtW; the offsetting cash DEBIT (Checking,
+		// blank kat = a plain unrestricted balance-sheet split) is retagged RtW by the
+		// offset pass so the campus-fund group nets to zero -- NO plug. Proves (a).
+		row("US", "I", "receipt", "Campus Revenue", "campus", "2025-08-01", "PRG", "7", "campus gift", "", "USD", "1.0", "0", "0", "100.00", "100.00", "Revenue"),
+		row("US", "A", "receipt", "Checking", "", "2025-08-01", "", "7", "campus gift in", "", "USD", "1.0", "100.00", "100.00", "0", "0", "Assets"),
+		// tid 8 (2025-09-01): a campus EXPENSE of 60 WITHIN the pool (100 -> 40), so RtW,
+		// PLUS a NON-campus expense of 40, both paid from ONE cash credit of 100. The
+		// shared Checking split (kat=campus but a BALANCE-SHEET split, so unrestricted and
+		// an offset candidate) is DIVIDED: 60 to the campus fund, 40 unrestricted. The
+		// campus expense carries a DONOR (GRANT1) yet resolves to the campus fund (RtW
+		// overrides donor). Per-fund balanced, NO plug. Proves (b) and (d).
+		row("US", "E", "spend", "Campus Costs", "campus", "2025-09-01", "PRG", "8", "campus supplies", "GRANT1", "USD", "1.0", "60.00", "60.00", "0", "0", "Expenses"),
+		row("US", "E", "spend", "Supplies", "", "2025-09-01", "PRG", "8", "office supplies", "", "USD", "1.0", "40.00", "40.00", "0", "0", "Expenses"),
+		row("US", "A", "spend", "Checking", "campus", "2025-09-01", "", "8", "paid both", "", "USD", "1.0", "0", "0", "100.00", "100.00", "Assets"),
+		// tid 10 (2025-10-01): a campus EXPENSE of 80 that EXCEEDS the remaining pool
+		// (40). It OVERFLOWS to unrestricted (its would-be donor fund is dropped too);
+		// its cash offset stays unrestricted; the txn balances as an ordinary
+		// unrestricted entry with NO campus fund and NO plug. Proves (c). Its Campus
+		// program is still assigned (kat feeds program even when overflowed).
+		row("US", "E", "spend", "Campus Costs", "campus", "2025-10-01", "PRG", "10", "campus overspend", "GRANT1", "USD", "1.0", "80.00", "80.00", "0", "0", "Expenses"),
+		row("US", "A", "spend", "Checking", "", "2025-10-01", "", "10", "overspend paid", "", "USD", "1.0", "0", "0", "80.00", "80.00", "Assets"),
 		// A consolidation-marker row (country CONSOL) that must be SKIPPED entirely.
 		row("CONSOL", "A", "elim", "Checking", "", "2025-05-01", "", "9", "elim", "", "", "1.0", "0", "0", "0", "0", "Assets"),
 	}
@@ -395,57 +407,60 @@ func TestMappingAppliesSubFundProgramFunction(t *testing.T) {
 	assertExpenseClass(t, sqldb, res, "Supplies", "program")
 }
 
-// TestCampusFundAssignedByKat proves the p26.40 marker-driven "campus" fund path:
-// (a) the fund is created with the right subsidiary superset, (b) every kat=campus
-// split carries it (overriding a donor fund), (c) a mixed campus txn whose campus
-// subset does not self-balance still imports via the Opening Balances self-heal (and
-// ledger.Check passes), and (d) non-campus splits stay unrestricted. Synthetic
-// values only (AGENTS rule 11).
+// TestCampusFundAssignedByKat proves the p26.43 "Restore the Way" drawdown model
+// (SUPERSEDES the p26.40 whole-transaction plug): (a) campus revenue builds the pool
+// and is RtW with its cash offset RtW; (b) a campus expense WITHIN the pool is RtW
+// with a DIVIDED cash offset, per-fund balanced with NO plug; (c) a campus expense
+// that EXCEEDS the remaining pool OVERFLOWS to unrestricted; (d) a cash split shared
+// between a campus and a non-campus expense is DIVIDED so each portion carries the
+// right fund; (e) ledger.Check is Error-clean AND Z18 (restricted-fund overspend) is
+// GONE (the fund asset balance is >= 0); (f) non-campus splits stay unrestricted.
+// Synthetic values only (AGENTS rule 11).
 func TestCampusFundAssignedByKat(t *testing.T) {
 	sqldb, st, res := buildInto(t, false)
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 
-	// (a) The campus fund is created, purpose-restricted, scoped to a SUPERSET of the
-	// campus-posting subsidiaries -- here all configured children {Test US, Test MX}.
 	if res.CampusFundID == nil {
 		t.Fatalf("campus fund not created (CampusFundID nil)")
 	}
-	fund, err := st.GetFund(ctx, *res.CampusFundID)
+	campusID := *res.CampusFundID
+
+	// The campus fund is purpose-restricted, scoped to the child superset {US, MX}.
+	fund, err := st.GetFund(ctx, campusID)
 	if err != nil {
 		t.Fatalf("GetFund: %v", err)
 	}
-	if fund.Name != "Restore the Way" {
-		t.Errorf("campus fund name = %q, want %q", fund.Name, "Restore the Way")
+	if fund.Name != "Restore the Way" || fund.Restriction != "purpose" {
+		t.Errorf("campus fund = %q/%q, want %q/purpose", fund.Name, fund.Restriction, "Restore the Way")
 	}
-	if fund.Restriction != "purpose" {
-		t.Errorf("campus fund restriction = %q, want purpose", fund.Restriction)
-	}
-	subIDs, err := st.FundSubsidiaryIDs(ctx, *res.CampusFundID)
+	subIDs, err := st.FundSubsidiaryIDs(ctx, campusID)
 	if err != nil {
 		t.Fatalf("FundSubsidiaryIDs: %v", err)
-	}
-	got := map[int64]bool{}
-	for _, id := range subIDs {
-		got[id] = true
-	}
-	// Every subsidiary that posts a campus split (Test US via tids 7,8) must be in
-	// the fund's scope; the full child set is the superset actually created.
-	for _, want := range []string{"Test US", "Test MX"} {
-		if !got[res.SubsidiaryIDs[want]] {
-			t.Errorf("campus fund scope missing subsidiary %q", want)
-		}
 	}
 	if len(subIDs) != 2 {
 		t.Errorf("campus fund scope size = %d, want 2 (all configured children)", len(subIDs))
 	}
 
-	// (b) The campus expense splits (tids 7,8 on Campus Costs) carry the campus fund
-	// AND the kat=campus program (Campus) -- kat still feeds program while newly
-	// feeding the fund. Every Campus Costs split is campus, so assert over all of them.
-	assertSplitFundProgram(t, sqldb, res, "Campus Costs", *res.CampusFundID, res.ProgramIDs["Campus"])
+	// (a) Campus revenue (tid 7) is RtW and its cash DEBIT offset was retagged RtW.
+	// The campus revenue split carries the fund and the Campus program.
+	assertSplitFundProgram(t, sqldb, res, "Campus Revenue", campusID, res.ProgramIDs["Campus"])
+	// tid 7's Checking debit (100) is the offset: it must be RtW (a whole-split retag).
+	if got := checkingCampusDebits(t, sqldb, res, campusID); got != 1 {
+		t.Errorf("tid 7 campus revenue offset: %d RtW Checking debit(s), want 1", got)
+	}
 
-	// (b'/precedence) The mixed txn (tid 8) campus split set a DONOR (GRANT1) yet must
-	// resolve to the campus fund, never Grant One -- kat=campus overrides the donor.
+	// (b)+(d) tid 8: campus expense 60 (RtW) + non-campus expense 40, one cash credit
+	// of 100 DIVIDED into a 60 RtW portion + a 40 unrestricted remainder. Exactly ONE
+	// transaction, NO campus plug leg.
+	if n := res.txnCountForTid("8"); n != 1 {
+		t.Fatalf("tid 8 produced %d transactions, want 1", n)
+	}
+	// The 100.00 cash credit split into two Checking credits on the same txn: one
+	// -60.00 RtW, one -40.00 unrestricted (amounts in minor units).
+	assertCheckingCredit(t, sqldb, res, "8", campusID, -6000)   // RtW portion
+	assertCheckingCredit(t, sqldb, res, "8", 0 /*NULL*/, -4000) // unrestricted remainder
+	// The campus expense (tid 8) carries the fund AND the Campus program despite its
+	// donor (GRANT1) -- RtW overrides the donor.
 	var grant1OnCampus int
 	if err := sqldb.QueryRow(
 		`SELECT COUNT(*) FROM splits WHERE account_id = ? AND fund_id = ?`,
@@ -454,37 +469,45 @@ func TestCampusFundAssignedByKat(t *testing.T) {
 		t.Fatalf("count GRANT1 campus splits: %v", err)
 	}
 	if grant1OnCampus != 0 {
-		t.Errorf("a campus expense split resolved to the donor fund GRANT1; kat=campus must override donor")
+		t.Errorf("a campus expense resolved to donor fund GRANT1; RtW must override donor")
 	}
 
-	// (c) The mixed campus txn imported (tid 8 -> 1 transaction) and its campus fund
-	// residual was routed to Opening Balances with the distinct [campus-plug] marker.
-	if n := res.txnCountForTid("8"); n != 1 {
-		t.Fatalf("mixed campus tid 8 produced %d transactions, want 1", n)
+	// (c) tid 10: campus expense 80 exceeds the remaining pool (40) -> OVERFLOW to
+	// unrestricted. Its Campus Costs split carries NO fund but still the Campus program.
+	var overflow int
+	if err := sqldb.QueryRow(`
+		SELECT COUNT(*) FROM splits s JOIN transactions t ON t.id = s.transaction_id
+		WHERE s.account_id = ? AND s.fund_id IS NULL AND s.program_id = ?`,
+		res.AccountIDs["Campus Costs"], res.ProgramIDs["Campus"],
+	).Scan(&overflow); err != nil {
+		t.Fatalf("count overflow campus expense: %v", err)
 	}
-	campusPlugs := 0
-	for _, w := range res.Warnings {
-		if strings.Contains(w, "[campus-plug]") {
-			campusPlugs++
-		}
+	if overflow == 0 {
+		t.Errorf("tid 10 campus expense did not overflow to unrestricted (pool exhausted)")
 	}
-	if campusPlugs == 0 {
-		t.Errorf("no [campus-plug] warning surfaced for the imbalanced campus subset (tid 8)")
-	}
-	// The Opening Balances counter-leg for tid 8's campus group must carry the campus
-	// fund (so the fund group nets to zero and the store accepts it).
+
+	// No campus-fund plug leg landed on Opening Balances, and no [campus-plug] warning
+	// surfaced -- the offset pass balanced every campus fund group directly.
 	var campusOnOpening int
 	if err := sqldb.QueryRow(
 		`SELECT COUNT(*) FROM splits WHERE account_id = ? AND fund_id = ?`,
-		res.AccountIDs["Opening Balances"], *res.CampusFundID,
+		res.AccountIDs["Opening Balances"], campusID,
 	).Scan(&campusOnOpening); err != nil {
 		t.Fatalf("count campus Opening Balances splits: %v", err)
 	}
-	if campusOnOpening == 0 {
-		t.Errorf("no campus-tagged Opening Balances plug leg; the self-heal did not fund-tag the counter-leg")
+	if campusOnOpening != 0 {
+		t.Errorf("campus fund got %d Opening-Balances plug legs, want 0 (offset pass should balance it)", campusOnOpening)
+	}
+	for _, w := range res.Warnings {
+		if strings.Contains(w, "[campus-plug]") {
+			t.Errorf("unexpected [campus-plug] warning on synthetic data: %s", w)
+		}
 	}
 
-	// ledger.Check must be clean (Z1/Z10 per-txn and per-fund zero-sum hold).
+	// (e) ledger.Check Error-clean AND Z18 (restricted-fund overspend) GONE FOR THE
+	// CAMPUS FUND. The fund holds a POSITIVE asset balance (revenue 100 in, only 60
+	// drawn RtW). (An unrelated synthetic GRANT1 MXN transfer legitimately trips its
+	// OWN Z18 and is not this test's concern; scope the assertion to the campus fund.)
 	vs, err := ledger.Check(context.Background(), sqldb)
 	if err != nil {
 		t.Fatalf("ledger.Check: %v", err)
@@ -492,30 +515,149 @@ func TestCampusFundAssignedByKat(t *testing.T) {
 	if ledger.HasErrors(vs) {
 		t.Fatalf("produced db has Error violations after campus import: %+v", vs)
 	}
+	campusZ18 := fmt.Sprintf("restricted fund %d asset balance", campusID)
+	for _, v := range vs {
+		if v.Rule == "Z18" && strings.Contains(v.Detail, campusZ18) {
+			t.Errorf("Z18 fires for the campus fund; its asset went negative: %s", v.Detail)
+		}
+	}
+	// The fund's net-debit sum over asset splits (the Z18 quantity) must be >= 0.
+	var fundAsset sql.NullInt64
+	if err := sqldb.QueryRow(`
+		SELECT SUM(s.amount) FROM splits s JOIN accounts a ON a.id = s.account_id
+		WHERE s.fund_id = ? AND a.type = 'asset'`, campusID,
+	).Scan(&fundAsset); err != nil {
+		t.Fatalf("sum fund asset: %v", err)
+	}
+	if fundAsset.Int64 < 0 {
+		t.Errorf("campus fund asset balance = %d, want >= 0 (no overspend)", fundAsset.Int64)
+	}
 
-	// (d) The tid 8 NON-campus asset split (Checking, blank kat) stays unrestricted:
-	// at least one Checking split carries no fund. (Checking also holds tids 1,2,4,6
-	// unrestricted splits and tid 7's campus split, so assert the unrestricted-split
-	// count is nonzero AND the tid 7 campus Checking split carries the campus fund.)
-	var unrestrictedChecking int
+	// (f) Non-campus splits stay unrestricted: the tid 8 Supplies expense carries no
+	// fund, and Checking holds unrestricted splits (tids 1,2,4,6,10 + the divided
+	// remainder).
+	var suppliesUnrestricted int
 	if err := sqldb.QueryRow(
 		`SELECT COUNT(*) FROM splits WHERE account_id = ? AND fund_id IS NULL`,
-		res.AccountIDs["Checking"],
-	).Scan(&unrestrictedChecking); err != nil {
-		t.Fatalf("count unrestricted Checking splits: %v", err)
+		res.AccountIDs["Supplies"],
+	).Scan(&suppliesUnrestricted); err != nil {
+		t.Fatalf("count unrestricted Supplies splits: %v", err)
 	}
-	if unrestrictedChecking == 0 {
-		t.Errorf("no unrestricted Checking split; non-campus splits must stay unrestricted")
+	if suppliesUnrestricted == 0 {
+		t.Errorf("non-campus Supplies expense did not stay unrestricted")
 	}
-	var campusChecking int
+}
+
+// checkingCampusDebits counts positive (debit) Checking splits tagged the campus
+// fund -- tid 7's retagged cash-in offset.
+func checkingCampusDebits(t *testing.T, sqldb *sql.DB, res *BuildResult, campusID int64) int {
+	t.Helper()
+	var n int
+	if err := sqldb.QueryRow(
+		`SELECT COUNT(*) FROM splits WHERE account_id = ? AND fund_id = ? AND amount > 0`,
+		res.AccountIDs["Checking"], campusID,
+	).Scan(&n); err != nil {
+		t.Fatalf("count campus Checking debits: %v", err)
+	}
+	return n
+}
+
+// assertCheckingCredit asserts exactly one Checking split in tid `tid`'s transaction
+// with the given fund (fund==0 means NULL/unrestricted) and exact amount.
+func assertCheckingCredit(t *testing.T, sqldb *sql.DB, res *BuildResult, tid string, fund, amount int64) {
+	t.Helper()
+	txns := res.tidTxns[tid]
+	if len(txns) == 0 {
+		t.Fatalf("tid %s produced no transactions", tid)
+	}
+	fundClause := "s.fund_id = ?"
+	args := []any{res.AccountIDs["Checking"], amount, txns[0], fund}
+	if fund == 0 {
+		fundClause = "s.fund_id IS NULL"
+		args = []any{res.AccountIDs["Checking"], amount, txns[0]}
+	}
+	var n int
+	q := `SELECT COUNT(*) FROM splits s WHERE s.account_id = ? AND s.amount = ?
+		AND s.transaction_id = ? AND ` + fundClause
+	if err := sqldb.QueryRow(q, args...).Scan(&n); err != nil {
+		t.Fatalf("count Checking credit (tid %s, fund %d, amt %d): %v", tid, fund, amount, err)
+	}
+	if n != 1 {
+		t.Errorf("tid %s Checking split fund=%d amount=%d: got %d, want 1", tid, fund, amount, n)
+	}
+}
+
+// TestCampusOffsetFallbackPlug covers the RARE pathological case (spec B / D
+// p26.43) where an RtW campus split has NO unrestricted balance-sheet split on the
+// correct side to offset it: the leftover falls through to the existing per-fund
+// self-heal (a fund-tagged Opening-Balances [campus-plug] leg) so the campus fund
+// group still nets to zero. Here a campus REVENUE (RtW) is booked against a
+// NON-campus expense with no cash leg -- the whole campus subset has no asset/
+// liability counterpart, so it plugs. This is the real-data ~707-plug path; the
+// synthetic case proves it stays balanced and marked (rule 11: synthetic only).
+func TestCampusOffsetFallbackPlug(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	accMap, err := ReadAccountMap(strings.NewReader(testAccountMap()))
+	if err != nil {
+		t.Fatalf("ReadAccountMap: %v", err)
+	}
+	cfg, err := ReadConfig(strings.NewReader(testConfig()))
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	// A single US/USD transaction: campus revenue -50 (RtW, grows the pool) offset by a
+	// NON-campus expense +50 (a "revenue applied straight against an expense" entry, no
+	// cash leg). The campus subset (just the -50 revenue) has no balance-sheet split to
+	// offset, so it plugs to Opening Balances with the campus fund.
+	src := header + "\n" +
+		row("US", "I", "receipt", "Campus Revenue", "campus", "2025-08-01", "PRG", "20", "campus gift", "", "USD", "1.0", "0", "0", "50.00", "50.00", "Revenue") + "\n" +
+		row("US", "E", "spend", "Supplies", "", "2025-08-01", "PRG", "20", "applied cost", "", "USD", "1.0", "50.00", "50.00", "0", "0", "Expenses") + "\n"
+	recs, err := ParseRecords(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("ParseRecords: %v", err)
+	}
+	res, err := runScaffold(ctx, accMap, cfg, nil, st, false)
+	if err != nil {
+		t.Fatalf("runScaffold: %v", err)
+	}
+	subRes, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, "Test US", false)
+	if err != nil {
+		t.Fatalf("runImportSubsidiary: %v", err)
+	}
+
+	// The transaction posted (not rejected/dropped) as ONE transaction.
+	if n := subRes.txnCountForTid("20"); n != 1 {
+		t.Fatalf("fallback tid 20 produced %d transactions, want 1", n)
+	}
+	// A [campus-plug] warning surfaced and a campus-tagged Opening-Balances leg exists.
+	plugged := false
+	for _, w := range subRes.Warnings {
+		if strings.Contains(w, "[campus-plug]") {
+			plugged = true
+		}
+	}
+	if !plugged {
+		t.Errorf("no [campus-plug] warning for the un-offsettable campus subset")
+	}
+	var campusOnOpening int
 	if err := sqldb.QueryRow(
 		`SELECT COUNT(*) FROM splits WHERE account_id = ? AND fund_id = ?`,
-		res.AccountIDs["Checking"], *res.CampusFundID,
-	).Scan(&campusChecking); err != nil {
-		t.Fatalf("count campus Checking splits: %v", err)
+		res.AccountIDs["Opening Balances"], *res.CampusFundID,
+	).Scan(&campusOnOpening); err != nil {
+		t.Fatalf("count campus Opening Balances splits: %v", err)
 	}
-	if campusChecking == 0 {
-		t.Errorf("tid 7 campus Checking split did not carry the campus fund")
+	if campusOnOpening != 1 {
+		t.Errorf("campus fallback plug legs on Opening Balances = %d, want 1", campusOnOpening)
+	}
+	// ledger.Check stays Error-clean (the plug keeps the fund group balanced).
+	vs, err := ledger.Check(context.Background(), sqldb)
+	if err != nil {
+		t.Fatalf("ledger.Check: %v", err)
+	}
+	if ledger.HasErrors(vs) {
+		t.Fatalf("fallback plug left Error violations: %+v", vs)
 	}
 }
 

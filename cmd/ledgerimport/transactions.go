@@ -35,6 +35,17 @@ func (b *builder) transactions(ctx context.Context, recs []Record) error {
 		groups[r.Tid] = append(groups[r.Tid], r)
 	}
 
+	// Pass 1 of the campus (Restore the Way) model: a GLOBAL chronological drawdown
+	// pool over every campus revenue/expense split decides, per split, whether it is
+	// assigned the restricted fund or overflows to unrestricted (D p26.43). It runs
+	// over the SAME skip-filtered `groups` so the (tid, group-index) keys align with
+	// the resolve loop below, and BEFORE any posting so postBucket can consult it.
+	plan, err := b.buildCampusPlan(groups)
+	if err != nil {
+		return err
+	}
+	b.campusPlan = plan
+
 	for _, tid := range order {
 		if err := b.postGroup(ctx, tid, groups[tid]); err != nil {
 			return err
@@ -58,11 +69,16 @@ func (b *builder) loadExponents(ctx context.Context) error {
 }
 
 // pending is a resolved split about to be posted, plus the source metadata the
-// FX/opening-balance logic needs (currency, country).
+// FX/opening-balance logic needs (currency, country) and the campus-model flags the
+// offset pass needs (D p26.43): campusRtW marks a campus R/E split assigned the
+// restricted fund, and isBalanceSheet marks an asset/liability split eligible to
+// carry an offset portion.
 type pending struct {
-	currency string
-	country  string
-	split    store.SplitInput
+	currency       string
+	country        string
+	split          store.SplitInput
+	campusRtW      bool
+	isBalanceSheet bool
 }
 
 // postGroup converts one tid group into one or more transactions. It resolves
@@ -76,14 +92,14 @@ func (b *builder) postGroup(ctx context.Context, tid string, recs []Record) erro
 	var curOrder []string
 	date := ""
 	desc := ""
-	for _, r := range recs {
+	for i, r := range recs {
 		if date == "" {
 			date = r.Dt
 		}
 		if desc == "" {
 			desc = r.Desc
 		}
-		p, err := b.resolveSplit(r)
+		p, err := b.resolveSplit(tid, i, r)
 		if errors.Is(err, errSkip) {
 			continue // zero net-debit split: cannot post (amount <> 0 CHECK); drop
 		}
@@ -148,19 +164,27 @@ func (b *builder) postBucket(
 	}
 	subID := b.res.SubsidiaryIDs[subName]
 
-	var splits []store.SplitInput
+	// Seed the split list from the bucket's resolved splits (positions assigned after
+	// the offset pass, which may divide a split). Pass 2 of the campus model then
+	// retags/divides the bucket's unrestricted balance-sheet splits so the RtW campus
+	// subset nets to zero WITHOUT a plug leg (D p26.43); it aligns 1:1 with `bucket`
+	// over the first len(bucket) entries, appending any divided RtW portions.
+	splits := make([]store.SplitInput, 0, len(bucket))
+	for _, p := range bucket {
+		splits = append(splits, p.split)
+	}
+	splits, _ = b.offsetRtW(splits, bucket)
+
 	// Residual is computed PER FUND, not just over the whole bucket: the store
 	// enforces zero-sum WITHIN EACH FUND GROUP (D20/Z10), so a counter-leg that
 	// balances the currency total but not each fund would be rejected. Key 0 = the
 	// unrestricted (NULL fund) group; fundOf recovers the *int64 for the counter-leg.
+	// After offsetRtW the campus-fund group normally nets to zero (no counter-leg);
+	// the rare leftover falls through here to a [campus-plug] Opening-Balances leg.
 	residual := map[int64]int64{}
 	fundOf := map[int64]*int64{}
 	var fundOrder []int64 // deterministic counter-leg order
-	for i, p := range bucket {
-		s := p.split
-		s.Position = int64(i)
-		splits = append(splits, s)
-
+	for _, s := range splits {
 		key := int64(0)
 		if s.FundID != nil {
 			key = *s.FundID
@@ -197,8 +221,9 @@ func (b *builder) postBucket(
 			// a genuine source imbalance. Route it to Opening Balances so a human sees
 			// a real posting, and WARN -- never nudge amounts onto an existing split.
 			// A campus-fund residual carries a distinct "campus-plug" marker so the
-			// operator can COUNT how many campus transactions needed a plug leg
-			// (accepted by the user, D p26.40) apart from other imbalances.
+			// operator can COUNT how many campus transactions still needed a plug leg
+			// after the offset pass (the rare pathological fallback, D p26.43) apart
+			// from other imbalances.
 			marker := ""
 			if b.res.CampusFundID != nil && key == *b.res.CampusFundID {
 				marker = " [campus-plug]"
@@ -221,6 +246,13 @@ func (b *builder) postBucket(
 		b.res.Warnings = append(b.res.Warnings,
 			fmt.Sprintf("tid %s (%s): single balanced split cannot post as a transaction", tid, currency))
 		return nil
+	}
+
+	// Assign contiguous display positions over the FINAL split set (the offset pass
+	// may have divided a split, so positions are normalized here rather than during
+	// the seed loop).
+	for i := range splits {
+		splits[i].Position = int64(i)
 	}
 
 	// No memo column in the export -> the transaction-level memo is left BLANK too
@@ -249,10 +281,17 @@ func (b *builder) postBucket(
 }
 
 // resolveSplit turns one source Record into a pending split: exact net-debit from
-// db/cr (rule 3), fund from donor (kat=campus overrides to the campus fund, D
-// p26.40), program from kat (R/E only), functional class from kls (expense only).
-// A zero net-debit yields errSkip (amount <> 0 CHECK).
-func (b *builder) resolveSplit(r Record) (pending, error) {
+// db/cr (rule 3), fund from donor, program from kat (R/E only), functional class
+// from kls (expense only). A zero net-debit yields errSkip (amount <> 0 CHECK).
+//
+// Campus (Restore the Way) fund assignment follows the p26.43 drawdown model, keyed
+// by the source split's (tid, group index): a campus R/E split assigned RtW by Pass
+// 1 takes the campus fund (OVERRIDING any donor); a campus R/E split that overflowed
+// the pool stays UNRESTRICTED (nil fund, donor ignored -- an overspent campus cost
+// is an ordinary unrestricted expense). Campus BALANCE-SHEET splits get no fund here;
+// they are offset candidates the Pass-2 offsetRtW may retag. The kat->program path is
+// unchanged for every campus split (RtW or overflowed): kat still feeds program.
+func (b *builder) resolveSplit(tid string, idx int, r Record) (pending, error) {
 	exp, ok := b.exponent[r.Currency]
 	if !ok {
 		return pending{}, fmt.Errorf("unknown currency %q", r.Currency)
@@ -271,6 +310,7 @@ func (b *builder) resolveSplit(r Record) (pending, error) {
 	}
 	acctType := b.acctType[acctID]
 	isRE := acctType == "revenue" || acctType == "expense"
+	isBalanceSheet := acctType == "asset" || acctType == "liability"
 
 	s := store.SplitInput{AccountID: acctID, Amount: amt}
 
@@ -280,12 +320,23 @@ func (b *builder) resolveSplit(r Record) (pending, error) {
 			s.FundID = &fid
 		}
 	}
-	// A kat=campus split is the "campus" restricted fund, taking PRECEDENCE over the
-	// donor fund (D p26.40): the user directed that every kat=campus row is the campus
-	// fund regardless of donor. The kat->program path above/below is unaffected -- kat
-	// still feeds program; this only adds the fund. nil campusFundID = feature off.
-	if r.Kat == "campus" && b.res.CampusFundID != nil {
-		s.FundID = b.res.CampusFundID
+	// Campus (Restore the Way) fund, per the p26.43 drawdown model. Only a campus
+	// R/E split the chronological pool assigned RtW takes the fund -- overriding the
+	// donor. A campus R/E split that OVERFLOWED the pool stays unrestricted (its donor
+	// fund is dropped too: an overspent campus cost is an ordinary unrestricted
+	// expense). Campus balance-sheet splits get no fund here; Pass-2 offsetRtW may
+	// retag a portion of them. A missing plan entry (feature off, or a non-R/E campus
+	// split) leaves the donor decision untouched.
+	campusRtW := false
+	if r.Kat == "campus" && b.res.CampusFundID != nil && isRE {
+		if rtw, ok := b.campusPlan[campusKey{tid: tid, idx: idx}]; ok {
+			if rtw {
+				s.FundID = b.res.CampusFundID
+				campusRtW = true
+			} else {
+				s.FundID = nil // overflowed the pool -> unrestricted (donor dropped)
+			}
+		}
 	}
 	// Program, ONLY on revenue/expense splits (the store rejects a program on an
 	// A/L/E split, ErrProgramOnBalanceSheet). Resolution, finest-first:
@@ -327,7 +378,13 @@ func (b *builder) resolveSplit(r Record) (pending, error) {
 	s.Memo = ""
 	s.Description = descVal
 
-	return pending{currency: r.Currency, country: r.Country, split: s}, nil
+	return pending{
+		currency:       r.Currency,
+		country:        r.Country,
+		split:          s,
+		campusRtW:      campusRtW,
+		isBalanceSheet: isBalanceSheet,
+	}, nil
 }
 
 // isOpening reports whether a tid group is an opening-balance entry (its typ is in

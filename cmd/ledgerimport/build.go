@@ -249,6 +249,13 @@ type builder struct {
 	// the all-in-one build path). See transactions.go postGroup.
 	importSub string
 
+	// campusPlan is the Pass-1 result of the campus (Restore the Way) drawdown model
+	// (D p26.43): for each campus revenue/expense split (keyed by tid + group index),
+	// whether it is assigned the restricted fund (true) or overflowed the pool to
+	// unrestricted (false). Empty when no campus fund is configured. Computed once at
+	// the top of transactions() over the full skip-filtered export.
+	campusPlan campusPlan
+
 	// acctType maps a created account id -> its cuento type. resolveSplit consults
 	// it so a source dimension (functional class from kls, program from kat) is only
 	// applied on the account types the store accepts it on (D21/D24) -- the source
