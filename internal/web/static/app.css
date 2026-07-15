@@ -300,6 +300,21 @@ button, input, select, textarea { font: inherit; color: inherit; }
   border-color: var(--color-primary-active);
 }
 .btn-ghost { background: transparent; }
+/* A disabled button LOOKS disabled: dimmed + a not-allowed cursor, with the primary
+   fill neutralized. Placed after the :hover/:active rules so it wins on a hovered
+   disabled button. Used e.g. by the reconcile Finalize button, which stays disabled
+   until the reconciliation difference is zero (.Summary.Finalizable). */
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary:disabled,
+.btn-primary[disabled] {
+  background: var(--color-surface-alt);
+  color: var(--color-text-muted);
+  border-color: var(--color-surface-alt);
+}
 
 /* Form fields. */
 .field { margin-bottom: var(--space-4); }
