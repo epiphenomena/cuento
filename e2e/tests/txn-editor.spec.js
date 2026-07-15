@@ -205,6 +205,48 @@ test.describe('transaction editor', () => {
     await expect(page.locator('#txn-program-1')).toBeVisible();
   });
 
+  // p26.39: an expense split defaults the functional class to Program (expense splits
+  // REQUIRE a class, rule 7) with Management & general + Fundraising as the ready
+  // alternates. An expense account with NO default class -> the class preselects "program",
+  // and the option order is program, management, fundraising.
+  test('an expense split defaults its functional class to Program (no account default)', async ({
+    page,
+    server,
+  }) => {
+    await login(page, server);
+    await createAsset(page, 'Prog Bank');
+    // An expense account WITHOUT a default functional class (skip the #af-func selection so
+    // it stores none).
+    await openNewAccount(page);
+    await page.locator('#af-type').selectOption('expense');
+    await expect(page.locator('#af-func')).toBeVisible();
+    await page.locator('#af-name-en').fill('Prog Supplies');
+    const rootSub = page.locator('input[name="sub_1"]');
+    if (!(await rootSub.isChecked())) await rootSub.check();
+    // Leave #af-func at its default (none) so the account carries no default class.
+    await saveAccount(page);
+    await expect(page.locator('tr.acct-row', { hasText: 'Prog Supplies' })).toBeVisible();
+
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await page.locator('#txn-account-0').selectOption({ label: 'Prog Supplies' });
+    await expect(page.locator('#txn-class-0')).toBeVisible();
+    // Defaults to Program even though the account has no default class.
+    await expect(page.locator('#txn-class-0')).toHaveValue('program');
+
+    // The three functional-class alternates are present in order (Program, Management &
+    // general, Fundraising) after the "No class" placeholder, with the formal
+    // "Management & general" label kept (not renamed to "Admin").
+    const values = await page.locator('#txn-class-0 option').evaluateAll((os) =>
+      os.map((o) => o.value),
+    );
+    expect(values).toEqual(['', 'program', 'management', 'fundraising']);
+    const mgmtLabel = await page
+      .locator('#txn-class-0 option[value="management"]')
+      .textContent();
+    expect(mgmtLabel.trim()).toBe('Management & general');
+  });
+
   // p26.2: the account select is enhanced into a fuzzy-filter combobox (combobox.js +
   // combofilter.js). The native <select> stays the value sink (the two tests above still
   // drive it via selectOption / arrow keys). This test drives the OVERLAY input: typing

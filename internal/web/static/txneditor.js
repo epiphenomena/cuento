@@ -128,8 +128,12 @@ function initEditor(form) {
       }
     }
     if (isExpense && classSel && opt) {
+      // p26.39: an expense split defaults to Program (expense splits REQUIRE a class, rule 7).
+      // Precedence: the account's own default class wins; else Program is preselected, with
+      // Management & general ("Admin") and Fundraising the ready alternates. Never overrides
+      // a value the user (or the server round-trip) already set.
       const def = opt.dataset.defaultClass;
-      if (!classSel.value && def) classSel.value = def;
+      if (!classSel.value) classSel.value = def && def !== '' ? def : 'program';
     }
     if (!isExpense && classSel) classSel.value = '';
     if (!isRE && progSel) progSel.value = '';
