@@ -214,15 +214,27 @@ func TestReviewRejectRoutesBack(t *testing.T) {
 	book := mkUser(t, st, "reviewer3", "write", false)
 	env := seedSubmittedReport(t, st, 2000)
 
-	// Missing (whitespace-only) reason -> 422; the report stays submitted.
+	// Missing (whitespace-only) reason -> 422; the report stays submitted. p26.27: the
+	// 422 re-renders the review PAGE (the prefilled editor + the reject form), NOT the
+	// queue -- so the body carries the txn-form + reject-form markers, and the localized
+	// reject-reason error.
 	blank := url.Values{}
 	blank.Set("reason", "   ")
 	rec := asUser(t, h, sm, book, http.MethodPost, "/expenses/review/reject/"+itoa(env.reportID), blank)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("blank-reason reject = %d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
-	if strings.Contains(rec.Body.String(), "expreview.reject_reason") {
+	body := rec.Body.String()
+	if strings.Contains(body, "expreview.reject_reason") {
 		t.Error("raw i18n key leaked (not localized)")
+	}
+	// The 422 is the REVIEW PAGE, not the queue: it has the review editor form + the
+	// reject form, and the localized reject-reason error.
+	if !strings.Contains(body, `id="txn-form"`) || !strings.Contains(body, "expreview-reject-form") {
+		t.Errorf("blank-reason reject 422 did not re-render the review page (missing txn-form / reject-form); body: %s", body)
+	}
+	if !strings.Contains(body, "expreview-reject-error") {
+		t.Errorf("blank-reason reject 422 missing the reject-reason error slot; body: %s", body)
 	}
 	rep, _ := st.GetExpenseReport(context.Background(), env.reportID)
 	if rep.Status != "submitted" {

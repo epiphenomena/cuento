@@ -282,6 +282,23 @@
   <h1>{{t "expreview.post_title"}}</h1>
   <p class="hint">{{t "expreview.post_intro"}}</p>
   {{template "transaction-form" .}}
+  {{/* p26.27: reject-with-reason lives HERE (the review page), a SIBLING of the post
+       form -- NOT nested (no nested forms). A plain (no-htmx) POST: a blank reason
+       re-renders THIS page at 422 with the reject-reason error; a successful reject
+       303-redirects back to the queue. */}}
+  {{- with .Page}}
+  <section class="expreview-reject" aria-labelledby="expreview-reject-heading">
+    <h2 id="expreview-reject-heading" class="expreview-reject-heading">{{t "expreview.reject_heading"}}</h2>
+    <form class="expreview-reject-form" method="post" action="/expenses/review/reject/{{.ExpenseReportID}}">
+      <label for="expreview-reject-reason" class="expreview-reject-reason-label">{{t "expreview.reject_reason_label"}}</label>
+      <input type="text" name="reason" id="expreview-reject-reason" class="expreview-reject-reason"
+             placeholder="{{t "expreview.reject_reason_placeholder"}}"
+             aria-label="{{t "expreview.reject_reason_label"}}">
+      {{if .RejectError}}<span class="field-error expreview-reject-error" role="alert">{{t .RejectError}}</span>{{end}}
+      <button type="submit" class="btn btn-ghost expreview-reject-btn">{{t "expreview.reject"}}</button>
+    </form>
+  </section>
+  {{- end}}
 {{else}}
 {{template "shell-open" (shellTitle . (t (txnTitleKey .Page.IsEdit)))}}
   <h1>{{t (txnTitleKey .Page.IsEdit)}}</h1>

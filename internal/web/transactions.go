@@ -129,6 +129,12 @@ type txnEditorModel struct {
 	// FirstErrorRow is the index of the first row carrying an error (autofocus target
 	// after a 422 swap); -1 = none.
 	FirstErrorRow int
+
+	// RejectError is the i18n KEY of the reject-reason error shown next to the reject
+	// form on the review PAGE (p26.27: a blank reject reason re-renders the review page
+	// at 422 with this key rendered via {{t}}); "" = none. Only meaningful in the
+	// ExpenseReportID (review & post) mode.
+	RejectError string
 }
 
 // txnNewForm handles GET /transactions/new: a blank grid defaulted to the user's

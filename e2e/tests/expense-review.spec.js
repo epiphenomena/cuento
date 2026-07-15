@@ -194,16 +194,38 @@ test('expenses review: reviewer posts one report (converts) and rejects another'
   await expect(page.locator('tr.expreview-row').filter({ has: page.locator('a.expreview-post') })).toHaveCount(1);
   await expect(page.locator(`tr.expreview-row[data-report-id="${postID}"] a.expreview-view-txn`)).toBeVisible();
 
-  // Reject the SECOND report with a reason (routes it back to the submitter).
+  // p26.27: the queue row offers ONLY the "Review" link now -- the reject-with-reason
+  // form moved onto the review PAGE (no per-row reject form on the queue anymore).
+  await expect(page.locator('form.expreview-reject-form')).toHaveCount(0);
+  const rejectRow = page.locator(`tr.expreview-row[data-report-id="${rejectID}"]`);
+  await expect(rejectRow.locator('a.expreview-post')).toBeVisible();
+
+  // Open the SECOND report's review page -> the p12 editor + a reject region.
+  await rejectRow.locator('a.expreview-post').click();
+  await page.waitForURL(`**/expenses/review/${rejectID}`);
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await expect(page.locator('form.expreview-reject-form')).toBeVisible();
+
+  // A BLANK reason -> the review page re-renders at 422 with the reject-reason error
+  // (the report stays submitted, the editor + reject form still shown).
+  const rejected422 = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === `/expenses/review/reject/${rejectID}` && r.request().method() === 'POST',
+  );
+  await page.locator('form.expreview-reject-form button.expreview-reject-btn').click();
+  const resp422 = await rejected422;
+  expect(resp422.status()).toBe(422);
+  await expect(page.locator('.expreview-reject-error')).toBeVisible();
+  await expect(page.locator('form#txn-form')).toBeVisible();
+
+  // Now reject WITH a reason from the review page (routes it back to the submitter);
+  // a successful reject 303-redirects back to the queue.
   const reason = `Missing itemized receipt (${suffix}).`;
-  const rejectRow = page.locator(`tr.expreview-row[data-report-id="${rejectID}"]`).filter({
-    has: page.locator('form.expreview-reject-form'),
-  });
-  await rejectRow.locator('input.expreview-reject-reason').fill(reason);
+  await page.locator('form.expreview-reject-form input.expreview-reject-reason').fill(reason);
   const queueReloaded = page.waitForResponse(
     (r) => new URL(r.url()).pathname === '/expenses/review' && r.request().method() === 'GET',
   );
-  await rejectRow.locator('button.expreview-reject-btn').click();
+  await page.locator('form.expreview-reject-form button.expreview-reject-btn').click();
+  await page.waitForURL('**/expenses/review');
   await queueReloaded;
   // No pending reports remain (both are actioned).
   await expect(page.locator('tr.expreview-row').filter({ has: page.locator('a.expreview-post') })).toHaveCount(0);

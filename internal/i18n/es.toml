@@ -1960,7 +1960,7 @@ other = "Agregue al menos una línea antes de enviar."
 [expreview.title]
 other = "Revisión de gastos"
 [expreview.intro]
-other = "Informes de gastos enviados pendientes de revisión. Revisar y contabilizar crea un asiento contable equilibrado; rechazar devuelve el informe al remitente con su motivo."
+other = "Informes de gastos enviados pendientes de revisión. Abra un informe para revisarlo y contabilizarlo como un asiento contable equilibrado, o rechácelo devolviéndolo al remitente."
 [expreview.pending_count]
 other = "%d informe(s) pendiente(s) de revisión"
 [expreview.empty]
@@ -1982,9 +1982,11 @@ other = "Estado"
 [expreview.col.actions]
 other = "Acciones"
 [expreview.review_post]
-other = "Revisar y contabilizar"
+other = "Revisar"
 [expreview.reject]
 other = "Rechazar"
+[expreview.reject_heading]
+other = "Rechazar este informe"
 [expreview.reject_reason_placeholder]
 other = "Motivo (obligatorio)"
 [expreview.reject_reason_label]

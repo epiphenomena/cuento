@@ -3,15 +3,13 @@
   .Page is a reviewQueueModel. This is the MIRROR of import_queue.tmpl.
 
   The queue lists SUBMITTED expense reports across ALL submitters (submitter,
-  subsidiary, line count, total) with a pending-count indicator. Each offers "review &
-  post" (opens the phase-12 editor prefilled, subsidiary locked -> creates the balanced
-  txn + converts the report atomically) and an inline REJECT form that REQUIRES a reason
-  (routing the report back to the submitter, who sees the reason via p20.2). A history
+  subsidiary, line count, total) with a pending-count indicator. Each row offers ONLY a
+  "Review" link (p26.27) opening the phase-12 editor prefilled with the subsidiary
+  locked; the reviewer posts (creates the balanced txn + converts the report atomically)
+  OR rejects with a reason -- BOTH now on the review PAGE, not this queue. A history
   section shows recently converted/rejected reports for context; a CONVERTED report
   links to its posted transaction (immutable -- no re-review).
 
-  A missing reject reason re-renders THIS page at 422 with the reject-reason error (the
-  p10.3 form-error convention -- a page-level notice, since the reason input is per-row).
   Submitter/subsidiary names are stored proper nouns rendered verbatim; every other
   string via {{t}} (rule 9); money via the formatters (rule 10); no inline script
   (rule 12).
@@ -21,10 +19,6 @@
   {{- with .Page}}
   <h1>{{t "expreview.title"}}</h1>
   <p class="hint">{{t "expreview.intro"}}</p>
-
-  {{- if .ErrorKey}}
-  <p class="field-error expreview-error" role="alert">{{t .ErrorKey}}</p>
-  {{- end}}
 
   <p class="expreview-count" role="status">{{t "expreview.pending_count" .NumPending}}</p>
 
@@ -49,15 +43,10 @@
         <td class="expreview-cell-lines">{{.LineCount}}</td>
         <td class="expreview-cell-total"><span class="amount">{{.TotalFmt}}</span></td>
         <td class="expreview-cell-actions">
+          {{/* p26.27: the row offers ONLY the "Review" link; reject-with-reason moved
+               ONTO the review page (transaction_form.tmpl's ExpenseReportID branch), so
+               the reviewer rejects WHILE viewing the specific report. */}}
           <a href="/expenses/review/{{.ID}}" class="btn btn-primary expreview-post">{{t "expreview.review_post"}}</a>
-          {{/* Plain form (no htmx): a missing reason re-renders the WHOLE queue at 422
-               (page-level notice); a successful reject 303-redirects back here. */}}
-          <form class="expreview-reject-form" method="post" action="/expenses/review/reject/{{.ID}}">
-            <input type="text" name="reason" class="expreview-reject-reason"
-                   placeholder="{{t "expreview.reject_reason_placeholder"}}"
-                   aria-label="{{t "expreview.reject_reason_label"}}">
-            <button type="submit" class="btn btn-ghost expreview-reject-btn">{{t "expreview.reject"}}</button>
-          </form>
         </td>
       </tr>
       {{- end}}

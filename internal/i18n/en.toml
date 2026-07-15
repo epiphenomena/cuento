@@ -1966,7 +1966,7 @@ other = "Add at least one line before submitting."
 [expreview.title]
 other = "Expense review"
 [expreview.intro]
-other = "Submitted expense reports awaiting review. Review & post creates a balanced ledger transaction; reject routes the report back to the submitter with your reason."
+other = "Submitted expense reports awaiting review. Open a report to review and post it as a balanced ledger transaction, or reject it back to the submitter."
 [expreview.pending_count]
 other = "%d report(s) pending review"
 [expreview.empty]
@@ -1988,9 +1988,11 @@ other = "Status"
 [expreview.col.actions]
 other = "Actions"
 [expreview.review_post]
-other = "Review & post"
+other = "Review"
 [expreview.reject]
 other = "Reject"
+[expreview.reject_heading]
+other = "Reject this report"
 [expreview.reject_reason_placeholder]
 other = "Reason (required)"
 [expreview.reject_reason_label]

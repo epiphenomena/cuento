@@ -68,9 +68,6 @@ type reviewQueueModel struct {
 	Pending    []reviewQueueRow
 	History    []reviewQueueRow
 	NumPending int
-
-	// ErrorKey is a page-level i18n error (the missing-reject-reason case), "" = none.
-	ErrorKey string
 }
 
 // expenseReview handles GET /expenses/review (TxnWrite): the reviewer queue. Submitted
@@ -83,7 +80,7 @@ func (s *server) expenseReview(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	model, err := s.buildReviewQueue(r, submitted, "")
+	model, err := s.buildReviewQueue(r, submitted)
 	if err != nil {
 		s.serverError(w)
 		return
@@ -94,8 +91,8 @@ func (s *server) expenseReview(w http.ResponseWriter, r *http.Request) {
 // buildReviewQueue assembles the queue model: the submitted reports (the working set)
 // plus the rejected + converted reports as history, each row carrying submitter +
 // subsidiary names, the line count + summed magnitude, and (converted) the posted txn
-// id. errKey stamps a page-level error ("" = none).
-func (s *server) buildReviewQueue(r *http.Request, submitted []sqlc.ExpenseReport, errKey string) (reviewQueueModel, error) {
+// id.
+func (s *server) buildReviewQueue(r *http.Request, submitted []sqlc.ExpenseReport) (reviewQueueModel, error) {
 	ctx := r.Context()
 	subNames, err := subNameMap(ctx, s.store)
 	if err != nil {
@@ -106,7 +103,7 @@ func (s *server) buildReviewQueue(r *http.Request, submitted []sqlc.ExpenseRepor
 		return reviewQueueModel{}, err
 	}
 
-	model := reviewQueueModel{NumPending: len(submitted), ErrorKey: errKey}
+	model := reviewQueueModel{NumPending: len(submitted)}
 	for _, rep := range submitted {
 		row, err := s.buildReviewRow(ctx, rep, subNames, userNames)
 		if err != nil {
@@ -208,26 +205,40 @@ func (s *server) expenseReviewForm(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/expenses/review", http.StatusSeeOther)
 		return
 	}
-	lines, err := s.store.ExpenseReportLines(ctx, id)
-	if err != nil {
-		s.serverError(w)
+	model, ok := s.buildReviewEditorModel(w, r, u, rep)
+	if !ok {
 		return
 	}
+	s.renderEditor(w, r, model)
+}
 
+// buildReviewEditorModel assembles the phase-12 editor model for a SUBMITTED report:
+// the sub-scoped options (newEditorModel), the ExpenseReportID marker (review & post
+// mode -> subsidiary locked), today's date, and the report's lines prefilled as rows
+// with a trailing empty counter-side row. It is shared by expenseReviewForm (the GET)
+// and the reject-422 re-render so a blank-reason reject re-renders the IDENTICAL review
+// page. ok=false means a 500 was already written.
+func (s *server) buildReviewEditorModel(w http.ResponseWriter, r *http.Request, u *store.CurrentUser, rep sqlc.ExpenseReport) (txnEditorModel, bool) {
+	ctx := r.Context()
+	lines, err := s.store.ExpenseReportLines(ctx, rep.ID)
+	if err != nil {
+		s.serverError(w)
+		return txnEditorModel{}, false
+	}
 	model, err := s.newEditorModel(ctx, u, rep.SubsidiaryID)
 	if err != nil {
 		s.serverError(w)
-		return
+		return txnEditorModel{}, false
 	}
-	model.ExpenseReportID = id
+	model.ExpenseReportID = rep.ID
 	model.FirstErrorRow = -1
 	model.Date = money.FormatDate(s.now(), dateFormatFor(u))
 	model.Rows = s.prefillExpenseRows(r, model, rep, lines)
 	if err := s.injectRowAccounts(ctx, &model); err != nil { // p26.10: never blank a referenced account
 		s.serverError(w)
-		return
+		return txnEditorModel{}, false
 	}
-	s.renderEditor(w, r, model)
+	return model, true
 }
 
 // prefillExpenseRows builds the editor rows from the report's lines: one row per line
@@ -385,11 +396,14 @@ func (s *server) expenseReviewPost(w http.ResponseWriter, r *http.Request) {
 
 // expenseReviewReject handles POST /expenses/review/{id}/reject (TxnWrite): reject a
 // submitted report with a REASON (required), routing it back to the submitter (p20.2
-// shows the reason; the submitter resubmits). A missing/blank reason -> 422 (the queue
-// re-rendered with the reject-reason error). A report that is not submitted (a race, or
-// a converted report) -> back to the queue.
+// shows the reason; the submitter resubmits). p26.27: the reject form now lives on the
+// review PAGE (transaction_form.tmpl's ExpenseReportID branch), so a missing/blank reason
+// re-renders THAT page at 422 with the reject-reason error (the report still shown), NOT
+// the queue. A successful reject 303-redirects back to the queue. A report that is not
+// submitted (a race, or a converted report) -> back to the queue.
 func (s *server) expenseReviewReject(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	u := currentUser(ctx)
 	id := parseID(r.PathValue("id"))
 
 	rep, err := s.store.GetExpenseReport(ctx, id)
@@ -401,14 +415,13 @@ func (s *server) expenseReviewReject(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	_ = rep
 	reason := trimSpace(r.FormValue("reason"))
 	if reason == "" {
-		// A missing reason: re-render the queue at 422 with the reject-reason error (the
-		// reason input is per-row, so a page-level notice, mirroring the p17.3 discard).
-		// The store also rejects an empty reason, but trimming/short-circuiting here
-		// handles a whitespace-only reason (the store checks == "" without trimming).
-		s.renderReviewError(w, r, "expreview.reject_reason_required")
+		// A missing reason: re-render the review PAGE at 422 with the reject-reason error
+		// (the report is still submitted, so the prefilled editor rebuilds cleanly). The
+		// store also rejects an empty reason, but trimming/short-circuiting here handles a
+		// whitespace-only reason (the store checks == "" without trimming).
+		s.renderRejectError(w, r, u, rep, "expreview.reject_reason_required")
 		return
 	}
 
@@ -418,7 +431,7 @@ func (s *server) expenseReviewReject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, store.ErrExpenseReportReasonRequired) {
-			s.renderReviewError(w, r, "expreview.reject_reason_required")
+			s.renderRejectError(w, r, u, rep, "expreview.reject_reason_required")
 			return
 		}
 		s.serverError(w)
@@ -431,21 +444,18 @@ func (s *server) expenseReviewReject(w http.ResponseWriter, r *http.Request) {
 // helpers
 // ===========================================================================
 
-// renderReviewError re-renders the review queue at 422 with a page-level error (the
-// missing-reject-reason case).
-func (s *server) renderReviewError(w http.ResponseWriter, r *http.Request, errKey string) {
-	ctx := r.Context()
-	submitted, err := s.store.ExpenseReportsByStatus(ctx, "submitted")
-	if err != nil {
-		s.serverError(w)
+// renderRejectError re-renders the review PAGE (the prefilled editor + the reject form)
+// at 422 with the reject-reason error stamped next to the reject form (p26.27). It reuses
+// buildReviewEditorModel so the page is IDENTICAL to the GET, then sets RejectError to the
+// error KEY (the template localizes it via {{t}}). The report is still submitted here, so
+// the prefill rebuilds cleanly.
+func (s *server) renderRejectError(w http.ResponseWriter, r *http.Request, u *store.CurrentUser, rep sqlc.ExpenseReport, errKey string) {
+	model, ok := s.buildReviewEditorModel(w, r, u, rep)
+	if !ok {
 		return
 	}
-	model, err := s.buildReviewQueue(r, submitted, errKey)
-	if err != nil {
-		s.serverError(w)
-		return
-	}
-	s.render(w, r, http.StatusUnprocessableEntity, "expense_review.tmpl", s.newShellPage(r, model))
+	model.RejectError = errKey
+	s.render(w, r, http.StatusUnprocessableEntity, "transaction_form.tmpl", s.newWideShellPage(r, model))
 }
 
 // redirectReview sends a review action's response: an HX-Redirect for htmx (a client
