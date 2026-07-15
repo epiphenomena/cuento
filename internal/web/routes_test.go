@@ -106,7 +106,7 @@ func newMatrixApp(t *testing.T) (http.Handler, []Route, *store.Store, *sql.DB, *
 	} else if bid, err := st.CreateImportBatch(seedCtx, "seed.csv", a1, 1, pid, "2025-01-01T00:00:00Z"); err != nil {
 		t.Fatalf("seed import batch: %v", err)
 	} else if _, err := st.StageImportRows(seedCtx, bid, a1, []bankimport.ParsedRow{
-		{Date: "2025-01-01", AmountMinor: 100, Payee: "Seed", Memo: "Seed", Raw: []string{"2025-01-01", "1.00", "Seed", "Seed"}},
+		{Date: "2025-01-01", AmountMinor: 100, Description: "Seed", Memo: "Seed", Raw: []string{"2025-01-01", "1.00", "Seed", "Seed"}},
 	}); err != nil {
 		t.Fatalf("seed import row: %v", err)
 	}

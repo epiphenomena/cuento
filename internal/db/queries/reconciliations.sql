@@ -166,8 +166,8 @@ ORDER BY statement_date DESC, id DESC;
 -- they are baked into the opening balance (PriorFinalizedStatementBalance), so
 -- showing them would double-count. Ordered ascending by (date, split id) so the
 -- workspace reads chronologically. Params: account_id, currency, reconciliation_id.
-SELECT s.id, s.transaction_id, s.amount, s.fund_id, s.memo,
-       s.reconciliation_id, t.date, t.subsidiary_id, t.payee_id, t.memo AS txn_memo
+SELECT s.id, s.transaction_id, s.amount, s.fund_id, s.memo, s.description,
+       s.reconciliation_id, t.date, t.subsidiary_id, t.memo AS txn_memo
 FROM splits s
 JOIN transactions t ON t.id = s.transaction_id
 WHERE s.account_id = ?
@@ -189,7 +189,7 @@ ORDER BY t.date, s.id;
 -- is fully identified by reconciliation_id; scoping would shrink the set and break the
 -- chain. Param: reconciliation_id.
 SELECT s.id, s.transaction_id, s.amount, s.fund_id, s.memo, s.description,
-       t.date, t.subsidiary_id, t.payee_id, t.memo AS txn_memo
+       t.date, t.subsidiary_id, t.memo AS txn_memo
 FROM splits s
 JOIN transactions t ON t.id = s.transaction_id
 WHERE s.reconciliation_id = ?

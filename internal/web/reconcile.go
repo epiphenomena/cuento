@@ -286,18 +286,18 @@ func reconStartErrorField(err error) (field, key string) {
 
 // ---- WORKSPACE ------------------------------------------------------------
 
-// reconSplitRow is one workspace split line: date/payee/memo/fund-chip/amount plus
-// its cleared state and the stable toggle/row ids.
+// reconSplitRow is one workspace split line: date/description/memo/fund-chip/amount
+// plus its cleared state and the stable toggle/row ids.
 type reconSplitRow struct {
-	SplitID   int64
-	RowID     string
-	ToggleID  string
-	Date      string
-	PayeeName string
-	Memo      string
-	FundName  string
-	AmountFmt string
-	Cleared   bool
+	SplitID     int64
+	RowID       string
+	ToggleID    string
+	Date        string
+	Description string
+	Memo        string
+	FundName    string
+	AmountFmt   string
+	Cleared     bool
 }
 
 // reconSummary is the sticky cleared/difference summary. Finalizable is the
@@ -367,10 +367,6 @@ func (s *server) buildWorkspace(ctx context.Context, reconID int64) (reconWorksp
 		return reconWorkspaceModel{}, err
 	}
 
-	payees, err := payeeNameMap(ctx, s.store)
-	if err != nil {
-		return reconWorkspaceModel{}, err
-	}
 	funds, err := fundNameMap(ctx, s.store)
 	if err != nil {
 		return reconWorkspaceModel{}, err
@@ -389,10 +385,6 @@ func (s *server) buildWorkspace(ctx context.Context, reconID int64) (reconWorksp
 		ReopenPath:     reconReopenPath(reconID),
 	}
 	for _, sp := range splits {
-		payee := ""
-		if sp.PayeeID != nil {
-			payee = payees[*sp.PayeeID]
-		}
 		fund := ""
 		if sp.FundID != nil {
 			fund = funds[*sp.FundID]
@@ -402,15 +394,15 @@ func (s *server) buildWorkspace(ctx context.Context, reconID int64) (reconWorksp
 			memo = sp.TxnMemo
 		}
 		model.Rows = append(model.Rows, reconSplitRow{
-			SplitID:   sp.SplitID,
-			RowID:     reconRowID(sp.SplitID),
-			ToggleID:  reconToggleID(sp.SplitID),
-			Date:      money.FormatDate(parseISOForDisplay(sp.Date), df),
-			PayeeName: payee,
-			Memo:      memo,
-			FundName:  fund,
-			AmountFmt: recon.Currency + " " + money.Format(sp.Amount, exp, opts),
-			Cleared:   sp.Cleared,
+			SplitID:     sp.SplitID,
+			RowID:       reconRowID(sp.SplitID),
+			ToggleID:    reconToggleID(sp.SplitID),
+			Date:        money.FormatDate(parseISOForDisplay(sp.Date), df),
+			Description: sp.Description,
+			Memo:        memo,
+			FundName:    fund,
+			AmountFmt:   recon.Currency + " " + money.Format(sp.Amount, exp, opts),
+			Cleared:     sp.Cleared,
 		})
 	}
 	// Uncleared first, then cleared, keeping each group in chronological order (the

@@ -327,22 +327,6 @@ type OrgSetting struct {
 	Value string
 }
 
-type Payee struct {
-	ID     int64
-	Name   string
-	Active int64
-}
-
-type PayeesVersion struct {
-	ID        int64
-	EntityID  int64
-	ChangeID  int64
-	ValidFrom string
-	Op        string
-	Name      string
-	Active    int64
-}
-
 type Program struct {
 	ID        int64
 	ParentID  sql.NullInt64
@@ -455,7 +439,6 @@ type Transaction struct {
 	ID           int64
 	Date         string
 	SubsidiaryID int64
-	PayeeID      sql.NullInt64
 	Memo         string
 	Currency     string
 	Deleted      int64
@@ -470,7 +453,6 @@ type TransactionsVersion struct {
 	Op           string
 	Date         string
 	SubsidiaryID int64
-	PayeeID      sql.NullInt64
 	Memo         string
 	Currency     string
 	Deleted      int64

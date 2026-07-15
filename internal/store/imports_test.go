@@ -15,14 +15,14 @@ import (
 // row as a duplicate (idempotent -- no double post).
 
 // stageOnePending stages a single pending row on env.checking and returns its id.
-func stageOnePending(t *testing.T, env importEnv, date string, amount int64, payee, memo string) int64 {
+func stageOnePending(t *testing.T, env importEnv, date string, amount int64, description, memo string) int64 {
 	t.Helper()
 	batch, err := env.s.CreateImportBatch(mutCtx(), "queue.csv", env.checking, env.subUS, env.profile, "2025-02-01T00:00:00Z")
 	if err != nil {
 		t.Fatalf("CreateImportBatch: %v", err)
 	}
 	staged, err := env.s.StageImportRows(mutCtx(), batch, env.checking, []bankimport.ParsedRow{
-		{Date: date, AmountMinor: amount, Payee: payee, Memo: memo, Raw: []string{date, payee, memo}},
+		{Date: date, AmountMinor: amount, Description: description, Memo: memo, Raw: []string{date, description, memo}},
 	})
 	if err != nil {
 		t.Fatalf("StageImportRows: %v", err)
@@ -232,7 +232,7 @@ func TestReimportFlagsDuplicates(t *testing.T) {
 		t.Fatalf("CreateImportBatch 2: %v", err)
 	}
 	staged, err := s.StageImportRows(mutCtx(), batch2, env.checking, []bankimport.ParsedRow{
-		{Date: "2025-01-15", AmountMinor: 10000, Payee: "Acme", Memo: "Invoice", Raw: []string{"2025-01-15", "Acme", "Invoice"}},
+		{Date: "2025-01-15", AmountMinor: 10000, Description: "Acme", Memo: "Invoice", Raw: []string{"2025-01-15", "Acme", "Invoice"}},
 	})
 	if err != nil {
 		t.Fatalf("StageImportRows 2: %v", err)
@@ -349,16 +349,14 @@ func TestDedupeFlagsExistingSplitsAndPendingRows(t *testing.T) {
 	s := env.s
 
 	// (a) Post a REAL ledger transaction: a $100.00 deposit into Checking (a
-	// positive net-debit on the asset account) with payee "Acme" and memo "Invoice".
-	// Its bank-side split becomes a dedupe source a matching bank row must hit.
-	payee, err := s.EnsurePayee(mutCtx(), "Acme")
-	if err != nil {
-		t.Fatalf("EnsurePayee: %v", err)
-	}
-	_, err = s.PostTransaction(mutCtx(), PostTransactionInput{
-		Date: "2025-01-15", SubsidiaryID: env.subUS, PayeeID: &payee, Memo: "Invoice", Currency: "USD",
+	// positive net-debit on the asset account) whose bank-side split carries the
+	// description "Acme" and memo "Invoice". That split's (date, amount, description,
+	// memo) is a dedupe source a matching bank row must hit (p26.20: the split
+	// description replaces the retired payee name as the dedupe text).
+	_, err := s.PostTransaction(mutCtx(), PostTransactionInput{
+		Date: "2025-01-15", SubsidiaryID: env.subUS, Memo: "Invoice", Currency: "USD",
 		Splits: []SplitInput{
-			{AccountID: env.checking, Amount: 10000, Memo: "Invoice", Position: 0},
+			{AccountID: env.checking, Amount: 10000, Memo: "Invoice", Description: "Acme", Position: 0},
 			{AccountID: env.equity, Amount: -10000, Position: 1},
 		},
 	})
@@ -366,13 +364,13 @@ func TestDedupeFlagsExistingSplitsAndPendingRows(t *testing.T) {
 		t.Fatalf("PostTransaction: %v", err)
 	}
 
-	// (b) Stage a PENDING row in a FIRST batch: a $55.00 line for payee "Bob".
+	// (b) Stage a PENDING row in a FIRST batch: a $55.00 line described "Bob".
 	batch1, err := s.CreateImportBatch(mutCtx(), "jan.csv", env.checking, env.subUS, env.profile, "2025-02-01T00:00:00Z")
 	if err != nil {
 		t.Fatalf("CreateImportBatch 1: %v", err)
 	}
 	staged1, err := s.StageImportRows(mutCtx(), batch1, env.checking, []bankimport.ParsedRow{
-		{Date: "2025-01-20", AmountMinor: 5500, Payee: "Bob", Memo: "Donation", Raw: []string{"2025-01-20", "55.00", "Bob", "Donation"}},
+		{Date: "2025-01-20", AmountMinor: 5500, Description: "Bob", Memo: "Donation", Raw: []string{"2025-01-20", "55.00", "Bob", "Donation"}},
 	})
 	if err != nil {
 		t.Fatalf("StageImportRows 1: %v", err)
@@ -392,11 +390,11 @@ func TestDedupeFlagsExistingSplitsAndPendingRows(t *testing.T) {
 	staged2, err := s.StageImportRows(mutCtx(), batch2, env.checking, []bankimport.ParsedRow{
 		// Same natural key as the posted ledger split (case/whitespace differ to
 		// prove normalization): date, +10000, "acme", "invoice".
-		{Date: "2025-01-15", AmountMinor: 10000, Payee: "ACME", Memo: "  invoice ", Raw: []string{"2025-01-15", "100.00", "ACME", "invoice"}},
+		{Date: "2025-01-15", AmountMinor: 10000, Description: "ACME", Memo: "  invoice ", Raw: []string{"2025-01-15", "100.00", "ACME", "invoice"}},
 		// Same natural key as the pending batch1 row.
-		{Date: "2025-01-20", AmountMinor: 5500, Payee: "Bob", Memo: "Donation", Raw: []string{"2025-01-20", "55.00", "Bob", "Donation"}},
+		{Date: "2025-01-20", AmountMinor: 5500, Description: "Bob", Memo: "Donation", Raw: []string{"2025-01-20", "55.00", "Bob", "Donation"}},
 		// Brand-new.
-		{Date: "2025-02-10", AmountMinor: 2500, Payee: "Carol", Memo: "New", Raw: []string{"2025-02-10", "25.00", "Carol", "New"}},
+		{Date: "2025-02-10", AmountMinor: 2500, Description: "Carol", Memo: "New", Raw: []string{"2025-02-10", "25.00", "Carol", "New"}},
 	})
 	if err != nil {
 		t.Fatalf("StageImportRows 2: %v", err)

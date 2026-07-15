@@ -534,8 +534,6 @@ other = "Load more"
 other = "Date"
 [register.col.subsidiary]
 other = "Subsidiary"
-[register.col.payee]
-other = "Payee"
 [register.col.description]
 other = "Description"
 [register.col.memo]
@@ -810,12 +808,6 @@ other = "Subsidiary"
 other = "Date"
 [txn.date_hint]
 other = "Type a date; t = today, + / - shift a day"
-[txn.payee]
-other = "Payee"
-[txn.payee_none]
-other = "No payee"
-[txn.payee_search]
-other = "Search payees..."
 [txn.memo]
 other = "Memo"
 [txn.description_hint]
@@ -866,8 +858,6 @@ other = "Description"
 other = "Memo"
 [txn.col.error]
 other = "Error"
-[txn.autofill.dropped_out_of_sub]
-other = "Some lines from this payee's last transaction were left out because their accounts are not in the selected subsidiary."
 [register.new_txn]
 other = "New transaction"
 [register.edit_txn]
@@ -954,8 +944,6 @@ other = "Line %d"
 other = "Date"
 [history.field.subsidiary]
 other = "Subsidiary"
-[history.field.payee]
-other = "Payee"
 [history.field.memo]
 other = "Memo"
 [history.field.description]
@@ -981,8 +969,6 @@ other = "Void transaction"
 other = "Voiding removes this transaction from the ledger. Its history is preserved. This cannot be undone from the app."
 [void.date]
 other = "Date"
-[void.payee]
-other = "Payee"
 [void.memo]
 other = "Memo"
 [void.col.account]
@@ -1436,8 +1422,8 @@ other = "Reopen"
 other = "Cleared"
 [recon.col.date]
 other = "Date"
-[recon.col.payee]
-other = "Payee"
+[recon.col.description]
+other = "Description"
 [recon.col.memo]
 other = "Memo"
 [recon.col.fund]

@@ -38,7 +38,6 @@ type HistoryField string
 const (
 	FieldDate       HistoryField = "date"
 	FieldSubsidiary HistoryField = "subsidiary"
-	FieldPayee      HistoryField = "payee"
 	FieldMemo       HistoryField = "memo"
 	FieldNotes      HistoryField = "notes"
 	FieldCurrency   HistoryField = "currency"
@@ -178,7 +177,7 @@ func (s *Store) TransactionHistory(ctx context.Context, id int64) ([]HistoryEntr
 
 // headerDiff computes the changed header fields between two snapshots. prev == nil
 // means a create (every non-empty field is a diff against the empty side, so the
-// timeline shows the initial values). NULL-aware for the optional payee.
+// timeline shows the initial values).
 func headerDiff(prev, cur *sqlc.TransactionVersionHistoryRow) []FieldDiff {
 	var diffs []FieldDiff
 	add := func(field HistoryField, oldV, newV DiffValue, changed bool) {
@@ -190,7 +189,6 @@ func headerDiff(prev, cur *sqlc.TransactionVersionHistoryRow) []FieldDiff {
 		// Create: show the initial header values as "" -> value.
 		add(FieldDate, DiffValue{}, DiffValue{Text: cur.Date}, true)
 		add(FieldSubsidiary, DiffValue{}, DiffValue{ID: valid(cur.SubsidiaryID)}, true)
-		add(FieldPayee, DiffValue{}, DiffValue{ID: cur.PayeeID}, cur.PayeeID.Valid)
 		add(FieldMemo, DiffValue{}, DiffValue{Text: cur.Memo}, cur.Memo != "")
 		add(FieldNotes, DiffValue{}, DiffValue{Text: cur.Notes}, cur.Notes != "")
 		add(FieldCurrency, DiffValue{}, DiffValue{Text: cur.Currency}, true)
@@ -198,7 +196,6 @@ func headerDiff(prev, cur *sqlc.TransactionVersionHistoryRow) []FieldDiff {
 	}
 	add(FieldDate, DiffValue{Text: prev.Date}, DiffValue{Text: cur.Date}, prev.Date != cur.Date)
 	add(FieldSubsidiary, DiffValue{ID: valid(prev.SubsidiaryID)}, DiffValue{ID: valid(cur.SubsidiaryID)}, prev.SubsidiaryID != cur.SubsidiaryID)
-	add(FieldPayee, DiffValue{ID: prev.PayeeID}, DiffValue{ID: cur.PayeeID}, !nullInt64Eq(prev.PayeeID, cur.PayeeID))
 	add(FieldMemo, DiffValue{Text: prev.Memo}, DiffValue{Text: cur.Memo}, prev.Memo != cur.Memo)
 	add(FieldNotes, DiffValue{Text: prev.Notes}, DiffValue{Text: cur.Notes}, prev.Notes != cur.Notes)
 	add(FieldCurrency, DiffValue{Text: prev.Currency}, DiffValue{Text: cur.Currency}, prev.Currency != cur.Currency)

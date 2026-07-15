@@ -15,7 +15,7 @@ import (
 // the merge-accounts confirm UX (merge.go):
 //
 //   1. GET  /transactions/{id}/void  -> a REVIEW page summarizing the transaction
-//      (date, payee, memo, split lines) and a Confirm button. ZERO writes.
+//      (date, memo, split lines) and a Confirm button. ZERO writes.
 //   2. POST /transactions/{id}/void with confirm=1 -> store.DeleteTransaction (rule
 //      14 soft-delete: the header's deleted flag flips and a transactions_versions
 //      op='delete' is appended; splits are left live -- the as-of/history queries
@@ -31,7 +31,6 @@ import (
 type voidReviewModel struct {
 	TxnID    int64
 	Date     string // formatted per the user's date format (rule 10)
-	Payee    string // "" = none
 	Memo     string // "" = none
 	Lines    []voidLine
 	ErrorKey string // "" = none; an i18n key shown as a banner (p16.5 recon lock)
@@ -111,7 +110,7 @@ func (s *server) void(w http.ResponseWriter, r *http.Request) {
 }
 
 // buildVoidReview assembles the review model from the LIVE transaction (header +
-// splits), formatting the date/amounts (rule 10) and resolving account/payee/fund
+// splits), formatting the date/amounts (rule 10) and resolving account/fund
 // names (rule 9). It returns an error (the handler 404s) for a missing or already-
 // voided transaction (GetTransaction).
 func (s *server) buildVoidReview(ctx context.Context, u *store.CurrentUser, lang string, id int64) (voidReviewModel, error) {
@@ -132,10 +131,6 @@ func (s *server) buildVoidReview(ctx context.Context, u *store.CurrentUser, lang
 	if err != nil {
 		return voidReviewModel{}, err
 	}
-	payees, err := payeeNameMap(ctx, s.store)
-	if err != nil {
-		return voidReviewModel{}, err
-	}
 
 	exp := s.currencyExponent(ctx, hdr.Currency)
 	opts := formatOptsFor(u)
@@ -144,9 +139,6 @@ func (s *server) buildVoidReview(ctx context.Context, u *store.CurrentUser, lang
 		TxnID: id,
 		Date:  money.FormatDate(parseISOForDisplay(hdr.Date), dateFormatFor(u)),
 		Memo:  hdr.Memo,
-	}
-	if hdr.PayeeID.Valid {
-		model.Payee = payees[hdr.PayeeID.Int64]
 	}
 	for _, sp := range splits {
 		line := voidLine{
@@ -164,9 +156,9 @@ func (s *server) buildVoidReview(ctx context.Context, u *store.CurrentUser, lang
 // txnDuplicate handles GET /transactions/{id}/duplicate (TxnWrite): it opens the
 // editor prefilled from an existing transaction's header + splits as a NEW UNSAVED
 // entry (no txn id, no split ids), so saving POSTs to /transactions (a create). The
-// payee and memo are copied (a duplicate is usually the same payee/purpose); the
-// date defaults to TODAY, not the original's, since a duplicate is a fresh entry made
-// now (DECISIONS p12.4). It reuses the p12.2 editor model machinery.
+// memo is copied (a duplicate is usually the same purpose); the date defaults to
+// TODAY, not the original's, since a duplicate is a fresh entry made now
+// (DECISIONS p12.4). It reuses the p12.2 editor model machinery.
 func (s *server) txnDuplicate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(ctx)
@@ -194,16 +186,7 @@ func (s *server) txnDuplicate(w http.ResponseWriter, r *http.Request) {
 	model.Currency = hdr.Currency
 	// Date defaults to today (a duplicate is a fresh entry made now, DECISIONS p12.4).
 	model.Date = money.FormatDate(time.Now(), dateFormatFor(u))
-	// Payee + memo copied from the source (same payee/purpose is the common case).
-	if hdr.PayeeID.Valid {
-		model.Payee = hdr.PayeeID.Int64
-		for _, p := range model.Payees {
-			if p.ID == model.Payee {
-				model.PayeeName = p.Name
-				break
-			}
-		}
-	}
+	// Memo copied from the source (same purpose is the common case).
 	model.Memo = hdr.Memo
 
 	exp := s.currencyExponent(ctx, hdr.Currency)

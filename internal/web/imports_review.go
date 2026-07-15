@@ -14,8 +14,8 @@ import (
 // p17.3 bank-CSV review queue -> post. After p17.2 stages a batch's rows as pending,
 // the reviewer works the queue: a per-batch PENDING list with a progress indicator,
 // an "edit & post" that opens the phase-12 editor PREFILLED from the staged row (the
-// batch account line + payee-template counter-splits, with the batch's SUBSIDIARY
-// LOCKED), and a discard-with-reason action. Posting creates a real balanced,
+// batch account line + one empty counter row for the reviewer to author, with the
+// batch's SUBSIDIARY LOCKED), and a discard-with-reason action. Posting creates a real balanced,
 // versioned ledger transaction and LINKS the row (store.PostImportRow, atomic); the
 // posted transaction is the row's audit, and a discarded row's audit is the change
 // carrying the reason.
@@ -55,7 +55,7 @@ type importQueueRow struct {
 	ID          int64
 	Date        string
 	AmountFmt   string
-	Payee       string
+	Description string // bank line descriptive text (the mapped payee_col)
 	Memo        string
 	Status      string
 	Duplicate   bool
@@ -119,13 +119,13 @@ func (s *server) buildImportQueue(r *http.Request, batchID int64, errKey, errArg
 			amt = *row.AmountMinor
 		}
 		qr := importQueueRow{
-			ID:        row.ID,
-			Date:      money.FormatDate(parseISOForDisplay(row.Date), df),
-			AmountFmt: currency + " " + money.Format(amt, exp, opts),
-			Payee:     row.Payee,
-			Memo:      row.Memo,
-			Status:    row.Status,
-			Duplicate: row.Duplicate,
+			ID:          row.ID,
+			Date:        money.FormatDate(parseISOForDisplay(row.Date), df),
+			AmountFmt:   currency + " " + money.Format(amt, exp, opts),
+			Description: row.Description,
+			Memo:        row.Memo,
+			Status:      row.Status,
+			Duplicate:   row.Duplicate,
 		}
 		if row.PostedTxnID != nil {
 			qr.PostedTxnID = *row.PostedTxnID
@@ -137,9 +137,10 @@ func (s *server) buildImportQueue(r *http.Request, batchID int64, errKey, errArg
 
 // importRowEditForm handles GET /import/rows/{id}/edit (TxnWrite): open the phase-12
 // editor PREFILLED from the staged row. Row 0 is the batch-account line (signed
-// parsed amount, date, payee name, memo); the counter-splits are prefilled via the
-// payee template (fund + program + functional class carried), with the batch's
-// SUBSIDIARY LOCKED. A non-pending row is redirected back to the queue.
+// parsed amount, date, the staged descriptive text as its split description, memo);
+// one empty counter row follows for the reviewer to author (the payee entity is
+// retired, so there is no last-transaction template). The batch's SUBSIDIARY is
+// LOCKED. A non-pending row is redirected back to the queue.
 func (s *server) importRowEditForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(ctx)
@@ -167,19 +168,7 @@ func (s *server) importRowEditForm(w http.ResponseWriter, r *http.Request) {
 	model.Date = money.FormatDate(parseISOForDisplay(row.Date), dateFormatFor(u))
 	model.Memo = row.Memo
 
-	// Resolve the parsed payee to an existing payee by name (READ-ONLY -- never create
-	// at GET; creation happens on POST via create-on-save). A match seeds the payee id
-	// + the template counter-splits.
-	var payeeID int64
-	if row.Payee != "" {
-		if id, err := s.store.LookupPayeeByName(ctx, row.Payee); err == nil {
-			payeeID = id
-		}
-	}
-	model.Payee = payeeID
-	model.PayeeName = row.Payee
-
-	model.Rows = s.prefillImportRows(ctx, u, model, row, payeeID)
+	model.Rows = s.prefillImportRows(ctx, u, model, row)
 	if err := s.injectRowAccounts(ctx, &model); err != nil { // p26.10: never blank a referenced account
 		s.serverError(w)
 		return
@@ -188,24 +177,24 @@ func (s *server) importRowEditForm(w http.ResponseWriter, r *http.Request) {
 }
 
 // prefillImportRows builds the editor rows for an "edit & post": the batch-account
-// line first (the bank side, authoritative from the staged row), then the payee's
-// template counter-splits (p12.3) EXCLUDING any split already on the batch account
-// (else the bank line is doubled). The template splits carry fund + program +
-// functional class; splits whose account is outside the locked subsidiary are dropped
-// (respects-subsidiary). If a counter split carries a restricted fund, the bank line
-// is given the SAME fund so per-fund zero-sum can hold (D20) -- the user still adjusts
-// and the server re-validates.
-func (s *server) prefillImportRows(ctx context.Context, u *store.CurrentUser, model txnEditorModel, row store.ImportRow, payeeID int64) []txnRowModel {
+// (bank side) line, authoritative from the staged row, plus one empty counter row for
+// the user to fill in. The bank line's Description is seeded from the staged row's
+// descriptive text (the former "payee" line) -- the SAME text that feeds the dedupe
+// hash, so a posted bank split re-hashes to its staging key (p26.20). The payee entity
+// is retired, so there is no last-transaction template to prefill counter-splits from;
+// the reviewer authors the counter side. The store re-validates on post.
+func (s *server) prefillImportRows(ctx context.Context, u *store.CurrentUser, model txnEditorModel, row store.ImportRow) []txnRowModel {
 	exp := s.currencyExponentForAccount(ctx, row.AccountID)
 	fmtOpts := money.FormatOpts{Number: numberFormatFor(u)}
 
-	// The bank line: the batch account, the signed parsed amount, memo.
-	bankFund := int64(0)
+	// The bank line: the batch account, the signed parsed amount, memo, and the bank
+	// line's descriptive text as the split description (dedupe-hash source).
 	bank := txnRowModel{
-		Index:   0,
-		Account: row.AccountID,
-		Amount:  money.Format(row.AmountMinor, exp, fmtOpts),
-		Memo:    row.Memo,
+		Index:       0,
+		Account:     row.AccountID,
+		Amount:      money.Format(row.AmountMinor, exp, fmtOpts),
+		Memo:        row.Memo,
+		Description: row.Description,
 	}
 	if row.AmountMinor >= 0 {
 		bank.AmountDR = money.Format(row.AmountMinor, exp, fmtOpts)
@@ -213,74 +202,7 @@ func (s *server) prefillImportRows(ctx context.Context, u *store.CurrentUser, mo
 		bank.AmountCR = money.Format(-row.AmountMinor, exp, fmtOpts)
 	}
 
-	rows := []txnRowModel{bank}
-
-	if payeeID == 0 {
-		// No known payee -> just the bank line and one empty counter row to fill in.
-		rows = append(rows, txnRowModel{Index: 1})
-		return rows
-	}
-
-	tpl, err := s.store.PayeeLastTransactionTemplate(ctx, payeeID)
-	if err != nil || !tpl.Found {
-		rows = append(rows, txnRowModel{Index: 1})
-		return rows
-	}
-
-	inSub := make(map[int64]bool, len(model.Accounts))
-	for _, a := range model.Accounts {
-		inSub[a.ID] = true
-	}
-
-	idx := 1
-	for _, sp := range tpl.Splits {
-		if sp.AccountID == row.AccountID {
-			// A template split on the batch account: don't double the bank line. Carry
-			// its fund onto the bank line so a restricted counter balances per-fund.
-			if sp.FundID.Valid {
-				bankFund = sp.FundID.Int64
-			}
-			continue
-		}
-		if !inSub[sp.AccountID] {
-			continue // outside the locked subsidiary -> drop
-		}
-		cr := txnRowModel{
-			Index:   idx,
-			Account: sp.AccountID,
-			Amount:  money.Format(sp.Amount, exp, fmtOpts),
-			Memo:    sp.Memo,
-		}
-		if sp.FundID.Valid {
-			cr.Fund = sp.FundID.Int64
-			if bankFund == 0 {
-				bankFund = sp.FundID.Int64
-			}
-		}
-		if sp.ProgramID.Valid {
-			cr.Program = sp.ProgramID.Int64
-		}
-		if sp.FunctionalClass.Valid {
-			cr.Class = sp.FunctionalClass.String
-		}
-		if sp.Amount >= 0 {
-			cr.AmountDR = money.Format(sp.Amount, exp, fmtOpts)
-		} else {
-			cr.AmountCR = money.Format(-sp.Amount, exp, fmtOpts)
-		}
-		rows = append(rows, cr)
-		idx++
-	}
-	if idx == 1 {
-		// Every template split was the batch account or out-of-sub -> one empty counter.
-		rows = append(rows, txnRowModel{Index: 1})
-	}
-	// Apply the carried fund onto the bank line (D20: restricted counter forces the
-	// cash side into the fund so per-fund zero-sum can hold).
-	if bankFund != 0 {
-		rows[0].Fund = bankFund
-	}
-	return rows
+	return []txnRowModel{bank, {Index: 1}}
 }
 
 // importRowPost handles POST /import/rows/{id}/post (TxnWrite): parse the (possibly
@@ -315,23 +237,9 @@ func (s *server) importRowPost(w http.ResponseWriter, r *http.Request) {
 	model.ImportRowID = rowID
 	model.ImportBatchID = row.BatchID
 	model.Currency = currency
-	model.Payee = parseID(r.FormValue("payee"))
-	model.PayeeName = trimSpace(r.FormValue("payee_name"))
 	model.Memo = r.FormValue("memo")
 	model.Notes = r.FormValue("notes")
 	model.FirstErrorRow = -1
-
-	// Create-on-save payee (p12.3): a picked id wins; else find-or-create by typed name
-	// (its own change, before the txn write, so a validation failure leaves it reusable).
-	payeeID := model.Payee
-	if payeeID == 0 && model.PayeeName != "" {
-		payeeID, err = s.store.EnsurePayee(s.actorCtx(ctx), model.PayeeName)
-		if err != nil {
-			s.serverError(w)
-			return
-		}
-		model.Payee = payeeID
-	}
 
 	dateISO, dateOK := parseEditorDate(r.FormValue("date"), dateFormatFor(u), s.now())
 	model.Date = r.FormValue("date")
@@ -353,10 +261,6 @@ func (s *server) importRowPost(w http.ResponseWriter, r *http.Request) {
 		Notes:        model.Notes,
 		Currency:     currency,
 		Splits:       splits,
-	}
-	if payeeID != 0 {
-		p := payeeID
-		in.PayeeID = &p
 	}
 
 	if _, err := s.store.PostImportRow(s.actorCtx(ctx), rowID, in); err != nil {

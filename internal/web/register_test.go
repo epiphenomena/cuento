@@ -36,14 +36,13 @@ type regEnv struct {
 	root       int64 // root subsidiary
 	subA, subB int64 // two children (so a >1-sub account exists)
 
-	checking  int64 // reconcilable, mapped to subA only (1 sub -> no badge)
-	multiSub  int64 // mapped to subA + subB (badge), NOT reconcilable
-	clearing  int64 // mapped to all subs, USD+MXN (multi-currency running bal)
-	expense   int64 // an expense account (counter-account target)
-	otherExp  int64 // a second expense (to make a >2-split txn -> "Split")
-	revenue   int64 // revenue account
-	fund      int64 // a restricted fund scoped to subA
-	payeeAcme int64
+	checking int64 // reconcilable, mapped to subA only (1 sub -> no badge)
+	multiSub int64 // mapped to subA + subB (badge), NOT reconcilable
+	clearing int64 // mapped to all subs, USD+MXN (multi-currency running bal)
+	expense  int64 // an expense account (counter-account target)
+	otherExp int64 // a second expense (to make a >2-split txn -> "Split")
+	revenue  int64 // revenue account
+	fund     int64 // a restricted fund scoped to subA
 }
 
 func newRegEnv(t *testing.T) *regEnv {
@@ -99,18 +98,7 @@ func newRegEnv(t *testing.T) *regEnv {
 		t.Fatalf("create fund: %v", err)
 	}
 
-	e.payeeAcme = mkPayee(t, st, ctx, "Acme")
 	return e
-}
-
-// mkPayee inserts a payee via the store's write funnel and returns its id.
-func mkPayee(t *testing.T, st *store.Store, ctx context.Context, name string) int64 {
-	t.Helper()
-	id, err := st.CreatePayee(ctx, name)
-	if err != nil {
-		t.Fatalf("create payee %s: %v", name, err)
-	}
-	return id
 }
 
 // prog returns the program id required for a revenue/expense split (the seeded
@@ -118,8 +106,9 @@ func mkPayee(t *testing.T, st *store.Store, ctx context.Context, name string) in
 const generalProgram int64 = 1
 
 // post2 posts a simple balanced 2-split txn (debit `debit`, credit `credit`) in
-// USD on subA, with an optional fund on both splits and program on R/E splits.
-func (e *regEnv) post2(t *testing.T, ctx context.Context, date string, amount int64, debit, credit int64, fund *int64, payee *int64) int64 {
+// USD on subA, with an optional fund on both splits and program on R/E splits. desc
+// (when non-empty) is set as the debit split's per-line description.
+func (e *regEnv) post2(t *testing.T, ctx context.Context, date string, amount int64, debit, credit int64, fund *int64, desc string) int64 {
 	t.Helper()
 	prog := func(acct int64) *int64 {
 		if acct == e.expense || acct == e.otherExp || acct == e.revenue {
@@ -138,10 +127,9 @@ func (e *regEnv) post2(t *testing.T, ctx context.Context, date string, amount in
 	in := store.PostTransactionInput{
 		Date:         date,
 		SubsidiaryID: e.subA,
-		PayeeID:      payee,
 		Currency:     "USD",
 		Splits: []store.SplitInput{
-			{AccountID: debit, Amount: amount, FundID: fund, ProgramID: prog(debit), FunctionalClass: fclass(debit), Position: 0},
+			{AccountID: debit, Amount: amount, FundID: fund, ProgramID: prog(debit), FunctionalClass: fclass(debit), Description: desc, Position: 0},
 			{AccountID: credit, Amount: -amount, FundID: fund, ProgramID: prog(credit), FunctionalClass: fclass(credit), Position: 1},
 		},
 	}
@@ -165,7 +153,7 @@ func TestRegisterKeysetPaging(t *testing.T) {
 	// Five checking-account debits on distinct ascending dates.
 	dates := []string{"2025-01-01", "2025-02-01", "2025-03-01", "2025-04-01", "2025-05-01"}
 	for i, d := range dates {
-		e.post2(t, ctx, d, int64((i+1)*100), e.checking, e.expense, nil, nil)
+		e.post2(t, ctx, d, int64((i+1)*100), e.checking, e.expense, nil, "")
 	}
 
 	opts := formatOptsFor(nil)
@@ -226,8 +214,8 @@ func TestRegisterRunningBalancePerCurrency(t *testing.T) {
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 
 	// USD flows through clearing.
-	e.post2(t, ctx, "2025-01-10", 26000, e.checking, e.clearing, nil, nil)
-	e.post2(t, ctx, "2025-02-10", 10000, e.checking, e.clearing, nil, nil)
+	e.post2(t, ctx, "2025-01-10", 26000, e.checking, e.clearing, nil, "")
+	e.post2(t, ctx, "2025-02-10", 10000, e.checking, e.clearing, nil, "")
 
 	// An MXN txn through clearing (needs an MXN account on subA). Cash MXN.
 	cashMX, err := e.st.CreateAccount(ctx, store.CreateAccountInput{
@@ -284,9 +272,9 @@ func TestRegisterFilters(t *testing.T) {
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 
 	// Unrestricted checking->expense in Jan; restricted (fund) checking->expense in
-	// Feb with payee Acme; a Mar txn with a distinctive memo.
-	e.post2(t, ctx, "2025-01-15", 100, e.checking, e.expense, nil, nil)
-	e.post2(t, ctx, "2025-02-15", 200, e.checking, e.expense, &e.fund, &e.payeeAcme)
+	// Feb with description "Acme"; a Mar txn with a distinctive memo.
+	e.post2(t, ctx, "2025-01-15", 100, e.checking, e.expense, nil, "")
+	e.post2(t, ctx, "2025-02-15", 200, e.checking, e.expense, &e.fund, "Acme")
 	mar := store.PostTransactionInput{
 		Date: "2025-03-15", SubsidiaryID: e.subA, Currency: "USD",
 		Memo: "ZEBRA memo",
@@ -318,7 +306,7 @@ func TestRegisterFilters(t *testing.T) {
 		t.Fatalf("text ZEBRA = %d rows, want 1", n)
 	}
 	if n := countRows(store.RegisterFilters{Text: "Acme"}); n != 1 {
-		t.Fatalf("text Acme (payee) = %d rows, want 1", n)
+		t.Fatalf("text Acme (description) = %d rows, want 1", n)
 	}
 	if n := countRows(store.RegisterFilters{FundID: &e.fund}); n != 1 {
 		t.Fatalf("fund filter = %d rows, want 1", n)
@@ -402,7 +390,7 @@ func TestRegisterCounterAccount(t *testing.T) {
 	e := newRegEnv(t)
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 
-	e.post2(t, ctx, "2025-01-01", 500, e.checking, e.expense, nil, nil)
+	e.post2(t, ctx, "2025-01-01", 500, e.checking, e.expense, nil, "")
 	// A 3-split txn on checking: checking -> expense + otherExp.
 	if _, err := e.st.PostTransaction(ctx, store.PostTransactionInput{
 		Date: "2025-02-01", SubsidiaryID: e.subA, Currency: "USD",
@@ -542,8 +530,8 @@ func TestRegisterFundChip(t *testing.T) {
 	e := newRegEnv(t)
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 
-	e.post2(t, ctx, "2025-01-01", 100, e.checking, e.expense, nil, nil)     // unrestricted
-	e.post2(t, ctx, "2025-02-01", 200, e.checking, e.expense, &e.fund, nil) // restricted
+	e.post2(t, ctx, "2025-01-01", 100, e.checking, e.expense, nil, "")     // unrestricted
+	e.post2(t, ctx, "2025-02-01", 200, e.checking, e.expense, &e.fund, "") // restricted
 
 	rows, _, _, err := registerRows(ctx, e.st, e.checking, store.RegisterCursor{}, store.RegisterFilters{}, 0, "en", formatOptsFor(nil))
 	if err != nil {
@@ -643,7 +631,7 @@ func TestRegisterHtmxPaging(t *testing.T) {
 	e := newRegEnv(t)
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	for i, d := range []string{"2025-01-01", "2025-02-01", "2025-03-01"} {
-		e.post2(t, ctx, d, int64((i+1)*100), e.checking, e.expense, nil, nil)
+		e.post2(t, ctx, d, int64((i+1)*100), e.checking, e.expense, nil, "")
 	}
 	reader := mkUser(t, e.st, "regpager", "read", false)
 	base := "/accounts/" + strconv.FormatInt(e.checking, 10) + "/register"

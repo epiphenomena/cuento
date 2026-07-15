@@ -5,7 +5,7 @@
 // /descriptions/suggest) and, on pick/commit, prefills THAT row's account/amount/fund/
 // program/class/memo (GET /descriptions/prefill) -- but ONLY when the row is otherwise
 // empty (the SAME never-overwrites decision as the old payee autofill, reusing the
-// tested isRowEmpty predicate from txnpayee.js).
+// tested isRowEmpty predicate from rowstate.js).
 //
 // CONTRACT (so both entry grids reuse the SAME widget, mirroring combobox.js):
 //   - initDescField(root): enhance every input.js-descfield:not([data-descfield]) under
@@ -28,7 +28,7 @@
 //
 // Guarded so importing under Node is side-effect free (no `document`), like combobox.js.
 
-import { isRowEmpty } from './txnpayee.js';
+import { isRowEmpty } from './rowstate.js';
 
 // --- PURE helpers (node-tested; no `document`) ------------------------------
 

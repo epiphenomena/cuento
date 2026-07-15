@@ -22,14 +22,13 @@ type sp struct {
 
 // post inserts a balanced transaction and returns its id, failing the test on
 // error. It is the workhorse of the transaction build.
-func post(t *testing.T, ctx context.Context, s *store.Store, date string, sub int64, ccy, memo string, payee *int64, splits ...sp) int64 {
+func post(t *testing.T, ctx context.Context, s *store.Store, date string, sub int64, ccy, memo string, splits ...sp) int64 {
 	t.Helper()
 	in := store.PostTransactionInput{
 		Date:         date,
 		SubsidiaryID: sub,
 		Currency:     ccy,
 		Memo:         memo,
-		PayeeID:      payee,
 	}
 	for i, x := range splits {
 		in.Splits = append(in.Splits, store.SplitInput{
@@ -53,17 +52,11 @@ func post(t *testing.T, ctx context.Context, s *store.Store, date string, sub in
 // by scenario for readability). Every scenario's per-fund and overall zero-sum is
 // verified by the store on post; ledger.Check then re-verifies the whole set.
 //
-// All amounts are minor units (cents). Payees: "City Utilities" repeats (autofill
-// tests). The twice-edited txn and the deleted txn are captured for as-of/audit
-// tests.
+// All amounts are minor units (cents). Two MXN cash expenses repeat the same
+// "Utilities" split description (the former repeat-payee case, now per-split text).
+// The twice-edited txn and the deleted txn are captured for as-of/audit tests.
 func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *IDs) {
 	t.Helper()
-
-	// Repeat payee for autofill tests (used by two MXN cash expenses).
-	utilities, err := s.CreatePayee(ctx, "City Utilities")
-	if err != nil {
-		t.Fatalf("create payee: %v", err)
-	}
 
 	// ---------------------------------------------------------------------
 	// Opening balances (one per subsidiary), via Equity:Opening Balances.
@@ -79,7 +72,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// -3,000.00; Building 120,000.00; balanced by Opening Balances equity credit
 	// -167,000.00. (USD)
 	post(
-		t, ctx, s, "2025-01-01", ids.US, "USD", "Opening balances RV Estados Unidos", nil,
+		t, ctx, s, "2025-01-01", ids.US, "USD", "Opening balances RV Estados Unidos",
 		sp{acct: ids.CheckingUS, amount: 5_000_000, desc: "Opening bank balance"},
 		sp{acct: ids.Building, amount: 12_000_000},
 		sp{acct: ids.CreditCard, amount: -300_000},
@@ -89,7 +82,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// Root opening: Savings 20,000.00 USD; balanced by Opening Balances
 	// -20,000.00. (Savings is a root-scoped account.)
 	post(
-		t, ctx, s, "2025-01-01", ids.Root, "USD", "Opening balances Rio Verde Internacional", nil,
+		t, ctx, s, "2025-01-01", ids.Root, "USD", "Opening balances Rio Verde Internacional",
 		sp{acct: ids.Savings, amount: 2_000_000},
 		sp{acct: ids.OpeningBalances, amount: -2_000_000},
 	)
@@ -97,7 +90,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// MX opening: Checking MX 300,000.00 MXN; Cash MXN 15,000.00; balanced by
 	// Opening Balances -315,000.00. (MXN)
 	post(
-		t, ctx, s, "2025-01-01", ids.MX, "MXN", "Saldos iniciales RV Mexico", nil,
+		t, ctx, s, "2025-01-01", ids.MX, "MXN", "Saldos iniciales RV Mexico",
 		sp{acct: ids.CheckingMX, amount: 30_000_000},
 		sp{acct: ids.CashMXN, amount: 1_500_000},
 		sp{acct: ids.OpeningBalances, amount: -31_500_000},
@@ -110,7 +103,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// Contribution received (US, USD): Checking US +2,000.00; Contributions
 	// -2,000.00 (program General/root).
 	post(
-		t, ctx, s, "2025-02-05", ids.US, "USD", "General donation", nil,
+		t, ctx, s, "2025-02-05", ids.US, "USD", "General donation",
 		sp{acct: ids.CheckingUS, amount: 200_000, desc: "Donation deposit"},
 		sp{acct: ids.Contributions, amount: -200_000},
 	)
@@ -118,7 +111,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// Salaries paid (US, USD): Salaries +8,000.00 (program, General); Checking US
 	// -8,000.00.
 	post(
-		t, ctx, s, "2025-02-28", ids.US, "USD", "February salaries", nil,
+		t, ctx, s, "2025-02-28", ids.US, "USD", "February salaries",
 		sp{acct: ids.Salaries, amount: 800_000},
 		sp{acct: ids.CheckingUS, amount: -800_000, desc: "Payroll run Feb"},
 	)
@@ -126,7 +119,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// Occupancy / rent (US, USD): Occupancy +1,500.00 (management, General);
 	// Checking US -1,500.00.
 	post(
-		t, ctx, s, "2025-03-01", ids.US, "USD", "March rent", nil,
+		t, ctx, s, "2025-03-01", ids.US, "USD", "March rent",
 		sp{acct: ids.Occupancy, amount: 150_000},
 		sp{acct: ids.CheckingUS, amount: -150_000, desc: "Office rent check"},
 	)
@@ -134,7 +127,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// Insurance (US, USD): Insurance +600.00 (management, General); Checking US
 	// -600.00.
 	post(
-		t, ctx, s, "2025-03-10", ids.US, "USD", "Annual insurance", nil,
+		t, ctx, s, "2025-03-10", ids.US, "USD", "Annual insurance",
 		sp{acct: ids.Insurance, amount: 60_000},
 		sp{acct: ids.CheckingUS, amount: -60_000, desc: "Liability insurance premium"},
 	)
@@ -142,7 +135,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// Bank fees (US, USD): Bank Fees +25.00 (management, General); Checking US
 	// -25.00. (Leaf-override 990 code IX.11g exercised in reports.)
 	post(
-		t, ctx, s, "2025-03-31", ids.US, "USD", "Q1 bank fees", nil,
+		t, ctx, s, "2025-03-31", ids.US, "USD", "Q1 bank fees",
 		sp{acct: ids.BankFees, amount: 2_500},
 		sp{acct: ids.CheckingUS, amount: -2_500, desc: "Quarterly account fees"},
 	)
@@ -152,14 +145,14 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// General so this is a General-program expense); Cash MXN -1,200.00.
 	genProg := ids.General
 	post(
-		t, ctx, s, "2025-03-15", ids.MX, "MXN", "Utilities", &utilities,
+		t, ctx, s, "2025-03-15", ids.MX, "MXN", "Utilities",
 		sp{acct: ids.FoodPurchases, amount: 120_000, prog: &genProg},
 		sp{acct: ids.CashMXN, amount: -120_000},
 	)
 	// Second occurrence of the repeat payee (autofill target). Food Purchases
 	// +900.00 MXN (General); Cash MXN -900.00.
 	post(
-		t, ctx, s, "2025-04-15", ids.MX, "MXN", "Utilities", &utilities,
+		t, ctx, s, "2025-04-15", ids.MX, "MXN", "Utilities",
 		sp{acct: ids.FoodPurchases, amount: 90_000, prog: &genProg},
 		sp{acct: ids.CashMXN, amount: -90_000},
 	)
@@ -172,7 +165,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// Checking MX +100,000.00 MXN; Government Grants -100,000.00 (Educacion).
 	// Both splits tagged the fund so the txn nets to zero WITHIN Beca Agua (MXN).
 	post(
-		t, ctx, s, "2025-04-01", ids.MX, "MXN", "Beca Agua grant receipt", nil,
+		t, ctx, s, "2025-04-01", ids.MX, "MXN", "Beca Agua grant receipt",
 		sp{acct: ids.CheckingMX, amount: 10_000_000, fund: &ids.BecaAgua},
 		sp{acct: ids.GovernmentGrants, amount: -10_000_000, fund: &ids.BecaAgua, prog: &ids.Educacion},
 	)
@@ -182,7 +175,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// silent). Checking US +2,000.00 USD (Beca Agua); Government Grants -2,000.00
 	// (Beca Agua, Educacion).
 	post(
-		t, ctx, s, "2025-04-05", ids.US, "USD", "Beca Agua US contribution", nil,
+		t, ctx, s, "2025-04-05", ids.US, "USD", "Beca Agua US contribution",
 		sp{acct: ids.CheckingUS, amount: 200_000, fund: &ids.BecaAgua, desc: "Restricted gift deposit"},
 		sp{acct: ids.GovernmentGrants, amount: -200_000, fund: &ids.BecaAgua, prog: &ids.Educacion},
 	)
@@ -194,7 +187,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	//   Beca Agua group:  supplies +3,000.00 ; cash -3,000.00
 	//   unrestricted group: supplies +2,000.00 ; cash -2,000.00
 	post(
-		t, ctx, s, "2025-05-10", ids.MX, "MXN", "Program supplies (mixed funding)", nil,
+		t, ctx, s, "2025-05-10", ids.MX, "MXN", "Program supplies (mixed funding)",
 		sp{acct: ids.ProgramSupplies, amount: 300_000, fund: &ids.BecaAgua, prog: &ids.Educacion, desc: "Water filters (grant-funded portion)"},
 		sp{acct: ids.CheckingMX, amount: -300_000, fund: &ids.BecaAgua, desc: "Water filters (grant-funded portion)"},
 		sp{acct: ids.ProgramSupplies, amount: 200_000, prog: &ids.Educacion, desc: "Water filters (general portion)"},
@@ -205,7 +198,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// fund scope. Program Supplies +1,500.00 USD (Beca Agua, Educacion);
 	// Checking US -1,500.00 (Beca Agua).
 	post(
-		t, ctx, s, "2025-05-20", ids.US, "USD", "Program supplies (US)", nil,
+		t, ctx, s, "2025-05-20", ids.US, "USD", "Program supplies (US)",
 		sp{acct: ids.ProgramSupplies, amount: 150_000, fund: &ids.BecaAgua, prog: &ids.Educacion},
 		sp{acct: ids.CheckingUS, amount: -150_000, fund: &ids.BecaAgua, desc: "Filter parts payment"},
 	)
@@ -219,7 +212,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// Contributions -50,000.00 (Building Fund, program General). Revenue split
 	// carries a program (required); asset split does not.
 	post(
-		t, ctx, s, "2025-06-01", ids.US, "USD", "Building Fund gift", nil,
+		t, ctx, s, "2025-06-01", ids.US, "USD", "Building Fund gift",
 		sp{acct: ids.CheckingUS, amount: 5_000_000, fund: &ids.BuildingFund, desc: "Capital campaign gift"},
 		sp{acct: ids.Contributions, amount: -5_000_000, fund: &ids.BuildingFund, prog: &genProg},
 	)
@@ -228,7 +221,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// +40,000.00 (Building Fund); Checking US -40,000.00 (Building Fund). No
 	// program on either split (both A-class); nets zero within Building Fund.
 	post(
-		t, ctx, s, "2025-06-15", ids.US, "USD", "Building improvement", nil,
+		t, ctx, s, "2025-06-15", ids.US, "USD", "Building improvement",
 		sp{acct: ids.Building, amount: 4_000_000, fund: &ids.BuildingFund},
 		sp{acct: ids.CheckingUS, amount: -4_000_000, fund: &ids.BuildingFund, desc: "Roof replacement payment"},
 	)
@@ -243,14 +236,14 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 
 	// Parent leg (US, USD): Due from RV Mexico +10,000.00; Checking US -10,000.00.
 	post(
-		t, ctx, s, "2025-07-01", ids.US, "USD", "Intercompany funding to MX", nil,
+		t, ctx, s, "2025-07-01", ids.US, "USD", "Intercompany funding to MX",
 		sp{acct: ids.DueFromMX, amount: 1_000_000},
 		sp{acct: ids.CheckingUS, amount: -1_000_000, desc: "Wire to RV Mexico"},
 	)
 	// Child leg (MX, USD): FX Clearing +10,000.00; Due to RV Internacional
 	// -10,000.00. Due-from (+10,000) and Due-to (-10,000) net to zero in USD.
 	post(
-		t, ctx, s, "2025-07-02", ids.MX, "USD", "Intercompany funding from Intl", nil,
+		t, ctx, s, "2025-07-02", ids.MX, "USD", "Intercompany funding from Intl",
 		sp{acct: ids.FXClearing, amount: 1_000_000},
 		sp{acct: ids.DueToIntl, amount: -1_000_000},
 	)
@@ -263,12 +256,12 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// here: +5,000.00 MXN and -260.00 USD sit side by side).
 	// ---------------------------------------------------------------------
 	post(
-		t, ctx, s, "2025-08-01", ids.MX, "MXN", "FX transfer out (MXN)", nil,
+		t, ctx, s, "2025-08-01", ids.MX, "MXN", "FX transfer out (MXN)",
 		sp{acct: ids.CashMXN, amount: -500_000},
 		sp{acct: ids.FXClearing, amount: 500_000},
 	)
 	post(
-		t, ctx, s, "2025-08-01", ids.US, "USD", "FX transfer in (USD)", nil,
+		t, ctx, s, "2025-08-01", ids.US, "USD", "FX transfer in (USD)",
 		sp{acct: ids.FXClearing, amount: -26_000},
 		sp{acct: ids.CheckingUS, amount: 26_000, desc: "Converted MXN settlement"},
 	)
@@ -280,14 +273,14 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// Fundraising event (US, USD): Checking US +3,000.00; Event Income -3,000.00
 	// (program General). Event Income has NO effective 990 code -> Z19 + Unmapped.
 	post(
-		t, ctx, s, "2025-09-15", ids.US, "USD", "Gala ticket sales", nil,
+		t, ctx, s, "2025-09-15", ids.US, "USD", "Gala ticket sales",
 		sp{acct: ids.CheckingUS, amount: 300_000, desc: "Gala ticket deposit"},
 		sp{acct: ids.EventIncome, amount: -300_000, prog: &genProg},
 	)
 	// Event costs (US, USD): Event Costs +1,000.00 (fundraising, General);
 	// Checking US -1,000.00.
 	post(
-		t, ctx, s, "2025-09-20", ids.US, "USD", "Gala catering", nil,
+		t, ctx, s, "2025-09-20", ids.US, "USD", "Gala catering",
 		sp{acct: ids.EventCosts, amount: 100_000},
 		sp{acct: ids.CheckingUS, amount: -100_000, desc: "Caterer invoice payment"},
 	)
@@ -299,21 +292,21 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// 2026 program fees (US, USD): Checking US +1,200.00; Program Service Fees
 	// -1,200.00 (default program Educacion).
 	post(
-		t, ctx, s, "2026-01-10", ids.US, "USD", "Program fees Q1", nil,
+		t, ctx, s, "2026-01-10", ids.US, "USD", "Program fees Q1",
 		sp{acct: ids.CheckingUS, amount: 120_000, desc: "Tuition fees received"},
 		sp{acct: ids.ProgramFees, amount: -120_000},
 	)
 	// 2026 salaries (US, USD): Salaries +8,500.00 (program, General); Checking US
 	// -8,500.00.
 	post(
-		t, ctx, s, "2026-02-27", ids.US, "USD", "February 2026 salaries", nil,
+		t, ctx, s, "2026-02-27", ids.US, "USD", "February 2026 salaries",
 		sp{acct: ids.Salaries, amount: 850_000},
 		sp{acct: ids.CheckingUS, amount: -850_000, desc: "Payroll run Feb 2026"},
 	)
 	// 2026 food purchases (MX, MXN, Food Pantry program via account default).
 	// Food Purchases +1,500.00 MXN (Food Pantry); Cash MXN -1,500.00.
 	post(
-		t, ctx, s, "2026-03-05", ids.MX, "MXN", "Pantry food restock", nil,
+		t, ctx, s, "2026-03-05", ids.MX, "MXN", "Pantry food restock",
 		sp{acct: ids.FoodPurchases, amount: 150_000},
 		sp{acct: ids.CashMXN, amount: -150_000},
 	)
@@ -321,14 +314,14 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// -1,550.00. (An uncleared item after the 2026-05-31 reconciliation -- captured
 	// so ExtendReconciliation leaves exactly this + June donation uncleared.)
 	ids.MayRentTxn = post(
-		t, ctx, s, "2026-05-25", ids.US, "USD", "May 2026 rent", nil,
+		t, ctx, s, "2026-05-25", ids.US, "USD", "May 2026 rent",
 		sp{acct: ids.Occupancy, amount: 155_000},
 		sp{acct: ids.CheckingUS, amount: -155_000},
 	)
 	// 2026 contribution (US, USD): Checking US +750.00; Contributions -750.00
 	// (General). A second uncleared item after the reconciliation.
 	ids.JuneDonationTxn = post(
-		t, ctx, s, "2026-06-10", ids.US, "USD", "June donation", nil,
+		t, ctx, s, "2026-06-10", ids.US, "USD", "June donation",
 		sp{acct: ids.CheckingUS, amount: 75_000},
 		sp{acct: ids.Contributions, amount: -75_000},
 	)
@@ -344,7 +337,7 @@ func buildTransactions(t *testing.T, ctx context.Context, s *store.Store, ids *I
 	// every aggregate.
 	// ---------------------------------------------------------------------
 	del := post(
-		t, ctx, s, "2025-10-01", ids.US, "USD", "Erroneous entry (to delete)", nil,
+		t, ctx, s, "2025-10-01", ids.US, "USD", "Erroneous entry (to delete)",
 		sp{acct: ids.Insurance, amount: 40_000},
 		sp{acct: ids.CheckingUS, amount: -40_000},
 	)
@@ -376,7 +369,7 @@ func buildEditedTransaction(t *testing.T, ctx context.Context, s *store.Store, i
 	genProg := ids.General
 
 	id := post(
-		t, ctx, s, "2025-11-01", ids.US, "USD", "Supplies (v1)", nil,
+		t, ctx, s, "2025-11-01", ids.US, "USD", "Supplies (v1)",
 		sp{acct: ids.ProgramSupplies, amount: 50_000, prog: &ids.Educacion},
 		sp{acct: ids.CheckingUS, amount: -50_000},
 	)

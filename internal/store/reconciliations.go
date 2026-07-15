@@ -341,8 +341,8 @@ type ReconciliationSummary struct {
 }
 
 // ReconciliationWorkspaceSplit is one split in the workspace list: the split's
-// financial fields plus its txn context (date/subsidiary/payee/memo) and whether it
-// is currently cleared against this recon. It carries RAW values; the web layer
+// financial fields plus its txn context (date/subsidiary/description/memo) and whether
+// it is currently cleared against this recon. It carries RAW values; the web layer
 // formats them (rule 10) and resolves names.
 type ReconciliationWorkspaceSplit struct {
 	SplitID      int64
@@ -350,8 +350,8 @@ type ReconciliationWorkspaceSplit struct {
 	Amount       int64 // net-debit signed minor units (D2)
 	FundID       *int64
 	SubsidiaryID int64
-	PayeeID      *int64
 	SplitMemo    string
+	Description  string // per-split free-text (p26.15); the workspace Description cell
 	TxnMemo      string
 	Date         string // raw YYYY-MM-DD
 	Cleared      bool   // reconciliation_id == this recon
@@ -424,8 +424,8 @@ func (s *Store) ReconciliationWorkspaceSplits(ctx context.Context, reconID int64
 			Amount:       r.Amount,
 			FundID:       nullInt64ToPtr(r.FundID),
 			SubsidiaryID: r.SubsidiaryID,
-			PayeeID:      nullInt64ToPtr(r.PayeeID),
 			SplitMemo:    r.Memo,
+			Description:  r.Description,
 			TxnMemo:      r.TxnMemo,
 			Date:         r.Date,
 			Cleared:      r.ReconciliationID.Valid && r.ReconciliationID.Int64 == reconID,
@@ -469,16 +469,15 @@ func (s *Store) ReconciliationsForAccount(ctx context.Context, accountID int64) 
 
 // ReconciliationStatementSplit is one INCLUDED (cleared) split of a finalized
 // reconciliation, for the p16.4 statement report: the split's financial fields plus
-// its txn context (date/subsidiary/payee/memo). RAW values (the report formats them,
-// rule 10). Mirrors ReconciliationWorkspaceSplit but without the Cleared flag (these
-// are all cleared, by definition of the query).
+// its txn context (date/subsidiary/description/memo). RAW values (the report formats
+// them, rule 10). Mirrors ReconciliationWorkspaceSplit but without the Cleared flag
+// (these are all cleared, by definition of the query).
 type ReconciliationStatementSplit struct {
 	SplitID      int64
 	TxnID        int64
 	Amount       int64 // net-debit signed minor units (D2)
 	FundID       *int64
 	SubsidiaryID int64
-	PayeeID      *int64
 	SplitMemo    string
 	Description  string // per-split free-text (p26.15); the statement Description cell
 	TxnMemo      string
@@ -505,7 +504,6 @@ func (s *Store) ReconciliationStatementSplits(ctx context.Context, reconID int64
 			Amount:       r.Amount,
 			FundID:       nullInt64ToPtr(r.FundID),
 			SubsidiaryID: r.SubsidiaryID,
-			PayeeID:      nullInt64ToPtr(r.PayeeID),
 			SplitMemo:    r.Memo,
 			Description:  r.Description,
 			TxnMemo:      r.TxnMemo,

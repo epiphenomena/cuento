@@ -1,4 +1,4 @@
--- p08.2: transaction/split/payee operations (D2, D18, D20, D21, D24). All SQL for
+-- p08.2: transaction/split operations (D2, D18, D20, D21, D24). All SQL for
 -- the store's transaction methods lives here (rule 6). This copies the
 -- version-append convention established in subsidiaries.sql (p04.2) and the
 -- snapshot-from-live pattern: the entity op does the live write inside the
@@ -19,74 +19,6 @@
 -- the generated SQL for the WHOLE file (see docs/DECISIONS.md p04.2).
 
 -- ---------------------------------------------------------------------------
--- payees (minimal; autocomplete is p12.3)
--- ---------------------------------------------------------------------------
-
--- name: InsertPayee :one
--- Live insert of a payee. name is UNIQUE COLLATE NOCASE (schema). Returns the id.
-INSERT INTO payees (name, active)
-VALUES (?, 1)
-RETURNING id;
-
--- name: GetPayee :one
-SELECT id, name, active FROM payees WHERE id = ?;
-
--- name: GetPayeeByName :one
--- Look up a payee by name for find-or-create (p12.3 create-on-save). payees.name is
--- UNIQUE COLLATE NOCASE, so the equality is case-insensitive: "Acme" finds "acme".
--- Returns no rows when the name is new (the caller then inserts).
-SELECT id, name, active FROM payees WHERE name = ?;
-
--- name: ListPayees :many
--- Every payee (id -> name), for the register's payee-name lookup (p12.1). The
--- payee set is tiny; the store loads it once per page render into an id->name map
--- rather than joining per row. Ordered by id for determinism.
-SELECT id, name, active FROM payees ORDER BY id;
-
--- name: SuggestPayees :many
--- Autocomplete ranking (p12.3): active payees whose name PREFIX-matches the query
--- (case-insensitive; payees.name is COLLATE NOCASE), ordered MOST-RECENT-FIRST by
--- the payee's latest NON-DELETED transaction date. Payees never used, or with only
--- deleted transactions, have a NULL max date and sort LAST, then by name for a
--- deterministic tail. The prefix is the caller-built LIKE pattern (query + '%'),
--- passed once; the store escapes LIKE metacharacters (% _) in the raw query before
--- appending the wildcard, so a literal % / _ in the query is not treated as a
--- wildcard (sqlc's parser rejects an explicit ESCAPE clause, so escaping is done in
--- Go against the default backslash-free LIKE -- see the store). Payees sharing the
--- same latest date (or all in the never-used/only-deleted tail) tiebreak by name
--- (COLLATE NOCASE), then id, for a deterministic order.
-SELECT p.id, p.name,
-       MAX(t.date) AS last_date
-FROM payees p
-LEFT JOIN transactions t
-  ON t.payee_id = p.id AND t.deleted = 0
-WHERE p.active = 1 AND p.name LIKE ?
-GROUP BY p.id, p.name
-ORDER BY (MAX(t.date) IS NULL), MAX(t.date) DESC, p.name COLLATE NOCASE, p.id;
-
--- name: LastTransactionForPayee :one
--- The id of a payee's LAST non-deleted transaction (p12.3 template autofill): the
--- greatest (date, id) among that payee's live transactions. Returns no rows when the
--- payee has no non-deleted transaction (never used / only deleted). The store then
--- reuses SplitsByTransaction to read its splits (the existing splits reader).
-SELECT id, currency
-FROM transactions
-WHERE payee_id = ? AND deleted = 0
-ORDER BY date DESC, id DESC
-LIMIT 1;
-
--- name: InsertPayeeVersion :exec
--- Snapshot-from-live version append for payees (STANDARD single-id entity,
--- entity_id = payees.id). Runs AFTER the live insert. Snapshot column set matches
--- 00010_transactions_splits.sql exactly (name, active). Params (positional, each
--- used once): op, change_id, entity_id -> generated Op, ID (change_id), ID_2.
-INSERT INTO payees_versions
-  (entity_id, change_id, valid_from, op, name, active)
-SELECT p.id, c.id, c.at, ?, p.name, p.active
-FROM payees p, changes c
-WHERE c.id = ? AND p.id = ?;
-
--- ---------------------------------------------------------------------------
 -- transactions
 -- ---------------------------------------------------------------------------
 
@@ -94,23 +26,23 @@ WHERE c.id = ? AND p.id = ?;
 -- Live insert of the transaction header (D18: exactly one subsidiary; D3: single
 -- currency). deleted defaults to 0. notes is the longer free-text explanation
 -- (p24.2), distinct from the short per-split memo. Returns the new id.
-INSERT INTO transactions (date, subsidiary_id, payee_id, memo, notes, currency, deleted)
-VALUES (?, ?, ?, ?, ?, ?, 0)
+INSERT INTO transactions (date, subsidiary_id, memo, notes, currency, deleted)
+VALUES (?, ?, ?, ?, ?, 0)
 RETURNING id;
 
 -- name: GetTransaction :one
 -- Column order matches the transactions table (ALTER appended notes LAST, p24.2) so
 -- sqlc maps this to the shared sqlc.Transaction model rather than a bespoke row type.
-SELECT id, date, subsidiary_id, payee_id, memo, currency, deleted, notes
+SELECT id, date, subsidiary_id, memo, currency, deleted, notes
 FROM transactions
 WHERE id = ?;
 
 -- name: UpdateTransaction :exec
--- Live update of the header fields (date/payee/memo/notes; subsidiary and currency
--- may also change on an edit). deleted is carried through by the store (never
--- flipped here -- soft-delete is its own query).
+-- Live update of the header fields (date/memo/notes; subsidiary and currency may also
+-- change on an edit). deleted is carried through by the store (never flipped here --
+-- soft-delete is its own query).
 UPDATE transactions
-SET date = ?, subsidiary_id = ?, payee_id = ?, memo = ?, notes = ?, currency = ?, deleted = ?
+SET date = ?, subsidiary_id = ?, memo = ?, notes = ?, currency = ?, deleted = ?
 WHERE id = ?;
 
 -- name: SoftDeleteTransaction :exec
@@ -123,8 +55,8 @@ UPDATE transactions SET deleted = 1 WHERE id = ?;
 -- Runs AFTER the live write. Snapshot column set matches 00010 exactly. Params
 -- (positional): op, change_id, entity_id -> generated Op, ID (change_id), ID_2.
 INSERT INTO transactions_versions
-  (entity_id, change_id, valid_from, op, date, subsidiary_id, payee_id, memo, notes, currency, deleted)
-SELECT t.id, c.id, c.at, ?, t.date, t.subsidiary_id, t.payee_id, t.memo, t.notes, t.currency, t.deleted
+  (entity_id, change_id, valid_from, op, date, subsidiary_id, memo, notes, currency, deleted)
+SELECT t.id, c.id, c.at, ?, t.date, t.subsidiary_id, t.memo, t.notes, t.currency, t.deleted
 FROM transactions t, changes c
 WHERE c.id = ? AND t.id = ?;
 
@@ -236,7 +168,7 @@ SELECT subtree.id FROM subtree;
 -- The transaction header as of a time: the latest transactions_versions row with
 -- valid_from <= at (op='delete' means the txn is absent -- the store excludes it).
 -- Tiebreak (valid_from DESC, id DESC) matches AssertVersioned's append order.
-SELECT op, date, subsidiary_id, payee_id, memo, notes, currency, deleted
+SELECT op, date, subsidiary_id, memo, notes, currency, deleted
 FROM transactions_versions
 WHERE entity_id = ? AND valid_from <= ?
 ORDER BY valid_from DESC, id DESC
@@ -269,7 +201,7 @@ ORDER BY entity_id, valid_from DESC, id DESC;
 -- change's actor id, actor display name, and timestamp. Includes op='delete' rows
 -- (a voided txn's history must still render). Params (positional): entity_id.
 SELECT tv.change_id, tv.op, tv.valid_from,
-       tv.date, tv.subsidiary_id, tv.payee_id, tv.memo, tv.notes, tv.currency, tv.deleted,
+       tv.date, tv.subsidiary_id, tv.memo, tv.notes, tv.currency, tv.deleted,
        c.actor_id, u.display_name AS actor_name, c.at
 FROM transactions_versions tv
 JOIN changes c ON c.id = tv.change_id

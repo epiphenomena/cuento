@@ -35,7 +35,7 @@
       <tr>
         <th>{{t "register.col.date"}}</th>
         <th>{{t "register.col.subsidiary"}}</th>
-        <th>{{t "register.col.payee"}}</th>
+        <th>{{t "register.col.description"}}</th>
         <th>{{t "register.col.memo"}}</th>
         <th>{{t "register.col.counter"}}</th>
         <th>{{t "register.col.fund"}}</th>
@@ -48,7 +48,7 @@
       <tr id="drill-row-{{.SplitID}}" class="drill-row">
         <td class="reg-date">{{.Date}}</td>
         <td class="reg-sub">{{if .SubName}}<span class="badge">{{.SubName}}</span>{{end}}</td>
-        <td class="reg-payee">{{if .PayeeName}}{{.PayeeName}}{{else}}<span class="muted">—</span>{{end}}</td>
+        <td class="reg-description">{{if .Description}}{{.Description}}{{else}}<span class="muted">—</span>{{end}}</td>
         <td class="reg-memo">{{if .Memo}}{{.Memo}}{{else}}<span class="muted">—</span>{{end}}</td>
         <td class="reg-counter">{{if .IsSplit}}{{t "register.split"}}{{else}}{{.CounterAccount}}{{end}}</td>
         <td class="reg-fund">{{if .FundName}}<span class="chip">{{.FundName}}</span>{{end}}</td>

@@ -38,7 +38,7 @@ func TestFormatsFollowUserSettings(t *testing.T) {
 
 	// One checking-account debit of 1,234.50 on 2025-03-15 (cents + grouping + a
 	// discriminating date make every format difference visible in one row).
-	e.post2(t, ctx, "2025-03-15", 123450, e.checking, e.expense, nil, nil)
+	e.post2(t, ctx, "2025-03-15", 123450, e.checking, e.expense, nil, "")
 
 	// Two read users with contrasting settings.
 	userA := mkUser(t, e.st, "fmt_a", "read", false)

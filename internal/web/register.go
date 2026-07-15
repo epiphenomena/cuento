@@ -199,19 +199,6 @@ func accountNameMap(ctx context.Context, st *store.Store, lang string) (map[int6
 	return m, nil
 }
 
-// payeeNameMap returns id->name for every payee (tiny set, loaded once per render).
-func payeeNameMap(ctx context.Context, st *store.Store) (map[int64]string, error) {
-	ps, err := st.ListPayees(ctx)
-	if err != nil {
-		return nil, err
-	}
-	m := make(map[int64]string, len(ps))
-	for _, p := range ps {
-		m[p.ID] = p.Name
-	}
-	return m, nil
-}
-
 // fundNameMap returns id->name for every fund (active AND closed; a chip may name a
 // now-closed fund).
 func fundNameMap(ctx context.Context, st *store.Store) (map[int64]string, error) {

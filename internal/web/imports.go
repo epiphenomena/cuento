@@ -98,10 +98,10 @@ type importPreviewModel struct {
 
 // importPreviewRow is one previewed parsed row: formatted for display.
 type importPreviewRow struct {
-	Date      string
-	AmountFmt string
-	Payee     string
-	Memo      string
+	Date        string
+	AmountFmt   string
+	Description string // bank line descriptive text (the mapped payee_col)
+	Memo        string
 }
 
 // importResultModel is the POST /import confirm result: the persisted batch, the
@@ -118,11 +118,11 @@ type importResultModel struct {
 // importResultRow is one staged row in the confirm result: its display fields and
 // whether it was flagged a duplicate.
 type importResultRow struct {
-	Date      string
-	AmountFmt string
-	Payee     string
-	Memo      string
-	Duplicate bool
+	Date        string
+	AmountFmt   string
+	Description string // bank line descriptive text (the mapped payee_col)
+	Memo        string
+	Duplicate   bool
 }
 
 // importPreviewCap is the number of parsed rows shown in the preview (all rows are
@@ -327,10 +327,10 @@ func (s *server) parseImportPreview(r *http.Request, raw []byte, accountID, subs
 	model.MoreRows = len(rows) - len(shown)
 	for _, row := range shown {
 		model.Rows = append(model.Rows, importPreviewRow{
-			Date:      money.FormatDate(parseISOForDisplay(row.Date), df),
-			AmountFmt: acct.DefaultCurrency + " " + money.Format(row.AmountMinor, exp, opts),
-			Payee:     row.Payee,
-			Memo:      row.Memo,
+			Date:        money.FormatDate(parseISOForDisplay(row.Date), df),
+			AmountFmt:   acct.DefaultCurrency + " " + money.Format(row.AmountMinor, exp, opts),
+			Description: row.Description,
+			Memo:        row.Memo,
 		})
 	}
 	return model, "", ""
@@ -432,11 +432,11 @@ func (s *server) buildImportResult(r *http.Request, batchID int64, filename, cur
 			model.Duplicates++
 		}
 		model.Rows = append(model.Rows, importResultRow{
-			Date:      money.FormatDate(parseISOForDisplay(row.Date), df),
-			AmountFmt: currency + " " + money.Format(row.AmountMinor, exp, opts),
-			Payee:     row.Payee,
-			Memo:      row.Memo,
-			Duplicate: row.Duplicate,
+			Date:        money.FormatDate(parseISOForDisplay(row.Date), df),
+			AmountFmt:   currency + " " + money.Format(row.AmountMinor, exp, opts),
+			Description: row.Description,
+			Memo:        row.Memo,
+			Duplicate:   row.Duplicate,
 		})
 	}
 	return model

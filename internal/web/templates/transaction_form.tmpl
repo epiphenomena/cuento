@@ -114,26 +114,14 @@
 {{- end}}
 {{- end}}
 
-{{/* txn-rows: the split-grid rows fragment. p12.3 autofill swaps THIS into #txn-rows
-     (the payee-template partial wraps it with an optional out-of-subsidiary notice).
-     It ranges the SAME single-sourced "txn-row" (no fork), so an autofilled row is
-     byte-identical to a page-rendered one (stable ids / gating / wiring). The model is
-     the txnEditorModel directly (the handler renders "txn-rows"/"payee-template" with
-     the model as data, not a shellPage). */ -}}
+{{/* txn-rows: the split-grid rows fragment. It ranges the SAME single-sourced
+     "txn-row" (no fork), so an autofilled/prefilled row is byte-identical to a
+     page-rendered one (stable ids / gating / wiring). The model is the txnEditorModel
+     directly (the handler renders "txn-rows" with the model as data, not a
+     shellPage). */ -}}
 {{define "txn-rows" -}}
 {{range .Rows}}{{template "txn-row" (txnRowCtx $ .)}}
 {{end}}
-{{- end}}
-
-{{/* payee-template: the p12.3 autofill partial htmx swaps into #txn-rows on a payee
-     pick. It is the txn-rows fragment PLUS, when template splits were dropped because
-     their account is outside the selected subsidiary, an out-of-band notice (hx-swap-oob
-     targets the dedicated #txn-autofill-notice region so it lands even though the main
-     swap replaces #txn-rows). The client applies these rows ONLY when every current row
-     is empty (never-overwrites guard, txnpayee.js); the server just renders them. */ -}}
-{{define "payee-template" -}}
-{{template "txn-rows" .}}
-<span id="txn-autofill-notice" hx-swap-oob="true" class="txn-autofill-notice"{{if not .AutofillNotice}} hidden{{end}}>{{if .AutofillNotice}}{{t .AutofillNotice}}{{end}}</span>
 {{- end}}
 
 {{/* desc-suggest: the p26.18 per-split description autocomplete fragment. A list of
@@ -213,9 +201,9 @@
              placeholder="{{t "txn.date_hint"}}"
              {{if eq $.Page.FirstErrorRow -2}}autofocus{{end}}>
     </div>
-    {{/* p26.19: the per-transaction payee header was REMOVED -- the per-split free-text
+    {{/* The per-transaction payee header was removed (p26.19) -- the per-split free-text
          description (in each grid row) replaces it, autocompleting + prefilling per row.
-         The payee data/columns/routes are physically removed in the next step. */}}
+         The payee data/columns/routes were physically removed in p26.20. */}}
     <div class="txn-field">
       <label for="txn-memo">{{t "txn.memo"}}</label>
       <input type="text" name="memo" id="txn-memo" class="txn-memo-header" value="{{.Memo}}">
@@ -231,10 +219,6 @@
       <button type="button" id="txn-apply-fund-btn" class="btn btn-ghost">{{t "txn.fund.apply_all_btn"}}</button>
     </div>
   </div>
-
-  {{/* p12.3 autofill notice region: the payee-template partial oob-swaps into this
-       span when out-of-subsidiary splits were dropped. Empty/hidden by default. */}}
-  <span id="txn-autofill-notice" class="txn-autofill-notice" hidden></span>
 
   <table class="txn-grid">
     <thead>

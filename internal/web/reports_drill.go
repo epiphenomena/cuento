@@ -39,7 +39,7 @@ func (s *server) reportDrillFromPath(r *http.Request) (reports.Report, bool) {
 }
 
 // drillRow is one rendered drill line: the same shape the register uses (date, sub,
-// payee, memo, counter-account, fund chip, amount) plus the txn id each row links to
+// description, memo, counter-account, fund chip, amount) plus the txn id each row links to
 // (the p12.4 editor/history). It carries the raw signed amount so the handler sums
 // the rows to echo the reconciled figure and a test can assert the sum without HTML
 // scraping.
@@ -52,7 +52,7 @@ type drillRow struct {
 
 	Date           string // formatted per the user's date setting
 	SubName        string
-	PayeeName      string
+	Description    string // per-split free-text (p26.20; description -> memo fallback)
 	Memo           string
 	CounterAccount string
 	IsSplit        bool
@@ -193,7 +193,7 @@ func (s *server) reportDrill(w http.ResponseWriter, r *http.Request) {
 }
 
 // renderDrillRows turns store.DrillRow splits into display-ready drillRow lines
-// (formatting money/date per the user's settings, resolving the subsidiary/payee/
+// (formatting money/date per the user's settings, resolving the subsidiary/
 // fund/counter-account names) and returns the signed sum of the raw amounts (the
 // reconciled figure). It mirrors registerRows' name-map + counter-account resolution
 // so the drill list matches the register's row shape. The sum is over the SAME rows
@@ -204,10 +204,6 @@ func (s *server) renderDrillRows(
 	ctx context.Context, rows []store.DrillRow, lang string, opts money.FormatOpts,
 ) ([]drillRow, int64, error) {
 	names, err := accountNameMap(ctx, s.store, lang)
-	if err != nil {
-		return nil, 0, err
-	}
-	payees, err := payeeNameMap(ctx, s.store)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -249,10 +245,6 @@ func (s *server) renderDrillRows(
 		if memo == "" {
 			memo = rw.TxnMemo
 		}
-		payee := ""
-		if rw.PayeeID != nil {
-			payee = payees[*rw.PayeeID]
-		}
 		fund := ""
 		if rw.FundID != nil {
 			fund = funds[*rw.FundID]
@@ -266,7 +258,7 @@ func (s *server) renderDrillRows(
 			Currency:       rw.Currency,
 			Date:           money.FormatDate(parseISOForDisplay(rw.Date), df),
 			SubName:        subs[rw.SubsidiaryID],
-			PayeeName:      payee,
+			Description:    rw.Description,
 			Memo:           memo,
 			CounterAccount: ca.name,
 			IsSplit:        ca.isSplit,

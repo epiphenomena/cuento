@@ -8,9 +8,9 @@ import (
 	"cuento/internal/testutil"
 )
 
-// p08.1 adds the transaction core: payees, transactions, splits, their three
-// *_versions twins, the six indexes named in Appendix A (plus the *_versions_entity
-// twins), and four row-local triggers:
+// p08.1 adds the transaction core: transactions, splits, their two *_versions twins
+// (the payees table was dropped in 00021, p26.20), the indexes named in Appendix A
+// (plus the *_versions_entity twins), and four row-local triggers:
 //
 //	trg_splits_leaf_active_only         a split's account must be an active leaf
 //	trg_accounts_no_children_over_splits a child cannot be inserted under an account that has splits
@@ -419,32 +419,6 @@ func TestTxnSubsidiaryDeleteBlocked(t *testing.T) {
 	}
 }
 
-// TestTxnPayeeDeleteBlocked proves the transactions.payee_id FK: deleting a payee a
-// transaction references is rejected.
-func TestTxnPayeeDeleteBlocked(t *testing.T) {
-	sqldb := testutil.NewDB(t)
-
-	res, err := sqldb.Exec(`INSERT INTO payees (name) VALUES ('Acme')`)
-	if err != nil {
-		if strings.Contains(err.Error(), "no such table") {
-			t.Fatalf("cannot seed a payee because payees is missing: %v", err)
-		}
-		t.Fatalf("seed payee: %v", err)
-	}
-	payee, _ := res.LastInsertId()
-
-	if _, err := sqldb.Exec(
-		`INSERT INTO transactions (date, subsidiary_id, payee_id, currency)
-		 VALUES ('2025-01-01', 1, ?, 'USD')`, payee,
-	); err != nil {
-		t.Fatalf("seed transaction: %v", err)
-	}
-
-	if _, err := sqldb.Exec(`DELETE FROM payees WHERE id = ?`, payee); err == nil {
-		t.Fatal("deleting a payee referenced by a transaction succeeded; the payee FK is not enforced")
-	}
-}
-
 // TestSplitAccountDeleteBlocked proves the splits.account_id FK: deleting an account
 // a split references is rejected. The account is a fresh asset leaf only referenced
 // by this split.
@@ -524,7 +498,7 @@ func TestTransactionsSplitsIndexesExist(t *testing.T) {
 	for _, idx := range []string{
 		"splits_account", "splits_txn", "splits_fund", "splits_program",
 		"txn_date", "txn_sub",
-		"payees_versions_entity", "transactions_versions_entity", "splits_versions_entity",
+		"transactions_versions_entity", "splits_versions_entity",
 	} {
 		var name string
 		err := sqldb.QueryRow(
@@ -544,7 +518,7 @@ func TestTransactionsSplitsVersionsTablesExist(t *testing.T) {
 	sqldb := testutil.NewDB(t)
 
 	for _, tbl := range []string{
-		"payees_versions", "transactions_versions", "splits_versions",
+		"transactions_versions", "splits_versions",
 	} {
 		var n int
 		if err := sqldb.QueryRow(`SELECT count(*) FROM ` + tbl).Scan(&n); err != nil {

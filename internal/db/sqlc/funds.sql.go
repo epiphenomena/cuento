@@ -79,7 +79,7 @@ SELECT sp.id AS split_id, t.id AS txn_id, t.date, t.subsidiary_id, t.currency,
        sp.amount, sp.account_id,
        CASE WHEN a.type = 'asset' THEN 1 ELSE 0 END AS is_asset,
        sp.program_id, sp.functional_class,
-       sp.memo AS split_memo, t.memo AS txn_memo, t.payee_id,
+       sp.memo AS split_memo, t.memo AS txn_memo,
        CAST(SUM(CASE WHEN a.type = 'asset' THEN sp.amount ELSE 0 END) OVER (
          PARTITION BY t.currency
          ORDER BY t.date, sp.id
@@ -112,7 +112,6 @@ type FundLedgerRow struct {
 	FunctionalClass sql.NullString
 	SplitMemo       string
 	TxnMemo         string
-	PayeeID         sql.NullInt64
 	RunningBalance  int64
 }
 
@@ -157,7 +156,6 @@ func (q *Queries) FundLedger(ctx context.Context, arg FundLedgerParams) ([]FundL
 			&i.FunctionalClass,
 			&i.SplitMemo,
 			&i.TxnMemo,
-			&i.PayeeID,
 			&i.RunningBalance,
 		); err != nil {
 			return nil, err

@@ -221,9 +221,8 @@ func (b *builder) postBucket(
 		memo = hashText(desc)
 	}
 
-	// PayeeID is left unset (nil): the importer no longer mints payees (p26.16, the
-	// payee->per-split-description migration). Row descriptions ride on each split's
-	// Description (set in resolveSplit) instead.
+	// The importer mints no payees (p26.16); the payee entity is fully removed as of
+	// p26.20. Row descriptions ride on each split's Description (set in resolveSplit).
 	txnID, err := b.st.PostTransaction(ctx, store.PostTransactionInput{
 		Date:         date,
 		SubsidiaryID: subID,

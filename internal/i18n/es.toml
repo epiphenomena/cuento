@@ -528,8 +528,6 @@ other = "Cargar mas"
 other = "Fecha"
 [register.col.subsidiary]
 other = "Subsidiaria"
-[register.col.payee]
-other = "Beneficiario"
 [register.col.description]
 other = "Descripción"
 [register.col.memo]
@@ -804,12 +802,6 @@ other = "Subsidiaria"
 other = "Fecha"
 [txn.date_hint]
 other = "Escriba una fecha; t = hoy, + / - cambian un dia"
-[txn.payee]
-other = "Beneficiario"
-[txn.payee_none]
-other = "Sin beneficiario"
-[txn.payee_search]
-other = "Buscar beneficiarios..."
 [txn.memo]
 other = "Nota"
 [txn.description_hint]
@@ -860,8 +852,6 @@ other = "Descripción"
 other = "Nota"
 [txn.col.error]
 other = "Error"
-[txn.autofill.dropped_out_of_sub]
-other = "Se omitieron algunas lineas de la ultima transaccion de este beneficiario porque sus cuentas no estan en la subsidiaria seleccionada."
 [register.new_txn]
 other = "Nueva transaccion"
 [register.edit_txn]
@@ -948,8 +938,6 @@ other = "Línea %d"
 other = "Fecha"
 [history.field.subsidiary]
 other = "Subsidiaria"
-[history.field.payee]
-other = "Beneficiario"
 [history.field.memo]
 other = "Nota"
 [history.field.description]
@@ -975,8 +963,6 @@ other = "Anular transacción"
 other = "Anular quita esta transacción del libro mayor. Su historial se conserva. Esto no se puede deshacer desde la aplicación."
 [void.date]
 other = "Fecha"
-[void.payee]
-other = "Beneficiario"
 [void.memo]
 other = "Nota"
 [void.col.account]
@@ -1437,8 +1423,8 @@ other = "Reabrir"
 other = "Marcada"
 [recon.col.date]
 other = "Fecha"
-[recon.col.payee]
-other = "Beneficiario"
+[recon.col.description]
+other = "Descripción"
 [recon.col.memo]
 other = "Nota"
 [recon.col.fund]

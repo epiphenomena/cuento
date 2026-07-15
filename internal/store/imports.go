@@ -166,7 +166,7 @@ type StagedRow struct {
 	DedupeHash  string
 	AmountMinor int64
 	Date        string
-	Payee       string
+	Description string // bank line descriptive text (was payee; feeds split description)
 	Memo        string
 }
 
@@ -196,7 +196,7 @@ func (s *Store) StageImportRows(ctx context.Context, batchID, accountID int64, r
 			// Within-batch duplicates also flag (a file listing the same line twice).
 			seen := make(map[string]bool)
 			for _, row := range rows {
-				hash := bankimport.DedupeHash(accountID, row.Date, row.AmountMinor, row.Payee, row.Memo)
+				hash := bankimport.DedupeHash(accountID, row.Date, row.AmountMinor, row.Description, row.Memo)
 				dup := existing[hash] || seen[hash]
 				seen[hash] = true
 
@@ -210,7 +210,7 @@ func (s *Store) StageImportRows(ctx context.Context, batchID, accountID int64, r
 					RawJson:      string(rawJSON),
 					ParsedDate:   nullString(row.Date),
 					ParsedAmount: sql.NullInt64{Int64: row.AmountMinor, Valid: true},
-					ParsedPayee:  nullString(row.Payee),
+					ParsedPayee:  nullString(row.Description),
 					ParsedMemo:   nullString(row.Memo),
 					DedupeHash:   hash,
 				})
@@ -223,7 +223,7 @@ func (s *Store) StageImportRows(ctx context.Context, batchID, accountID int64, r
 					DedupeHash:  hash,
 					AmountMinor: row.AmountMinor,
 					Date:        row.Date,
-					Payee:       row.Payee,
+					Description: row.Description,
 					Memo:        row.Memo,
 				})
 			}
@@ -240,7 +240,8 @@ func (s *Store) StageImportRows(ctx context.Context, batchID, accountID int64, r
 // (across batches), and (2) the natural keys of posted ledger splits on the account,
 // re-hashed in Go with the SAME bankimport.DedupeHash. The ledger-split key uses the
 // split memo, falling back to the transaction memo when the split memo is empty, and
-// the transaction's payee name (empty when absent) -- documented in DECISIONS p17.2.
+// the split's per-line description (empty when absent) -- documented in DECISIONS p17.2
+// (the description replaces the retired payee name as of p26.20).
 func (s *Store) existingDedupeSet(ctx context.Context, accountID int64) (map[string]bool, error) {
 	set := make(map[string]bool)
 
@@ -261,7 +262,7 @@ func (s *Store) existingDedupeSet(ctx context.Context, accountID int64) (map[str
 		if memo == "" {
 			memo = sp.TxnMemo
 		}
-		set[bankimport.DedupeHash(accountID, sp.Date, sp.Amount, sp.Payee, memo)] = true
+		set[bankimport.DedupeHash(accountID, sp.Date, sp.Amount, sp.Description, memo)] = true
 	}
 	return set, nil
 }
@@ -272,7 +273,7 @@ type ImportBatchRow struct {
 	ID          int64
 	AmountMinor *int64
 	Date        string
-	Payee       string
+	Description string // bank line descriptive text (was payee); parsed_payee column
 	Memo        string
 	Status      string
 	DedupeHash  string
@@ -294,7 +295,7 @@ func (s *Store) ImportRowsForBatch(ctx context.Context, batchID int64) ([]Import
 			ID:          r.ID,
 			AmountMinor: nullInt64ToPtr(r.ParsedAmount),
 			Date:        r.ParsedDate.String,
-			Payee:       r.ParsedPayee.String,
+			Description: r.ParsedPayee.String,
 			Memo:        r.ParsedMemo.String,
 			Status:      r.Status,
 			DedupeHash:  r.DedupeHash,
@@ -369,7 +370,7 @@ func (s *Store) ImportRowsForBatchFlagged(ctx context.Context, batchID int64) ([
 		if memo == "" {
 			memo = sp.TxnMemo
 		}
-		ledger[bankimport.DedupeHash(batch.AccountID, sp.Date, sp.Amount, sp.Payee, memo)] = true
+		ledger[bankimport.DedupeHash(batch.AccountID, sp.Date, sp.Amount, sp.Description, memo)] = true
 	}
 
 	for i := range rows {
@@ -394,7 +395,7 @@ type ImportRow struct {
 	SubsidiaryID int64 // the batch's subsidiary (locked in the editor)
 	AmountMinor  int64
 	Date         string
-	Payee        string
+	Description  string // bank line descriptive text (was payee); parsed_payee column
 	Memo         string
 	Status       string
 	PostedTxnID  *int64
@@ -416,7 +417,7 @@ func (s *Store) GetImportRow(ctx context.Context, rowID int64) (ImportRow, error
 		AccountID:    r.AccountID,
 		SubsidiaryID: r.SubsidiaryID,
 		Date:         r.ParsedDate.String,
-		Payee:        r.ParsedPayee.String,
+		Description:  r.ParsedPayee.String,
 		Memo:         r.ParsedMemo.String,
 		Status:       r.Status,
 		PostedTxnID:  nullInt64ToPtr(r.PostedTransactionID),

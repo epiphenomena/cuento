@@ -95,7 +95,7 @@ WITH RECURSIVE scope(id) AS (
 )
 SELECT sp.id AS split_id, t.id AS txn_id, t.date, t.subsidiary_id, t.currency,
        sp.amount, sp.fund_id, sp.program_id, sp.functional_class,
-       sp.memo AS split_memo, t.memo AS txn_memo, t.payee_id, sp.description
+       sp.memo AS split_memo, t.memo AS txn_memo, sp.description
 FROM splits sp
 JOIN transactions t ON t.id = sp.transaction_id
 WHERE t.deleted = 0
@@ -141,7 +141,6 @@ type DrillSplitsRow struct {
 	FunctionalClass sql.NullString
 	SplitMemo       string
 	TxnMemo         string
-	PayeeID         sql.NullInt64
 	Description     string
 }
 
@@ -211,7 +210,6 @@ func (q *Queries) DrillSplits(ctx context.Context, arg DrillSplitsParams) ([]Dri
 			&i.FunctionalClass,
 			&i.SplitMemo,
 			&i.TxnMemo,
-			&i.PayeeID,
 			&i.Description,
 		); err != nil {
 			return nil, err
@@ -481,7 +479,7 @@ WITH RECURSIVE des(id) AS (
 filtered AS (
   SELECT sp.id AS split_id, t.id AS txn_id, t.date, t.subsidiary_id,
          t.currency, sp.account_id, sp.amount, sp.fund_id, sp.program_id,
-         sp.functional_class, sp.memo AS split_memo, t.memo AS txn_memo, t.payee_id,
+         sp.functional_class, sp.memo AS split_memo, t.memo AS txn_memo,
          sp.description,
          CAST(SUM(sp.amount) OVER (
            PARTITION BY t.currency
@@ -490,18 +488,17 @@ filtered AS (
          ) AS INTEGER) AS running_balance
   FROM splits sp
   JOIN transactions t ON t.id = sp.transaction_id
-  LEFT JOIN payees py ON py.id = t.payee_id
   WHERE sp.account_id IN (SELECT id FROM des)
     AND t.deleted = 0
     AND (? = 0 OR t.date >= ?)
     AND (? = 0 OR t.date <= ?)
-    AND (? = 0 OR (t.memo LIKE ? OR sp.memo LIKE ? OR py.name LIKE ?))
+    AND (? = 0 OR (t.memo LIKE ? OR sp.memo LIKE ? OR sp.description LIKE ?))
     AND (? = 0 OR sp.fund_id = ?)
     AND (? = 0 OR t.subsidiary_id = ?)
     AND (? = 0 OR sp.program_id = ?)
 )
 SELECT split_id, txn_id, date, subsidiary_id, currency, account_id, amount, fund_id,
-       program_id, functional_class, split_memo, txn_memo, payee_id, description,
+       program_id, functional_class, split_memo, txn_memo, description,
        running_balance
 FROM filtered
 ORDER BY date DESC, split_id DESC
@@ -516,7 +513,7 @@ type RegisterPageParams struct {
 	Column6      interface{}
 	Memo         string
 	Memo_2       string
-	Name         string
+	Description  string
 	Column10     interface{}
 	FundID       sql.NullInt64
 	Column12     interface{}
@@ -538,7 +535,6 @@ type RegisterPageRow struct {
 	FunctionalClass sql.NullString
 	SplitMemo       string
 	TxnMemo         string
-	PayeeID         sql.NullInt64
 	Description     string
 	RunningBalance  int64
 }
@@ -568,7 +564,7 @@ type RegisterPageRow struct {
 // Filters are optional; each is passed as a PAIR of positional ? (a "? IS NULL OR
 // ..." guard reuses a param, which sqlc's sqlite parser mangles -- p04.2 quirk --
 // so the store binds each filter value to TWO consecutive ? instead; the text
-// filter binds the wrapped %..% pattern to THREE ? for memo/split-memo/payee).
+// filter binds the wrapped %..% pattern to THREE ? for memo/split-memo/description).
 //
 // Param order (positional):
 //
@@ -586,7 +582,7 @@ func (q *Queries) RegisterPage(ctx context.Context, arg RegisterPageParams) ([]R
 		arg.Column6,
 		arg.Memo,
 		arg.Memo_2,
-		arg.Name,
+		arg.Description,
 		arg.Column10,
 		arg.FundID,
 		arg.Column12,
@@ -614,7 +610,6 @@ func (q *Queries) RegisterPage(ctx context.Context, arg RegisterPageParams) ([]R
 			&i.FunctionalClass,
 			&i.SplitMemo,
 			&i.TxnMemo,
-			&i.PayeeID,
 			&i.Description,
 			&i.RunningBalance,
 		); err != nil {

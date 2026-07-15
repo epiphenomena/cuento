@@ -2,12 +2,12 @@
   p12.4 void confirm-review page (/transactions/{id}/void, TxnWrite). Voiding a
   transaction is a soft-delete (rule 14) but feels destructive, so it is a two-step
   flow mirroring the merge confirm UX: this page SUMMARIZES the transaction (date,
-  payee, memo, split lines) and offers a Confirm button that POSTs back with
+  memo, split lines) and offers a Confirm button that POSTs back with
   confirm=1 to execute. A plain full-page form (no htmx swap) -- on success the
   handler redirects to /accounts. .Page is a voidReviewModel.
 
   Every string via {{t}} (rule 9); amounts/dates already formatted (rule 10);
-  account/fund/payee names are stored proper nouns rendered verbatim; no inline
+  account/fund names are stored proper nouns rendered verbatim; no inline
   script (rule 12).
 */ -}}
 {{define "void.tmpl" -}}
@@ -21,7 +21,6 @@
 
   <dl class="void-summary">
     <dt>{{t "void.date"}}</dt><dd>{{.Date}}</dd>
-    <dt>{{t "void.payee"}}</dt><dd>{{if .Payee}}{{.Payee}}{{else}}<span class="muted">&mdash;</span>{{end}}</dd>
     <dt>{{t "void.memo"}}</dt><dd>{{if .Memo}}{{.Memo}}{{else}}<span class="muted">&mdash;</span>{{end}}</dd>
   </dl>
 

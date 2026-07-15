@@ -261,8 +261,7 @@ type RegisterRow struct {
 	SplitMemo       string
 	TxnMemo         string
 	Description     string // per-split free-text (p26.15); the register Description column
-	PayeeID         *int64
-	RunningBalance  int64 // cumulative to this row within its currency
+	RunningBalance  int64  // cumulative to this row within its currency
 }
 
 // RegisterPage returns one page of the register for accountID in REVERSE
@@ -313,7 +312,7 @@ func (s *Store) RegisterPage(
 		Column6:      textActive,
 		Memo:         like,
 		Memo_2:       like,
-		Name:         like,
+		Description:  like,
 		Column10:     fundActive,
 		FundID:       nullInt64Ptr(filters.FundID),
 		Column12:     subActive,
@@ -365,7 +364,6 @@ func (s *Store) RegisterPage(
 			SplitMemo:       r.SplitMemo,
 			TxnMemo:         r.TxnMemo,
 			Description:     r.Description,
-			PayeeID:         nullInt64ToPtr(r.PayeeID),
 			RunningBalance:  r.RunningBalance,
 		}
 	}
@@ -398,7 +396,6 @@ type FundLedgerRow struct {
 	FunctionalClass *string
 	SplitMemo       string
 	TxnMemo         string
-	PayeeID         *int64
 	RunningBalance  int64 // cumulative asset-side amount to this row, per currency
 }
 
@@ -433,7 +430,6 @@ func (s *Store) FundLedger(ctx context.Context, fundID int64, asof string) ([]Fu
 			FunctionalClass: nullStringToPtr(r.FunctionalClass),
 			SplitMemo:       r.SplitMemo,
 			TxnMemo:         r.TxnMemo,
-			PayeeID:         nullInt64ToPtr(r.PayeeID),
 			RunningBalance:  r.RunningBalance,
 		}
 	}
@@ -483,7 +479,6 @@ type DrillRow struct {
 	SplitMemo       string
 	TxnMemo         string
 	Description     string // per-split free-text (p26.15); the ledger Description cell
-	PayeeID         *int64
 }
 
 // DrillSplits returns every non-deleted split matching f, ordered by (date,
@@ -541,7 +536,6 @@ func (s *Store) DrillSplits(ctx context.Context, f DrillFilter) ([]DrillRow, err
 			SplitMemo:       r.SplitMemo,
 			TxnMemo:         r.TxnMemo,
 			Description:     r.Description,
-			PayeeID:         nullInt64ToPtr(r.PayeeID),
 		}
 	}
 	return out, nil

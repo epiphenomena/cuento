@@ -12,10 +12,10 @@ import (
 // matching the editor's write-gating -- they exist only to author an entry) and are
 // picked up by the permission-matrix test automatically (rule 8).
 //
-// These REPLACE the old payee autofill (payees.go): the whole-grid /payees/{id}/
-// template becomes per-ROW /descriptions/prefill, and /descriptions/suggest is the
-// distinct-description analogue of the removed payee suggest. The entry UI is
-// UNCHANGED this step (the header payee field stays); 4b wires the grid to these.
+// These REPLACED the old payee autofill: the whole-grid payee template became per-ROW
+// /descriptions/prefill, and /descriptions/suggest is the distinct-description
+// analogue of the removed payee suggest. The payee entity + its routes were physically
+// removed in p26.20; the grid is wired to these per-split description endpoints.
 
 // descSuggestModel carries the ranked distinct descriptions the desc-suggest
 // fragment renders as <li> options.

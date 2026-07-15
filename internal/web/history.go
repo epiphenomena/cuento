@@ -95,10 +95,6 @@ func (s *server) renderHistory(ctx context.Context, u *store.CurrentUser, lang s
 	if err != nil {
 		return nil, err
 	}
-	payees, err := payeeNameMap(ctx, s.store)
-	if err != nil {
-		return nil, err
-	}
 	programs, err := programNameMap(ctx, s.store)
 	if err != nil {
 		return nil, err
@@ -123,8 +119,6 @@ func (s *server) renderHistory(ctx context.Context, u *store.CurrentUser, lang s
 			return currency + " " + money.Format(v.Amount, exp, opts)
 		case store.FieldSubsidiary:
 			return nameOr(subs, v.ID)
-		case store.FieldPayee:
-			return nameOr(payees, v.ID)
 		case store.FieldAccount:
 			return nameOr(accounts, v.ID)
 		case store.FieldFund:
@@ -254,8 +248,6 @@ func histFieldLabel(f store.HistoryField) string {
 		return "history.field.date"
 	case store.FieldSubsidiary:
 		return "history.field.subsidiary"
-	case store.FieldPayee:
-		return "history.field.payee"
 	case store.FieldCurrency:
 		return "history.field.currency"
 	case store.FieldAccount:

@@ -9,7 +9,7 @@ package ledger
 //   - "non-deleted transaction" = transactions.deleted = 0; a soft-deleted txn
 //     (rule 14) is out of the ledger and out of every balance/scope check.
 //   - NULL-safe comparison uses SQLite's `IS` / `IS NOT`, so a nullable column
-//     (fund_id, program_id, functional_class, parent_id, payee_id...) compares
+//     (fund_id, program_id, functional_class, parent_id...) compares
 //     correctly whether or not it is NULL.
 //   - "latest version" of an entity = its *_versions row with the greatest
 //     (valid_from, id) -- the same (valid_from DESC, id DESC) tiebreak the store's
@@ -200,18 +200,10 @@ WHERE v.id IS NULL OR v.op = 'delete'
    OR v.program_id IS NOT c.program_id OR v.amount IS NOT c.amount
    OR v.currency IS NOT c.currency OR v.schedule_id IS NOT c.schedule_id
 UNION ALL
--- payees
-SELECT 'payees:' || CAST(c.id AS TEXT)
-FROM payees c
-LEFT JOIN payees_versions v
-  ON v.id = (SELECT id FROM payees_versions x WHERE x.entity_id = c.id
-             ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
-WHERE v.id IS NULL OR v.op = 'delete'
-   OR v.name IS NOT c.name OR v.active IS NOT c.active
-UNION ALL
 -- transactions: a soft-deleted txn's latest version IS op='delete' by design, so
 -- only compare the business columns and treat a missing version as the violation
 -- (a live deleted=1 row correctly has a 'delete' latest version -- NOT a Z3 miss).
+-- payee_id was dropped in 00021 (p26.20), so it is not compared.
 SELECT 'transactions:' || CAST(c.id AS TEXT)
 FROM transactions c
 LEFT JOIN transactions_versions v
@@ -219,7 +211,7 @@ LEFT JOIN transactions_versions v
              ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
 WHERE v.id IS NULL
    OR v.date IS NOT c.date OR v.subsidiary_id IS NOT c.subsidiary_id
-   OR v.payee_id IS NOT c.payee_id OR v.memo IS NOT c.memo
+   OR v.memo IS NOT c.memo
    OR v.notes IS NOT c.notes
    OR v.currency IS NOT c.currency OR v.deleted IS NOT c.deleted
 UNION ALL
@@ -318,7 +310,6 @@ FROM (
   UNION ALL SELECT 'account_subsidiaries_versions', id, change_id FROM account_subsidiaries_versions
   UNION ALL SELECT 'funds_versions', id, change_id FROM funds_versions
   UNION ALL SELECT 'fund_subsidiaries_versions', id, change_id FROM fund_subsidiaries_versions
-  UNION ALL SELECT 'payees_versions', id, change_id FROM payees_versions
   UNION ALL SELECT 'budget_schedules_versions', id, change_id FROM budget_schedules_versions
   UNION ALL SELECT 'budget_schedule_dates_versions', id, change_id FROM budget_schedule_dates_versions
   UNION ALL SELECT 'budgets_versions', id, change_id FROM budgets_versions

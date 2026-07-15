@@ -7,7 +7,7 @@
 // There is NO balancing, NO DR/CR, NO functional-class here -- a plain account/amount/
 // fund/program/memo grid whose whole set saves under one change (replace-set by line id,
 // the hidden line_id_<i> round-trip). The pure emptiness predicate (isRowEmpty) is the
-// SAME tested one the txn editor uses (txnpayee.js); this module is the thin, e2e-covered
+// SAME tested one the txn editor uses (rowstate.js); this module is the thin, e2e-covered
 // glue. Guarded so importing under Node is side-effect free (no `document`).
 //
 // p26.4 adds:
@@ -19,7 +19,7 @@
 //     stays contiguous 0..n-1 (server handler unchanged); deleting the only/last row resets
 //     it in place so the grid never drops below one trailing empty row.
 
-import { isRowEmpty } from './txnpayee.js';
+import { isRowEmpty } from './rowstate.js';
 import { formatAmountGrouped } from './txnamount.js';
 import { initCombos, stripCombo, resyncCombos } from './combobox.js';
 import { initDescField, stripDescField } from './descfield.js';

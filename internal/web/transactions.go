@@ -37,9 +37,10 @@ import (
 //     row (attributed from the option data the editor ALREADY loaded, never by
 //     re-running balance/scope logic). Client chips are display-only.
 //
-// Scope boundary (this step only): the editor grid + account/payee combobox +
-// create/edit round-trip. NOT payee suggest/autofill (p12.3), NOT void/duplicate/
-// history (p12.4), NOT the keyboard-only QA pass (p12.6).
+// Scope boundary (this step only): the editor grid + account combobox +
+// create/edit round-trip. NOT void/duplicate/history (p12.4), NOT the
+// keyboard-only QA pass (p12.6). (The header payee field + its autofill were
+// retired in p26.19/p26.20; per-split descriptions replace them.)
 
 // txnRowModel is one split row in the editor. It carries the row's current values
 // (echoed on a re-render) plus its stable key and any per-row error key (trap 5).
@@ -90,8 +91,6 @@ type txnEditorModel struct {
 	IsEdit     bool
 	Subsidiary int64
 	Date       string // echoed in the user's date format
-	Payee      int64
-	PayeeName  string // the typed/picked payee name (create-on-save + 422 echo)
 	Memo       string
 	Notes      string // longer multiline explanation (p24.2)
 	Currency   string
@@ -119,15 +118,10 @@ type txnEditorModel struct {
 	Accounts     []txnAccountOption // filtered to Subsidiary (leaf+active)
 	Funds        []txnOption        // ActiveFunds(Subsidiary)
 	Programs     []txnOption        // active programs
-	Payees       []txnOption
-	Classes      []string // program|management|fundraising
+	Classes      []string           // program|management|fundraising
 
 	RootProgram int64 // the program-defaulting fallback (D24)
 	UserProgram int64 // the user's default_program (p26.5); 0 = unset. Prefill tier BELOW an account's own default_program and ABOVE RootProgram.
-
-	// AutofillNotice is the i18n key shown when a payee template (p12.3) had splits
-	// dropped because their account is outside the selected subsidiary; "" = none.
-	AutofillNotice string
 
 	// Errors (trap 5). TotalsError is the overall/fund-imbalance key rendered in the
 	// sticky totals bar; row errors live on each row's ErrorKey.
@@ -259,17 +253,6 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 	model.IsEdit = true
 	model.Currency = hdr.Currency
 	model.Date = money.FormatDate(parseISOForDisplay(hdr.Date), dateFormatFor(u))
-	if hdr.PayeeID.Valid {
-		model.Payee = hdr.PayeeID.Int64
-		// Echo the payee's name into the autocomplete input (the option list already
-		// loaded it; no extra query).
-		for _, p := range model.Payees {
-			if p.ID == model.Payee {
-				model.PayeeName = p.Name
-				break
-			}
-		}
-	}
 	model.Memo = hdr.Memo
 	model.Notes = hdr.Notes
 
@@ -361,10 +344,6 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 	model.TxnID = txnID
 	model.IsEdit = txnID != 0
 	model.Currency = currency
-	// p26.19: the per-transaction payee is no longer parsed from the entry form (the header
-	// payee field was removed; per-split descriptions replace it). model.Payee/PayeeName
-	// stay unset here -- the PostTransactionInput leaves PayeeID nil. The payee column/route
-	// are physically removed in the next step.
 	model.Memo = r.FormValue("memo")
 	model.Notes = r.FormValue("notes")
 	model.FirstErrorRow = -1
@@ -744,19 +723,6 @@ func (s *server) newEditorModel(ctx context.Context, u *store.CurrentUser, sub i
 			model.RootProgram = p.ID
 		}
 		model.Programs = append(model.Programs, txnOption{ID: p.ID, Name: p.Name})
-	}
-
-	// Payee combobox options (the suggestion endpoint is p12.3; here it is a combobox
-	// over the existing payees list).
-	payees, err := s.store.ListPayees(ctx)
-	if err != nil {
-		return model, err
-	}
-	for _, p := range payees {
-		if p.Active == 0 {
-			continue
-		}
-		model.Payees = append(model.Payees, txnOption{ID: p.ID, Name: p.Name})
 	}
 
 	return model, nil

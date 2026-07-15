@@ -29,7 +29,7 @@ type reviewEnv struct {
 	expense  int64
 }
 
-func stageReviewBatch(t *testing.T, st *store.Store, payee, memo string) reviewEnv {
+func stageReviewBatch(t *testing.T, st *store.Store, description, memo string) reviewEnv {
 	t.Helper()
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 
@@ -63,7 +63,7 @@ func stageReviewBatch(t *testing.T, st *store.Store, payee, memo string) reviewE
 		t.Fatalf("CreateImportBatch: %v", err)
 	}
 	staged, err := st.StageImportRows(ctx, batch, checking, []bankimport.ParsedRow{
-		{Date: "2025-01-15", AmountMinor: -4200, Payee: payee, Memo: memo, Raw: []string{"2025-01-15", "-42.00", payee, memo}},
+		{Date: "2025-01-15", AmountMinor: -4200, Description: description, Memo: memo, Raw: []string{"2025-01-15", "-42.00", description, memo}},
 	})
 	if err != nil {
 		t.Fatalf("StageImportRows: %v", err)
@@ -102,36 +102,15 @@ func TestImportEditPostPrefillLocksSubsidiary(t *testing.T) {
 	}
 }
 
-// TestImportEditPostPrefillsPayeeTemplateFundAndClass: when the parsed payee matches a
-// known payee with a prior transaction, the counter-splits are prefilled from that
-// template INCLUDING fund and functional class.
-func TestImportEditPostPrefillsPayeeTemplateFundAndClass(t *testing.T) {
+// TestImportEditPostSeedsBankLineDescription: the edit&post editor seeds the bank
+// (batch-account) row's Description from the staged row's descriptive text (the former
+// "payee" line). This is the dedupe-hash source, so a posted bank split re-hashes to
+// its staging key (p26.20). The payee entity is retired, so there is no counter-split
+// template -- the reviewer authors the counter side (one empty counter row).
+func TestImportEditPostSeedsBankLineDescription(t *testing.T) {
 	h, st, sm := accountsApp(t)
 	book := mkUser(t, st, "book", "write", false)
-	env := stageReviewBatch(t, st, "Acme", "Invoice")
-	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
-
-	// A restricted fund + a prior transaction for "Acme" whose expense counter carries
-	// the fund + a functional class -- the template the edit&post prefill reuses.
-	fund, err := st.CreateFund(ctx, store.CreateFundInput{Name: "Grant", Restriction: "purpose", Subsidiaries: []int64{1}})
-	if err != nil {
-		t.Fatalf("CreateFund: %v", err)
-	}
-	payeeID, err := st.EnsurePayee(ctx, "Acme")
-	if err != nil {
-		t.Fatalf("EnsurePayee: %v", err)
-	}
-	cls := "management"
-	_, err = st.PostTransaction(ctx, store.PostTransactionInput{
-		Date: "2025-01-01", SubsidiaryID: 1, PayeeID: &payeeID, Currency: "USD",
-		Splits: []store.SplitInput{
-			{AccountID: env.checking, Amount: -4200, FundID: &fund, Position: 0},
-			{AccountID: env.expense, Amount: 4200, FundID: &fund, FunctionalClass: &cls, Position: 1},
-		},
-	})
-	if err != nil {
-		t.Fatalf("PostTransaction (template): %v", err)
-	}
+	env := stageReviewBatch(t, st, "Acme Supplies Co", "Invoice")
 
 	rec := asUser(t, h, sm, book, http.MethodGet, "/import/rows/"+strconv.FormatInt(env.rowID, 10)+"/edit", nil)
 	if rec.Code != http.StatusOK {
@@ -139,17 +118,9 @@ func TestImportEditPostPrefillsPayeeTemplateFundAndClass(t *testing.T) {
 	}
 	body := rec.Body.String()
 
-	// The counter split (expense) is prefilled with the fund AND functional class from
-	// the template. The account option's `selected` is not contiguous with its value
-	// (multi-attribute option), so match the selected option by its rendered name.
-	if !strings.Contains(body, `selected>Supplies</option>`) {
-		t.Error("expense counter split not prefilled from template")
-	}
-	if !strings.Contains(body, `value="`+strconv.FormatInt(fund, 10)+`" selected>Grant</option>`) {
-		t.Error("template fund not prefilled on a counter split")
-	}
-	if !strings.Contains(body, `value="management" selected`) {
-		t.Error("template functional class not prefilled on the counter split")
+	// The bank line's description input carries the staged descriptive text.
+	if !strings.Contains(body, `value="Acme Supplies Co"`) {
+		t.Errorf("bank line description not seeded from the staged row; body:\n%s", body)
 	}
 }
 

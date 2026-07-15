@@ -92,17 +92,17 @@ WHERE account_id = ? AND status IN ('pending','posted');
 -- name: LedgerSplitDedupeKeys :many
 -- Dedupe LOOKUP source (2): the natural keys of already-posted LEDGER splits on
 -- this account, on NON-DELETED transactions. Each row yields (date, amount,
--- payee-name, memo) which the store re-hashes in Go with bankimport.DedupeHash to
+-- description, memo) which the store re-hashes in Go with bankimport.DedupeHash to
 -- the SAME hash a matching bank row would produce -- so a bank line that is already
 -- a posted transaction is flagged. The split MEMO is used, with the transaction
 -- memo as the fallback when the split memo is empty (documented in the store);
--- payee is the transaction's payee name (empty when the txn has no payee).
+-- description is the split's per-line free text (p26.20 -- it replaces the retired
+-- payee name; the bank-import write path sets it on the bank-account split).
 SELECT t.date        AS date,
        s.amount      AS amount,
-       COALESCE(p.name, '') AS payee,
+       s.description AS description,
        s.memo        AS split_memo,
        t.memo        AS txn_memo
 FROM splits s
 JOIN transactions t ON t.id = s.transaction_id
-LEFT JOIN payees p ON p.id = t.payee_id
 WHERE s.account_id = ? AND t.deleted = 0;

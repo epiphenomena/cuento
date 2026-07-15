@@ -715,9 +715,8 @@ func TestSourceDimensionsGatedByAccountType(t *testing.T) {
 }
 
 // TestAnonymizeHashesMemosAndDescriptions: with --anonymize, no produced split
-// memo NOR split description may equal a synthetic source original. The importer no
-// longer mints payees (p26.16), so there are none to hash -- the payee table is
-// asserted empty here too.
+// memo NOR split description may equal a synthetic source original. The importer
+// never minted payees (p26.16); the payee entity is fully removed (p26.20).
 func TestAnonymizeHashesMemosAndDescriptions(t *testing.T) {
 	sqldb, _, res := buildInto(t, true)
 
@@ -742,10 +741,6 @@ func TestAnonymizeHashesMemosAndDescriptions(t *testing.T) {
 	if len(descs) == 0 {
 		t.Errorf("no split descriptions produced")
 	}
-	// No payees are minted by the importer any more.
-	if names := allPayeeNames(t, sqldb); len(names) != 0 {
-		t.Errorf("importer minted %d payees; want 0 (payee minting removed p26.16)", len(names))
-	}
 	_ = res
 }
 
@@ -753,8 +748,7 @@ func TestAnonymizeHashesMemosAndDescriptions(t *testing.T) {
 // the ledger row that produced it (per-split, not per-transaction). tid 2's two
 // source rows carry distinct desc, so the expense split and the checking split must
 // carry their own row's desc. Synthesized counter-legs (FX Clearing / Opening
-// Balances) come from no source row and carry an EMPTY description. And no payees
-// are minted (p26.16 removed payee minting; PayeeID is left unset).
+// Balances) come from no source row and carry an EMPTY description.
 func TestSplitDescriptionFromSourceRow(t *testing.T) {
 	sqldb, _, res := buildInto(t, false)
 
@@ -773,18 +767,6 @@ func TestSplitDescriptionFromSourceRow(t *testing.T) {
 	assertAcctDescription(t, sqldb, res, "Opening Balances", "")
 	// The synthesized FX Clearing counter-leg (tid 4/5) likewise.
 	assertAcctDescription(t, sqldb, res, "FX Clearing", "")
-
-	// The importer mints NO payees, and every posted transaction has a NULL payee.
-	if names := allPayeeNames(t, sqldb); len(names) != 0 {
-		t.Errorf("importer minted %d payees; want 0", len(names))
-	}
-	var withPayee int
-	if err := sqldb.QueryRow(`SELECT COUNT(*) FROM transactions WHERE payee_id IS NOT NULL`).Scan(&withPayee); err != nil {
-		t.Fatalf("count txns with payee: %v", err)
-	}
-	if withPayee != 0 {
-		t.Errorf("%d transactions carry a payee_id; want 0 (payee unset)", withPayee)
-	}
 }
 
 // ---- small raw-read helpers (reads outside the store are fine via sqlc/raw) --
@@ -851,11 +833,6 @@ func assertExpenseClass(t *testing.T, sqldb *sql.DB, res *BuildResult, srcAcct, 
 	if !found {
 		t.Errorf("no split on expense account %s", srcAcct)
 	}
-}
-
-func allPayeeNames(t *testing.T, sqldb *sql.DB) []string {
-	t.Helper()
-	return scanStrings(t, sqldb, `SELECT name FROM payees`)
 }
 
 func allMemos(t *testing.T, sqldb *sql.DB) []string {

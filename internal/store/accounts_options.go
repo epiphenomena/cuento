@@ -130,17 +130,6 @@ func (s *Store) AllSubsidiaries(ctx context.Context) ([]sqlc.SubTreeRow, error) 
 	return s.SubTree(ctx)
 }
 
-// ListPayees returns every payee (id, name, active), id-ordered. The register
-// (p12.1) loads it once per render into an id->name map so each row can show its
-// payee's name without a per-row join. A read via sqlc (rule 2).
-func (s *Store) ListPayees(ctx context.Context) ([]sqlc.Payee, error) {
-	rows, err := s.q.ListPayees(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("store: list payees: %w", err)
-	}
-	return rows, nil
-}
-
 // ListFunds returns every fund (active AND closed), id-ordered. The register
 // (p12.1) uses it for the fund-name lookup (a chip may name a now-closed fund) and
 // the fund-filter option list; unlike ActiveFunds it is NOT subsidiary-scoped and

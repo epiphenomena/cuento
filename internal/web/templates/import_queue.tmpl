@@ -52,7 +52,7 @@
           data-row-id="{{.ID}}">
         <td class="import-cell-date">{{.Date}}</td>
         <td class="import-cell-amount"><span class="amount">{{.AmountFmt}}</span></td>
-        <td class="import-cell-payee">{{.Payee}}</td>
+        <td class="import-cell-payee">{{.Description}}</td>
         <td class="import-cell-memo">{{.Memo}}</td>
         <td class="import-cell-status">
           {{- if eq .Status "posted"}}

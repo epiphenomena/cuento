@@ -19,7 +19,7 @@
 import { parseAmountMinor, drcrToSigned, formatSignedMinor } from './txnamount.js';
 import { fundImbalances, applyFundToAll } from './txnfund.js';
 import { nextCell, invalidRowsForSubsidiary } from './txngrid.js';
-import { isRowEmpty } from './txnpayee.js';
+import { isRowEmpty } from './rowstate.js';
 import { initCombos, stripCombo, resyncCombos } from './combobox.js';
 import { initDescField, stripDescField } from './descfield.js';
 

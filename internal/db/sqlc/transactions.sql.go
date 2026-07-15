@@ -71,33 +71,8 @@ func (q *Queries) DeleteSplit(ctx context.Context, id int64) error {
 	return err
 }
 
-const getPayee = `-- name: GetPayee :one
-SELECT id, name, active FROM payees WHERE id = ?
-`
-
-func (q *Queries) GetPayee(ctx context.Context, id int64) (Payee, error) {
-	row := q.db.QueryRowContext(ctx, getPayee, id)
-	var i Payee
-	err := row.Scan(&i.ID, &i.Name, &i.Active)
-	return i, err
-}
-
-const getPayeeByName = `-- name: GetPayeeByName :one
-SELECT id, name, active FROM payees WHERE name = ?
-`
-
-// Look up a payee by name for find-or-create (p12.3 create-on-save). payees.name is
-// UNIQUE COLLATE NOCASE, so the equality is case-insensitive: "Acme" finds "acme".
-// Returns no rows when the name is new (the caller then inserts).
-func (q *Queries) GetPayeeByName(ctx context.Context, name string) (Payee, error) {
-	row := q.db.QueryRowContext(ctx, getPayeeByName, name)
-	var i Payee
-	err := row.Scan(&i.ID, &i.Name, &i.Active)
-	return i, err
-}
-
 const getTransaction = `-- name: GetTransaction :one
-SELECT id, date, subsidiary_id, payee_id, memo, currency, deleted, notes
+SELECT id, date, subsidiary_id, memo, currency, deleted, notes
 FROM transactions
 WHERE id = ?
 `
@@ -111,7 +86,6 @@ func (q *Queries) GetTransaction(ctx context.Context, id int64) (Transaction, er
 		&i.ID,
 		&i.Date,
 		&i.SubsidiaryID,
-		&i.PayeeID,
 		&i.Memo,
 		&i.Currency,
 		&i.Deleted,
@@ -160,68 +134,8 @@ func (q *Queries) HasFundSubsidiaryMap(ctx context.Context, arg HasFundSubsidiar
 	return scoped, err
 }
 
-const insertPayee = `-- name: InsertPayee :one
-
-
-INSERT INTO payees (name, active)
-VALUES (?, 1)
-RETURNING id
-`
-
-// p08.2: transaction/split/payee operations (D2, D18, D20, D21, D24). All SQL for
-// the store's transaction methods lives here (rule 6). This copies the
-// version-append convention established in subsidiaries.sql (p04.2) and the
-// snapshot-from-live pattern: the entity op does the live write inside the
-// funnel's fn, then appends a snapshot-from-live version row, so each version row
-// is byte-identical to its live row (Z3 can never diverge) and valid_from ==
-// changes.at BY CONSTRUCTION.
-//
-// transactions/splits use SOFT-DELETE only for the header (rule 14): DeleteTransaction
-// flips transactions.deleted and appends a transactions_versions op='delete'; the
-// splits are left in place (the as-of query excludes the txn by its own delete row).
-// An UpdateTransaction split REMOVAL is a hard live DELETE of that split row plus a
-// splits_versions op='delete' (captured BEFORE the live delete, snapshot-from-live).
-//
-// Query names are DISTINCT across the whole sqlc package.
-//
-// NOTE: keep every comment and identifier in this file PURE ASCII. sqlc v1.31.1
-// miscounts byte offsets when a query file contains multi-byte UTF-8, corrupting
-// the generated SQL for the WHOLE file (see docs/DECISIONS.md p04.2).
-// ---------------------------------------------------------------------------
-// payees (minimal; autocomplete is p12.3)
-// ---------------------------------------------------------------------------
-// Live insert of a payee. name is UNIQUE COLLATE NOCASE (schema). Returns the id.
-func (q *Queries) InsertPayee(ctx context.Context, name string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, insertPayee, name)
-	var id int64
-	err := row.Scan(&id)
-	return id, err
-}
-
-const insertPayeeVersion = `-- name: InsertPayeeVersion :exec
-INSERT INTO payees_versions
-  (entity_id, change_id, valid_from, op, name, active)
-SELECT p.id, c.id, c.at, ?, p.name, p.active
-FROM payees p, changes c
-WHERE c.id = ? AND p.id = ?
-`
-
-type InsertPayeeVersionParams struct {
-	Op   string
-	ID   int64
-	ID_2 int64
-}
-
-// Snapshot-from-live version append for payees (STANDARD single-id entity,
-// entity_id = payees.id). Runs AFTER the live insert. Snapshot column set matches
-// 00010_transactions_splits.sql exactly (name, active). Params (positional, each
-// used once): op, change_id, entity_id -> generated Op, ID (change_id), ID_2.
-func (q *Queries) InsertPayeeVersion(ctx context.Context, arg InsertPayeeVersionParams) error {
-	_, err := q.db.ExecContext(ctx, insertPayeeVersion, arg.Op, arg.ID, arg.ID_2)
-	return err
-}
-
 const insertSplit = `-- name: InsertSplit :one
+
 
 INSERT INTO splits
   (transaction_id, account_id, amount, fund_id, program_id, functional_class, memo, description, position)
@@ -294,15 +208,14 @@ func (q *Queries) InsertSplitVersion(ctx context.Context, arg InsertSplitVersion
 
 const insertTransaction = `-- name: InsertTransaction :one
 
-INSERT INTO transactions (date, subsidiary_id, payee_id, memo, notes, currency, deleted)
-VALUES (?, ?, ?, ?, ?, ?, 0)
+INSERT INTO transactions (date, subsidiary_id, memo, notes, currency, deleted)
+VALUES (?, ?, ?, ?, ?, 0)
 RETURNING id
 `
 
 type InsertTransactionParams struct {
 	Date         string
 	SubsidiaryID int64
-	PayeeID      sql.NullInt64
 	Memo         string
 	Notes        string
 	Currency     string
@@ -318,7 +231,6 @@ func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionPa
 	row := q.db.QueryRowContext(ctx, insertTransaction,
 		arg.Date,
 		arg.SubsidiaryID,
-		arg.PayeeID,
 		arg.Memo,
 		arg.Notes,
 		arg.Currency,
@@ -330,8 +242,8 @@ func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionPa
 
 const insertTransactionVersion = `-- name: InsertTransactionVersion :exec
 INSERT INTO transactions_versions
-  (entity_id, change_id, valid_from, op, date, subsidiary_id, payee_id, memo, notes, currency, deleted)
-SELECT t.id, c.id, c.at, ?, t.date, t.subsidiary_id, t.payee_id, t.memo, t.notes, t.currency, t.deleted
+  (entity_id, change_id, valid_from, op, date, subsidiary_id, memo, notes, currency, deleted)
+SELECT t.id, c.id, c.at, ?, t.date, t.subsidiary_id, t.memo, t.notes, t.currency, t.deleted
 FROM transactions t, changes c
 WHERE c.id = ? AND t.id = ?
 `
@@ -348,60 +260,6 @@ type InsertTransactionVersionParams struct {
 func (q *Queries) InsertTransactionVersion(ctx context.Context, arg InsertTransactionVersionParams) error {
 	_, err := q.db.ExecContext(ctx, insertTransactionVersion, arg.Op, arg.ID, arg.ID_2)
 	return err
-}
-
-const lastTransactionForPayee = `-- name: LastTransactionForPayee :one
-SELECT id, currency
-FROM transactions
-WHERE payee_id = ? AND deleted = 0
-ORDER BY date DESC, id DESC
-LIMIT 1
-`
-
-type LastTransactionForPayeeRow struct {
-	ID       int64
-	Currency string
-}
-
-// The id of a payee's LAST non-deleted transaction (p12.3 template autofill): the
-// greatest (date, id) among that payee's live transactions. Returns no rows when the
-// payee has no non-deleted transaction (never used / only deleted). The store then
-// reuses SplitsByTransaction to read its splits (the existing splits reader).
-func (q *Queries) LastTransactionForPayee(ctx context.Context, payeeID sql.NullInt64) (LastTransactionForPayeeRow, error) {
-	row := q.db.QueryRowContext(ctx, lastTransactionForPayee, payeeID)
-	var i LastTransactionForPayeeRow
-	err := row.Scan(&i.ID, &i.Currency)
-	return i, err
-}
-
-const listPayees = `-- name: ListPayees :many
-SELECT id, name, active FROM payees ORDER BY id
-`
-
-// Every payee (id -> name), for the register's payee-name lookup (p12.1). The
-// payee set is tiny; the store loads it once per page render into an id->name map
-// rather than joining per row. Ordered by id for determinism.
-func (q *Queries) ListPayees(ctx context.Context) ([]Payee, error) {
-	rows, err := q.db.QueryContext(ctx, listPayees)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Payee
-	for rows.Next() {
-		var i Payee
-		if err := rows.Scan(&i.ID, &i.Name, &i.Active); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const programSubtreeIDs = `-- name: ProgramSubtreeIDs :many
@@ -810,60 +668,9 @@ func (q *Queries) SubsidiaryNativeTotals(ctx context.Context, subsidiaryID int64
 	return items, nil
 }
 
-const suggestPayees = `-- name: SuggestPayees :many
-SELECT p.id, p.name,
-       MAX(t.date) AS last_date
-FROM payees p
-LEFT JOIN transactions t
-  ON t.payee_id = p.id AND t.deleted = 0
-WHERE p.active = 1 AND p.name LIKE ?
-GROUP BY p.id, p.name
-ORDER BY (MAX(t.date) IS NULL), MAX(t.date) DESC, p.name COLLATE NOCASE, p.id
-`
-
-type SuggestPayeesRow struct {
-	ID       int64
-	Name     string
-	LastDate interface{}
-}
-
-// Autocomplete ranking (p12.3): active payees whose name PREFIX-matches the query
-// (case-insensitive; payees.name is COLLATE NOCASE), ordered MOST-RECENT-FIRST by
-// the payee's latest NON-DELETED transaction date. Payees never used, or with only
-// deleted transactions, have a NULL max date and sort LAST, then by name for a
-// deterministic tail. The prefix is the caller-built LIKE pattern (query + '%'),
-// passed once; the store escapes LIKE metacharacters (% _) in the raw query before
-// appending the wildcard, so a literal % / _ in the query is not treated as a
-// wildcard (sqlc's parser rejects an explicit ESCAPE clause, so escaping is done in
-// Go against the default backslash-free LIKE -- see the store). Payees sharing the
-// same latest date (or all in the never-used/only-deleted tail) tiebreak by name
-// (COLLATE NOCASE), then id, for a deterministic order.
-func (q *Queries) SuggestPayees(ctx context.Context, name string) ([]SuggestPayeesRow, error) {
-	rows, err := q.db.QueryContext(ctx, suggestPayees, name)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []SuggestPayeesRow
-	for rows.Next() {
-		var i SuggestPayeesRow
-		if err := rows.Scan(&i.ID, &i.Name, &i.LastDate); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const transactionVersionAsOf = `-- name: TransactionVersionAsOf :one
 
-SELECT op, date, subsidiary_id, payee_id, memo, notes, currency, deleted
+SELECT op, date, subsidiary_id, memo, notes, currency, deleted
 FROM transactions_versions
 WHERE entity_id = ? AND valid_from <= ?
 ORDER BY valid_from DESC, id DESC
@@ -879,7 +686,6 @@ type TransactionVersionAsOfRow struct {
 	Op           string
 	Date         string
 	SubsidiaryID int64
-	PayeeID      sql.NullInt64
 	Memo         string
 	Notes        string
 	Currency     string
@@ -900,7 +706,6 @@ func (q *Queries) TransactionVersionAsOf(ctx context.Context, arg TransactionVer
 		&i.Op,
 		&i.Date,
 		&i.SubsidiaryID,
-		&i.PayeeID,
 		&i.Memo,
 		&i.Notes,
 		&i.Currency,
@@ -912,7 +717,7 @@ func (q *Queries) TransactionVersionAsOf(ctx context.Context, arg TransactionVer
 const transactionVersionHistory = `-- name: TransactionVersionHistory :many
 
 SELECT tv.change_id, tv.op, tv.valid_from,
-       tv.date, tv.subsidiary_id, tv.payee_id, tv.memo, tv.notes, tv.currency, tv.deleted,
+       tv.date, tv.subsidiary_id, tv.memo, tv.notes, tv.currency, tv.deleted,
        c.actor_id, u.display_name AS actor_name, c.at
 FROM transactions_versions tv
 JOIN changes c ON c.id = tv.change_id
@@ -927,7 +732,6 @@ type TransactionVersionHistoryRow struct {
 	ValidFrom    string
 	Date         string
 	SubsidiaryID int64
-	PayeeID      sql.NullInt64
 	Memo         string
 	Notes        string
 	Currency     string
@@ -965,7 +769,6 @@ func (q *Queries) TransactionVersionHistory(ctx context.Context, entityID int64)
 			&i.ValidFrom,
 			&i.Date,
 			&i.SubsidiaryID,
-			&i.PayeeID,
 			&i.Memo,
 			&i.Notes,
 			&i.Currency,
@@ -1025,14 +828,13 @@ func (q *Queries) UpdateSplit(ctx context.Context, arg UpdateSplitParams) error 
 
 const updateTransaction = `-- name: UpdateTransaction :exec
 UPDATE transactions
-SET date = ?, subsidiary_id = ?, payee_id = ?, memo = ?, notes = ?, currency = ?, deleted = ?
+SET date = ?, subsidiary_id = ?, memo = ?, notes = ?, currency = ?, deleted = ?
 WHERE id = ?
 `
 
 type UpdateTransactionParams struct {
 	Date         string
 	SubsidiaryID int64
-	PayeeID      sql.NullInt64
 	Memo         string
 	Notes        string
 	Currency     string
@@ -1040,14 +842,13 @@ type UpdateTransactionParams struct {
 	ID           int64
 }
 
-// Live update of the header fields (date/payee/memo/notes; subsidiary and currency
-// may also change on an edit). deleted is carried through by the store (never
-// flipped here -- soft-delete is its own query).
+// Live update of the header fields (date/memo/notes; subsidiary and currency may also
+// change on an edit). deleted is carried through by the store (never flipped here --
+// soft-delete is its own query).
 func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionParams) error {
 	_, err := q.db.ExecContext(ctx, updateTransaction,
 		arg.Date,
 		arg.SubsidiaryID,
-		arg.PayeeID,
 		arg.Memo,
 		arg.Notes,
 		arg.Currency,

@@ -219,8 +219,8 @@ function enhance(select, opts) {
   select.addEventListener('change', syncInputToSelection);
 
   syncInputToSelection();
-  // Init seeding (freeText): on a 422 re-render of a typed-new payee the select is 0 but
-  // the caller holds the typed name (in #txn-payee-name) -> show it so the box isn't blank.
+  // Init seeding (freeText): on a 422 re-render of a typed-new value the select is 0 but
+  // the caller holds the typed text (opts.initialText) -> show it so the box isn't blank.
   if (freeText && input.value === '' && opts && opts.initialText) {
     input.value = opts.initialText;
   }

@@ -336,9 +336,11 @@ func TestZ3TamperedComposite(t *testing.T) {
 
 func TestZ3MissingVersion(t *testing.T) {
 	w := newWorld(t)
-	// A live row with NO version at all (insert bypassing the store).
+	// A live row with NO version at all (insert bypassing the store): a programs row
+	// with no programs_versions snapshot is a Z3 miss.
 	exec(t, w.d, `PRAGMA foreign_keys=OFF`)
-	exec(t, w.d, `INSERT INTO payees(name, active) VALUES ('Ghost', 1)`)
+	exec(t, w.d, `INSERT INTO programs(parent_id, name, active, sort_order)
+		VALUES ((SELECT id FROM programs WHERE parent_id IS NULL), 'Ghost', 1, 0)`)
 	assertFlags(t, w.d, "Z3")
 }
 

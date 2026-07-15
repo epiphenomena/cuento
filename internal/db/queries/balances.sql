@@ -199,7 +199,7 @@ ORDER BY t.subsidiary_id, sp.account_id, fund_id, sp.program_id, t.currency, t.d
 -- Filters are optional; each is passed as a PAIR of positional ? (a "? IS NULL OR
 -- ..." guard reuses a param, which sqlc's sqlite parser mangles -- p04.2 quirk --
 -- so the store binds each filter value to TWO consecutive ? instead; the text
--- filter binds the wrapped %..% pattern to THREE ? for memo/split-memo/payee).
+-- filter binds the wrapped %..% pattern to THREE ? for memo/split-memo/description).
 --
 -- Param order (positional):
 --   account_id (des CTE base),
@@ -214,7 +214,7 @@ WITH RECURSIVE des(id) AS (
 filtered AS (
   SELECT sp.id AS split_id, t.id AS txn_id, t.date, t.subsidiary_id,
          t.currency, sp.account_id, sp.amount, sp.fund_id, sp.program_id,
-         sp.functional_class, sp.memo AS split_memo, t.memo AS txn_memo, t.payee_id,
+         sp.functional_class, sp.memo AS split_memo, t.memo AS txn_memo,
          sp.description,
          CAST(SUM(sp.amount) OVER (
            PARTITION BY t.currency
@@ -223,18 +223,17 @@ filtered AS (
          ) AS INTEGER) AS running_balance
   FROM splits sp
   JOIN transactions t ON t.id = sp.transaction_id
-  LEFT JOIN payees py ON py.id = t.payee_id
   WHERE sp.account_id IN (SELECT id FROM des)
     AND t.deleted = 0
     AND (? = 0 OR t.date >= ?)
     AND (? = 0 OR t.date <= ?)
-    AND (? = 0 OR (t.memo LIKE ? OR sp.memo LIKE ? OR py.name LIKE ?))
+    AND (? = 0 OR (t.memo LIKE ? OR sp.memo LIKE ? OR sp.description LIKE ?))
     AND (? = 0 OR sp.fund_id = ?)
     AND (? = 0 OR t.subsidiary_id = ?)
     AND (? = 0 OR sp.program_id = ?)
 )
 SELECT split_id, txn_id, date, subsidiary_id, currency, account_id, amount, fund_id,
-       program_id, functional_class, split_memo, txn_memo, payee_id, description,
+       program_id, functional_class, split_memo, txn_memo, description,
        running_balance
 FROM filtered
 ORDER BY date DESC, split_id DESC;
@@ -274,7 +273,7 @@ WITH RECURSIVE scope(id) AS (
 )
 SELECT sp.id AS split_id, t.id AS txn_id, t.date, t.subsidiary_id, t.currency,
        sp.amount, sp.fund_id, sp.program_id, sp.functional_class,
-       sp.memo AS split_memo, t.memo AS txn_memo, t.payee_id, sp.description
+       sp.memo AS split_memo, t.memo AS txn_memo, sp.description
 FROM splits sp
 JOIN transactions t ON t.id = sp.transaction_id
 WHERE t.deleted = 0

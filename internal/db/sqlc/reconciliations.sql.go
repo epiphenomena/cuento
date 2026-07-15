@@ -414,7 +414,7 @@ func (q *Queries) PriorFinalizedStatementBalance(ctx context.Context, arg PriorF
 
 const reconciliationClearedSplits = `-- name: ReconciliationClearedSplits :many
 SELECT s.id, s.transaction_id, s.amount, s.fund_id, s.memo, s.description,
-       t.date, t.subsidiary_id, t.payee_id, t.memo AS txn_memo
+       t.date, t.subsidiary_id, t.memo AS txn_memo
 FROM splits s
 JOIN transactions t ON t.id = s.transaction_id
 WHERE s.reconciliation_id = ?
@@ -431,7 +431,6 @@ type ReconciliationClearedSplitsRow struct {
 	Description   string
 	Date          string
 	SubsidiaryID  int64
-	PayeeID       sql.NullInt64
 	TxnMemo       string
 }
 
@@ -464,7 +463,6 @@ func (q *Queries) ReconciliationClearedSplits(ctx context.Context, reconciliatio
 			&i.Description,
 			&i.Date,
 			&i.SubsidiaryID,
-			&i.PayeeID,
 			&i.TxnMemo,
 		); err != nil {
 			return nil, err
@@ -537,8 +535,8 @@ func (q *Queries) SetSplitReconciliation(ctx context.Context, arg SetSplitReconc
 }
 
 const workspaceSplits = `-- name: WorkspaceSplits :many
-SELECT s.id, s.transaction_id, s.amount, s.fund_id, s.memo,
-       s.reconciliation_id, t.date, t.subsidiary_id, t.payee_id, t.memo AS txn_memo
+SELECT s.id, s.transaction_id, s.amount, s.fund_id, s.memo, s.description,
+       s.reconciliation_id, t.date, t.subsidiary_id, t.memo AS txn_memo
 FROM splits s
 JOIN transactions t ON t.id = s.transaction_id
 WHERE s.account_id = ?
@@ -560,10 +558,10 @@ type WorkspaceSplitsRow struct {
 	Amount           int64
 	FundID           sql.NullInt64
 	Memo             string
+	Description      string
 	ReconciliationID sql.NullInt64
 	Date             string
 	SubsidiaryID     int64
-	PayeeID          sql.NullInt64
 	TxnMemo          string
 }
 
@@ -589,10 +587,10 @@ func (q *Queries) WorkspaceSplits(ctx context.Context, arg WorkspaceSplitsParams
 			&i.Amount,
 			&i.FundID,
 			&i.Memo,
+			&i.Description,
 			&i.ReconciliationID,
 			&i.Date,
 			&i.SubsidiaryID,
-			&i.PayeeID,
 			&i.TxnMemo,
 		); err != nil {
 			return nil, err

@@ -44,7 +44,7 @@
     {{end}}
   </td>
   <td class="recon-date">{{.Date}}</td>
-  <td class="recon-payee">{{if .PayeeName}}{{.PayeeName}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
+  <td class="recon-description">{{if .Description}}{{.Description}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
   <td class="recon-memo">{{if .Memo}}{{.Memo}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
   <td class="recon-fund">{{if .FundName}}<span class="chip">{{.FundName}}</span>{{end}}</td>
   <td class="recon-amount amount">{{.AmountFmt}}</td>
@@ -116,7 +116,7 @@
       <tr>
         <th>{{t "recon.col.cleared"}}</th>
         <th>{{t "recon.col.date"}}</th>
-        <th>{{t "recon.col.payee"}}</th>
+        <th>{{t "recon.col.description"}}</th>
         <th>{{t "recon.col.memo"}}</th>
         <th>{{t "recon.col.fund"}}</th>
         <th>{{t "recon.col.amount"}}</th>

@@ -102,7 +102,7 @@ func nullStr(ns sql.NullString) string {
 }
 
 // likeContains builds a LIKE pattern matching values that CONTAIN q as a substring
-// ('%' + q + '%'). Like likePrefix (payees.go) it neutralizes LIKE metacharacters
+// ('%' + q + '%'). It neutralizes LIKE metacharacters
 // (%, _, backslash) in q by mapping each to the single-char wildcard '_' -- the
 // default SQLite LIKE has no ESCAPE character and sqlc rejects an explicit ESCAPE
 // clause, so a literal % or _ in the query is kept from acting as a wildcard without

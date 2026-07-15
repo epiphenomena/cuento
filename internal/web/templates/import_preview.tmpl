@@ -37,7 +37,7 @@
       <tr class="import-preview-row">
         <td class="import-cell-date">{{.Date}}</td>
         <td class="import-cell-amount"><span class="amount">{{.AmountFmt}}</span></td>
-        <td class="import-cell-payee">{{.Payee}}</td>
+        <td class="import-cell-payee">{{.Description}}</td>
         <td class="import-cell-memo">{{.Memo}}</td>
       </tr>
       {{- end}}
@@ -99,7 +99,7 @@
       <tr class="import-result-row{{if .Duplicate}} import-row-duplicate{{end}}">
         <td class="import-cell-date">{{.Date}}</td>
         <td class="import-cell-amount"><span class="amount">{{.AmountFmt}}</span></td>
-        <td class="import-cell-payee">{{.Payee}}</td>
+        <td class="import-cell-payee">{{.Description}}</td>
         <td class="import-cell-memo">{{.Memo}}</td>
         <td class="import-cell-status">
           {{- if .Duplicate}}<span class="import-dupe-flag" role="note">{{t "import.duplicate"}}</span>

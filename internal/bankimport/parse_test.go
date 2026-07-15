@@ -40,7 +40,7 @@ func TestParseSingleSignedAmount(t *testing.T) {
 	if rows[0].Err != nil {
 		t.Fatalf("row 0 err: %v", rows[0].Err)
 	}
-	if rows[0].Date != "2025-01-15" || rows[0].AmountMinor != 10000 || rows[0].Payee != "Acme" || rows[0].Memo != "Invoice 5" {
+	if rows[0].Date != "2025-01-15" || rows[0].AmountMinor != 10000 || rows[0].Description != "Acme" || rows[0].Memo != "Invoice 5" {
 		t.Errorf("row 0 = %+v", rows[0])
 	}
 	if rows[1].AmountMinor != -4250 {
@@ -146,7 +146,7 @@ func TestParseDelimiterSniffing(t *testing.T) {
 			if len(rows) != 1 || rows[0].Err != nil {
 				t.Fatalf("rows=%+v", rows)
 			}
-			if rows[0].AmountMinor != 10000 || rows[0].Payee != "Acme" {
+			if rows[0].AmountMinor != 10000 || rows[0].Description != "Acme" {
 				t.Errorf("sniffed %s wrong: %+v", tt.name, rows[0])
 			}
 		})

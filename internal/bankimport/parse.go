@@ -1,6 +1,6 @@
 // Package bankimport is the PURE, table-tested CSV parser for bank-statement
 // imports (p17.2). Given raw CSV bytes plus a mapping Config, it produces a slice
-// of ParsedRow{Date, AmountMinor, Payee, Memo, Raw} -- one per data row -- with a
+// of ParsedRow{Date, AmountMinor, Description, Memo, Raw} -- one per data row -- with a
 // per-row error (never a panic) on a row that does not parse. It touches NO
 // database and no document; the store (p17.2) stages the rows and computes the
 // dedupe hash. Amounts land as int64 minor units (rule 3) via money.Parse; dates
@@ -88,7 +88,9 @@ type Config struct {
 type ParsedRow struct {
 	Date        string // YYYY-MM-DD (money's canonical), empty on error
 	AmountMinor int64  // net-debit signed minor units (D2)
-	Payee       string
+	// Description is the bank line's descriptive TEXT (the mapped payee_col); the
+	// payee entity is retired (p26.20), so this text now feeds the split description.
+	Description string
 	Memo        string
 	Raw         []string
 	Err         error
@@ -158,7 +160,7 @@ func parseRow(rec []string, cfg Config, exponent int) ParsedRow {
 
 	row.Date = date
 	row.AmountMinor = amount
-	row.Payee = optionalCell(rec, cfg.PayeeCol)
+	row.Description = optionalCell(rec, cfg.PayeeCol)
 	row.Memo = optionalCell(rec, cfg.MemoCol)
 	return row
 }

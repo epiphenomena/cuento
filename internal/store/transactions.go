@@ -95,7 +95,6 @@ type SplitInput struct {
 type PostTransactionInput struct {
 	Date         string
 	SubsidiaryID int64
-	PayeeID      *int64
 	Memo         string
 	Notes        string // longer multiline explanation (p24.2), distinct from split memos
 	Currency     string
@@ -154,7 +153,6 @@ func (s *Store) postTransactionTx(ctx context.Context, q *sqlc.Queries, changeID
 	txnID, err := q.InsertTransaction(ctx, sqlc.InsertTransactionParams{
 		Date:         in.Date,
 		SubsidiaryID: in.SubsidiaryID,
-		PayeeID:      nullInt64Ptr(in.PayeeID),
 		Memo:         in.Memo,
 		Notes:        in.Notes,
 		Currency:     in.Currency,
@@ -315,7 +313,6 @@ func (s *Store) UpdateTransaction(ctx context.Context, id int64, in PostTransact
 			if err := q.UpdateTransaction(ctx, sqlc.UpdateTransactionParams{
 				Date:         in.Date,
 				SubsidiaryID: in.SubsidiaryID,
-				PayeeID:      nullInt64Ptr(in.PayeeID),
 				Memo:         in.Memo,
 				Notes:        in.Notes,
 				Currency:     in.Currency,
@@ -366,29 +363,6 @@ func (s *Store) DeleteTransaction(ctx context.Context, id int64) error {
 		return fmt.Errorf("delete transaction %d: %w", id, err)
 	}
 	return nil
-}
-
-// CreatePayee creates a minimal payee under one change (op='create'), returning the
-// id. Autocomplete is p12.3; this is the minimum PostTransaction's optional
-// payee_id needs.
-func (s *Store) CreatePayee(ctx context.Context, name string) (int64, error) {
-	var newID int64
-	_, err := s.write(ctx, "payee.create", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
-			id, err := q.InsertPayee(ctx, name)
-			if err != nil {
-				return fmt.Errorf("insert payee: %w", err)
-			}
-			newID = id
-			if err := q.InsertPayeeVersion(ctx, sqlc.InsertPayeeVersionParams{Op: "create", ID: changeID, ID_2: id}); err != nil {
-				return fmt.Errorf("append payee version: %w", err)
-			}
-			return nil
-		})
-	if err != nil {
-		return 0, fmt.Errorf("create payee: %w", err)
-	}
-	return newID, nil
 }
 
 // GetTransaction returns the current LIVE header of one transaction (read; sqlc).
@@ -454,7 +428,6 @@ type TransactionState struct {
 	Present      bool
 	Date         string
 	SubsidiaryID int64
-	PayeeID      sql.NullInt64
 	Memo         string
 	Notes        string
 	Currency     string
@@ -525,7 +498,6 @@ func (s *Store) TransactionAsOf(ctx context.Context, id int64, at time.Time) (Tr
 		Present:      true,
 		Date:         hdr.Date,
 		SubsidiaryID: hdr.SubsidiaryID,
-		PayeeID:      hdr.PayeeID,
 		Memo:         hdr.Memo,
 		Notes:        hdr.Notes,
 		Currency:     hdr.Currency,
