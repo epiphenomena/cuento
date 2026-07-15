@@ -19,10 +19,11 @@ import (
 
 // SuggestDescriptions returns up to 10 DISTINCT non-empty split descriptions whose
 // text SUBSTRING-matches q (case-insensitive), across non-deleted transactions,
-// ranked most-recently-used first. Descriptions used in subsidiary sub sort first
-// (prefer, not filter); sub == 0 means "no preference" (pure recency). A blank q
-// returns nothing (autocomplete shows suggestions only once the user types). LIKE
-// metacharacters in q are neutralized so a literal % or _ is matched as itself.
+// ranked most-recently-used first. p26.38: SCOPED to subsidiary sub (filter, not
+// prefer) so subsidiary A never surfaces B's descriptions; sub == 0 means "no
+// subsidiary chosen yet" -> unscoped (all subs). A blank q returns nothing
+// (autocomplete shows suggestions only once the user types). LIKE metacharacters in q
+// are neutralized so a literal % or _ is matched as itself.
 func (s *Store) SuggestDescriptions(ctx context.Context, q string, sub int64) ([]string, error) {
 	q = strings.TrimSpace(q)
 	if q == "" {
@@ -56,11 +57,12 @@ type DescriptionPrefill struct {
 }
 
 // PrefillDescription returns the MOST-RECENT non-deleted split whose description
-// EQUALS q exactly, preferring subsidiary sub (else most recent anywhere). A blank
-// q, or no exact match, returns Found=false. The returned account/fund/program may
-// now be inactive or out of subsidiary sub -- the method returns it regardless (the
-// editor's p26.10 option injection + save-time guard handle display/validation);
-// the caller notes this contract.
+// EQUALS q exactly. p26.38: SCOPED to subsidiary sub (filter, not prefer) so a prefill
+// in subsidiary A never pulls B's account/fund/program; sub == 0 (no subsidiary chosen
+// yet) is unscoped. A blank q, or no exact match, returns Found=false. The returned
+// account/fund/program may now be inactive within sub -- the method returns it
+// regardless (the editor's p26.10 option injection + save-time guard handle
+// display/validation); the caller notes this contract.
 func (s *Store) PrefillDescription(ctx context.Context, q string, sub int64) (DescriptionPrefill, error) {
 	q = strings.TrimSpace(q)
 	if q == "" {

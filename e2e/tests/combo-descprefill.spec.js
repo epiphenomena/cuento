@@ -202,5 +202,149 @@ test.describe('combobox + description prefill row-targeting', () => {
     await expect(fundOverlay).toBeVisible();
     await expect(page.locator('#el-fund-0')).toHaveValue('0');
     await expect(fundOverlay).toHaveValue(/unrestricted/i);
+
+    // p26.38.1: per-line zebra now bands the expense grid too (the even .el-row tbody's cells
+    // get --color-surface-alt). Fill line 0 so a trailing line 1 (an EVEN nth-of-type tbody,
+    // 1-indexed) auto-appends, then assert its cells are banded (distinct from line 0's).
+    await page.locator('#el-amount-0').fill('3.00');
+    await expect(page.locator('.el-row[data-row="1"]')).toBeVisible();
+    const bg = (rowSel) =>
+      page
+        .locator(`${rowSel} td.txn-cell`)
+        .first()
+        .evaluate((el) => getComputedStyle(el).backgroundColor);
+    const alt = await page.evaluate(() =>
+      getComputedStyle(document.documentElement).getPropertyValue('--color-surface-alt').trim(),
+    );
+    // The even line (line 1, the 2nd tbody) is banded; the odd line (line 0) is not the alt.
+    const bg1 = await bg('.el-row[data-row="1"]');
+    const bg0 = await bg('.el-row[data-row="0"]');
+    expect(bg1).not.toBe(bg0);
+    expect(alt.length).toBeGreaterThan(0);
+  });
+
+  // p26.38.2 REPRO/regression: in the EXPENSE grid a description prefill must land on the
+  // SAME line it was typed in (not an alternating line). The prefill source is a POSTED
+  // transaction split (draft expense lines are not splits yet), so admin (TxnWrite +
+  // ExpenseSubmit) seeds one, then adds an expense line and drives the description on a
+  // trailing row. Also proves p26.38.3: the suggestion/prefill is subsidiary-scoped (the
+  // grid's #er-sub / data-sub carrier threads the sub).
+  test('expense grid: a description prefill lands on the SAME line, subsidiary-scoped', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'ExpTgt Cash');
+    // An expense account in the root sub (the report + the seed txn both use it).
+    await openNewAccount(page);
+    const swapped = page.waitForResponse(
+      (r) => new URL(r.url()).pathname === '/accounts/new' && r.request().method() === 'GET',
+    );
+    await page.locator('#af-type').selectOption('expense');
+    await swapped;
+    await expect(page.locator('#af-func')).toBeVisible();
+    await page.locator('#af-name-en').fill('ExpTgt Rent');
+    const rootSub = page.locator('input[name="sub_1"]');
+    if (!(await rootSub.isChecked())) await rootSub.check();
+    await page.locator('#af-func').selectOption('program');
+    await saveAccount(page);
+    await expect(page.locator('tr.acct-row', { hasText: 'ExpTgt Rent' })).toBeVisible();
+
+    // Seed a POSTED transaction (header = Cash, body = Rent 25) carrying the description --
+    // that split is the prefill source for the expense grid.
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await page.locator('#txn-main-account').selectOption({ label: 'ExpTgt Cash' });
+    await page.locator('#txn-account-0').selectOption({ label: 'ExpTgt Rent' });
+    await page.locator('#txn-amount-0').fill('25.00');
+    await page.locator('#txn-desc-0').fill('ExpTgt monthly rent');
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+    // New expense report (root sub). Fill line 0 with a DIFFERENT account, then type the
+    // description on the TRAILING line 1 and pick the suggestion.
+    await page.goto('/expenses');
+    await page.getByRole('button', { name: /new expense report/i }).click();
+    await page.waitForURL('**/expenses/*');
+    await expect(page.locator('form#expense-grid-form')).toBeVisible();
+    await page.locator('#el-account-0').selectOption({ label: 'ExpTgt Rent' });
+    await page.locator('#el-amount-0').fill('9.00');
+    await expect(page.locator('#el-account-1')).toBeVisible(); // trailing line auto-appended
+
+    const elDesc1 = page.locator('#el-desc-1');
+    await elDesc1.click();
+    await elDesc1.fill('ExpTgt monthly');
+    const sug = page.locator('#el-desc-list-1 .desc-suggestion', { hasText: 'ExpTgt monthly rent' });
+    await expect(sug).toBeVisible(); // subsidiary-scoped suggestion resolved (data-sub threaded)
+    await sug.click();
+
+    // The prefill landed on LINE 1 (where the description was typed), NOT line 0 or line 2.
+    const rentVal = await page.locator('#el-account-1 option', { hasText: 'ExpTgt Rent' }).getAttribute('value');
+    await expect(page.locator('#el-account-1')).toHaveValue(rentVal);
+    await expect(page.locator('#el-amount-1')).toHaveValue('25.00');
+    // Line 0 (the pre-filled row) is untouched; a fresh trailing line 2 stays empty.
+    await expect(page.locator('#el-amount-0')).toHaveValue('9.00');
+    await expect(page.locator('#el-desc-0')).toHaveValue('');
+    await expect(page.locator('#el-account-2')).toHaveValue('0');
+  });
+
+  // p26.38.3: once an expense report has a saved line its SUBSIDIARY LOCKS -- the #er-sub
+  // picker disappears, so descfield.subOf() has no select to read. The grid form's data-sub
+  // carrier must keep the description autocomplete subsidiary-scoped in that locked state
+  // (else it silently falls back to sub=0 = unscoped). Save a line to lock, then confirm a
+  // subsequent line's description autocomplete still resolves the seeded (in-sub) suggestion.
+  test('expense grid: description autocomplete stays subsidiary-scoped after the sub locks', async ({
+    page,
+    server,
+  }) => {
+    await login(page, server);
+    // An expense account in the root sub + a posted txn carrying the description (the source).
+    await openNewAccount(page);
+    const swapped = page.waitForResponse(
+      (r) => new URL(r.url()).pathname === '/accounts/new' && r.request().method() === 'GET',
+    );
+    await page.locator('#af-type').selectOption('expense');
+    await swapped;
+    await expect(page.locator('#af-func')).toBeVisible();
+    await page.locator('#af-name-en').fill('Locked Rent');
+    const rootSub = page.locator('input[name="sub_1"]');
+    if (!(await rootSub.isChecked())) await rootSub.check();
+    await page.locator('#af-func').selectOption('program');
+    await saveAccount(page);
+    await createAsset(page, 'Locked Cash');
+
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await page.locator('#txn-main-account').selectOption({ label: 'Locked Cash' });
+    await page.locator('#txn-account-0').selectOption({ label: 'Locked Rent' });
+    await page.locator('#txn-amount-0').fill('30.00');
+    await page.locator('#txn-desc-0').fill('Locked scope demo');
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+    // New report: save line 0 -> the subsidiary locks (the #er-sub picker disappears).
+    await page.goto('/expenses');
+    await page.getByRole('button', { name: /new expense report/i }).click();
+    await page.waitForURL('**/expenses/*');
+    const rid = Number(new URL(page.url()).pathname.split('/').pop());
+    await expect(page.locator('form#expense-grid-form')).toBeVisible();
+    await page.locator('#el-account-0').selectOption({ label: 'Locked Rent' });
+    await page.locator('#el-amount-0').fill('7.00');
+    await expect(page.locator('#el-account-1')).toBeVisible();
+    const reloaded = page.waitForResponse(
+      (r) => new URL(r.url()).pathname === `/expenses/${rid}` && r.request().method() === 'GET',
+    );
+    await page.locator('#expense-save-lines').click();
+    await reloaded;
+
+    // The sub is now locked: no #er-sub select, but the grid form carries data-sub.
+    await expect(page.locator('#er-sub')).toHaveCount(0);
+    await expect(page.locator('#expense-grid-form')).toHaveAttribute('data-sub', /\d+/);
+
+    // The next (trailing) line's description autocomplete still resolves the in-sub suggestion
+    // -- proving the data-sub fallback threaded the subsidiary (else sub=0 would be unscoped).
+    const elDesc1 = page.locator('#el-desc-1');
+    await elDesc1.click();
+    await elDesc1.fill('Locked scope');
+    await expect(
+      page.locator('#el-desc-list-1 .desc-suggestion', { hasText: 'Locked scope demo' }),
+    ).toBeVisible();
   });
 });

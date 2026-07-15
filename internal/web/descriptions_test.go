@@ -12,8 +12,8 @@ import (
 // p26.18 per-split description autocomplete + per-row prefill handler tests (step 4a
 // of the payee->description migration). Driven through the REAL mounted router
 // (httptest) against a real migrated db (AGENTS conventions); no store mocks. The
-// multi-sub txnWebEnv (sub1/sub2, salaries mapped to both) exercises sub-preference,
-// which the single-sub store test cannot.
+// multi-sub txnWebEnv (sub1/sub2, salaries mapped to both) exercises the p26.38 sub
+// SCOPING (filter, not prefer), which the single-sub store test cannot.
 
 // seedDescTxn posts a balanced 2-split txn in `sub` on `date`: salaries (debit,
 // program+class defaulted) carrying `desc` as its description + memo `memo`, and
@@ -68,18 +68,24 @@ func TestDescriptionsSuggest(t *testing.T) {
 		t.Fatalf("missing data-description for Rent office\n%s", body)
 	}
 
-	// Sub preference: sub1 only has "Rent office" (older) + "Rent parking". Preferring
-	// sub1 floats the sub1-used descriptions above the sub2-only recency win. Add a
-	// sub2-only description that is the MOST RECENT overall; preferring sub1 must NOT
-	// rank it first.
+	// p26.38 sub SCOPING (filter, not prefer): a sub2-ONLY description must NOT appear in
+	// sub1's suggestions at all (subsidiary A never surfaces B's descriptions). "Rent tower"
+	// is the newest overall but lives only in sub2.
 	e.seedDescTxn(t, e.sub2, "2025-09-09", "Rent tower", "", 7000) // sub2 only, newest
 	rec2 := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/descriptions/suggest?q=rent&sub="+itoa(e.sub1), nil)
 	body2 := rec2.Body.String()
-	// A description used in sub1 must precede the sub2-only "Rent tower".
-	tower := strings.Index(body2, "Rent tower")
-	park2 := strings.Index(body2, "Rent parking")
-	if tower < 0 || park2 < 0 || park2 > tower {
-		t.Fatalf("sub1 preference: expected a sub1 description before sub2-only 'Rent tower'\n%s", body2)
+	if strings.Contains(body2, "Rent tower") {
+		t.Fatalf("sub1 scope: sub2-only 'Rent tower' must NOT appear\n%s", body2)
+	}
+	// sub1's own descriptions ("Rent office" used in sub1, "Rent parking") are still there.
+	if !strings.Contains(body2, "Rent parking") || !strings.Contains(body2, "Rent office") {
+		t.Fatalf("sub1 scope: expected sub1's own 'Rent office' + 'Rent parking'\n%s", body2)
+	}
+	// The converse: sub2's suggestions include "Rent tower" but NOT sub1-only "Rent parking".
+	rec2b := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/descriptions/suggest?q=rent&sub="+itoa(e.sub2), nil)
+	body2b := rec2b.Body.String()
+	if !strings.Contains(body2b, "Rent tower") || strings.Contains(body2b, "Rent parking") {
+		t.Fatalf("sub2 scope: expected 'Rent tower' and NOT sub1-only 'Rent parking'\n%s", body2b)
 	}
 
 	// Empty q -> an empty listbox (no <li> items), 200.
@@ -126,11 +132,19 @@ func TestDescriptionsPrefill(t *testing.T) {
 		t.Fatalf("class not carried\n%s", body)
 	}
 
-	// Prefer sub1 -> the sub1 split (80.00, sub1 memo) even though sub2 is newer.
+	// p26.38 sub SCOPING: sub1 -> the sub1 split (80.00, sub1 memo) even though sub2 is
+	// newer (the sub2 split is FILTERED OUT, so it never leaks its account/memo into sub1).
 	rec2 := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/descriptions/prefill?q=Consulting+fee&sub="+itoa(e.sub1), nil)
 	body2 := rec2.Body.String()
 	if !strings.Contains(body2, `data-amount="80.00"`) || !strings.Contains(body2, `data-memo="sub1 memo"`) {
-		t.Fatalf("sub1 preference: expected the sub1 split (80.00 / sub1 memo)\n%s", body2)
+		t.Fatalf("sub1 scope: expected the sub1 split (80.00 / sub1 memo)\n%s", body2)
+	}
+	// A description that exists ONLY in sub2, queried under sub1 -> no match (data-found=0):
+	// subsidiary A never pulls B's split.
+	e.seedDescTxn(t, e.sub2, "2025-06-01", "Sub2 vendor", "sub2 only", 3000)
+	recX := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/descriptions/prefill?q=Sub2+vendor&sub="+itoa(e.sub1), nil)
+	if recX.Code != http.StatusOK || !strings.Contains(recX.Body.String(), `data-found="0"`) {
+		t.Fatalf("sub1 scope: a sub2-only description must not prefill under sub1\n%s", recX.Body.String())
 	}
 
 	// Exact-only: a substring ("Consulting") is NOT an exact match -> data-found="0".

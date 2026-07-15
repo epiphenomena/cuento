@@ -62,7 +62,10 @@
        fresh trailing empty row as the last row is edited; the server drops the trailing
        empty on save. This grid form is a SIBLING of the submit/discard forms below (no
        nested forms). */}}
-  <form method="post" action="/expenses/{{.ID}}/lines" id="expense-grid-form" data-user-program="{{.UserProgram}}" data-account-missing-msg="{{t "error.expense.account_not_offered"}}">
+  {{/* p26.38: data-sub carries the report's subsidiary so the per-line description
+       autocomplete/prefill is scoped to it EVEN when the sub picker is locked (a saved
+       multi-line report drops #er-sub, so descfield.subOf() has no select to read). */}}
+  <form method="post" action="/expenses/{{.ID}}/lines" id="expense-grid-form" data-sub="{{.SubID}}" data-user-program="{{.UserProgram}}" data-account-missing-msg="{{t "error.expense.account_not_offered"}}">
     {{/* p26.32 two-row line layout: each line is its OWN <tbody class="el-row"> holding a
          .el-row-main (description / account / amount, wider) and a .el-row-more (fund /
          program / memo / error / delete, packed). Grouping by <tbody> bands both physical

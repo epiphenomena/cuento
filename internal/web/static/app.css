@@ -865,18 +865,29 @@ input[aria-invalid="true"] {
    fields are wider than row 2's six. The per-split zebra bands BOTH physical rows together
    by alternating the whole tbody -- nth-of-type is self-maintaining across add/delete/
    reindex, and grouping by tbody means no data-split-index attribute is needed. */
+/* p26.38: the expense line grid uses <tbody class="el-row"> (not .txn-row) but the SAME
+   .txn-grid-2row table + .txn-cell cells, so the per-split zebra must band .el-row too;
+   its trailing status/delete cells are .el-row-error / .el-delete-cell. Both grids share
+   these selectors so a split's two physical <tr> band together on the even tbodies. */
 .txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-cell,
 .txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-row-error,
-.txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-delete-cell {
+.txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-delete-cell,
+.txn-grid-2row tbody.el-row:nth-of-type(even) td.txn-cell,
+.txn-grid-2row tbody.el-row:nth-of-type(even) td.el-row-error,
+.txn-grid-2row tbody.el-row:nth-of-type(even) td.el-delete-cell {
   background: var(--color-surface-alt);
 }
 .txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-cell input,
 .txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-cell select,
-.txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-cell .combo > .combo-text {
+.txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-cell .combo > .combo-text,
+.txn-grid-2row tbody.el-row:nth-of-type(even) td.txn-cell input,
+.txn-grid-2row tbody.el-row:nth-of-type(even) td.txn-cell select,
+.txn-grid-2row tbody.el-row:nth-of-type(even) td.txn-cell .combo > .combo-text {
   background: var(--color-surface-alt);
 }
 /* A soft top rule opens each split so the two-row group reads as one unit. */
-.txn-grid-2row tbody.txn-row + tbody.txn-row { border-top: 2px solid var(--color-primary); }
+.txn-grid-2row tbody.txn-row + tbody.txn-row,
+.txn-grid-2row tbody.el-row + tbody.el-row { border-top: 2px solid var(--color-primary); }
 /* Row 2's packed cells sit slightly indented visually via the left description column being
    the widest; nothing else to do -- the colspans carry the proportions. */
 

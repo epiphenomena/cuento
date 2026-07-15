@@ -299,7 +299,13 @@ function contextFor(input) {
     const sel = '#txn-subsidiary, #er-sub, [name="subsidiary"]';
     let sub = form ? form.querySelector(sel) : null;
     if (!sub) sub = doc.querySelector(sel);
-    return sub ? sub.value : '';
+    if (sub && sub.value) return sub.value;
+    // p26.38: the expense grid's sub picker (#er-sub) DISAPPEARS once the report locks its
+    // subsidiary (a saved multi-line report), so no select exists to read. Fall back to the
+    // grid form's data-sub carrier so per-line description scoping keeps working when locked.
+    const gridForm = form && form.id === 'expense-grid-form' ? form : doc.getElementById('expense-grid-form');
+    if (gridForm && gridForm.dataset && gridForm.dataset.sub) return gridForm.dataset.sub;
+    return '';
   }
   // rowValuesOf reads the emptiness-relevant fields (account/amount/dr/cr/memo) of the
   // input's row, by class (both grids share .txn-account/.el-account etc. naming pairs).
