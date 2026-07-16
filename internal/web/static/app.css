@@ -499,6 +499,11 @@ input[aria-invalid="true"] {
 }
 .tree-toggle::before { content: "\25BE"; } /* ▾ expanded */
 .tree-toggle.is-collapsed::before { content: "\25B8"; } /* ▸ collapsed */
+/* p26.55: a parent's NAME cell is clickable to toggle its subtree (treetable.js adds
+   .tree-name-cell only to cells that HAVE a disclosure toggle). Genuine links inside
+   keep their own cursor via the more-specific rule. */
+.tree-name-cell { cursor: pointer; }
+.tree-name-cell a { cursor: pointer; }
 /* Tree indentation. The selectors are qualified with `.tree-table td` so they
    OUTRANK `.tree-table td`'s own padding shorthand (equal-specificity padding-left
    would otherwise win and flatten the tree). A nesting guide line makes the

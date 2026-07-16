@@ -340,6 +340,17 @@ test('reports: the trial balance nests accounts and the tree collapse/expand con
   // Expand all -> the child reappears.
   await page.locator('.report-controls .tree-expand-all').click();
   await expect(childRow).toBeVisible();
+
+  // p26.55: clicking the parent's NAME (its first cell, not just the little arrow)
+  // toggles the subtree. Click the parent row's name cell -> the child hides; click
+  // again -> it reappears. This is the "click a parent's name collapses/expands its
+  // subtree" case.
+  const parentNameCell = parentRow.locator('td.tree-name-cell').first();
+  await expect(parentNameCell).toBeVisible();
+  await parentNameCell.click();
+  await expect(childRow).toBeHidden();
+  await parentNameCell.click();
+  await expect(childRow).toBeVisible();
 });
 
 // p15.6 ACCOUNT LEDGER: seed a balanced transfer (so the chosen account has a real

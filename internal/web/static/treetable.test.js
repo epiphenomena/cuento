@@ -7,10 +7,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-let descendantRange, hasChildren, rowHidden, nextLevelToReveal, collapseAllSet, expandLevelSet;
+let descendantRange, hasChildren, rowHidden, nextLevelToReveal, collapseAllSet, expandLevelSet,
+  nameClickToggles;
 test.before(async () => {
-  ({ descendantRange, hasChildren, rowHidden, nextLevelToReveal, collapseAllSet, expandLevelSet } =
-    await import('./treetable.js'));
+  ({
+    descendantRange,
+    hasChildren,
+    rowHidden,
+    nextLevelToReveal,
+    collapseAllSet,
+    expandLevelSet,
+    nameClickToggles,
+  } = await import('./treetable.js'));
 });
 
 // A small chart:  0: A(0) B(1) C(2) D(1) E(0)
@@ -88,4 +96,15 @@ test('expandLevelSet: reveals exactly the next hidden level (progressive)', () =
   // A second expand reveals depth-2.
   const afterTwo = expandLevelSet(depths, afterOne);
   assert.equal(rowHidden(depths, afterTwo, 2), false);
+});
+
+// p26.55: clicking the NAME cell toggles the subtree, UNLESS the click hit a genuine
+// interactive element (an <a> link or the disclosure <button> itself, which has its own
+// handler). nameClickToggles is the pure decision the cell listener consults.
+test('nameClickToggles: a plain name click (no interactive ancestor) toggles', () => {
+  assert.equal(nameClickToggles(false), true);
+});
+
+test('nameClickToggles: a click inside a link or the toggle button does NOT toggle', () => {
+  assert.equal(nameClickToggles(true), false);
 });

@@ -99,6 +99,17 @@ export function expandLevelSet(depths, collapsed) {
   return next;
 }
 
+// nameClickToggles is the PURE decision for p26.55 "click the row NAME to toggle":
+// given a click that landed somewhere inside a parent row's first (name) cell, should
+// it toggle that row's subtree? It should, UNLESS the click hit a genuine interactive
+// element -- an actual link (<a>) or a <button> (the injected disclosure toggle itself,
+// which already has its own handler; letting a name-click also fire would double-toggle).
+// `insideInteractive` reports whether the clicked element is, or is nested under, such an
+// element within the cell. Returns true only for a "plain" name click.
+export function nameClickToggles(insideInteractive) {
+  return !insideInteractive;
+}
+
 // -------------------------- DOM glue (browser only) ------------------------
 
 function enhanceTree(table, controls) {
@@ -108,7 +119,18 @@ function enhanceTree(table, controls) {
 
   const collapsed = new Set(); // indices of collapsed parent rows
 
-  // Inject a disclosure toggle into each parent row's first cell.
+  // toggle flips row i's collapsed state and re-renders. Shared by the disclosure
+  // button (below) and the p26.55 name-cell click.
+  function toggle(i) {
+    if (collapsed.has(i)) collapsed.delete(i);
+    else collapsed.add(i);
+    render();
+  }
+
+  // Inject a disclosure toggle into each parent row's first cell, and make the WHOLE
+  // name cell clickable (p26.55) so a click on the account/row NAME toggles the subtree
+  // too -- unless it lands on a genuine link (or the button itself, which has its own
+  // handler; a name-click there would double-toggle).
   const toggles = new Array(rows.length).fill(null);
   rows.forEach((tr, i) => {
     if (!hasChildren(depths, i)) return;
@@ -118,13 +140,18 @@ function enhanceTree(table, controls) {
     btn.type = 'button';
     btn.className = 'tree-toggle';
     btn.setAttribute('aria-expanded', 'true');
-    btn.addEventListener('click', () => {
-      if (collapsed.has(i)) collapsed.delete(i);
-      else collapsed.add(i);
-      render();
-    });
+    btn.addEventListener('click', () => toggle(i));
     cell.insertBefore(btn, cell.firstChild);
     toggles[i] = btn;
+
+    // p26.55: clicking the NAME cell (not just the little arrow) toggles the subtree.
+    // Guard against a click on an actual link or on the disclosure button (which fires
+    // its own handler) -- closest() walks up from the click target within the cell.
+    cell.classList.add('tree-name-cell');
+    cell.addEventListener('click', (ev) => {
+      const insideInteractive = !!(ev.target.closest && ev.target.closest('a, button'));
+      if (nameClickToggles(insideInteractive)) toggle(i);
+    });
   });
 
   // render applies the collapsed set to the DOM: hide hidden rows, set each toggle's
