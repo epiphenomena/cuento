@@ -98,9 +98,9 @@ test.describe('keyboard-only entry', () => {
 
     // Two asset leaves + one restricted fund. The transfer moves money between the two
     // accounts under two different funds.
-    await createAsset(page, 'KB Checking');
-    await createAsset(page, 'KB Savings');
-    await createFund(page, 'KB Water Grant', 'KB Funder');
+    await createAsset(page, 'EntKbd Checking');
+    await createAsset(page, 'EntKbd Savings');
+    await createFund(page, 'EntKbd Water Grant', 'EntKbd Funder');
 
     // Open the editor directly (the register->new-transaction link path is covered by
     // txn-editor.spec.js; here we focus on driving the grid itself by keyboard).
@@ -111,24 +111,24 @@ test.describe('keyboard-only entry', () => {
     await expect(page.locator('#txn-account-0')).toBeVisible();
     await expect(page.locator('#txn-account-1')).toHaveCount(0);
 
-    // p26.34: KB Checking is the HEADER (balancing) account. The two body rows touch two
+    // p26.34: EntKbd Checking is the HEADER (balancing) account. The two body rows touch two
     // funds (grant + unrestricted), so the header FANS OUT into one balancing split per
     // fund server-side (-40 grant, -10 unrestricted). The header account is entered by
     // keyboard too (the combobox is a real select).
-    await selectByKeyboard(page, '#txn-main-account', 'KB Checking');
+    await selectByKeyboard(page, '#txn-main-account', 'EntKbd Checking');
 
-    // --- Body row 0: KB Savings +40.00, fund KB Water Grant ---------------------
+    // --- Body row 0: EntKbd Savings +40.00, fund EntKbd Water Grant ---------------------
     // Drive each field by keyboard. Selects are operated by Arrow keys (real keyboard),
     // amounts by typing, and we Tab between fields to prove linear reachability. Filling
     // row 0's account grows row 1 (the auto-append).
-    await selectByKeyboard(page, '#txn-account-0', 'KB Savings');
+    await selectByKeyboard(page, '#txn-account-0', 'EntKbd Savings');
     await expect(page.locator('#txn-account-1')).toBeVisible();
     await page.keyboard.press('Tab'); // account -> amount
     await expect(page.locator('#txn-amount-0')).toBeFocused();
     await page.keyboard.type('40.00');
     await page.keyboard.press('Tab'); // amount -> fund
     await expect(page.locator('#txn-fund-0')).toBeFocused();
-    await selectByKeyboard(page, '#txn-fund-0', 'KB Water Grant');
+    await selectByKeyboard(page, '#txn-fund-0', 'EntKbd Water Grant');
     // Row 0 is an ASSET account, so its program + class cells are visibility:hidden and
     // must be SKIPPED by native Tab (no dead stop). p26.23 moved the per-split description
     // to the FIRST column (before account), so the always-visible traversal for an asset
@@ -144,8 +144,8 @@ test.describe('keyboard-only entry', () => {
     await page.keyboard.press('Shift+Tab');
     await expect(page.locator('#txn-desc-0')).toBeFocused();
 
-    // --- Body row 1: KB Savings +10.00, Unrestricted ----------------------------
-    await selectByKeyboard(page, '#txn-account-1', 'KB Savings');
+    // --- Body row 1: EntKbd Savings +10.00, Unrestricted ----------------------------
+    await selectByKeyboard(page, '#txn-account-1', 'EntKbd Savings');
     await expect(page.locator('#txn-account-2')).toBeVisible();
     await page.keyboard.press('Tab');
     await expect(page.locator('#txn-amount-1')).toBeFocused();
@@ -166,7 +166,7 @@ test.describe('keyboard-only entry', () => {
     await expect(page.locator('table.register-table')).toBeVisible();
 
     // The posted entry is visible: the 40.00 leg appears in the register we land on
-    // (KB Savings, the first split's account).
+    // (EntKbd Savings, the first split's account).
     await expect(page.locator('table.register-table')).toContainText('40.00');
   });
 
@@ -179,15 +179,15 @@ test.describe('keyboard-only entry', () => {
     server,
   }) => {
     await login(page, server);
-    await createAsset(page, 'KB2 Checking');
-    await createAsset(page, 'KB2 Savings');
-    await createAsset(page, 'KB2 Reserve');
+    await createAsset(page, 'EntKbd2 Checking');
+    await createAsset(page, 'EntKbd2 Savings');
+    await createAsset(page, 'EntKbd2 Reserve');
 
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    // p26.34: KB2 Checking is the HEADER (balancing) account; the two body rows are the
+    // p26.34: EntKbd2 Checking is the HEADER (balancing) account; the two body rows are the
     // other legs, so on save the header takes the single-fund residual (-50).
-    await selectByKeyboard(page, '#txn-main-account', 'KB2 Checking');
+    await selectByKeyboard(page, '#txn-main-account', 'EntKbd2 Checking');
     // p25.2: starts with a single empty row; filling row 0 auto-appends row 1.
     await expect(page.locator('#txn-account-0')).toBeVisible();
 
@@ -195,7 +195,7 @@ test.describe('keyboard-only entry', () => {
     // Choose an asset account in row 0 so its program/class cells stay hidden. Then
     // from the account cell, Enter advances account -> amount (col+1). This exercises
     // the WIRED Enter handler (native Enter on a <select> would otherwise do nothing).
-    await selectByKeyboard(page, '#txn-account-0', 'KB2 Savings');
+    await selectByKeyboard(page, '#txn-account-0', 'EntKbd2 Savings');
     await expect(page.locator('#txn-account-1')).toBeVisible();
     await page.locator('#txn-account-0').focus();
     await page.keyboard.press('Enter');
@@ -230,12 +230,12 @@ test.describe('keyboard-only entry', () => {
     await expect(page.locator('#txn-account-0')).toBeFocused();
 
     // --- Row 1: a second body leg (distinct account so the reorder is observable) ----
-    await selectByKeyboard(page, '#txn-account-1', 'KB2 Reserve');
+    await selectByKeyboard(page, '#txn-account-1', 'EntKbd2 Reserve');
     await page.locator('#txn-amount-1').focus();
     await page.keyboard.type('10.00');
 
     // --- Alt+ArrowDown reorders rows 0 and 1 ---------------------------------
-    // Focus row 0's account (KB2 Savings) and move the row down; its values land in
+    // Focus row 0's account (EntKbd2 Savings) and move the row down; its values land in
     // row 1's inputs and focus follows to row 1's account.
     await page.locator('#txn-account-0').focus();
     const row0Account = await page.locator('#txn-account-0').inputValue();
@@ -255,7 +255,7 @@ test.describe('keyboard-only entry', () => {
     await page.keyboard.press('Control+Enter');
     await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
     await expect(page.locator('table.register-table')).toBeVisible();
-    // p26.34: the save lands on the MAIN split's register (KB2 Checking, the header
+    // p26.34: the save lands on the MAIN split's register (EntKbd2 Checking, the header
     // balancing account), which carries the -50.00 residual of the two body legs.
     await expect(page.locator('table.register-table')).toContainText('50.00');
   });
