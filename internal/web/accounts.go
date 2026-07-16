@@ -112,6 +112,7 @@ type accountsPageModel struct {
 	Subs       []subOption
 	SubFilter  int64 // 0 = all
 	ActiveOnly bool
+	TypeFilter string // p26.75: "" = all types, else one of asset/liability/equity/revenue/expense
 	AsOf       string // formatted as-of date (rule 10)
 }
 
@@ -119,6 +120,18 @@ type accountsPageModel struct {
 // section) accounts in: Assets, Liabilities, Equity, Revenue, Expenses (p26.74).
 // The same order and labels keep the chart consistent with how reports group.
 var accountTypeOrder = []string{"asset", "liability", "equity", "revenue", "expense"}
+
+// validAccountType returns typ if it is one of the five canonical account types,
+// else "" ("All"). It sanitizes the p26.75 type-filter query value so an unknown or
+// blank value falls back to showing every type.
+func validAccountType(typ string) string {
+	for _, t := range accountTypeOrder {
+		if t == typ {
+			return typ
+		}
+	}
+	return ""
+}
 
 // txnAccountGroup / expenseAccountGroup pair a type's i18n label key with its
 // options, so the account-selector templates (transaction + expense forms) render an
@@ -257,17 +270,26 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var subFilter int64
 	var activeOnly bool
+	var typeFilter string
 	if q.Has("sub") {
 		subFilter = parseID(q.Get("sub"))
 		activeOnly = q.Get("active") == "1"
+		// p26.75: the account-type filter rides the SAME filter form as sub/active, so
+		// its value is present on every deliberate submit (the `sub`-presence
+		// discriminator is unchanged); sanitized to a known type (unknown/blank = "All"),
+		// then persisted like sub/active.
+		typeFilter = validAccountType(q.Get("type"))
 		s.sessions.Put(ctx, sessionAcctSubKey, subFilter)
 		s.sessions.Put(ctx, sessionAcctActiveKey, activeOnly)
+		s.sessions.Put(ctx, sessionAcctTypeKey, typeFilter)
 	} else {
 		// Fresh visit: restore. scs GetInt64/GetBool return 0/false when unset,
 		// which already equals the page's defaults (all subsidiaries, show inactive),
-		// so "none stored" needs no special-casing.
+		// so "none stored" needs no special-casing. GetString returns "" when unset,
+		// which is the type filter's default ("All").
 		subFilter = s.sessions.GetInt64(ctx, sessionAcctSubKey)
 		activeOnly = s.sessions.GetBool(ctx, sessionAcctActiveKey)
+		typeFilter = s.sessions.GetString(ctx, sessionAcctTypeKey)
 	}
 
 	var subPtr *int64
@@ -307,6 +329,7 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 	model := accountsPageModel{
 		SubFilter:  subFilter,
 		ActiveOnly: activeOnly,
+		TypeFilter: typeFilter,
 		AsOf:       money.FormatDate(asofTime, dateFormatFor(u)),
 	}
 	var base []acctRow
@@ -328,8 +351,8 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 		base = append(base, ar)
 	}
 	// p26.74: inject the type-tier headers, grouping the roots by `type` in the
-	// canonical statement order (the type filter, "", shows every type).
-	model.Rows = groupRowsByType(base, "")
+	// canonical statement order. p26.75: when a type is chosen, narrow to it.
+	model.Rows = groupRowsByType(base, typeFilter)
 
 	subs, err := s.store.AllSubsidiaries(ctx)
 	if err != nil {

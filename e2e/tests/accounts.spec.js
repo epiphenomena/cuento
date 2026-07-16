@@ -282,4 +282,56 @@ test.describe('chart of accounts', () => {
     expect(headerDepth).toBe(0);
     expect(acctDepth).toBeGreaterThan(0);
   });
+
+  // p26.75: the account-type filter narrows the chart to one type's group; "All"
+  // restores every type, and the selection persists across a bare navigation (like
+  // the sub/active filters). Auto-applies on change via the same htmx filter form.
+  test('the account-type filter narrows the chart and All restores it', async ({ page, server }) => {
+    await login(page, server);
+
+    // Two accounts of different types so filtering is observable.
+    async function createTyped(name, typ) {
+      await page.goto('/accounts/new');
+      await page.locator('#af-name-en').fill(name);
+      if (typ !== 'asset') {
+        await page.locator('#af-type').selectOption(typ);
+        await expect(page.locator('#af-type')).toHaveValue(typ);
+        await page.locator('#af-name-en').fill(name);
+      }
+      const rootSub = page.locator('input[name="sub_1"]');
+      if (!(await rootSub.isChecked())) await rootSub.check();
+      await page.getByRole('button', { name: /^save$/i }).click();
+      await page.waitForURL(/\/accounts$/);
+      await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
+    }
+    await createTyped('TF Asset E2E', 'asset');
+    await createTyped('TF Liab E2E', 'liability');
+
+    await page.goto('/accounts');
+    const asset = page.locator('tr.acct-row', { hasText: 'TF Asset E2E' });
+    const liab = page.locator('tr.acct-row', { hasText: 'TF Liab E2E' });
+    const liabHeader = page.locator('tr.acct-type-header', { hasText: 'Liabilities' });
+    await expect(asset).toBeVisible();
+    await expect(liab).toBeVisible();
+
+    // Filter to Assets: the asset shows; the liability + its header disappear.
+    await page.locator('#type-filter').selectOption('asset');
+    await expect(page.locator('#accounts-results')).toBeVisible();
+    await expect(asset).toBeVisible();
+    await expect(liab).toHaveCount(0);
+    await expect(liabHeader).toHaveCount(0);
+
+    // Persist across a bare nav (away then back): the asset-only filter is remembered.
+    await page.goto('/funds');
+    await page.goto('/accounts');
+    await expect(page.locator('#type-filter')).toHaveValue('asset');
+    await expect(page.locator('tr.acct-row', { hasText: 'TF Liab E2E' })).toHaveCount(0);
+
+    // "All" restores every type.
+    await page.locator('#type-filter').selectOption('');
+    await expect(page.locator('#accounts-results')).toBeVisible();
+    await expect(page.locator('tr.acct-row', { hasText: 'TF Asset E2E' })).toBeVisible();
+    await expect(page.locator('tr.acct-row', { hasText: 'TF Liab E2E' })).toBeVisible();
+    await expect(page.locator('tr.acct-type-header', { hasText: 'Liabilities' })).toBeVisible();
+  });
 });

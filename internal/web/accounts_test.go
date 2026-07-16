@@ -764,12 +764,116 @@ func TestAccountsChartTypeHeaders(t *testing.T) {
 	if !strings.Contains(body, `class="acct-row acct-type-header"`) {
 		t.Errorf("chart has no acct-type-header rows; body:\n%s", body)
 	}
-	// The Assets header appears before the Liabilities header (canonical order), and a
-	// created asset sits under Assets. Header rows must NOT be register links.
-	assetsAt := strings.Index(body, ">Assets<")
-	liabAt := strings.Index(body, ">Liabilities<")
+	// The Assets header ROW appears before the Liabilities header ROW (canonical
+	// order). Match the header-row td specifically (not the p26.75 filter dropdown's
+	// own option labels, which also read "Assets"/"Liabilities").
+	assetsAt := strings.Index(body, `acct-name acct-depth-0">Assets<`)
+	liabAt := strings.Index(body, `acct-name acct-depth-0">Liabilities<`)
 	if assetsAt < 0 || liabAt < 0 || assetsAt > liabAt {
 		t.Errorf("Assets header not before Liabilities (assets=%d liab=%d)", assetsAt, liabAt)
+	}
+}
+
+// TestGroupRowsByTypeFilterNarrows (p26.75): a non-empty typeFilter keeps only that
+// type's block + header; "All" ("") keeps every type.
+func TestGroupRowsByTypeFilterNarrows(t *testing.T) {
+	base := []acctRow{
+		{ID: 1, Name: "Cash", Type: "asset", Depth: 0},
+		{ID: 3, Name: "Credit Card", Type: "liability", Depth: 0},
+	}
+	got := groupRowsByType(base, "liability")
+	if len(got) != 2 || !got[0].Header || got[0].Type != "liability" || got[1].Name != "Credit Card" {
+		t.Fatalf("type filter did not narrow to liability: %+v", got)
+	}
+	if all := groupRowsByType(base, ""); len(all) != 4 {
+		t.Errorf("all-types grouping row count = %d, want 4: %+v", len(all), all)
+	}
+}
+
+// TestValidAccountType (p26.75): only the five canonical types pass; anything else
+// sanitizes to "" ("All").
+func TestValidAccountType(t *testing.T) {
+	for _, ok := range []string{"asset", "liability", "equity", "revenue", "expense"} {
+		if validAccountType(ok) != ok {
+			t.Errorf("validAccountType(%q) dropped a valid type", ok)
+		}
+	}
+	for _, bad := range []string{"", "ASSET", "junk", "assets"} {
+		if got := validAccountType(bad); got != "" {
+			t.Errorf("validAccountType(%q) = %q, want \"\"", bad, got)
+		}
+	}
+}
+
+// TestAccountsTypeFilterNarrows (p26.75): selecting a type on the chart shows only
+// that type's group; "All" restores every type; and the selection persists across a
+// bare navigation (like the sub/active filters).
+func TestAccountsTypeFilterNarrows(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	book := mkUser(t, st, "book_typefilter", "write", false)
+
+	mk := func(name, typ string) {
+		form := url.Values{}
+		form.Set("type", typ)
+		form.Set("currency", "USD")
+		form.Set("name_en", name)
+		form.Set("sub_1", "1")
+		if typ == "expense" {
+			form.Set("functional_class", "program")
+		}
+		rec := asUser(t, h, sm, book, http.MethodPost, "/accounts", form)
+		if rec.Code >= 400 {
+			t.Fatalf("create %q (%s): %d %s", name, typ, rec.Code, rec.Body.String())
+		}
+	}
+	mk("TF Cash", "asset")
+	mk("TF Loan", "liability")
+
+	cookie := mintCookie(t, sm, book)
+	do := func(path string) string {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d", path, rec.Code)
+		}
+		return rec.Body.String()
+	}
+
+	// Filter to assets: the asset shows, the liability + Liabilities header do not.
+	assetsOnly := do("/accounts?sub=0&type=asset")
+	if !strings.Contains(assetsOnly, "TF Cash") {
+		t.Errorf("type=asset dropped the asset account:\n%s", assetsOnly)
+	}
+	if strings.Contains(assetsOnly, "TF Loan") {
+		t.Errorf("type=asset still shows a liability account:\n%s", assetsOnly)
+	}
+	if !strings.Contains(assetsOnly, `class="acct-row acct-type-header"`) {
+		t.Errorf("type=asset shows no header at all")
+	}
+	// The Liabilities HEADER ROW (a td, not the filter dropdown option) must be gone.
+	if strings.Contains(assetsOnly, `acct-name acct-depth-0">Liabilities<`) {
+		t.Errorf("type=asset still shows the Liabilities header row")
+	}
+
+	// A bare nav restores the remembered type filter (assets only).
+	restored := do("/accounts")
+	if strings.Contains(restored, "TF Loan") {
+		t.Errorf("bare nav did not restore the asset-only type filter:\n%s", restored)
+	}
+	// The type select reflects the remembered value.
+	if !strings.Contains(restored, `value="asset" selected`) {
+		t.Errorf("bare nav did not re-select the asset type option:\n%s", restored)
+	}
+
+	// "All" restores every type: both accounts + both headers show again.
+	all := do("/accounts?sub=0&type=")
+	if !strings.Contains(all, "TF Cash") || !strings.Contains(all, "TF Loan") {
+		t.Errorf("type=All did not restore both accounts:\n%s", all)
+	}
+	if !strings.Contains(all, `acct-name acct-depth-0">Liabilities<`) {
+		t.Errorf("type=All did not restore the Liabilities header row")
 	}
 }
 

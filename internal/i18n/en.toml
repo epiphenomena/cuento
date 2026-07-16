@@ -450,6 +450,10 @@ other = "Subsidiary"
 other = "All subsidiaries"
 [accounts.filter.active_only]
 other = "Active only"
+[accounts.filter.type]
+other = "Type"
+[accounts.filter.all_types]
+other = "All types"
 [accounts.filter.apply]
 other = "Apply"
 [accounts.col.name]

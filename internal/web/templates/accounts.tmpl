@@ -26,6 +26,19 @@
     {{range .Subs}}<option value="{{.ID}}"{{if eq .ID $.SubFilter}} selected{{end}}>{{.Name}}</option>
     {{end}}
   </select>
+  {{/* p26.75: account-type filter -- show only one type's group. Rides the SAME filter
+       form (so it submits alongside `sub`, the deliberate-submit discriminator) and is
+       persisted like the sub/active filters. The option labels reuse the plural
+       account.section.* section labels, matching the injected chart headers. */}}
+  <label for="type-filter">{{t "accounts.filter.type"}}</label>
+  <select id="type-filter" name="type">
+    <option value="">{{t "accounts.filter.all_types"}}</option>
+    <option value="asset"{{if eq "asset" .TypeFilter}} selected{{end}}>{{t "account.section.asset"}}</option>
+    <option value="liability"{{if eq "liability" .TypeFilter}} selected{{end}}>{{t "account.section.liability"}}</option>
+    <option value="equity"{{if eq "equity" .TypeFilter}} selected{{end}}>{{t "account.section.equity"}}</option>
+    <option value="revenue"{{if eq "revenue" .TypeFilter}} selected{{end}}>{{t "account.section.revenue"}}</option>
+    <option value="expense"{{if eq "expense" .TypeFilter}} selected{{end}}>{{t "account.section.expense"}}</option>
+  </select>
   <label class="check">
     <input type="checkbox" name="active" value="1"{{if .ActiveOnly}} checked{{end}}>
     {{t "accounts.filter.active_only"}}
