@@ -23,7 +23,7 @@ func baseSingle() Config {
 		DateFmt:   DateISO,
 		DateCol:   0,
 		AmountCol: 1,
-		PayeeCol:  2,
+		DescCol:   2,
 		MemoCol:   3,
 	}
 }
@@ -72,7 +72,7 @@ func TestParseDebitCreditPair(t *testing.T) {
 		DateCol:   0,
 		DebitCol:  1,
 		CreditCol: 2,
-		PayeeCol:  3,
+		DescCol:   3,
 		MemoCol:   -1,
 	}
 	raw := []byte("date,debit,credit,payee\n2025-01-15,100.00,,Acme\n2025-01-16,,42.50,Bob\n")
@@ -94,7 +94,7 @@ func TestParseDebitCreditPair(t *testing.T) {
 func TestParseDebitCreditSignFlip(t *testing.T) {
 	cfg := Config{
 		Delimiter: DelimiterComma, HasHeader: true, Amount: AmountDebitCredit,
-		DateFmt: DateISO, DateCol: 0, DebitCol: 1, CreditCol: 2, PayeeCol: 3, MemoCol: -1,
+		DateFmt: DateISO, DateCol: 0, DebitCol: 1, CreditCol: 2, DescCol: 3, MemoCol: -1,
 		SignFlip: true,
 	}
 	raw := []byte("date,debit,credit,payee\n2025-01-15,100.00,,Acme\n")
@@ -111,7 +111,7 @@ func TestParseDebitCreditSignFlip(t *testing.T) {
 func TestParseDebitCreditBothBlankOrBothFilled(t *testing.T) {
 	cfg := Config{
 		Delimiter: DelimiterComma, HasHeader: true, Amount: AmountDebitCredit,
-		DateFmt: DateISO, DateCol: 0, DebitCol: 1, CreditCol: 2, PayeeCol: 3, MemoCol: -1,
+		DateFmt: DateISO, DateCol: 0, DebitCol: 1, CreditCol: 2, DescCol: 3, MemoCol: -1,
 	}
 	raw := []byte("date,debit,credit,payee\n2025-01-15,,,Acme\n2025-01-16,10.00,5.00,Bob\n")
 	rows, err := Parse(raw, cfg, exp2)

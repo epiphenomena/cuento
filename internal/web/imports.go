@@ -16,7 +16,8 @@ import (
 
 // p17.2 bank-CSV import: upload -> mapping UI -> 20-row preview -> stage (D17,
 // DECISIONS p17.2). A TxnWrite user uploads a bank statement CSV, assigns columns
-// (which column is date/amount/payee/memo), picks the target account + subsidiary,
+// (which column is date/amount/description/memo), picks the target account +
+// subsidiary,
 // chooses a delimiter / header / amount mode / sign-flip / date format (optionally
 // saving the mapping as a reusable profile), previews the first 20 parsed rows, and
 // confirms to STAGE the rows (batch + import_rows persisted, duplicates flagged).
@@ -100,7 +101,7 @@ type importPreviewModel struct {
 type importPreviewRow struct {
 	Date        string
 	AmountFmt   string
-	Description string // bank line descriptive text (the mapped payee_col)
+	Description string // bank line descriptive text (the mapped desc_col)
 	Memo        string
 }
 
@@ -120,7 +121,7 @@ type importResultModel struct {
 type importResultRow struct {
 	Date        string
 	AmountFmt   string
-	Description string // bank line descriptive text (the mapped payee_col)
+	Description string // bank line descriptive text (the mapped desc_col)
 	Memo        string
 	Duplicate   bool
 }
@@ -215,7 +216,7 @@ func importMapping(r *http.Request) bankimport.Config {
 		AmountCol: atoiDefault(r.FormValue("amount_col"), 0),
 		DebitCol:  atoiDefault(r.FormValue("debit_col"), 0),
 		CreditCol: atoiDefault(r.FormValue("credit_col"), 0),
-		PayeeCol:  atoiDefault(r.FormValue("payee_col"), -1),
+		DescCol:   atoiDefault(r.FormValue("desc_col"), -1),
 		MemoCol:   atoiDefault(r.FormValue("memo_col"), -1),
 	}
 }

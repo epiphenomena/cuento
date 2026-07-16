@@ -55,7 +55,7 @@ type importQueueRow struct {
 	ID          int64
 	Date        string
 	AmountFmt   string
-	Description string // bank line descriptive text (the mapped payee_col)
+	Description string // bank line descriptive text (the mapped desc_col)
 	Memo        string
 	Status      string
 	Duplicate   bool

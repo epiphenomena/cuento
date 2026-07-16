@@ -36,7 +36,7 @@ func importApp(t *testing.T) (http.Handler, *store.Store, *scs.SessionManager, *
 // accountsApp / mkUser / mintCookie.
 
 // importFields is the mapping + target the import form carries. The defaults map a
-// date,amount,payee,memo CSV with a header, comma delimiter, single signed amount.
+// date,amount,desc,memo CSV with a header, comma delimiter, single signed amount.
 func importFields(accountID, subsidiaryID int64) map[string]string {
 	return map[string]string{
 		"account_id":    strconv.FormatInt(accountID, 10),
@@ -47,7 +47,7 @@ func importFields(accountID, subsidiaryID int64) map[string]string {
 		"date_format":   "ISO",
 		"date_col":      "0",
 		"amount_col":    "1",
-		"payee_col":     "2",
+		"desc_col":      "2",
 		"memo_col":      "3",
 	}
 }
@@ -200,7 +200,7 @@ func TestImportProfileReuse(t *testing.T) {
 		store.WithActor(context.Background(), store.Actor{ID: 1}),
 		"bank", bankimport.Config{
 			Delimiter: bankimport.DelimiterComma, HasHeader: true, Amount: bankimport.AmountSingle,
-			DateFmt: bankimport.DateISO, DateCol: 0, AmountCol: 1, PayeeCol: 2, MemoCol: 3,
+			DateFmt: bankimport.DateISO, DateCol: 0, AmountCol: 1, DescCol: 2, MemoCol: 3,
 		},
 	)
 	if err != nil {

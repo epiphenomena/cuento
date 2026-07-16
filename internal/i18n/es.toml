@@ -1585,8 +1585,8 @@ other = "Columna de importe"
 other = "Columna de debito"
 [import.col.credit]
 other = "Columna de credito"
-[import.col.payee]
-other = "Columna de beneficiario"
+[import.col.desc]
+other = "Columna de descripcion"
 [import.col.memo]
 other = "Columna de memo"
 [import.col.status]

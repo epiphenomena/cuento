@@ -1584,8 +1584,8 @@ other = "Amount column"
 other = "Debit column"
 [import.col.credit]
 other = "Credit column"
-[import.col.payee]
-other = "Payee column"
+[import.col.desc]
+other = "Description column"
 [import.col.memo]
 other = "Memo column"
 [import.col.status]

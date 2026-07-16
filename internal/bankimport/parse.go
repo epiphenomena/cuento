@@ -77,8 +77,12 @@ type Config struct {
 	AmountCol int `json:"amount_col"` // AmountSingle
 	DebitCol  int `json:"debit_col"`  // AmountDebitCredit
 	CreditCol int `json:"credit_col"` // AmountDebitCredit
-	PayeeCol  int `json:"payee_col"`
-	MemoCol   int `json:"memo_col"` // negative == unmapped
+	// DescCol maps the bank line's descriptive column (the split description). The
+	// JSON tag stayed "desc_col" after the payee->description rename (p26.60); the
+	// payee ENTITY was retired earlier (p26.20), this is just the mapping vocabulary
+	// catching up.
+	DescCol int `json:"desc_col"`
+	MemoCol int `json:"memo_col"` // negative == unmapped
 }
 
 // ParsedRow is one parsed data row. Raw holds the original cells (so the staging
@@ -88,7 +92,7 @@ type Config struct {
 type ParsedRow struct {
 	Date        string // YYYY-MM-DD (money's canonical), empty on error
 	AmountMinor int64  // net-debit signed minor units (D2)
-	// Description is the bank line's descriptive TEXT (the mapped payee_col); the
+	// Description is the bank line's descriptive TEXT (the mapped desc_col); the
 	// payee entity is retired (p26.20), so this text now feeds the split description.
 	Description string
 	Memo        string
@@ -160,7 +164,7 @@ func parseRow(rec []string, cfg Config, exponent int) ParsedRow {
 
 	row.Date = date
 	row.AmountMinor = amount
-	row.Description = optionalCell(rec, cfg.PayeeCol)
+	row.Description = optionalCell(rec, cfg.DescCol)
 	row.Memo = optionalCell(rec, cfg.MemoCol)
 	return row
 }
@@ -298,7 +302,7 @@ func cell(rec []string, i int) (string, error) {
 }
 
 // optionalCell returns the trimmed value at index i, or "" if i is unmapped
-// (negative) or out of range -- optional fields (payee, memo) never fail a row.
+// (negative) or out of range -- optional fields (desc, memo) never fail a row.
 func optionalCell(rec []string, i int) string {
 	if i < 0 || i >= len(rec) {
 		return ""

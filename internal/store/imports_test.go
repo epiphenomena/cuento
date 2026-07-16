@@ -307,7 +307,7 @@ func newImportEnv(t *testing.T) importEnv {
 
 	profile, err := s.CreateMappingProfile(mutCtx(), "bank", bankimport.Config{
 		Delimiter: bankimport.DelimiterComma, HasHeader: true, Amount: bankimport.AmountSingle,
-		DateFmt: bankimport.DateISO, DateCol: 0, AmountCol: 1, PayeeCol: 2, MemoCol: 3,
+		DateFmt: bankimport.DateISO, DateCol: 0, AmountCol: 1, DescCol: 2, MemoCol: 3,
 	})
 	if err != nil {
 		t.Fatalf("CreateMappingProfile: %v", err)

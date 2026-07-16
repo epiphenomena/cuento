@@ -28,7 +28,7 @@
       <tr>
         <th>{{t "import.col.date"}}</th>
         <th>{{t "import.col.amount"}}</th>
-        <th>{{t "import.col.payee"}}</th>
+        <th>{{t "import.col.desc"}}</th>
         <th>{{t "import.col.memo"}}</th>
       </tr>
     </thead>
@@ -62,7 +62,7 @@
     <input type="hidden" name="amount_col" value="{{.Mapping.AmountCol}}">
     <input type="hidden" name="debit_col" value="{{.Mapping.DebitCol}}">
     <input type="hidden" name="credit_col" value="{{.Mapping.CreditCol}}">
-    <input type="hidden" name="payee_col" value="{{.Mapping.PayeeCol}}">
+    <input type="hidden" name="desc_col" value="{{.Mapping.DescCol}}">
     <input type="hidden" name="memo_col" value="{{.Mapping.MemoCol}}">
     <input type="hidden" name="save_profile" value="{{if .SaveProfile}}1{{else}}0{{end}}">
     <input type="hidden" name="profile_name" value="{{.ProfileName}}">
@@ -89,7 +89,7 @@
       <tr>
         <th>{{t "import.col.date"}}</th>
         <th>{{t "import.col.amount"}}</th>
-        <th>{{t "import.col.payee"}}</th>
+        <th>{{t "import.col.desc"}}</th>
         <th>{{t "import.col.memo"}}</th>
         <th>{{t "import.col.status"}}</th>
       </tr>

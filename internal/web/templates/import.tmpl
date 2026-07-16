@@ -4,7 +4,7 @@
 
   The user picks the target SUBSIDIARY and ACCOUNT (subsidiary-first structurally
   guarantees the account maps to the subsidiary; the store re-validates on confirm),
-  assigns which zero-based COLUMN indices carry date/amount/payee/memo, and chooses
+  assigns which zero-based COLUMN indices carry date/amount/description/memo, and chooses
   the delimiter / header / amount mode / sign-flip / date format. The form POSTs
   (multipart) to /import/preview, which swaps a 20-row preview into #import-workspace
   (the file input cannot survive an htmx swap, so preview carries the CSV forward
@@ -109,8 +109,8 @@
         <input type="number" id="import-credit-col" name="credit_col" value="2" min="0" step="1">
       </div>
       <div class="field">
-        <label for="import-payee-col">{{t "import.col.payee"}}</label>
-        <input type="number" id="import-payee-col" name="payee_col" value="2" min="-1" step="1">
+        <label for="import-desc-col">{{t "import.col.desc"}}</label>
+        <input type="number" id="import-desc-col" name="desc_col" value="2" min="-1" step="1">
       </div>
       <div class="field">
         <label for="import-memo-col">{{t "import.col.memo"}}</label>
