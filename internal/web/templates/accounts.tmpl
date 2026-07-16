@@ -72,6 +72,19 @@
     </thead>
     <tbody>
       {{range .Rows}}
+      {{if .Header}}
+      {{/* p26.74: injected TYPE-TIER header ("Assets"/"Liabilities"/…). Display-only
+           and non-selectable -- no register link, no balances, no account actions:
+           it is not a real account. It participates in treetable collapse/expand as
+           the shallowest (depth-0) row of its block; its name cell holds NO <a>, so
+           the p26.55 name-click toggle applies. */}}
+      <tr class="acct-row acct-type-header" data-depth="{{.Depth}}">
+        <td class="acct-name acct-depth-{{.Depth}}">{{t .TypeLabelKey}}</td>
+        <td></td>
+        <td class="acct-balances"></td>
+        <td class="acct-actions"></td>
+      </tr>
+      {{else}}
       <tr class="acct-row{{if not .Active}} acct-inactive{{end}}" data-depth="{{.Depth}}">
         {{/* p25: the account name opens its register (the everyday drill-down); the
              dedicated Register button is gone. */}}
@@ -95,6 +108,7 @@
           {{end}}
         </td>
       </tr>
+      {{end}}
       {{else}}
       <tr><td colspan="4">{{t "accounts.empty"}}</td></tr>
       {{end}}

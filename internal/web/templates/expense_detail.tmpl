@@ -100,7 +100,11 @@
           <td class="txn-cell el-account-cell" colspan="4">
             <select name="account_{{$i}}" id="el-account-{{$i}}" class="el-account combo-input">
               <option value="0">{{t "expense.line.form.account_none"}}</option>
-              {{range $page.Accounts}}<option value="{{.ID}}" {{if .Unavailable}}data-unavailable="1" data-path="{{.Path}} {{t "txn.account.unavailable_suffix"}}"{{else}}data-path="{{.Path}}"{{end}}{{if eq .ID $l.AccountID}} selected{{end}}>{{.Path}}{{if .Unavailable}} {{t "txn.account.unavailable_suffix"}}{{end}}</option>
+              {{/* p26.74: group the R/E account options by type (optgroup); only the
+                   Revenue + Expenses groups appear here since the grid offers R/E leaves. */}}
+              {{range (expenseAccountsByType $page.Accounts)}}<optgroup label="{{t .LabelKey}}">
+              {{range .Options}}<option value="{{.ID}}" {{if .Unavailable}}data-unavailable="1" data-path="{{.Path}} {{t "txn.account.unavailable_suffix"}}"{{else}}data-path="{{.Path}}"{{end}}{{if eq .ID $l.AccountID}} selected{{end}}>{{.Path}}{{if .Unavailable}} {{t "txn.account.unavailable_suffix"}}{{end}}</option>
+              {{end}}</optgroup>
               {{end}}
             </select>
           </td>

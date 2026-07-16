@@ -78,6 +78,14 @@ func currencyExponents(ctx context.Context, st *store.Store) (map[string]int, er
 
 // acctRow is one rendered tree row: the account plus its formatted per-currency
 // balances and an indent depth for the tree table.
+//
+// p26.74: an injected TYPE HEADER ("Assets", "Liabilities", …) is also an acctRow
+// but with Header=true — it groups the root accounts of one type under a
+// non-selectable, display-only row at depth 0 (the type-level roots shift to depth
+// 1). A header carries no id/balances/actions and no register link; it participates
+// in treetable collapse/expand purely by being the shallowest row of its block (the
+// depth sequence alone makes it a parent). TypeLabelKey is the i18n key
+// ("account.section.<type>", the plural statement labels) the template renders.
 type acctRow struct {
 	ID           int64
 	Name         string
@@ -86,6 +94,9 @@ type acctRow struct {
 	Reconcilable bool // -> the section's reconcile affordance (p25)
 	Depth        int
 	Balances     []string // pre-formatted "CCY 1,234.56" strings (rule 10)
+
+	Header       bool   // p26.74: injected type-tier header (display-only, non-selectable)
+	TypeLabelKey string // p26.74: i18n key for a header's label ("account.type.<type>")
 }
 
 // subOption is a subsidiary offered in the filter and the checklist.
@@ -102,6 +113,125 @@ type accountsPageModel struct {
 	SubFilter  int64 // 0 = all
 	ActiveOnly bool
 	AsOf       string // formatted as-of date (rule 10)
+}
+
+// accountTypeOrder is the canonical statement order the chart groups (and reports
+// section) accounts in: Assets, Liabilities, Equity, Revenue, Expenses (p26.74).
+// The same order and labels keep the chart consistent with how reports group.
+var accountTypeOrder = []string{"asset", "liability", "equity", "revenue", "expense"}
+
+// txnAccountGroup / expenseAccountGroup pair a type's i18n label key with its
+// options, so the account-selector templates (transaction + expense forms) render an
+// <optgroup label="Assets">…</optgroup> per type (p26.74). Grouping is presentation
+// only: the flat model.Accounts is unchanged (the JS-side data-attr consumers +
+// injectRowAccounts still see one list), and HTMLSelectElement.options flattens
+// optgroup children so the combobox's fuzzy filter (combofilter.js) is untouched.
+type txnAccountGroup struct {
+	LabelKey string
+	Options  []txnAccountOption
+}
+
+type expenseAccountGroup struct {
+	LabelKey string
+	Options  []expenseAccountOption
+}
+
+// groupTxnAccountsByType buckets the transaction editor's account options into the
+// canonical type order (p26.74). Options already arrive in tree order, but explicit
+// bucketing (not boundary detection) keeps the grouping correct even when a user's
+// account creation order interleaves types. A type with no options emits no group
+// (an empty optgroup is a phantom). The value="0" placeholder is rendered OUTSIDE
+// any group by the template; only real options carry a type and are bucketed here.
+func groupTxnAccountsByType(opts []txnAccountOption) []txnAccountGroup {
+	var groups []txnAccountGroup
+	for _, typ := range accountTypeOrder {
+		var g []txnAccountOption
+		for _, o := range opts {
+			if o.Type == typ {
+				g = append(g, o)
+			}
+		}
+		if len(g) > 0 {
+			groups = append(groups, txnAccountGroup{LabelKey: "account.section." + typ, Options: g})
+		}
+	}
+	return groups
+}
+
+// groupExpenseAccountsByType buckets the expense line grid's account options by type
+// (p26.74). The expense grid offers only R/E leaves, so in practice only the Revenue
+// and Expenses groups appear; empty types emit no group.
+func groupExpenseAccountsByType(opts []expenseAccountOption) []expenseAccountGroup {
+	var groups []expenseAccountGroup
+	for _, typ := range accountTypeOrder {
+		var g []expenseAccountOption
+		for _, o := range opts {
+			if o.Type == typ {
+				g = append(g, o)
+			}
+		}
+		if len(g) > 0 {
+			groups = append(groups, expenseAccountGroup{LabelKey: "account.section." + typ, Options: g})
+		}
+	}
+	return groups
+}
+
+// groupRowsByType injects a display-only type header before each type's root
+// accounts (p26.74), returning a new pre-ordered row list keyed off each root's
+// `type`. It is presentation, not stored data: the base rows come straight from
+// store.Tree (pre-order, depth from treeDepths); this reorders whole ROOT BLOCKS
+// (a null-parent row and its subtree) into accountTypeOrder, prefixes each
+// non-empty type with a header at depth 0, and shifts every real row's depth +1 so
+// the type-level roots sit at depth 1. Within a type, block order is preserved
+// (SortOrder). typeFilter (p26.75), when non-empty, keeps only that type's block +
+// header. A type with no root blocks emits NO header (an empty header would read as
+// a phantom, account-less row and would not be collapsible).
+func groupRowsByType(rows []acctRow, typeFilter string) []acctRow {
+	// Split into root blocks: each block starts at a depth-0 row and runs until the
+	// next depth-0 row. The block's TYPE is its root's type (constant along a chain).
+	type block struct {
+		typ  string
+		rows []acctRow
+	}
+	var blocks []block
+	for i := 0; i < len(rows); {
+		start := i
+		i++
+		for i < len(rows) && rows[i].Depth > 0 {
+			i++
+		}
+		blocks = append(blocks, block{typ: rows[start].Type, rows: rows[start:i]})
+	}
+
+	out := make([]acctRow, 0, len(rows)+len(accountTypeOrder))
+	for _, typ := range accountTypeOrder {
+		if typeFilter != "" && typ != typeFilter {
+			continue
+		}
+		var typBlocks []block
+		for _, b := range blocks {
+			if b.typ == typ {
+				typBlocks = append(typBlocks, b)
+			}
+		}
+		if len(typBlocks) == 0 {
+			continue // no accounts of this type -> no header (avoid a phantom row)
+		}
+		out = append(out, acctRow{
+			Header:       true,
+			Type:         typ,
+			TypeLabelKey: "account.section." + typ,
+			Depth:        0,
+		})
+		for _, b := range typBlocks {
+			for _, r := range b.rows {
+				r.Depth++ // the injected header is depth 0; real roots shift to depth 1
+				out = append(out, r)
+			}
+		}
+	}
+	return out
 }
 
 // accountsPage handles GET /accounts (TxnRead): the tree table with balances and
@@ -179,6 +309,7 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 		ActiveOnly: activeOnly,
 		AsOf:       money.FormatDate(asofTime, dateFormatFor(u)),
 	}
+	var base []acctRow
 	for _, row := range rows {
 		if activeOnly && row.Active == 0 {
 			continue
@@ -194,8 +325,11 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 		for _, c := range bals[row.ID] {
 			ar.Balances = append(ar.Balances, money.FormatMoney(c.Minor, c.Currency, c.Exponent, opts))
 		}
-		model.Rows = append(model.Rows, ar)
+		base = append(base, ar)
 	}
+	// p26.74: inject the type-tier headers, grouping the roots by `type` in the
+	// canonical statement order (the type filter, "", shows every type).
+	model.Rows = groupRowsByType(base, "")
 
 	subs, err := s.store.AllSubsidiaries(ctx)
 	if err != nil {

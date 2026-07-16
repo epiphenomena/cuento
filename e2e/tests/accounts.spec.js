@@ -175,38 +175,111 @@ test.describe('chart of accounts', () => {
     await createAccount('Tree Leaf E2E', 'Tree Child E2E');
 
     await page.goto('/accounts');
+    // p26.74: an injected "Assets" TYPE HEADER now sits at depth 0 above the asset
+    // roots (which shifted to depth 1); the chain is header(0) -> Tree Root E2E(1) ->
+    // Child(2) -> Leaf(3). The header is a plain .acct-row.acct-type-header (no id, no
+    // register link) and participates in collapse/expand as the block's top parent.
+    const header = page.locator('tr.acct-type-header', { hasText: 'Assets' });
     const root = page.locator('tr.acct-row', { hasText: 'Tree Root E2E' });
     const child = page.locator('tr.acct-row', { hasText: 'Tree Child E2E' });
     const leaf = page.locator('tr.acct-row', { hasText: 'Tree Leaf E2E' });
 
-    // All three visible initially (the module fully expands on load).
+    // The header + all three accounts are visible initially (the module fully expands).
+    await expect(header).toBeVisible();
     await expect(root).toBeVisible();
     await expect(child).toBeVisible();
     await expect(leaf).toBeVisible();
 
-    // Collapse all -> only depth-0 rows remain; the child and leaf hide.
+    // Collapse all -> only the depth-0 TYPE HEADERS remain; every account hides.
     await page.locator('.tree-collapse-all').click();
+    await expect(header).toBeVisible();
+    await expect(root).toBeHidden();
+    await expect(child).toBeHidden();
+    await expect(leaf).toBeHidden();
+
+    // Expand one level -> depth-1 (the asset roots, incl. Tree Root) show; deeper hidden.
+    await page.locator('.tree-expand-level').click();
     await expect(root).toBeVisible();
     await expect(child).toBeHidden();
     await expect(leaf).toBeHidden();
 
-    // Expand one level -> depth-1 (child) shows, depth-2 (leaf) still hidden.
+    // Expand one more level -> depth-2 (child) shows, depth-3 (leaf) still hidden.
     await page.locator('.tree-expand-level').click();
     await expect(child).toBeVisible();
     await expect(leaf).toBeHidden();
 
-    // Expand one more level -> the leaf (depth 2) shows.
+    // Expand once more -> depth-3 (the leaf) shows; fully expanded now.
     await page.locator('.tree-expand-level').click();
     await expect(leaf).toBeVisible();
 
-    // Per-row disclosure toggle: collapsing the ROOT hides its whole subtree.
+    // Collapsing the injected Assets HEADER hides its whole type subtree (p26.74:
+    // collapse/expand works on a header). Its disclosure toggle lives in the name cell.
+    await header.locator('.tree-toggle').click();
+    await expect(root).toBeHidden();
+    await expect(child).toBeHidden();
+    await expect(leaf).toBeHidden();
+    // Expanding the header again reveals its subtree (nothing beneath was collapsed).
+    await header.locator('.tree-toggle').click();
+    await expect(root).toBeVisible();
+    await expect(child).toBeVisible();
+    await expect(leaf).toBeVisible();
+
+    // Per-row disclosure toggle still works: collapsing Tree Root hides its subtree.
     await root.locator('.tree-toggle').click();
     await expect(child).toBeHidden();
     await expect(leaf).toBeHidden();
-    // Expanding the root again reveals its direct child (state persists: the leaf,
-    // whose parent-child was never collapsed, comes back too).
     await root.locator('.tree-toggle').click();
     await expect(child).toBeVisible();
     await expect(leaf).toBeVisible();
+  });
+
+  // p26.74: the chart injects a display-only TYPE HEADER per type in canonical
+  // statement order (Assets, Liabilities, Equity, Revenue, Expenses), with the real
+  // accounts nested one level under each. The header is not an account: no register
+  // link, no Edit/Deactivate. This drives the REAL page over the fixture (which has
+  // all five types) plus a freshly-created asset nested under Assets.
+  test('shows the five type headers with accounts nested under them', async ({ page, server }) => {
+    await login(page, server);
+
+    // The e2e db is FRESH (no fixture accounts), so create one account of each type
+    // so every canonical section header appears. A type-change re-fetches the form
+    // region (parent options), so wait for the type select to settle each time.
+    async function createTyped(name, typ) {
+      await page.goto('/accounts/new');
+      await page.locator('#af-name-en').fill(name);
+      if (typ !== 'asset') { // asset is the default; changing type re-fetches the form
+        await page.locator('#af-type').selectOption(typ);
+        await expect(page.locator('#af-type')).toHaveValue(typ);
+        await page.locator('#af-name-en').fill(name); // re-fill in case the re-fetch cleared it
+      }
+      const rootSub = page.locator('input[name="sub_1"]');
+      if (!(await rootSub.isChecked())) await rootSub.check();
+      await page.getByRole('button', { name: /^save$/i }).click();
+      await page.waitForURL(/\/accounts$/);
+      await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
+    }
+    await createTyped('Grouped Asset E2E', 'asset');
+    await createTyped('Grouped Liab E2E', 'liability');
+    await createTyped('Grouped Equity E2E', 'equity');
+    await createTyped('Grouped Rev E2E', 'revenue');
+    await createTyped('Grouped Exp E2E', 'expense');
+
+    await page.goto('/accounts');
+    // Every canonical section header is present, in order, as a display-only row.
+    for (const label of ['Assets', 'Liabilities', 'Equity', 'Revenue', 'Expenses']) {
+      await expect(page.locator('tr.acct-type-header', { hasText: label })).toBeVisible();
+    }
+    // A type header carries no register link / Edit / Deactivate (it is not an account).
+    const assets = page.locator('tr.acct-type-header', { hasText: 'Assets' });
+    await expect(assets.locator('a')).toHaveCount(0);
+    await expect(assets.locator('button[type="submit"]')).toHaveCount(0);
+
+    // The created asset is present and (via data-depth) sits deeper than the Assets header.
+    const acct = page.locator('tr.acct-row', { hasText: 'Grouped Asset E2E' });
+    await expect(acct).toBeVisible();
+    const headerDepth = Number(await assets.getAttribute('data-depth'));
+    const acctDepth = Number(await acct.getAttribute('data-depth'));
+    expect(headerDepth).toBe(0);
+    expect(acctDepth).toBeGreaterThan(0);
   });
 });

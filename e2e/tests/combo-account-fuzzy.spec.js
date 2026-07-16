@@ -126,6 +126,47 @@ test.describe('account combobox fuzzy matching (p26.44)', () => {
     );
   });
 
+  // p26.74: the account selector groups its options by TYPE under <optgroup> labels
+  // (Assets / Liabilities / …) in canonical statement order. optgroups flatten in
+  // HTMLSelectElement.options, so the fuzzy overlay above still ranks every option
+  // (the other tests in this file prove that); here we assert the native select's
+  // grouping directly. Both the header (#txn-main-account) and a body row
+  // (#txn-account-0) carry the groups; the value="0" placeholder stays outside them.
+  test('the account select groups options by type under optgroups', async ({ page, server }) => {
+    await login(page, server);
+    // Fresh e2e db: create one asset + one expense so two type groups appear. Expense
+    // needs a functional class (form default handles it); the create form's expense
+    // path is covered elsewhere -- here we only need it to exist as an option.
+    await createAsset(page, 'Grp Checking');
+    await page.goto('/accounts/new');
+    await page.locator('#af-name-en').fill('Grp Rent');
+    await page.locator('#af-type').selectOption('expense');
+    await expect(page.locator('#af-type')).toHaveValue('expense');
+    await page.locator('#af-name-en').fill('Grp Rent');
+    const rentSub = page.locator('input[name="sub_1"]');
+    if (!(await rentSub.isChecked())) await rentSub.check();
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await expect(page.locator('tr.acct-row', { hasText: 'Grp Rent' })).toBeVisible();
+
+    await page.goto('/transactions/new');
+    await expect(page.locator('#txn-account-0')).toBeVisible();
+
+    for (const sel of ['#txn-main-account', '#txn-account-0']) {
+      const select = page.locator(sel);
+      // The Assets optgroup exists and holds the created asset.
+      const assets = select.locator('optgroup[label="Assets"]');
+      await expect(assets).toHaveCount(1);
+      await expect(assets.locator('option', { hasText: 'Grp Checking' })).toHaveCount(1);
+      // The created expense account surfaces under the Expenses group.
+      const expenses = select.locator('optgroup[label="Expenses"]');
+      await expect(expenses).toHaveCount(1);
+      await expect(expenses.locator('option', { hasText: 'Grp Rent' })).toHaveCount(1);
+      // The "Choose account" placeholder (value 0) is NOT inside any optgroup.
+      await expect(select.locator('optgroup > option[value="0"]')).toHaveCount(0);
+      await expect(select.locator('option[value="0"]')).toHaveCount(1);
+    }
+  });
+
   // p26.44 ROOT CAUSE / regression: for a non-freeText combo the native <select> is the Tab
   // stop (p26.11: the overlay is tabIndex=-1). A KEYBOARD user tabs onto the account select and
   // types -- which used to hit the browser's native <select> prefix-typeahead, NOT the fuzzy

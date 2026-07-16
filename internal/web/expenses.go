@@ -218,6 +218,7 @@ type expenseAccountOption struct {
 	ID   int64
 	Name string
 	Path string
+	Type string // p26.74: the account's type, so the selector can <optgroup> by it
 	// Unavailable marks an account force-included because an existing line references
 	// it though it is inactive / a placeholder / out-of-subsidiary (p26.10); the
 	// template appends a marker suffix + data-unavailable so the user sees why the
@@ -469,7 +470,7 @@ func (s *server) expenseLineOptions(ctx context.Context, sub int64, include ...i
 		if !a.Unavailable && a.Type != "revenue" && a.Type != "expense" {
 			continue
 		}
-		accounts = append(accounts, expenseAccountOption{ID: a.ID, Name: a.Name, Path: a.Path, Unavailable: a.Unavailable})
+		accounts = append(accounts, expenseAccountOption{ID: a.ID, Name: a.Name, Path: a.Path, Type: a.Type, Unavailable: a.Unavailable})
 	}
 
 	fs, err := s.store.ActiveFunds(ctx, sub)

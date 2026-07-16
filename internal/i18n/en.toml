@@ -588,6 +588,21 @@ other = "Equity"
 other = "Revenue"
 [account.type.expense]
 other = "Expense"
+# p26.74: PLURAL statement-tier section labels for the injected type headers on the
+# chart of accounts + the account-selector <optgroup>s. Distinct from the SINGULAR
+# per-account account.type.* labels (the Type column); these match the report section
+# labels verbatim (reports.balance_sheet.section.* / income_statement.section.*) so the
+# chart, the selector, and the reports all group under the same words (DECISIONS p26.74).
+[account.section.asset]
+other = "Assets"
+[account.section.liability]
+other = "Liabilities"
+[account.section.equity]
+other = "Equity"
+[account.section.revenue]
+other = "Revenue"
+[account.section.expense]
+other = "Expenses"
 [functional.program]
 other = "Program"
 [functional.management]

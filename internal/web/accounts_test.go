@@ -646,6 +646,133 @@ func TestAccountsFilterRememberedActiveOn(t *testing.T) {
 	}
 }
 
+// TestGroupRowsByTypeInjectsHeaders (p26.74): groupRowsByType buckets root blocks
+// into the canonical statement order, injects one display-only header per non-empty
+// type at depth 0, shifts real rows +1, and preserves each block's subtree order.
+// Rows are given INTERLEAVED (asset, liability, asset) to prove explicit bucketing,
+// not boundary detection: both assets must land under ONE Assets header.
+func TestGroupRowsByTypeInjectsHeaders(t *testing.T) {
+	base := []acctRow{
+		{ID: 1, Name: "Cash", Type: "asset", Depth: 0},
+		{ID: 2, Name: "Cash.BOA", Type: "asset", Depth: 1},
+		{ID: 3, Name: "Credit Card", Type: "liability", Depth: 0},
+		{ID: 4, Name: "Fixed Assets", Type: "asset", Depth: 0}, // interleaved second asset block
+		{ID: 5, Name: "Revenue", Type: "revenue", Depth: 0},
+	}
+	got := groupRowsByType(base, "")
+
+	// Expected shape: Assets header, Cash, Cash.BOA, Fixed Assets, Liabilities header,
+	// Credit Card, Revenue header, Revenue. NO Equity/Expenses header (no such rows).
+	type want struct {
+		header bool
+		typ    string
+		name   string
+		depth  int
+	}
+	wants := []want{
+		{header: true, typ: "asset", depth: 0},
+		{name: "Cash", depth: 1},
+		{name: "Cash.BOA", depth: 2},
+		{name: "Fixed Assets", depth: 1},
+		{header: true, typ: "liability", depth: 0},
+		{name: "Credit Card", depth: 1},
+		{header: true, typ: "revenue", depth: 0},
+		{name: "Revenue", depth: 1},
+	}
+	if len(got) != len(wants) {
+		t.Fatalf("row count = %d, want %d: %+v", len(got), len(wants), got)
+	}
+	for i, w := range wants {
+		g := got[i]
+		if g.Header != w.header {
+			t.Errorf("row %d Header=%v, want %v", i, g.Header, w.header)
+		}
+		if w.header {
+			if g.Type != w.typ {
+				t.Errorf("row %d header type=%q, want %q", i, g.Type, w.typ)
+			}
+			if g.TypeLabelKey != "account.section."+w.typ {
+				t.Errorf("row %d label key=%q", i, g.TypeLabelKey)
+			}
+		} else if g.Name != w.name {
+			t.Errorf("row %d name=%q, want %q", i, g.Name, w.name)
+		}
+		if g.Depth != w.depth {
+			t.Errorf("row %d (%s) depth=%d, want %d", i, g.Name, g.Depth, w.depth)
+		}
+	}
+}
+
+// TestGroupTxnAccountsByType (p26.74): the selector grouping buckets account options
+// by type in canonical order, dropping empty types.
+func TestGroupTxnAccountsByType(t *testing.T) {
+	opts := []txnAccountOption{
+		{ID: 1, Type: "expense", Path: "Salaries"},
+		{ID: 2, Type: "asset", Path: "Cash"},
+		{ID: 3, Type: "asset", Path: "Savings"},
+	}
+	groups := groupTxnAccountsByType(opts)
+	if len(groups) != 2 {
+		t.Fatalf("group count = %d, want 2 (asset, expense): %+v", len(groups), groups)
+	}
+	if groups[0].LabelKey != "account.section.asset" || len(groups[0].Options) != 2 {
+		t.Errorf("first group not Assets(2): %+v", groups[0])
+	}
+	if groups[1].LabelKey != "account.section.expense" || len(groups[1].Options) != 1 {
+		t.Errorf("second group not Expenses(1): %+v", groups[1])
+	}
+}
+
+// TestAccountsChartTypeHeaders (p26.74): GET /accounts renders the five type headers
+// (via account.type.* labels) as display-only rows -- each header row carries the
+// acct-type-header class and NO register link/edit/deactivate -- with the fixture's
+// accounts nested under them.
+func TestAccountsChartTypeHeaders(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	book := mkUser(t, st, "book_hdr", "write", false)
+
+	// Create one account of each of the five types so every header appears.
+	mk := func(name, typ, cur string) {
+		form := url.Values{}
+		form.Set("type", typ)
+		form.Set("currency", cur)
+		form.Set("name_en", name)
+		form.Set("sub_1", "1")
+		if typ == "expense" {
+			form.Set("functional_class", "program")
+		}
+		rec := asUser(t, h, sm, book, http.MethodPost, "/accounts", form)
+		if rec.Code >= 400 {
+			t.Fatalf("create %q (%s): status=%d body=%s", name, typ, rec.Code, rec.Body.String())
+		}
+	}
+	mk("Hdr Cash", "asset", "USD")
+	mk("Hdr Loan", "liability", "USD")
+	mk("Hdr Equity", "equity", "USD")
+	mk("Hdr Gifts", "revenue", "USD")
+	mk("Hdr Rent", "expense", "USD")
+
+	body := asUser(t, h, sm, book, http.MethodGet, "/accounts", nil).Body.String()
+
+	// Each type header row is present (acct-type-header) and carries the localized
+	// label; the fixture guarantees all five types exist.
+	for _, label := range []string{"Assets", "Liabilities", "Equity", "Revenue", "Expenses"} {
+		if !strings.Contains(body, label) {
+			t.Errorf("chart missing %q type header; body:\n%s", label, body)
+		}
+	}
+	if !strings.Contains(body, `class="acct-row acct-type-header"`) {
+		t.Errorf("chart has no acct-type-header rows; body:\n%s", body)
+	}
+	// The Assets header appears before the Liabilities header (canonical order), and a
+	// created asset sits under Assets. Header rows must NOT be register links.
+	assetsAt := strings.Index(body, ">Assets<")
+	liabAt := strings.Index(body, ">Liabilities<")
+	if assetsAt < 0 || liabAt < 0 || assetsAt > liabAt {
+		t.Errorf("Assets header not before Liabilities (assets=%d liab=%d)", assetsAt, liabAt)
+	}
+}
+
 // activeCheckboxChecked reports whether the rendered active-only checkbox input
 // carries `checked`. It isolates the input tag so an unrelated `checked` elsewhere
 // can't fool the assertion.

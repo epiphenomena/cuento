@@ -582,6 +582,21 @@ other = "Patrimonio"
 other = "Ingreso"
 [account.type.expense]
 other = "Gasto"
+# p26.74: etiquetas PLURALES de seccion (nivel de estado) para los encabezados de tipo
+# inyectados en el catalogo de cuentas + los <optgroup> del selector de cuentas. Distintas
+# de las etiquetas SINGULARES por cuenta account.type.* (la columna Tipo); coinciden con las
+# etiquetas de seccion de los informes (reports.balance_sheet.section.* /
+# income_statement.section.*) (DECISIONS p26.74).
+[account.section.asset]
+other = "Activos"
+[account.section.liability]
+other = "Pasivos"
+[account.section.equity]
+other = "Patrimonio"
+[account.section.revenue]
+other = "Ingresos"
+[account.section.expense]
+other = "Gastos"
 [functional.program]
 other = "Programa"
 [functional.management]

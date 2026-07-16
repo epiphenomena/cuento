@@ -58,11 +58,17 @@
     <td class="txn-cell txn-account-cell" colspan="4">
       <select name="account_{{.Index}}" id="txn-account-{{.Index}}" class="txn-account combo-input">
         <option value="0">{{t "txn.account.choose"}}</option>
-        {{range $.Page.Accounts}}<option data-account-option value="{{.ID}}"
+        {{/* p26.74: group the options by type under an <optgroup> (canonical statement
+             order). HTMLSelectElement.options flattens optgroup children, so the combobox
+             fuzzy filter (combofilter.js) is unaffected; the native no-JS select shows the
+             group labels. */}}
+        {{range (txnAccountsByType $.Page.Accounts)}}<optgroup label="{{t .LabelKey}}">
+        {{range .Options}}<option data-account-option value="{{.ID}}"
           data-type="{{.Type}}" data-default-program="{{.DefaultProgram}}"
           data-default-class="{{.DefaultClass}}" data-subsidiaries="{{.SubsCSV}}"
           {{if .Unavailable}}data-unavailable="1" data-path="{{.Path}} {{t "txn.account.unavailable_suffix"}}"{{else}}data-path="{{.Path}}"{{end}}
           {{if eq .ID $.Row.Account}} selected{{end}}>{{.Path}}{{if .Unavailable}} {{t "txn.account.unavailable_suffix"}}{{end}}</option>
+        {{end}}</optgroup>
         {{end}}
       </select>
     </td>
@@ -283,11 +289,14 @@
       <label for="txn-main-account">{{t "txn.main.account"}}</label>
       <select name="main_account" id="txn-main-account" class="txn-account combo-input">
         <option value="0">{{t "txn.account.choose"}}</option>
-        {{range .Accounts}}<option data-account-option value="{{.ID}}"
+        {{/* p26.74: group by type (optgroup); see the body-row account select above. */}}
+        {{range (txnAccountsByType .Accounts)}}<optgroup label="{{t .LabelKey}}">
+        {{range .Options}}<option data-account-option value="{{.ID}}"
           data-type="{{.Type}}" data-default-program="{{.DefaultProgram}}"
           data-default-class="{{.DefaultClass}}" data-subsidiaries="{{.SubsCSV}}"
           {{if .Unavailable}}data-unavailable="1" data-path="{{.Path}} {{t "txn.account.unavailable_suffix"}}"{{else}}data-path="{{.Path}}"{{end}}
           {{if eq .ID $.Page.MainAccount}} selected{{end}}>{{.Path}}{{if .Unavailable}} {{t "txn.account.unavailable_suffix"}}{{end}}</option>
+        {{end}}</optgroup>
         {{end}}
       </select>
     </div>

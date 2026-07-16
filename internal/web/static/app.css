@@ -481,6 +481,11 @@ input[aria-invalid="true"] {
   font-variant-numeric: tabular-nums;
 }
 .tree-table .acct-inactive { opacity: 0.6; }
+/* p26.74: injected TYPE-tier header row ("Assets"/"Liabilities"/…). Display-only and
+   non-selectable -- a bold, faintly-shaded band grouping each type's accounts. It is
+   not a real account (no register link/actions); collapse/expand works on it. */
+.tree-table .acct-type-header > td { background: var(--color-surface-muted, rgba(0,0,0,0.03)); }
+.tree-table .acct-type-header .acct-name { font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; font-size: 0.85rem; }
 
 /* p26.25: tree collapse/expand controls sit above the tree; JS reveals them (they
    render `hidden`). A tight horizontal cluster like the section actions. */
