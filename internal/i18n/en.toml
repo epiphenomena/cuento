@@ -2141,26 +2141,17 @@ other = "Previous month"
 [cal.next_month]
 other = "Next month"
 
-# p23.9 "More" hub: the top-nav item + the card grid (labels reuse nav.*).
-[nav.more]
-other = "More"
-[more.title]
-other = "More"
-[more.intro]
-other = "Everything else — ledger dimensions, budgeting, imports, your settings, and administration."
-[more.empty]
+# p26.77 "All" landing: the top-nav item + the card grid of every destination
+# (sections + sub-items + granted reports), grouped into labeled sections. Card
+# labels reuse the existing nav.* / *.title keys; section headers reuse nav.* plus
+# the one new all.section.personal.
+[nav.all]
+other = "All"
+[all.title]
+other = "All"
+[all.intro]
+other = "Every page you can reach — the ledger, budgeting, expenses, imports, reports, your settings, and administration."
+[all.empty]
 other = "Nothing here for your account."
-[more.desc.funds]
-other = "Donor-restricted and unrestricted funds."
-[more.desc.programs]
-other = "The program dimension for revenue and expense."
-[more.desc.reconciliations]
-other = "Reconcile accounts against statements."
-[more.desc.budgets]
-other = "Budgets and recurring schedules."
-[more.desc.import]
-other = "Import transactions from bank CSV files."
-[more.desc.settings]
-other = "Your language, number and date formats, theme, and defaults."
-[more.desc.admin]
-other = "Users, subsidiaries, currencies, and organization settings."
+[all.section.personal]
+other = "Personal"

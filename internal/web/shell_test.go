@@ -94,18 +94,18 @@ func TestNavLocalized(t *testing.T) {
 	enBody := getHomeAs(t, h, sm, enUser).Body.String()
 	esBody := getHomeAs(t, h, sm, esUser).Body.String()
 
-	// The "More" nav label differs across catalogs (p23.9: Settings/Admin moved into
-	// the More hub, so the top nav's discriminating label is now nav.more).
-	enMore := i18n.T("en", "nav.more")
-	esMore := i18n.T("es", "nav.more")
-	if enMore == esMore {
-		t.Fatalf("catalog test precondition: en and es nav.more are equal (%q)", enMore)
+	// The "All" nav label differs across catalogs (p26.77 renamed the old "More" hub
+	// to the "All" landing; the top nav's discriminating label is now nav.all).
+	enAll := i18n.T("en", "nav.all")
+	esAll := i18n.T("es", "nav.all")
+	if enAll == esAll {
+		t.Fatalf("catalog test precondition: en and es nav.all are equal (%q)", enAll)
 	}
-	if !strings.Contains(enBody, enMore) {
-		t.Errorf("en body missing en nav label %q", enMore)
+	if !strings.Contains(enBody, enAll) {
+		t.Errorf("en body missing en nav label %q", enAll)
 	}
-	if !strings.Contains(esBody, esMore) {
-		t.Errorf("es body missing es nav label %q", esMore)
+	if !strings.Contains(esBody, esAll) {
+		t.Errorf("es body missing es nav label %q", esAll)
 	}
 
 	// No raw catalog key must leak: a rendered "nav." literal means a {{t}} key
@@ -144,30 +144,31 @@ func TestNavPermGated(t *testing.T) {
 	admin := makeUser(t, st, store.CreateUserInput{Username: "pg_admin", IsAdmin: true})
 	_ = db
 
-	moreLabel := i18n.T("en", "nav.more")
+	allLabel := i18n.T("en", "nav.all")
 
-	// p23.9: Settings/Admin moved into the "More" hub, so the perm gating is on the
-	// hub CARDS (/more), not the top nav. Every logged-in user sees the "More" top-nav
-	// entry (AnyUser).
+	// p26.77: the top nav carries the AnyUser "All" landing entry (formerly "More"); the
+	// per-destination cards on the landing (/more) are perm-gated. Every logged-in user
+	// sees the "All" top-nav entry.
 	for _, u := range []*store.CurrentUser{admin, bookkeeper, noAccess} {
-		if !strings.Contains(getHomeAs(t, h, sm, u).Body.String(), moreLabel) {
-			t.Errorf("logged-in %s missing the More nav entry", u.Username)
+		if !strings.Contains(getHomeAs(t, h, sm, u).Body.String(), allLabel) {
+			t.Errorf("logged-in %s missing the All nav entry", u.Username)
 		}
 	}
 
-	// The admin card (-> /admin) shows on /more only for an admin; Settings (AnyUser)
-	// shows for everyone.
-	adminMore := asUser(t, h, sm, admin.ID, http.MethodGet, "/more", nil).Body.String()
-	if !strings.Contains(adminMore, `href="/admin"`) {
-		t.Errorf("admin persona missing the Admin card on /more:\n%s", adminMore)
+	// The Admin cards (-> /admin/*) show on the All landing only for an admin; Settings
+	// (AnyUser) shows for everyone. p26.77 lists the admin SUB-pages as cards, so the
+	// discriminating admin href is /admin/users (not the /admin hub).
+	adminAll := asUser(t, h, sm, admin.ID, http.MethodGet, "/more", nil).Body.String()
+	if !strings.Contains(adminAll, `href="/admin/users"`) {
+		t.Errorf("admin persona missing the Admin cards on the All landing:\n%s", adminAll)
 	}
 	for _, u := range []*store.CurrentUser{bookkeeper, noAccess} {
 		body := asUser(t, h, sm, u.ID, http.MethodGet, "/more", nil).Body.String()
-		if strings.Contains(body, `href="/admin"`) {
-			t.Errorf("non-admin %s sees the Admin card on /more (should not):\n%s", u.Username, body)
+		if strings.Contains(body, `href="/admin/users"`) {
+			t.Errorf("non-admin %s sees the Admin cards on the All landing (should not):\n%s", u.Username, body)
 		}
 		if !strings.Contains(body, `href="/settings"`) {
-			t.Errorf("logged-in %s missing the Settings card on /more:\n%s", u.Username, body)
+			t.Errorf("logged-in %s missing the Settings card on the All landing:\n%s", u.Username, body)
 		}
 	}
 
@@ -175,6 +176,61 @@ func TestNavPermGated(t *testing.T) {
 	rec := getHomeAs(t, h, sm, nil)
 	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/login" {
 		t.Errorf("anon on / = %d %q, want 302 -> /login", rec.Code, rec.Header().Get("Location"))
+	}
+}
+
+// TestAllLandingCards (p26.77): the "All" landing (/more) renders a grouped grid of
+// perm-gated cards for every reachable destination — sections, sub-items, AND the
+// reports the user is GRANTED (not merely "has some grant"). It proves: (1) grouping
+// headers render; (2) an admin sees section + report + admin cards; (3) a report card
+// appears ONLY for its granted group; (4) a pure submitter sees only their cards.
+func TestAllLandingCards(t *testing.T) {
+	h, _, st, _, sm := newMatrixApp(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	admin := makeUser(t, st, store.CreateUserInput{Username: "all_admin", IsAdmin: true})
+	// A viewer granted ONLY the "funds" report group: sees fund reports, NOT financial.
+	viewer := makeUser(t, st, store.CreateUserInput{Username: "all_viewer", TxnPerm: "read"})
+	if err := st.GrantReportGroup(ctx, viewer.ID, "funds"); err != nil {
+		t.Fatalf("grant funds group: %v", err)
+	}
+	// A pure submitter: ExpenseSubmit only, no ledger/report access.
+	submitter := makeUser(t, st, store.CreateUserInput{Username: "all_sub", TxnPerm: "none"})
+	if err := st.SetUserCanSubmitExpenses(ctx, submitter.ID, true); err != nil {
+		t.Fatalf("set can-submit: %v", err)
+	}
+
+	adminBody := asUser(t, h, sm, admin.ID, http.MethodGet, "/more", nil).Body.String()
+	// Grouping headers render (the grid is sectioned, not a flat list).
+	if !strings.Contains(adminBody, `class="hub-section-title"`) {
+		t.Errorf("admin All landing missing section headers:\n%s", adminBody)
+	}
+	// Section, admin sub-page, and report cards all present for an admin.
+	for _, href := range []string{"/accounts", "/funds", "/admin/users", "/reports/trial_balance", "/settings"} {
+		if !strings.Contains(adminBody, `href="`+href+`"`) {
+			t.Errorf("admin All landing missing card href=%q", href)
+		}
+	}
+
+	// The funds-only viewer sees a fund report card but NOT a financial-group report
+	// (trial_balance is "financial"); the fund_activity report is "funds".
+	viewerBody := asUser(t, h, sm, viewer.ID, http.MethodGet, "/more", nil).Body.String()
+	if !strings.Contains(viewerBody, `href="/reports/fund_activity"`) {
+		t.Errorf("funds-viewer missing the granted fund report card:\n%s", viewerBody)
+	}
+	if strings.Contains(viewerBody, `href="/reports/trial_balance"`) {
+		t.Errorf("funds-viewer sees an UNGRANTED financial report card (per-report grant leak):\n%s", viewerBody)
+	}
+
+	// The pure submitter sees My expenses + Settings, but no ledger/admin/report cards.
+	subBody := asUser(t, h, sm, submitter.ID, http.MethodGet, "/more", nil).Body.String()
+	if !strings.Contains(subBody, `href="/expenses"`) || !strings.Contains(subBody, `href="/settings"`) {
+		t.Errorf("submitter missing expected cards (expenses/settings):\n%s", subBody)
+	}
+	for _, href := range []string{"/accounts", "/admin/users", "/reports/trial_balance"} {
+		if strings.Contains(subBody, `href="`+href+`"`) {
+			t.Errorf("submitter sees an unreachable card href=%q:\n%s", href, subBody)
+		}
 	}
 }
 

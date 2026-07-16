@@ -1272,15 +1272,16 @@ input[aria-invalid="true"] {
   font-weight: 600;
 }
 
-/* p23.9 card hub ("More", and the reusable card-grid layout): a responsive grid of
-   tiles linking to sections. Whole-card is the link (big hit target). */
+/* p23.9 / p26.77 card grid ("All" landing, and the reusable card-grid layout): a
+   responsive grid of tiles linking to destinations. Whole-card is the link (big hit
+   target). p26.77 groups cards into labeled .hub-section blocks. */
 .hub-cards {
   list-style: none;
-  margin: var(--space-6) 0;
+  margin: var(--space-3) 0 var(--space-6);
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
-  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: var(--space-3);
 }
 .hub-card { display: flex; }
 .hub-card-link {
@@ -1299,6 +1300,19 @@ input[aria-invalid="true"] {
 .hub-card-link:hover { border-color: var(--color-primary); }
 .hub-card-label { font-weight: 700; color: var(--color-primary); }
 .hub-card-desc { color: var(--color-text-muted); font-size: 0.9rem; }
+
+/* p26.77 "All" landing sections: a labeled group heading above each card grid. */
+.hub-section { margin: var(--space-5) 0; }
+.hub-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0;
+  padding-bottom: var(--space-1);
+  border-bottom: var(--border);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
 
 /* p26.64 bank-import horizontal column mapping: the file's columns run across the top
    (name + a sample value stacked), each with a "maps to" select beneath it. */

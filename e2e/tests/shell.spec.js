@@ -35,11 +35,11 @@ test.describe('authenticated shell', () => {
     await expect(page.locator('main#main')).toBeVisible();
     await expect(page.locator('footer.app-footer')).toBeVisible();
 
-    // p23.9: the top nav is lean (Accounts + More + role items); Settings/Admin moved
-    // into the "More" hub as perm-gated cards.
+    // p23.9/p26.77: the top nav is lean (Accounts + All + role items); Settings/Admin
+    // and every other destination live on the "All" landing as perm-gated cards.
     const nav = page.locator('nav.app-nav');
     await expect(nav.getByRole('link', { name: 'Accounts' })).toBeVisible();
-    await expect(nav.getByRole('link', { name: 'More' })).toBeVisible();
+    await expect(nav.getByRole('link', { name: 'All', exact: true })).toBeVisible();
 
     // p26.48: "New transaction" is a DISTINCT right-aligned button in the header, NOT an
     // inline nav link. It reuses the .btn/.btn-primary tokens and routes to the full
@@ -65,13 +65,17 @@ test.describe('authenticated shell', () => {
     // pattern, never a hard-coded value, so the spec holds across build paths.
     await expect(page.locator('footer.app-footer')).toContainText(/Version\s+\S+/);
 
-    // The More hub lists the Settings + Admin cards (admin persona sees both), and
-    // Settings is a live target through the hub.
-    await nav.getByRole('link', { name: 'More' }).click();
+    // The All landing lists cards for every destination the admin can reach — the
+    // ledger (Accounts), an admin sub-page (Users), a granted report (Trial balance),
+    // and Settings — grouped into labeled sections. Settings is a live target.
+    await nav.getByRole('link', { name: 'All', exact: true }).click();
     await page.waitForURL('**/more');
     const main = page.locator('main#main');
+    await expect(main.locator('.hub-section-title')).not.toHaveCount(0);
+    await expect(main.locator('a.hub-card-link[href="/accounts"]')).toBeVisible();
+    await expect(main.locator('a.hub-card-link[href="/admin/users"]')).toBeVisible();
+    await expect(main.locator('a.hub-card-link[href="/reports/trial_balance"]')).toBeVisible();
     await expect(main.locator('a.hub-card-link[href="/settings"]')).toBeVisible();
-    await expect(main.locator('a.hub-card-link[href="/admin"]')).toBeVisible();
     await main.locator('a.hub-card-link[href="/settings"]').click();
     await page.waitForURL('**/settings');
     await expect(page.locator('main#main h1')).toHaveText('Settings');

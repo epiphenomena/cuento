@@ -1,36 +1,41 @@
 {{/*
-  p23.9 "More" hub (GET /more, AnyUser). A card grid linking to the sections lifted
-  out of the top nav — funds, programs, reconciliations, budgets, import, settings,
-  and the admin sub-hub. Cards are perm-gated server-side (visibleHubCards), so a
-  user only sees what they can reach. Self-contained shell page. .Page is a
-  hubPageModel. Every string via {{t}} (rule 9); no inline script (rule 12).
+  p26.77 "All" landing (GET /more, AnyUser; also GET / — p26.78). A card grid of EVERY
+  navigable destination: every top-level section, its sub-items, and every report the
+  user is granted, grouped into labeled sections. Cards are perm-gated server-side
+  (allSections), so a user only sees what they can reach — a report card appears iff the
+  user could open the report (per-report grant), not merely "has some grant". Each card
+  is a labeled, clickable tile linking to its destination. Self-contained shell page;
+  .Page is a hubPageModel. Every string via {{t}} (rule 9); no inline script (rule 12).
 
-  This is the reusable card-hub layout — the "cards linking to subpages" pattern the
-  user asked for; other hub landings can render the same "hub-cards" partial.
+  This is the reusable card-grid landing — the "cards linking to destinations" pattern.
 */ -}}
 
-{{define "hub-cards" -}}
+{{define "all-cards" -}}
 {{- /* Dot is a hubPageModel. */ -}}
-<ul class="hub-cards">
-  {{range .Cards}}
-  <li class="hub-card">
-    <a class="hub-card-link" href="{{.Href}}">
-      <span class="hub-card-label">{{.Label}}</span>
-      <span class="hub-card-desc">{{.Desc}}</span>
-    </a>
-  </li>
-  {{else}}
-  <li class="hub-empty">{{t "more.empty"}}</li>
-  {{end}}
-</ul>
+{{range .Sections}}
+<section class="hub-section">
+  <h2 class="hub-section-title">{{.Label}}</h2>
+  <ul class="hub-cards">
+    {{range .Cards}}
+    <li class="hub-card">
+      <a class="hub-card-link" href="{{.Href}}">
+        <span class="hub-card-label">{{.Label}}</span>
+      </a>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{else}}
+<p class="hub-empty">{{t "all.empty"}}</p>
+{{end}}
 {{- end}}
 
 {{define "more.tmpl" -}}
-{{template "shell-open" (shellTitle . (t "more.title"))}}
+{{template "shell-open" (shellTitle . (t "all.title"))}}
   {{- with .Page}}
   <h1>{{t .TitleKey}}</h1>
   <p class="hint">{{t .IntroKey}}</p>
-  {{template "hub-cards" .}}
+  {{template "all-cards" .}}
   {{- end}}
 {{template "shell-close" .}}
 {{- end}}

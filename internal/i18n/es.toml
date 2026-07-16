@@ -2134,26 +2134,14 @@ other = "Mes anterior"
 [cal.next_month]
 other = "Mes siguiente"
 
-# p23.9 "More" hub.
-[nav.more]
-other = "Más"
-[more.title]
-other = "Más"
-[more.intro]
-other = "Todo lo demás: dimensiones del libro, presupuestos, importaciones, tus ajustes y administración."
-[more.empty]
+# p26.77 "All" landing.
+[nav.all]
+other = "Todo"
+[all.title]
+other = "Todo"
+[all.intro]
+other = "Todas las páginas a tu alcance: el libro, presupuestos, gastos, importaciones, informes, tus ajustes y administración."
+[all.empty]
 other = "No hay nada aquí para tu cuenta."
-[more.desc.funds]
-other = "Fondos restringidos y no restringidos por donantes."
-[more.desc.programs]
-other = "La dimensión de programa para ingresos y gastos."
-[more.desc.reconciliations]
-other = "Concilia cuentas con los estados de cuenta."
-[more.desc.budgets]
-other = "Presupuestos y programaciones recurrentes."
-[more.desc.import]
-other = "Importa transacciones desde archivos CSV bancarios."
-[more.desc.settings]
-other = "Tu idioma, formatos de número y fecha, tema y valores predeterminados."
-[more.desc.admin]
-other = "Usuarios, subsidiarias, monedas y ajustes de la organización."
+[all.section.personal]
+other = "Personal"

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"cuento/internal/i18n"
+	"cuento/internal/reports"
 	"cuento/internal/store"
 )
 
@@ -63,11 +64,13 @@ func navSections() []navEntry {
 		// shown when the user can do EITHER, and lands the parent on whichever they can
 		// reach (a pure reviewer must not land on /expenses and 403).
 		{"nav.expenses", "/expenses", ExpenseSubmit},
-		// p23.9: everything else (funds, programs, reconciliations, budgets, import,
-		// settings, admin) lives under the AnyUser "More" hub as perm-gated cards,
-		// keeping the top nav lean. The hub page is a card grid; the second-level menu
-		// carries the same links (subNavGroups).
-		{"nav.more", "/more", AnyUser},
+		// p26.77: the last top-nav item is the AnyUser "All" landing (still served at
+		// /more) — a full card grid of EVERY navigable destination (every section, its
+		// sub-items, and every permitted report), each card perm-gated. It supersedes the
+		// old "More" hub (which listed only the sections lifted out of the top nav); the
+		// route path stays /more (lowest churn — the permission matrix is generated from
+		// routes()), only the label + page contents change. p26.78 also points / here.
+		{"nav.all", "/more", AnyUser},
 	}
 }
 
@@ -458,12 +461,14 @@ func (s *server) home(w http.ResponseWriter, r *http.Request) {
 	s.renderShell(w, r, http.StatusOK, nil)
 }
 
-// hubCard is one card on a hub landing (p23.9): a localized label + description
-// linking to a section, shown only when the section is registered AND the user's
-// perm permits it (so a hub never links somewhere the user would be 403'd).
+// hubCard is one card on the "All" landing (p26.77, formerly the p23.9 More hub): a
+// localized label linking to a destination, shown only when the destination is
+// registered AND the user's perm permits it (so a card never links somewhere the user
+// would be 403'd). Perm distinguishes the two gating paths: a plain section card gates
+// via navPermits; a report card (Report=true) gates per-report via decide+grantChecker
+// (a ReportGroup navPermits would leak reports the user has NO grant for).
 type hubCard struct {
 	LabelKey string
-	DescKey  string
 	Href     string
 	Perm     Perm
 }
@@ -471,28 +476,70 @@ type hubCard struct {
 // hubCardItem is a resolved card for the template (localized, no Perm/keys leaked).
 type hubCardItem struct {
 	Label string
-	Desc  string
 	Href  string
 }
 
-// moreCards is the "More" hub's contents (p23.9): the ledger dimensions/operations
-// plus personal settings and the admin sub-hub, each perm-gated. Reuses the existing
-// nav.* labels; descriptions are the new more.desc.* keys.
-func moreCards() []hubCard {
-	return []hubCard{
-		{"nav.funds", "more.desc.funds", "/funds", TxnRead},
-		{"nav.programs", "more.desc.programs", "/programs", TxnRead},
-		{"nav.reconciliations", "more.desc.reconciliations", "/reconciliations", TxnRead},
-		{"nav.budgets", "more.desc.budgets", "/budgets", TxnRead},
-		{"nav.import", "more.desc.import", "/import", TxnWrite},
-		{"nav.settings", "more.desc.settings", "/settings", AnyUser},
-		{"nav.admin", "more.desc.admin", "/admin", Admin},
+// allSection is one titled group of cards on the "All" landing (p26.77): a localized
+// section header and the cards in it the user may reach. A section with no visible
+// card is dropped entirely (no empty header).
+type allSection struct {
+	Label string
+	Cards []hubCardItem
+}
+
+// allCardGroup is the DATA for one section of the "All" landing: a section-header i18n
+// key and the ordered cards it contains. The grid is assembled from an explicit list
+// of these (not a generic tree walk) so grouping stays legible and reuses the same
+// nav.* / admin.*.title labels the top nav and section bars already ship.
+type allCardGroup struct {
+	LabelKey string
+	Cards    []hubCard
+}
+
+// allCardGroups is the ordered section→cards map for the "All" landing (p26.77). It
+// mirrors the nav structure: the ledger section (accounts + its dimensions), budgeting,
+// expenses, import, personal, and admin. Reports are appended SEPARATELY (they need
+// per-report grant filtering, not a single section Perm) in allSections. Every card's
+// Perm matches its route's registry Perm, so visibleAllCards drops exactly what the
+// route would 403. The "All" self-card is intentionally absent (never link the page to
+// itself).
+func allCardGroups() []allCardGroup {
+	return []allCardGroup{
+		{"nav.accounts", []hubCard{
+			{"nav.accounts", "/accounts", TxnRead},
+			{"nav.funds", "/funds", TxnRead},
+			{"nav.programs", "/programs", TxnRead},
+			{"nav.reconciliations", "/reconciliations", TxnRead},
+		}},
+		{"nav.budgets", []hubCard{
+			{"nav.budgets", "/budgets", TxnRead},
+			{"budget.schedules.title", "/schedules", TxnRead},
+		}},
+		{"nav.expenses", []hubCard{
+			{"nav.myexpenses", "/expenses", ExpenseSubmit},
+			{"nav.expensereview", "/expenses/review", TxnWrite},
+		}},
+		{"nav.import", []hubCard{
+			{"nav.import", "/import", TxnWrite},
+		}},
+		{"all.section.personal", []hubCard{
+			{"nav.settings", "/settings", AnyUser},
+		}},
+		{"nav.admin", []hubCard{
+			{"admin.users.title", "/admin/users", Admin},
+			{"subsidiaries.title", "/admin/subsidiaries", Admin},
+			{"admin.currencies.title", "/admin/currencies", Admin},
+			{"admin.rates.title", "/admin/rates", Admin},
+			{"org.title", "/admin/org", Admin},
+			{"admin.ops.title", "/admin/ops", Admin},
+		}},
 	}
 }
 
-// visibleHubCards resolves cards for the current user: registered route + permitted
-// (reusing navPermits, so a card and its route agree), localized.
-func (s *server) visibleHubCards(ctx context.Context, u *store.CurrentUser, cards []hubCard) []hubCardItem {
+// visibleAllCards resolves cards for the current user: registered route + permitted
+// (reusing navPermits, so a card and its route agree), localized. Used for the plain
+// (non-report) section cards; report cards go through reportAllCards.
+func (s *server) visibleAllCards(ctx context.Context, u *store.CurrentUser, cards []hubCard) []hubCardItem {
 	registered := s.registeredGetPaths()
 	lang := langOf(ctx)
 	var out []hubCardItem
@@ -502,30 +549,83 @@ func (s *server) visibleHubCards(ctx context.Context, u *store.CurrentUser, card
 		}
 		out = append(out, hubCardItem{
 			Label: i18n.T(lang, c.LabelKey),
-			Desc:  i18n.T(lang, c.DescKey),
 			Href:  c.Href,
 		})
 	}
 	return out
 }
 
-// hubPageModel is the model for a card-hub landing.
+// reportSections builds one allSection per report GROUP the user can reach, each
+// listing the reports in that group the user is granted (p26.77). It reuses the EXACT
+// enforcement path reportsIndex uses (decide + a once-loaded grantChecker), so a report
+// card appears iff the user could open /reports/{id} — a ReportGroup navPermits ("any
+// grant or admin") would wrongly show reports from groups the user lacks. Groups are in
+// reports.Groups() order, reports in All() order, matching the /reports index.
+func (s *server) reportSections(ctx context.Context, u *store.CurrentUser) []allSection {
+	lang := langOf(ctx)
+	checker := s.grantChecker(ctx, u, ReportGroup(""))
+	byGroup := make(map[string][]hubCardItem)
+	for _, rep := range s.reports.All() {
+		if decide(ReportGroup(rep.Group), u, checker) != outcomeAllow {
+			continue
+		}
+		byGroup[rep.Group] = append(byGroup[rep.Group], hubCardItem{
+			Label: i18n.T(lang, rep.TitleKey),
+			Href:  "/reports/" + rep.ID,
+		})
+	}
+	var out []allSection
+	for _, g := range reports.Groups() {
+		cards := byGroup[g]
+		if len(cards) == 0 {
+			continue
+		}
+		out = append(out, allSection{
+			Label: i18n.T(lang, "reports.group."+g),
+			Cards: cards,
+		})
+	}
+	return out
+}
+
+// hubPageModel is the model for the "All" card-grid landing (p26.77): its title/intro
+// and the ordered, perm-filtered sections of cards.
 type hubPageModel struct {
 	TitleKey string
 	IntroKey string
-	Cards    []hubCardItem
+	Sections []allSection
 }
 
-// moreHub handles GET /more (AnyUser, p23.9): the "More" landing — a grid of
-// perm-gated cards to the sections lifted out of the top nav. A pure submitter sees
-// only the cards their perms allow (often just Settings).
+// allSections assembles the full ordered section list for the current user: the fixed
+// nav-structure groups (allCardGroups, filtered to reachable cards) followed by the
+// per-group report sections (reportSections). An empty section is dropped so a user
+// with no grant for a group never sees an empty header.
+func (s *server) allSections(ctx context.Context, u *store.CurrentUser) []allSection {
+	lang := langOf(ctx)
+	var out []allSection
+	for _, g := range allCardGroups() {
+		cards := s.visibleAllCards(ctx, u, g.Cards)
+		if len(cards) == 0 {
+			continue
+		}
+		out = append(out, allSection{Label: i18n.T(lang, g.LabelKey), Cards: cards})
+	}
+	// Reports last: a distinct block per report group the user is granted.
+	out = append(out, s.reportSections(ctx, u)...)
+	return out
+}
+
+// moreHub handles GET /more (AnyUser, p26.77): the "All" landing — a grid of perm-gated
+// cards to EVERY navigable destination (sections + sub-items + granted reports). A pure
+// submitter sees only what their perms allow (My expenses + Settings). p26.78 also
+// serves this grid at / (home). Route path stays /more (label is "All").
 func (s *server) moreHub(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(ctx)
 	model := hubPageModel{
-		TitleKey: "more.title",
-		IntroKey: "more.intro",
-		Cards:    s.visibleHubCards(ctx, u, moreCards()),
+		TitleKey: "all.title",
+		IntroKey: "all.intro",
+		Sections: s.allSections(ctx, u),
 	}
 	s.render(w, r, http.StatusOK, "more.tmpl", s.newShellPage(r, model))
 }
