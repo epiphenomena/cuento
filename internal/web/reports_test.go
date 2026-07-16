@@ -158,6 +158,65 @@ func TestScopeSelectorOnEveryReport(t *testing.T) {
 	}
 }
 
+// TestReportFilterPlacement (p26.76): a LIGHT report renders its filter form in the
+// SECOND-LEVEL nav bar (SubNavControls="report" -> the form inside .app-subnav), while a
+// DENSE report keeps it INLINE in the page body. The predicate reportFiltersInline is the
+// single source of truth; this test pins the rendered LOCATION for one report of each
+// kind so a regression (form vanishing from the bar, or leaking into both) is caught.
+func TestReportFilterPlacement(t *testing.T) {
+	h, st, _, sm := reportsApp(t)
+	admin := mkUser(t, st, "admin", "none", true)
+
+	// The bar opens with <nav class="app-subnav" ...>; the body with <main id="main".
+	subnavForm := func(body string) bool {
+		i := strings.Index(body, `class="app-subnav"`)
+		j := strings.Index(body, `id="main"`)
+		return i >= 0 && i < j && strings.Contains(body[i:j], `class="report-params"`)
+	}
+	mainForm := func(body string) bool {
+		j := strings.Index(body, `id="main"`)
+		return j >= 0 && strings.Contains(body[j:], `class="report-params"`)
+	}
+
+	// trial_balance: 3 controls (scope + as-of + currency) => subnav.
+	tb := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.TrialBalanceReportID, nil).Body.String()
+	if !subnavForm(tb) {
+		t.Errorf("trial_balance: filter form not in the subnav (should be):\n%s", tb)
+	}
+	if mainForm(tb) {
+		t.Errorf("trial_balance: filter form leaked into the body (should be subnav-only)")
+	}
+
+	// income_statement: 5 controls (scope + period + granularity + currency) => inline.
+	is := asUser(t, h, sm, admin, http.MethodGet, "/reports/income_statement", nil).Body.String()
+	if !mainForm(is) {
+		t.Errorf("income_statement: filter form not inline in the body (should be):\n%s", is)
+	}
+	if subnavForm(is) {
+		t.Errorf("income_statement: filter form leaked into the subnav (should be inline-only)")
+	}
+}
+
+// TestReportFiltersInlinePredicate pins the p26.76 inline/subnav split for the shipped
+// reports, so a future spec change surfaces here (and the coordinator can re-review the
+// experiment) rather than silently cramming a dense report into the bar.
+func TestReportFiltersInlinePredicate(t *testing.T) {
+	wantInline := map[string]bool{
+		"income_statement":    true,
+		"program_statement":   true,
+		"capital_campaign":    true,
+		"actuals_vs_budget":   true,
+		"cashflow_projection": true,
+	}
+	for _, rep := range reports.Default().All() {
+		got := reportFiltersInline(rep)
+		if got != wantInline[rep.ID] {
+			t.Errorf("report %q: reportFiltersInline = %v, want %v (control count %d)",
+				rep.ID, got, wantInline[rep.ID], reportControlCount(rep))
+		}
+	}
+}
+
 // TestTrialBalanceReportRenders: the trial-balance report renders its typed cells (a
 // money cell formatted with a currency prefix and a native total row) into the HTML
 // page. Proves the framework is end-to-end: route -> params -> toolkit -> store ->

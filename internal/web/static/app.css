@@ -618,6 +618,28 @@ input[aria-invalid="true"] {
 .report-params .report-field { display: flex; flex-direction: column; }
 .report-params label { font-weight: 600; margin-bottom: var(--space-1); }
 .report-params .report-run { align-self: end; }
+
+/* p26.76: the SAME report filter form rendered in the second-level nav bar (the subnav
+   controls slot). Compact it for the bar — drop the outer margin/border/legend chrome
+   and tighten fields/labels/selects — so the filters read as a toolbar row (like the
+   register/accounts subnav filters), not a boxed fieldset. The controls keep their
+   report-params class + names, so the form submits identically. */
+.app-subnav-controls .report-params { margin: 0; width: 100%; }
+.app-subnav-controls .report-params fieldset {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  gap: var(--space-1) var(--space-3);
+}
+.app-subnav-controls .report-params legend {
+  padding: 0;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+.app-subnav-controls .report-params label { font-size: 0.85rem; margin-bottom: 0; }
+.app-subnav-controls .report-params select { max-width: 11rem; }
+.app-subnav-controls .report-params .js-datefield { width: 8rem; }
+.app-subnav-controls .report-params .report-run { padding: var(--space-1) var(--space-3); }
 .report-export { margin: var(--space-3) 0; }
 .report-table { width: 100%; border-collapse: collapse; margin-top: var(--space-4); }
 .report-table th, .report-table td {

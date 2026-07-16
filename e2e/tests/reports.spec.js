@@ -86,11 +86,25 @@ test('reports: open the trial balance, set as-of/scope, see the balancing total,
   // The shared params form is present.
   await expect(page.locator('form.report-params')).toBeVisible();
 
+  // p26.76: for a light report (trial balance) the filter form lives in the SECOND-LEVEL
+  // nav bar (the subnav), NOT an inline body fieldset — this is the experiment. Assert the
+  // form is inside .app-subnav and drives the report from there.
+  await expect(page.locator('nav.app-subnav form.report-params')).toBeVisible();
+  await expect(page.locator('main#main form.report-params')).toHaveCount(0);
+
   // The subsidiary SCOPE selector is present on the report (every report is scoped,
   // D18): a <select name="scope"> with the marker class, listing at least the root.
   const scope = page.locator('select.report-scope-select[name="scope"]');
   await expect(scope).toBeVisible();
   await expect(scope.locator('option')).not.toHaveCount(0);
+
+  // The subnav filters DRIVE the report: set the as-of + scope and click Run (a plain GET
+  // submit from the bar), and the report table re-renders (no-JS-friendly, persistence
+  // intact — same round trip the URL navigation below makes).
+  await page.locator('nav.app-subnav form.report-params [name="asof"]').fill('2026-06-30');
+  await page.locator('nav.app-subnav form.report-params button[type="submit"]').click();
+  await page.waitForURL(/asof=/);
+  await expect(page.locator('table.report-table')).toBeVisible();
 
   // The as-of date control is present (trial balance is an as-of report). It is a
   // plain text input (never input[type=date], rule 12), named "asof".
@@ -182,6 +196,12 @@ test('reports: open the income statement, set period + granularity, see the R/E 
   // The shared params form + the always-present subsidiary SCOPE selector (D18).
   await expect(page.locator('form.report-params')).toBeVisible();
   await expect(page.locator('select.report-scope-select[name="scope"]')).toBeVisible();
+
+  // p26.76: the income statement is a DENSE report (scope + period + granularity +
+  // currency), so its filters stay INLINE in the page body — NOT the subnav. This is the
+  // "leave it inline when it would cramp the bar" arm of the experiment.
+  await expect(page.locator('main#main form.report-params')).toBeVisible();
+  await expect(page.locator('nav.app-subnav form.report-params')).toHaveCount(0);
 
   // The GRANULARITY select is present (an income-statement comparative control), set to
   // "quarter" from the query round trip.
