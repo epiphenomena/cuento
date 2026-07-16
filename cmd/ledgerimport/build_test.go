@@ -1494,3 +1494,163 @@ func asStr(v interface{}) string {
 		return ""
 	}
 }
+
+// configWithCorrections returns testConfig with a `corrections` list appended: one
+// balanced manual adjustment (D p26.72) posting a due-to/from cutoff pair in USD on
+// the US subsidiary -- a Dr asset (Checking) / Cr revenue (Donations) entry of an
+// exact integer amount, restricted to the GRANT1 fund on both legs so it is per-fund
+// balanced. All values are invented (rule 11).
+func configWithCorrections() string {
+	base := strings.TrimSuffix(strings.TrimSpace(testConfig()), "}")
+	return base + `,
+  "corrections": [
+    {
+      "date": "2025-12-31",
+      "subsidiary": "Test US",
+      "currency": "USD",
+      "memo": "FY cutoff adjustment",
+      "description": "in-transit cutoff",
+      "splits": [
+        {"account": "Checking", "amount": 400000, "fund": "GRANT1"},
+        {"account": "Grant Revenue", "amount": -400000, "fund": "GRANT1", "program": "Education"}
+      ]
+    }
+  ]
+}`
+}
+
+// TestCorrectionPostsBalancedAdjustment proves the config-driven manual adjustment
+// primitive (D p26.72): a `corrections` entry posts a balanced correction
+// transaction into the built db through the store (versioned, invariant-checked),
+// with the exact integer amounts, accounts and fund the config names, and leaves
+// ledger.Check Error-clean. Synthetic-only (rule 11).
+func TestCorrectionPostsBalancedAdjustment(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	accMap, err := ReadAccountMap(strings.NewReader(testAccountMap()))
+	if err != nil {
+		t.Fatalf("ReadAccountMap: %v", err)
+	}
+	cfg, err := ReadConfig(strings.NewReader(configWithCorrections()))
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	if len(cfg.Corrections) != 1 {
+		t.Fatalf("parsed %d corrections, want 1", len(cfg.Corrections))
+	}
+	res, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, testRates(), st, false)
+	if err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+
+	// The correction posted exactly one transaction, recorded under its synthetic tid.
+	txns := res.tidTxns["correction-0"]
+	if len(txns) != 1 {
+		t.Fatalf("correction produced %d transactions, want 1", len(txns))
+	}
+	txnID := txns[0]
+
+	// Header: US subsidiary, the config date, memo, USD.
+	var subID int64
+	var date, memo, currency string
+	if err := sqldb.QueryRow(
+		`SELECT subsidiary_id, date, memo, currency FROM transactions WHERE id = ?`, txnID,
+	).Scan(&subID, &date, &memo, &currency); err != nil {
+		t.Fatalf("load correction txn: %v", err)
+	}
+	if subID != res.SubsidiaryIDs["Test US"] {
+		t.Errorf("correction subsidiary = %d, want Test US (%d)", subID, res.SubsidiaryIDs["Test US"])
+	}
+	if date != "2025-12-31" || memo != "FY cutoff adjustment" || currency != "USD" {
+		t.Errorf("correction header = (%q,%q,%q), want (2025-12-31, FY cutoff adjustment, USD)", date, memo, currency)
+	}
+
+	// Splits: exactly the two legs, exact integer amounts, on the named accounts,
+	// both carrying the GRANT1 fund (so the store's per-fund zero-sum held). The
+	// grant-revenue leg carries the Education program.
+	rows, err := sqldb.Query(
+		`SELECT account_id, amount, fund_id, program_id FROM splits WHERE transaction_id = ? ORDER BY position`, txnID)
+	if err != nil {
+		t.Fatalf("load correction splits: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	type leg struct {
+		acct, amount int64
+		fund         sql.NullInt64
+		prog         sql.NullInt64
+	}
+	var legs []leg
+	for rows.Next() {
+		var l leg
+		if err := rows.Scan(&l.acct, &l.amount, &l.fund, &l.prog); err != nil {
+			t.Fatalf("scan split: %v", err)
+		}
+		legs = append(legs, l)
+	}
+	if len(legs) != 2 {
+		t.Fatalf("correction has %d splits, want 2", len(legs))
+	}
+	grant := res.FundIDs["GRANT1"]
+	var sum int64
+	for _, l := range legs {
+		sum += l.amount
+		if !l.fund.Valid || l.fund.Int64 != grant {
+			t.Errorf("split acct=%d not tagged GRANT1 fund %d (got %v)", l.acct, grant, l.fund)
+		}
+	}
+	if sum != 0 {
+		t.Errorf("correction splits net-debit sum = %d, want 0 (balanced)", sum)
+	}
+	// The Checking (asset) DEBIT leg is +400000; the Grant Revenue (revenue) CREDIT
+	// leg is -400000 and carries the Education program.
+	byAcct := map[int64]leg{}
+	for _, l := range legs {
+		byAcct[l.acct] = l
+	}
+	if l, ok := byAcct[res.AccountIDs["Checking"]]; !ok || l.amount != 400000 {
+		t.Errorf("Checking leg = %+v, want amount 400000", l)
+	}
+	if l, ok := byAcct[res.AccountIDs["Grant Revenue"]]; !ok || l.amount != -400000 {
+		t.Errorf("Grant Revenue leg = %+v, want amount -400000", l)
+	} else if !l.prog.Valid || l.prog.Int64 != res.ProgramIDs["Education"] {
+		t.Errorf("Grant Revenue leg program = %v, want Education %d", l.prog, res.ProgramIDs["Education"])
+	}
+
+	// The whole produced db (import + adjustment) is Error-clean.
+	vs, err := ledger.Check(context.Background(), sqldb)
+	if err != nil {
+		t.Fatalf("ledger.Check: %v", err)
+	}
+	if ledger.HasErrors(vs) {
+		t.Fatalf("ledger.Check has errors after correction: %+v", vs)
+	}
+}
+
+// TestCorrectionRejectsUnbalanced proves a mis-specified (non-zero-sum) correction
+// FAILS the build loudly rather than silently plugging or continuing -- an
+// adjustment must balance (the store enforces zero-sum on write, rule 7).
+func TestCorrectionRejectsUnbalanced(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	accMap, err := ReadAccountMap(strings.NewReader(testAccountMap()))
+	if err != nil {
+		t.Fatalf("ReadAccountMap: %v", err)
+	}
+	cfg, err := ReadConfig(strings.NewReader(configWithCorrections()))
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	// Break the balance: make the credit leg smaller than the debit leg.
+	cfg.Corrections[0].Splits[1].Amount = -300000
+	_, err = runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, testRates(), st, false)
+	if err == nil {
+		t.Fatal("unbalanced correction was accepted; want a loud build failure")
+	}
+	if !strings.Contains(err.Error(), "correction 0") {
+		t.Errorf("error %q does not name the offending correction", err)
+	}
+}

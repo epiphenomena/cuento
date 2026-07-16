@@ -204,6 +204,14 @@ func runBuild(
 		}
 		mergeResult(res, subRes)
 	}
+	// Manual adjustment transactions (D p26.72) post AFTER every subsidiary's
+	// transactions, so any account/fund/program they touch is live. The builder
+	// carries the scaffold's id maps on `res`, so a fresh builder over the same res
+	// resolves the correction keys.
+	cb := &builder{st: st, cfg: cfg, res: res, anonymize: anonymize, acctType: nil}
+	if err := cb.corrections(ctx); err != nil {
+		return nil, err
+	}
 	return res, nil
 }
 

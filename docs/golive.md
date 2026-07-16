@@ -199,6 +199,23 @@ no real names/values.
     unknown fields (`DisallowUnknownFields`), so a stale `payee_column` now fails the
     build loudly. Nothing replaces it; the desc-on-every-split behavior is automatic.
 
+11. **Manual adjustments (`corrections`, p26.72).** The config's optional
+    `corrections` list holds fully-specified, self-balancing journal entries the
+    mechanical CSV import cannot express — the owner's consolidation-worksheet
+    entries (e.g. a year-end IN-TRANSIT cutoff, where the sending leg posts one
+    fiscal year on one subsidiary's books and the receiving leg the next year on
+    another). Each entry is one transaction: `date`, `subsidiary` (name),
+    `currency`, optional `memo`/`description`, and a `splits` list of
+    `{account, amount, fund?, program?, functional_class?, description?}`, where
+    `account` is a source_acct key and `amount` is the EXACT signed net-debit in
+    minor units (Dr +/Cr −). They post AFTER the source import, through the store,
+    like any other transaction (versioned, invariant-checked, per-fund zero-sum);
+    a correction that does NOT balance fails the build loudly (no plug leg is
+    synthesized — an adjustment must already balance). This is a general primitive
+    for any future legitimate consolidation/cutoff entry. The SPECIFIC values live
+    only in the gitignored `mapping.json` (rule 11). Review each entry against the
+    worksheet before cutover.
+
 ### Needs human decision (blocks `--strict`, not the non-strict goal)
 
 - **990 code assignment** (item 6) is the only thing standing between the current

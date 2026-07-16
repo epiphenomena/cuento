@@ -277,6 +277,46 @@ type Config struct {
 	// OpeningBalanceTyps lists source `typ` values whose tid groups are treated as
 	// opening balances (their imbalance is absorbed by OpeningBalanceAccount).
 	OpeningBalanceTyps []string `json:"opening_balance_typs"`
+
+	// Corrections is a list of fully-specified MANUAL ADJUSTMENT transactions applied
+	// after the source import (D p26.72). Each is a balanced journal entry the owner's
+	// consolidation worksheet requires but the mechanical CSV import cannot express --
+	// e.g. a year-end in-transit CUTOFF correction whose two legs the source books
+	// straddle across a fiscal boundary. They post through the store exactly like an
+	// imported transaction (versioned, invariant-checked, per-fund zero-sum), so a
+	// mis-specified adjustment fails the build loudly rather than corrupting the ledger.
+	// Empty/nil = no adjustments (the common case). This is a GENERAL primitive: the
+	// owner may add future legitimate consolidation/cutoff entries here without code
+	// changes. The SPECIFIC values live only in the gitignored config (rule 11).
+	Corrections []Correction `json:"corrections"`
+}
+
+// Correction is one manual adjustment transaction (D p26.72). It is a
+// fully-specified, self-balancing journal entry addressed by human-readable keys
+// (subsidiary NAME, source_acct, donor, program name) matching the rest of the
+// mapping, resolved to ids at apply time. A single currency and subsidiary per
+// entry (rule 7: one currency + one subsidiary per transaction).
+type Correction struct {
+	Date        string            `json:"date"`        // YYYY-MM-DD, the posting date
+	Subsidiary  string            `json:"subsidiary"`  // subsidiary NAME (must be configured)
+	Currency    string            `json:"currency"`    // ISO code; every split posts in it
+	Memo        string            `json:"memo"`        // optional transaction memo (audit trail)
+	Description string            `json:"description"` // optional default per-split description
+	Splits      []CorrectionSplit `json:"splits"`
+}
+
+// CorrectionSplit is one leg of a Correction. Amount is the EXACT signed net-debit
+// in the currency's minor units (rule 3: int64, never a float / lossy source `v`);
+// debits positive, credits negative (D2). Account is a source_acct key in the
+// account-mapping CSV. Fund (a donor key), Program (a program name) and
+// FunctionalClass are optional and validated against the same maps the import uses.
+type CorrectionSplit struct {
+	Account         string `json:"account"`          // source_acct in the account-mapping CSV
+	Amount          int64  `json:"amount"`           // exact net-debit, minor units (Dr + / Cr -)
+	Fund            string `json:"fund"`             // donor key -> fund (optional; "" = unrestricted)
+	Program         string `json:"program"`          // program NAME (optional; R/E only)
+	FunctionalClass string `json:"functional_class"` // program|management|fundraising (optional; expense only)
+	Description     string `json:"description"`      // per-split description (optional; falls back to the entry's)
 }
 
 // SubsidiaryConfig is a child subsidiary derived from a source country code.
