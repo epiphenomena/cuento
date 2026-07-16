@@ -1006,6 +1006,8 @@ other = "Esta transacción tiene una partida conciliada en una conciliación fin
 # NOMBRES de grupo (financial/funds/programs/tax) son valores de referencia crudos
 # mostrados tal cual en la interfaz de concesión de administración, no entradas del
 # catálogo.
+[reports.params.filters]
+other = "Filtros"
 [reports.params.scope]
 other = "Alcance de subsidiaria"
 [reports.params.asof]

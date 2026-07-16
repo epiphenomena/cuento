@@ -24,109 +24,137 @@
   <h1>{{.Title}}</h1>
 
   <form class="report-params" method="get" action="/reports/{{.Params.ReportID}}">
+    {{/* p26.52: the fieldset LEGEND labels the box ("Filters"); each control keeps its
+         OWN inner label (no more doubled "Subsidiary scope"). Each label+control is
+         wrapped in a .report-field flex unit so the label always stays with its input
+         and the From/To pair flows together (never orphaning a label on its own row). */}}
     <fieldset class="report-scope">
-      <legend>{{t "reports.params.scope"}}</legend>
-      <label for="rp-scope">{{t "reports.params.scope"}}</label>
-      <select id="rp-scope" name="scope" class="report-scope-select">
-        {{- range .Params.Scopes}}
-        <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Name}}</option>
-        {{- end}}
-      </select>
+      <legend>{{t "reports.params.filters"}}</legend>
+      <div class="report-field">
+        <label for="rp-scope">{{t "reports.params.scope"}}</label>
+        <select id="rp-scope" name="scope" class="report-scope-select">
+          {{- range .Params.Scopes}}
+          <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Name}}</option>
+          {{- end}}
+        </select>
+      </div>
 
       {{if .Params.ShowAsOf}}
-      <label for="rp-asof">{{t "reports.params.asof"}}</label>
-      <input type="text" id="rp-asof" name="asof" value="{{.Params.AsOf}}"
-             inputmode="numeric" autocomplete="off">
+      <div class="report-field">
+        <label for="rp-asof">{{t "reports.params.asof"}}</label>
+        <input type="text" id="rp-asof" name="asof" value="{{.Params.AsOf}}"
+               inputmode="numeric" autocomplete="off">
+      </div>
       {{end}}
 
       {{if .Params.ShowPeriod}}
-      <label for="rp-from">{{t "reports.params.from"}}</label>
-      <input type="text" id="rp-from" name="from" class="js-datefield" value="{{.Params.From}}"
-             inputmode="numeric" autocomplete="off">
-      <label for="rp-to">{{t "reports.params.to"}}</label>
-      <input type="text" id="rp-to" name="to" class="js-datefield" value="{{.Params.To}}"
-             inputmode="numeric" autocomplete="off">
+      <div class="report-field">
+        <label for="rp-from">{{t "reports.params.from"}}</label>
+        <input type="text" id="rp-from" name="from" class="js-datefield" value="{{.Params.From}}"
+               inputmode="numeric" autocomplete="off">
+      </div>
+      <div class="report-field">
+        <label for="rp-to">{{t "reports.params.to"}}</label>
+        <input type="text" id="rp-to" name="to" class="js-datefield" value="{{.Params.To}}"
+               inputmode="numeric" autocomplete="off">
+      </div>
       {{end}}
 
       {{if .Params.ShowGranularity}}
-      <label for="rp-gran">{{t "reports.params.granularity"}}</label>
-      <select id="rp-gran" name="granularity">
-        <option value="none"{{if eq .Params.Granularity "none"}} selected{{end}}>{{t "reports.gran.none"}}</option>
-        <option value="week"{{if eq .Params.Granularity "week"}} selected{{end}}>{{t "reports.gran.week"}}</option>
-        <option value="month"{{if eq .Params.Granularity "month"}} selected{{end}}>{{t "reports.gran.month"}}</option>
-        <option value="quarter"{{if eq .Params.Granularity "quarter"}} selected{{end}}>{{t "reports.gran.quarter"}}</option>
-        <option value="year"{{if eq .Params.Granularity "year"}} selected{{end}}>{{t "reports.gran.year"}}</option>
-      </select>
+      <div class="report-field">
+        <label for="rp-gran">{{t "reports.params.granularity"}}</label>
+        <select id="rp-gran" name="granularity">
+          <option value="none"{{if eq .Params.Granularity "none"}} selected{{end}}>{{t "reports.gran.none"}}</option>
+          <option value="week"{{if eq .Params.Granularity "week"}} selected{{end}}>{{t "reports.gran.week"}}</option>
+          <option value="month"{{if eq .Params.Granularity "month"}} selected{{end}}>{{t "reports.gran.month"}}</option>
+          <option value="quarter"{{if eq .Params.Granularity "quarter"}} selected{{end}}>{{t "reports.gran.quarter"}}</option>
+          <option value="year"{{if eq .Params.Granularity "year"}} selected{{end}}>{{t "reports.gran.year"}}</option>
+        </select>
+      </div>
       {{end}}
 
       {{if .Params.ShowCurrency}}
-      <label for="rp-ccy">{{t "reports.params.currency"}}</label>
-      <select id="rp-ccy" name="currency">
-        {{- range .Params.Currencies}}
-        <option value="{{.Code}}"{{if .Selected}} selected{{end}}>{{.Code}}</option>
-        {{- end}}
-      </select>
+      <div class="report-field">
+        <label for="rp-ccy">{{t "reports.params.currency"}}</label>
+        <select id="rp-ccy" name="currency">
+          {{- range .Params.Currencies}}
+          <option value="{{.Code}}"{{if .Selected}} selected{{end}}>{{.Code}}</option>
+          {{- end}}
+        </select>
+      </div>
       {{end}}
 
       {{if .Params.ShowDetail}}
-      <label for="rp-detail">{{t "reports.params.detail"}}</label>
-      <select id="rp-detail" name="detail" class="report-detail-select">
-        <option value=""{{if ne .Params.Detail "currency"}} selected{{end}}>{{t "reports.detail.converted"}}</option>
-        <option value="currency"{{if eq .Params.Detail "currency"}} selected{{end}}>{{t "reports.detail.currency"}}</option>
-      </select>
+      <div class="report-field">
+        <label for="rp-detail">{{t "reports.params.detail"}}</label>
+        <select id="rp-detail" name="detail" class="report-detail-select">
+          <option value=""{{if ne .Params.Detail "currency"}} selected{{end}}>{{t "reports.detail.converted"}}</option>
+          <option value="currency"{{if eq .Params.Detail "currency"}} selected{{end}}>{{t "reports.detail.currency"}}</option>
+        </select>
+      </div>
       {{end}}
 
       {{if .Params.ShowAccount}}
-      <label for="rp-account">{{t "reports.params.account"}}</label>
-      <select id="rp-account" name="account" class="report-account-select">
-        <option value="0"{{if eq .Params.Account 0}} selected{{end}}>{{t "reports.account.choose"}}</option>
-        {{- range .Params.Accounts}}
-        <option value="{{.ID}}"{{if eq .ID $.Page.Params.Account}} selected{{end}}>{{.Name}}</option>
-        {{- end}}
-      </select>
+      <div class="report-field">
+        <label for="rp-account">{{t "reports.params.account"}}</label>
+        <select id="rp-account" name="account" class="report-account-select">
+          <option value="0"{{if eq .Params.Account 0}} selected{{end}}>{{t "reports.account.choose"}}</option>
+          {{- range .Params.Accounts}}
+          <option value="{{.ID}}"{{if eq .ID $.Page.Params.Account}} selected{{end}}>{{.Name}}</option>
+          {{- end}}
+        </select>
+      </div>
       {{end}}
 
       {{if .Params.ShowFund}}
-      <label for="rp-fund">{{t "reports.params.fund"}}</label>
-      <select id="rp-fund" name="fund" class="report-fund-select">
-        <option value="0"{{if eq .Params.Fund 0}} selected{{end}}>{{t "reports.fund_activity.all_funds"}}</option>
-        {{- range .Params.Funds}}
-        <option value="{{.ID}}"{{if eq .ID $.Page.Params.Fund}} selected{{end}}>{{.Name}}</option>
-        {{- end}}
-      </select>
+      <div class="report-field">
+        <label for="rp-fund">{{t "reports.params.fund"}}</label>
+        <select id="rp-fund" name="fund" class="report-fund-select">
+          <option value="0"{{if eq .Params.Fund 0}} selected{{end}}>{{t "reports.fund_activity.all_funds"}}</option>
+          {{- range .Params.Funds}}
+          <option value="{{.ID}}"{{if eq .ID $.Page.Params.Fund}} selected{{end}}>{{.Name}}</option>
+          {{- end}}
+        </select>
+      </div>
       {{end}}
 
       {{if .Params.ShowProgram}}
-      <label for="rp-program">{{t "reports.params.program"}}</label>
-      <select id="rp-program" name="program" class="report-program-select">
-        <option value="0"{{if eq .Params.Program 0}} selected{{end}}>{{t "reports.program_statement.all_programs"}}</option>
-        {{- range .Params.Programs}}
-        <option value="{{.ID}}"{{if eq .ID $.Page.Params.Program}} selected{{end}}>{{.Name}}</option>
-        {{- end}}
-      </select>
+      <div class="report-field">
+        <label for="rp-program">{{t "reports.params.program"}}</label>
+        <select id="rp-program" name="program" class="report-program-select">
+          <option value="0"{{if eq .Params.Program 0}} selected{{end}}>{{t "reports.program_statement.all_programs"}}</option>
+          {{- range .Params.Programs}}
+          <option value="{{.ID}}"{{if eq .ID $.Page.Params.Program}} selected{{end}}>{{.Name}}</option>
+          {{- end}}
+        </select>
+      </div>
       {{end}}
 
       {{if .Params.ShowRecon}}
-      <label for="rp-recon">{{t "reports.params.reconciliation"}}</label>
-      <select id="rp-recon" name="reconciliation" class="report-recon-select">
-        <option value="0"{{if eq .Params.Recon 0}} selected{{end}}>{{t "reports.reconciliation_statement.choose"}}</option>
-        {{- range .Params.Recons}}
-        <option value="{{.ID}}"{{if eq .ID $.Page.Params.Recon}} selected{{end}}>{{.Label}}</option>
-        {{- end}}
-      </select>
+      <div class="report-field">
+        <label for="rp-recon">{{t "reports.params.reconciliation"}}</label>
+        <select id="rp-recon" name="reconciliation" class="report-recon-select">
+          <option value="0"{{if eq .Params.Recon 0}} selected{{end}}>{{t "reports.reconciliation_statement.choose"}}</option>
+          {{- range .Params.Recons}}
+          <option value="{{.ID}}"{{if eq .ID $.Page.Params.Recon}} selected{{end}}>{{.Label}}</option>
+          {{- end}}
+        </select>
+      </div>
       {{end}}
 
       {{if .Params.ShowBudget}}
-      <label for="rp-budget">{{t "reports.params.budget"}}</label>
-      <select id="rp-budget" name="budget" class="report-budget-select">
-        <option value="0"{{if eq .Params.Budget 0}} selected{{end}}>{{t "reports.budget.choose"}}</option>
-        {{- range .Params.Budgets}}
-        <option value="{{.ID}}"{{if eq .ID $.Page.Params.Budget}} selected{{end}}>{{.Label}}</option>
-        {{- end}}
-      </select>
+      <div class="report-field">
+        <label for="rp-budget">{{t "reports.params.budget"}}</label>
+        <select id="rp-budget" name="budget" class="report-budget-select">
+          <option value="0"{{if eq .Params.Budget 0}} selected{{end}}>{{t "reports.budget.choose"}}</option>
+          {{- range .Params.Budgets}}
+          <option value="{{.ID}}"{{if eq .ID $.Page.Params.Budget}} selected{{end}}>{{.Label}}</option>
+          {{- end}}
+        </select>
+      </div>
       {{end}}
 
-      <button type="submit" class="btn btn-primary">{{t "reports.params.run"}}</button>
+      <button type="submit" class="btn btn-primary report-run">{{t "reports.params.run"}}</button>
     </fieldset>
   </form>
 

@@ -600,7 +600,14 @@ input[aria-invalid="true"] {
   gap: var(--space-3);
 }
 .report-params legend { font-weight: 600; padding: 0 var(--space-2); }
-.report-params label { display: block; font-weight: 600; margin-bottom: var(--space-1); }
+/* p26.52: each label+control is a .report-field flex COLUMN, so the label always sits
+   directly above its own input as ONE non-breaking unit (the fieldset wraps whole
+   fields, never orphaning a label from its control). The From/To pair are two adjacent
+   fields, so they flow together on one row when space allows and wrap as label+input
+   pairs otherwise. */
+.report-params .report-field { display: flex; flex-direction: column; }
+.report-params label { font-weight: 600; margin-bottom: var(--space-1); }
+.report-params .report-run { align-self: end; }
 .report-export { margin: var(--space-3) 0; }
 .report-table { width: 100%; border-collapse: collapse; margin-top: var(--space-4); }
 .report-table th, .report-table td {
