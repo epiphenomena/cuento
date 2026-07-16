@@ -443,18 +443,16 @@ func (s *server) buildImportResult(r *http.Request, batchID int64, filename, cur
 	return model
 }
 
-// renderImportError re-renders the upload page at 422 with the error message. The
-// file input cannot be echoed back, so this is a full-page 422 (like admin-rates),
-// not an inline field swap.
+// renderImportError renders the BARE import-error fragment at 422 with the message.
+// Its two callers (importPreview, importConfirm) are htmx POSTs targeting
+// #import-workspace with hx-swap=innerHTML, so a full shell page would nest a whole
+// document inside the workspace (the duplicate page-frame bug, p26.62 — the p26.35
+// class). The fragment swaps cleanly and shows the error in place; the NO-JS fallback
+// still gets a valid 422 body with the message. The file input cannot be echoed back
+// either way (it never survives an htmx swap), so re-picking the file is expected.
 func (s *server) renderImportError(w http.ResponseWriter, r *http.Request, key, arg string) {
-	model, err := s.buildImportUpload(r)
-	if err != nil {
-		s.serverError(w)
-		return
-	}
-	model.ErrorKey = key
-	model.ErrorArg = arg
-	s.render(w, r, http.StatusUnprocessableEntity, "import.tmpl", s.newShellPage(r, model))
+	s.render(w, r, http.StatusUnprocessableEntity, "import-error",
+		importPreviewModel{ErrorKey: key, ErrorArg: arg})
 }
 
 // subsidiaryName returns a subsidiary's name, or "" on any error (display only).

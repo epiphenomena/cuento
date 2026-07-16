@@ -114,6 +114,50 @@ test('bank import: amount-mode select shows only the relevant amount fields', as
   await expect(dcFields.first()).toBeHidden();
 });
 
+// p26.62: a malformed CSV (a row whose amount column is not a number) is rejected at
+// /import/preview with a 422. The error must swap into #import-workspace as a BARE
+// fragment -- NOT a full shell page (which would nest a whole document, duplicating the
+// page frame underneath everything, the p26.35 class of bug). Assert the error text
+// shows in-place AND there is no second <header>/nav nested inside the workspace.
+test('bank import: a malformed CSV shows the error in place, no duplicate page frame', async ({ page, server }) => {
+  await login(page, server);
+  const acctName = await createAssetAccount(page);
+
+  await page.goto('/import');
+  await expect(page.getByRole('heading', { name: /import bank csv/i })).toBeVisible();
+  await page.locator('#import-subsidiary').selectOption('1');
+  await page.locator('#import-account').selectOption({ label: acctName });
+
+  // The amount column (index 1) holds non-numeric text -> every row fails to parse.
+  const badCsv = 'date,amount,desc,memo\n2025-01-15,notmoney,Acme,Invoice\n';
+  await page.locator('#import-file').setInputFiles({
+    name: 'bad.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(badCsv, 'utf8'),
+  });
+
+  const previewResp = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/import/preview' && r.request().method() === 'POST',
+  );
+  await page.locator('form.import-upload-form button[type="submit"]').click();
+  const resp = await previewResp;
+  expect(resp.status()).toBe(422);
+
+  // The error message shows inside the workspace (swapped in place).
+  const workspace = page.locator('#import-workspace');
+  await expect(workspace.locator('p.import-error[role="alert"]')).toBeVisible();
+
+  // NO nested shell: the workspace must not contain a second <header> or nav (a full
+  // page swapped into the sub-target would duplicate the whole frame). There is exactly
+  // ONE app header on the page, and none inside the workspace.
+  await expect(workspace.locator('header')).toHaveCount(0);
+  await expect(workspace.locator('nav.app-nav')).toHaveCount(0);
+  await expect(page.locator('.app-header')).toHaveCount(1);
+
+  // The original upload form is still present (the page shell survived the swap).
+  await expect(page.locator('form.import-upload-form')).toHaveCount(1);
+});
+
 test('bank import: upload, map, preview, stage; a duplicate row is flagged', async ({ page, server }) => {
   await login(page, server);
   const acctName = await createAssetAccount(page);

@@ -17,6 +17,18 @@
   via the formatters (rule 10); no inline script (rule 12).
 */ -}}
 
+{{/*
+  p26.62 import-error (data: importPreviewModel with ErrorKey/ErrorArg set) is the
+  BARE workspace fragment rendered at 422 when a parse/mapping error rejects the
+  upload. The preview + confirm forms POST via htmx innerHTML into #import-workspace,
+  so the error MUST be a fragment -- rendering the full import.tmpl shell here nested a
+  whole document (a duplicate page-frame) inside the workspace (the p26.35 class of
+  bug). It swaps cleanly into #import-workspace and shows the message in place.
+*/ -}}
+{{define "import-error" -}}
+<p class="field-error import-error" role="alert">{{if .ErrorArg}}{{t .ErrorKey .ErrorArg}}{{else}}{{t .ErrorKey}}{{end}}</p>
+{{- end}}
+
 {{define "import-preview" -}}
 <section class="import-preview">
   <h2>{{t "import.preview.title"}}</h2>
