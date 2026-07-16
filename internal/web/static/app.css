@@ -630,6 +630,14 @@ input[aria-invalid="true"] {
 }
 .recon-table td.amount, .recon-table th.amount { text-align: right; font-variant-numeric: tabular-nums; }
 .recon-row.is-cleared { color: var(--color-text-muted); }
+/* p26.49: a row that HAS a toggle (non-finalized, so reconrow.js forwards a click to it)
+   reads as clickable -- pointer cursor + a hover highlight over the whole row. A
+   finalized row renders no .recon-toggle, so :has() keeps it inert (no cue, no toggle).
+   Genuinely interactive children (the Edit link, the toggle button) keep their own
+   default cursor via the more-specific rules below. */
+.recon-row:has(.recon-toggle) { cursor: pointer; }
+.recon-row:has(.recon-toggle):hover { background: var(--color-surface-alt); }
+.recon-row a, .recon-row .recon-toggle { cursor: auto; }
 .recon-toggle { cursor: pointer; }
 .recon-toggle[aria-pressed="true"] { font-weight: 600; }
 .recon-check { color: var(--color-success, green); font-weight: 700; }

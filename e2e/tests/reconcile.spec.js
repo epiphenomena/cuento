@@ -121,16 +121,28 @@ test('reconcile: start, toggle splits (targeted swap), reach zero, finalize', as
     /** @type {any} */ (window).__reconSentinel = 'alive';
   });
 
-  // Toggle the FIRST split via a CLICK. Its row swaps in place (hx-target) and the
-  // summary OOB. We wait for the diff chip TEXT to change (a targeted swap updated
-  // it), not a nav. After clearing one deposit the difference is 400 - 250 = 150.00.
-  await toggles.first().click();
+  // p26.49: toggle the FIRST split by clicking a NON-interactive cell of its ROW (the
+  // amount cell, not the button) -- reconrow.js forwards ONE synthetic click to the
+  // row's .recon-toggle. Its row swaps in place (hx-target) and the summary OOB. We wait
+  // for the diff chip TEXT to change (a targeted swap updated it), not a nav. Clearing
+  // one deposit exactly once => 400 - 250 = 150.00 (a DOUBLE toggle would net back to
+  // 400.00, so this text assertion also proves exactly-once).
+  const firstRow = page.locator('tr.recon-row').first();
+  await firstRow.locator('td.recon-amount').click();
   await expect(diff).toContainText('150.00');
   // The sentinel survived -> no full-page reload happened (targeted swap only).
   const aliveAfterFirst = await page.evaluate(
     () => /** @type {any} */ (window).__reconSentinel,
   );
   expect(aliveAfterFirst).toBe('alive');
+
+  // p26.49: clicking the SAME row's cell again UNCLEARS it (round-trips exactly once) ->
+  // difference returns to 400.00. Then re-clear it (row click) so the flow proceeds to a
+  // zero difference below. (After the row swap, re-query the first row's amount cell.)
+  await page.locator('tr.recon-row').first().locator('td.recon-description').click();
+  await expect(diff).toContainText('400.00');
+  await page.locator('tr.recon-row').first().locator('td.recon-amount').click();
+  await expect(diff).toContainText('150.00');
 
   // Toggle the SECOND split via the KEYBOARD (the "Space toggles the focused row"
   // affordance): FOCUS its toggle button, press Space -> the split clears. The toggle
@@ -165,6 +177,12 @@ test('reconcile: start, toggle splits (targeted swap), reach zero, finalize', as
   await expect(page.locator('.recon-finalized-note')).toBeVisible();
   await expect(page.getByRole('button', { name: /reopen/i })).toBeVisible();
   // No live toggles remain on a finalized recon (read-only).
+  await expect(page.locator('button.recon-toggle')).toHaveCount(0);
+  // p26.49: clicking a FINALIZED row does NOT toggle -- it renders no .recon-toggle, so
+  // reconrow.js forwards nothing (the diff chip stays at the finalized 0.00). We stay on
+  // the same read-only view (no nav, no swap).
+  await page.locator('tr.recon-row').first().locator('td.recon-amount').click();
+  await expect(page.locator('.recon-finalized-note')).toBeVisible();
   await expect(page.locator('button.recon-toggle')).toHaveCount(0);
   // We are on the same workspace URL (the finalized recon "shows").
   expect(page.url()).toBe(workspaceURL);

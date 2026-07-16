@@ -129,6 +129,13 @@
       {{end}}
     </tbody>
   </table>
+  {{/* p26.49: whole-row click-to-toggle. Loaded on the PAGE (a <script> injected via an
+       htmx innerHTML swap would not execute); it installs ONE delegated listener on the
+       stable #recon-rows tbody (which the toggle's row-only outerHTML swap never
+       replaces), forwarding a row click to the row's .recon-toggle unless the click hit
+       an interactive child. CSP-safe (external module, no inline handler; NO hx-trigger
+       filter expr). The button stays the sole keyboard/Space affordance. */ -}}
+  <script type="module" src="{{asset "reconrow.js"}}"></script>
   {{- end}}
 {{template "shell-close" .}}
 {{- end}}
