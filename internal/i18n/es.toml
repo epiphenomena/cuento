@@ -1236,6 +1236,29 @@ other = "Total de activos del fondo"
 [reports.fund_activity.all_funds]
 other = "— todos los fondos —"
 
+# p26.51 campana capital — un estado trimestral de campana capital acotado a un fondo
+# restringido: flujos de ingresos/gastos por trimestre y activos capitalizados + activos
+# netos restringidos al cierre del trimestre, mas un total acumulado y un desglose de
+# activos capitales por cuenta. Reproduce campus.py; convertido al tipo de cierre trimestral.
+[reports.capital_campaign.title]
+other = "Campana capital"
+[reports.capital_campaign.col.period]
+other = "Trimestre"
+[reports.capital_campaign.col.gross_revenue]
+other = "Ingresos brutos"
+[reports.capital_campaign.col.gross_expenses]
+other = "Gastos brutos"
+[reports.capital_campaign.col.net_cash]
+other = "Efectivo neto"
+[reports.capital_campaign.col.capitalized]
+other = "Activos capitalizados"
+[reports.capital_campaign.col.rna]
+other = "Activos netos restringidos"
+[reports.capital_campaign.total]
+other = "Total acumulado"
+[reports.capital_campaign.capital_detail]
+other = "Activos capitales (a la fecha del informe)"
+
 # p15.9 actividades por restriccion — el estado de actividades FASB con las dos columnas
 # por restriccion del donante (Sin / Con) + una columna Total, por moneda. La linea
 # "activos netos liberados de restricciones" es DERIVADA (D20, sin traspaso asentado):

@@ -75,6 +75,39 @@ type Expected struct {
 	// seam has not been applied and no reconciliation exists. It captures the
 	// finalized 2026-05-31 Checking US (USD) reconciliation's expected state.
 	Reconciliation ReconciliationExpected
+
+	// Campaign is the p26.51 capital-campaign seam, populated ONLY after
+	// (*Fixture).ExtendCapitalCampaign(t) is called; the zero value (Fund 0) means
+	// the seam has not been applied and no campaign exists. It captures the
+	// restricted campaign fund's hand-derived per-currency campaign figures.
+	Campaign CampaignExpected
+}
+
+// CampaignExpected holds the p26.51 capital-campaign seam's expectations: the ids
+// the seam created and the hand-derived per-currency campaign figures (native minor
+// units) the Capital Campaign report asserts against. The RNA (restricted net
+// assets) figure equals GrossRevenue - GrossExpense - Land - Construction per
+// currency (campus.py's identity), which is exactly the fund's spendable Closing
+// balance since the fund opens at 0.
+type CampaignExpected struct {
+	Fund          int64
+	LandAccount   int64
+	ConstrAccount int64
+	FixedAssets   int64
+	From          string // campaign start (first-activity default)
+	To            string // report as-of date
+
+	GrossRevenueUSD int64
+	GrossExpenseUSD int64
+	LandUSD         int64
+	ConstructionUSD int64
+	RNAUSD          int64
+
+	GrossRevenueMXN int64
+	GrossExpenseMXN int64
+	LandMXN         int64
+	ConstructionMXN int64
+	RNAMXN          int64
 }
 
 // ReconciliationExpected holds the p16 reconciliation seam's expectations: the

@@ -1237,6 +1237,29 @@ other = "Total fund assets"
 [reports.fund_activity.all_funds]
 other = "— all funds —"
 
+# p26.51 capital campaign — a QUARTERLY capital-campaign statement scoped to one
+# restricted fund: per-quarter revenue/expense flows and as-of-quarter-end capitalized
+# assets + restricted net assets, plus a cumulative total and a per-account capital
+# breakdown. Structurally mirrors the user's campus.py; converted at the quarter-end rate.
+[reports.capital_campaign.title]
+other = "Capital campaign"
+[reports.capital_campaign.col.period]
+other = "Quarter"
+[reports.capital_campaign.col.gross_revenue]
+other = "Gross revenue"
+[reports.capital_campaign.col.gross_expenses]
+other = "Gross expenses"
+[reports.capital_campaign.col.net_cash]
+other = "Net cash"
+[reports.capital_campaign.col.capitalized]
+other = "Capitalized assets"
+[reports.capital_campaign.col.rna]
+other = "Restricted net assets"
+[reports.capital_campaign.total]
+other = "Cumulative total"
+[reports.capital_campaign.capital_detail]
+other = "Capital assets (as of report date)"
+
 # p15.9 activities by restriction — the FASB statement of activities with the two
 # donor-restriction columns (Without / With) + a Total column, per currency. The "net
 # assets released from restrictions" line is DERIVED (D20, no journaled transfer): it

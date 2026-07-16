@@ -32,6 +32,7 @@ const FA = '/reports/fund_activity';
 const ABR = '/reports/activities_by_restriction';
 const PS = '/reports/program_statement';
 const F990 = '/reports/form_990';
+const CC = '/reports/capital_campaign';
 
 async function login(page, server) {
   await page.goto('/login');
@@ -1008,4 +1009,87 @@ test('reports: open the 990 package, see the four Parts + Unmapped buckets + tot
   expect(resp990.headers()['content-type']).toContain('text/csv');
   const body990 = await resp990.text();
   expect(body990.split('\n')[0]).toContain(',');
+});
+
+// p26.51 CAPITAL CAMPAIGN: seed a restricted campaign fund with a revenue receipt and a
+// LAND (capital) purchase applying the fund, then open the report, pick the FUND (the
+// report-specific selector), and see the QUARTERLY campaign layout -- the Quarter column
+// + the campaign line-item columns (Gross revenue / Gross expenses / Net cash /
+// Capitalized assets / Restricted net assets), a cumulative total row, and the per-account
+// capital-detail section with the LAND row -- then confirm the CSV returns. MUTATES (one
+// fund + three accounts + two txns); names are unique so it never collides with sibling
+// worker-db specs and it only ADDS rows. Strict CSP => NO page.waitForFunction.
+test('reports: open the capital campaign report, pick a fund, see the quarterly campaign layout + Land detail, CSV returns', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  // --- seed: a restricted campaign fund, its cash, a revenue line, and a LAND asset ---
+  await createFund(page, 'Campaign Fund E2E', 'Campaign Donors E2E');
+  await createAsset(page, 'Campaign Cash E2E');
+  await createAsset(page, 'Land E2E'); // a capital asset; its NAME is all the report keys on
+  await createRevenueAccount(page, 'Campaign Gift E2E');
+
+  // Receipt INTO the fund: DR Campaign Cash 500.00 (fund), CR Campaign Gift 500.00 (fund).
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await page.locator('#txn-main-account').selectOption({ label: 'Campaign Cash E2E' });
+  await page.locator('#txn-account-0').selectOption({ label: 'Campaign Gift E2E' });
+  await page.locator('#txn-amount-0').fill('-500.00');
+  await page.locator('#txn-fund-0').selectOption({ label: 'Campaign Fund E2E' });
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+  // LAND purchase applying the fund (a NON-EXPENSE capital application): DR Land 200.00
+  // (fund), CR Campaign Cash 200.00 (fund). Both asset splits, fund-tagged.
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await page.locator('#txn-main-account').selectOption({ label: 'Campaign Cash E2E' });
+  await page.locator('#txn-account-0').selectOption({ label: 'Land E2E' });
+  await page.locator('#txn-amount-0').fill('200.00');
+  await page.locator('#txn-fund-0').selectOption({ label: 'Campaign Fund E2E' });
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+  // --- open the report, root scope; the params form carries the FUND selector ---
+  await page.goto(`${CC}?scope=1`);
+  await expect(page.locator('form.report-params')).toBeVisible();
+  await expect(page.locator('select.report-scope-select[name="scope"]')).toBeVisible();
+  const fundSelect = page.locator('select.report-fund-select[name="fund"]');
+  await expect(fundSelect).toBeVisible();
+  // The period FROM/TO controls and the target-currency select (converting report).
+  await expect(page.locator('form.report-params [name="from"]')).toBeVisible();
+  await expect(page.locator('form.report-params [name="to"]')).toBeVisible();
+
+  // --- pick the fund + a wide period + USD -> the quarterly campaign statement ---
+  await fundSelect.selectOption({ label: 'Campaign Fund E2E' });
+  await page.locator('form.report-params [name="from"]').fill('2025-01-01');
+  await page.locator('form.report-params [name="to"]').fill('2030-12-31');
+  await page.locator('form.report-params button[type="submit"]').click();
+  await page.waitForURL('**/reports/capital_campaign?**');
+
+  // The table renders the campaign line-item column headers (localized en) + the Quarter
+  // column, the cumulative total row, and the capital-detail Land row (the point: Land is
+  // shown by its NAME, tying to the campus.py Land line).
+  const table = page.locator('table.report-table');
+  await expect(table).toBeVisible();
+  await expect(table).toContainText('Quarter');
+  await expect(table).toContainText('Gross revenue');
+  await expect(table).toContainText('Capitalized assets');
+  await expect(table).toContainText('Restricted net assets');
+  await expect(table).toContainText('Cumulative total');
+  await expect(table).toContainText('Capital assets');
+  await expect(table).toContainText('Land E2E');
+  // A cumulative-total (report-total) row is present.
+  await expect(page.locator('table.report-table tr.report-total')).not.toHaveCount(0);
+
+  // --- the CSV export link is present and the endpoint returns text/csv ---
+  await expect(page.locator('a.report-csv-link')).toBeVisible();
+  const csvHref = await page.locator('a.report-csv-link').getAttribute('href');
+  const resp = await page.request.get(csvHref);
+  expect(resp.status()).toBe(200);
+  expect(resp.headers()['content-type']).toContain('text/csv');
+  const body = await resp.text();
+  expect(body.split('\n')[0]).toContain(',');
 });

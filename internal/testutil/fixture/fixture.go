@@ -109,6 +109,19 @@ type IDs struct {
 	// CheckingUSRecon is the finalized 2026-05-31 Checking US (USD) reconciliation
 	// the seam creates -- zero until ExtendReconciliation is called (opt-in seam).
 	CheckingUSRecon int64
+
+	// --- Capital-campaign seam (ExtendCapitalCampaign, opt-in) -----------------
+	// These are zero until (*Fixture).ExtendCapitalCampaign(t) is called; New does
+	// NOT call it, so the default fixture carries no campaign and every existing
+	// golden/tally is untouched. The seam models a multi-quarter, multi-currency
+	// restricted CAPITAL CAMPAIGN (the p26.51 Capital Campaign report's data): a
+	// restricted fund whose revenue is partly deployed into a LAND purchase and a
+	// FIXED-ASSET (construction) purchase across several quarters, leaving an
+	// unspent restricted (spendable) balance.
+	Campaign     int64 // the restricted capital-campaign fund
+	FixedAssets  int64 // placeholder parent for the campaign's capital accounts
+	CampaignLand int64 // "Land" leaf under Fixed Assets (the campus.py Land line)
+	Construction int64 // fixed-asset leaf under Fixed Assets (the rollup line)
 }
 
 // Fixture is the built synthetic dataset: the db, a store over it, the entity
