@@ -24,9 +24,9 @@
    7 — Other salaries and wages                USD        USD $16,500.00
    11g — Fees for services -- other            USD            USD $25.00
    16 — Occupancy                              USD         USD $3,050.00
-   24e — All other expenses                    USD         USD $4,175.14
+   24e — All other expenses                    USD         USD $4,195.88
    (Unmapped)                                  USD             USD $0.00
-=  Total functional expenses                   USD        USD $23,750.14
+=  Total functional expenses                   USD        USD $23,770.88
    Part X — Balance sheet
    Checking US                                 USD        USD $35,935.00
    Checking MX                                 USD        USD $21,823.20

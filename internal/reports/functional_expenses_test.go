@@ -7,27 +7,29 @@ package reports_test
 // is the oracle, never the report's own output. The golden files
 // (testdata/functional_expenses.{txt,csv}) are a committed, human-reviewable rendering;
 // -update / `make golden` regenerate them deterministically (lang=en, root scope,
-// period 2025-01-01..2026-06-30, USD target, CLOSING-rate conversion).
+// period 2025-01-01..2026-06-30, USD target, TRANSACTION-DATE-rate conversion, p26.71).
 //
 // The report is a 2D MATRIX: ROWS = effective Part IX lines (expense accounts grouped
 // + subtotaled under their effective line, Unmapped bucket LAST); COLUMNS = Program |
 // Management & general | Fundraising | Total. Conversion is to the target (USD) at the
-// CLOSING rate on the period end (a 990 line total is a year-end rollup, D12 — like the
-// balance sheet, NOT the income statement's txn-date flow). Line subtotals / the Total
-// column / the grand total are built by int64 addition of the converted cells (footing),
-// so "Program + Management + Fundraising == Total" holds EXACTLY per row.
+// TRANSACTION-DATE rate (p26.71: an expense is a period FLOW measured at the rate in
+// force when it occurred — like the income statement, D12 RateTxnDate, NOT the balance
+// sheet's closing rate). Line subtotals / the Total column / the grand total are built by
+// int64 addition of the converted cells (footing), so "Program + Management + Fundraising
+// == Total" holds EXACTLY per row, and the grand total TIES the income statement's total
+// expenses (at GranNone, both round once over the whole period).
 //
-// HAND-VERIFIED (root scope, USD target, period 2025-01..2026-06, CLOSING rate 18.10 =>
-// MXN->USD = 1/18.10, half-even per (account,class) cell):
+// HAND-VERIFIED (root scope, USD target, period 2025-01..2026-06, txn-date monthly USD->
+// MXN rates, half-even per (account,class) cell over the whole period):
 //
 //	IX.7  Other salaries and wages   program 1,650,000                 -> total 1,650,000
 //	IX.11g Fees for services — other  management     2,500 (leaf ovr)  -> total     2,500
 //	IX.16 Occupancy                   management   305,000             -> total   305,000
-//	IX.24e All other expenses         program   257,514  (= 210,000
-//	         + 500,000 MXN /18.10 = 27,624 + 360,000 MXN /18.10 = 19,890)
+//	IX.24e All other expenses         program   259,588  (= 210,000 USD
+//	         + 500,000 MXN txn-date = 28,971 + 360,000 MXN txn-date = 20,617)
 //	                                  management    60,000  (Insurance)
-//	                                  fundraising  100,000  (Event Costs) -> total 417,514
-//	GRAND  program 1,907,514 · management 367,500 · fundraising 100,000  -> total 2,375,014
+//	                                  fundraising  100,000  (Event Costs) -> total 419,588
+//	GRAND  program 1,909,588 · management 367,500 · fundraising 100,000  -> total 2,377,088
 //
 // Effective-line order (form990_lines sort): IX.7 < IX.11g < IX.16 < IX.24e, then the
 // Unmapped bucket LAST (empty on this fixture — every expense account inherits IX.24e
@@ -111,7 +113,7 @@ func TestFunctionalExpensesGolden(t *testing.T) {
 		"7 — Other salaries and wages":     {1_650_000, 0, 0, 1_650_000},
 		"11g — Fees for services -- other": {0, 2_500, 0, 2_500}, // leaf override, own line
 		"16 — Occupancy":                   {0, 305_000, 0, 305_000},
-		"24e — All other expenses":         {257_514, 60_000, 100_000, 417_514},
+		"24e — All other expenses":         {259_588, 60_000, 100_000, 419_588},
 	}
 	for label, w := range lines {
 		cells, ok := feRowFor(table, label)
@@ -128,8 +130,8 @@ func TestFunctionalExpensesGolden(t *testing.T) {
 	// --- Per-account rows under IX.24e (the inherited line): the converted class cells.
 	acctRows := map[string]want{
 		"Salaries":         {1_650_000, 0, 0, 1_650_000},
-		"Program Supplies": {237_624, 0, 0, 237_624}, // 210,000 USD + 500,000 MXN /18.10 = 27,624
-		"Food Purchases":   {19_890, 0, 0, 19_890},   // 360,000 MXN /18.10, closing rate
+		"Program Supplies": {238_971, 0, 0, 238_971}, // 210,000 USD + 500,000 MXN txn-date = 28,971
+		"Food Purchases":   {20_617, 0, 0, 20_617},   // 360,000 MXN txn-date rate
 		"Occupancy":        {0, 305_000, 0, 305_000},
 		"Insurance":        {0, 60_000, 0, 60_000},
 		"Bank Fees":        {0, 2_500, 0, 2_500},
@@ -152,8 +154,8 @@ func TestFunctionalExpensesGolden(t *testing.T) {
 	if !ok {
 		t.Fatalf("no grand-total row")
 	}
-	if grand[1].Minor != 1_907_514 || grand[2].Minor != 367_500 || grand[3].Minor != 100_000 || grand[4].Minor != 2_375_014 {
-		t.Errorf("grand total = [prog %d, mgmt %d, fund %d, total %d], want [1907514, 367500, 100000, 2375014]",
+	if grand[1].Minor != 1_909_588 || grand[2].Minor != 367_500 || grand[3].Minor != 100_000 || grand[4].Minor != 2_377_088 {
+		t.Errorf("grand total = [prog %d, mgmt %d, fund %d, total %d], want [1909588, 367500, 100000, 2377088]",
 			grand[1].Minor, grand[2].Minor, grand[3].Minor, grand[4].Minor)
 	}
 
@@ -497,5 +499,71 @@ func TestFunctionalExpensesEmpty(t *testing.T) {
 		if row.Kind == reports.RowSubtotal {
 			t.Errorf("empty report has a 990-line subtotal row %q", row.Cells[0].Text)
 		}
+	}
+}
+
+// TestFunctionalExpensesTiesIncomeStatement is the p26.71 cross-report tie: the
+// functional-expenses grand total EQUALS the income statement's total expenses EQUALS
+// the 990 Part IX grand total, EXACTLY, on the multi-currency multi-rate fixture — the
+// whole point of moving Part IX / functional expenses off the closing rate and onto the
+// transaction-date (flow) rate. All three consume the expense flow at the txn-date rate;
+// the tie is an IDENTITY, so the test computes all three and asserts equality (no literal
+// is hand-pinned — `make golden` owns the whole-period figures). The income statement is
+// run at GranNone so it rounds ONCE over the whole period, the same grain as the
+// functional matrix (a quarterly run rounds per (account,quarter) and can differ by a
+// minor unit — the documented footing note). Every fixture expense account is single-
+// class, so Σ round(class) == round(Σ classes) and the (account×class) vs (account)
+// rounding grains coincide; a real multi-class chart can leave a sub-dollar residual
+// (DECISIONS p26.71), but the FX-basis gap this closes is eliminated regardless.
+func TestFunctionalExpensesTiesIncomeStatement(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := context.Background()
+
+	// Functional-expenses grand total (txn-date, whole period).
+	feP := feGoldenParams(f)
+	feT, err := functionalExpensesReport(t).Run(ctx, reports.NewToolkit(f.Store, feP), feP)
+	if err != nil {
+		t.Fatalf("run functional expenses: %v", err)
+	}
+	feGrand, ok := feRowFor(feT, "reports.functional_expenses.total")
+	if !ok {
+		t.Fatal("no functional-expenses grand-total row")
+	}
+	feTotal := feGrand[4].Minor
+
+	// Income statement total expenses at GranNone (round once over the whole period, the
+	// same grain as the functional matrix — a quarterly run differs by a minor unit).
+	isP := isGoldenParams(f)
+	isP.Granularity = reports.GranNone
+	isT, err := incomeStatementReport(t).Run(ctx, reports.NewToolkit(f.Store, isP), isP)
+	if err != nil {
+		t.Fatalf("run income statement: %v", err)
+	}
+	isExpenses, ok := isTotalFor(isT, "reports.income_statement.total.expenses")
+	if !ok {
+		t.Fatal("no income-statement total-expenses row")
+	}
+
+	// 990 Part IX grand total (same txn-date functional path).
+	nineP := feGoldenParams(f)
+	nineT, err := form990Report(t).Run(ctx, reports.NewToolkit(f.Store, nineP), nineP)
+	if err != nil {
+		t.Fatalf("run 990: %v", err)
+	}
+	nineGrand, ok := f990RowFor(nineT, "reports.form_990.ix.total")
+	if !ok {
+		t.Fatal("no 990 Part IX total row")
+	}
+	nineTotal := nineGrand[2].Minor
+
+	if feTotal != isExpenses {
+		t.Errorf("functional-expenses total (%d) != income-statement total expenses (%d)", feTotal, isExpenses)
+	}
+	if nineTotal != feTotal {
+		t.Errorf("990 Part IX total (%d) != functional-expenses total (%d)", nineTotal, feTotal)
+	}
+	if nineTotal != isExpenses {
+		t.Errorf("990 Part IX total (%d) != income-statement total expenses (%d)", nineTotal, isExpenses)
 	}
 }

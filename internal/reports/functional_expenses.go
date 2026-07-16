@@ -18,14 +18,18 @@ import (
 // the foot totals the whole part.
 //
 // CONVERSION (Params.TargetCurrency, default scope base): a 990 is a single-currency
-// form, and Part IX line totals are a year-end ROLLUP (a position-style aggregate,
-// not a monthly flow), so — matching the balance sheet (p15.4) — every cell is
-// converted to the target at the CLOSING rate on the period end (To). Each
-// (account,class) cell is converted+rounded ONCE (D12 final-aggregate grain,
-// FunctionalMatrix RateClosing); the line subtotals, the Total column, and the grand
-// total are built by INT64 ADDITION of those converted cells (the footing rule, as in
-// the income statement) so "Program + Management + Fundraising == Total" holds EXACTLY
-// per row and "Σ lines == grand total" holds exactly, with no second rounding.
+// form. Part IX line totals are an expense FLOW over the period, so — matching the
+// income statement (p15.5), NOT the balance sheet — every cell is converted to the
+// target at the TRANSACTION-DATE rate (p26.71: an expense is measured at the rate in
+// force when it occurred; the closing rate is for balances). This makes the Part IX
+// grand total tie the income statement's total expenses exactly, regardless of intra-
+// year FX movement (before p26.71 the closing-rate "year-end rollup" left a gap when
+// rates moved mid-year). Each (account,class) cell is converted+rounded ONCE (D12
+// final-aggregate grain, FunctionalMatrix RateTxnDate); the line subtotals, the Total
+// column, and the grand total are built by INT64 ADDITION of those converted cells (the
+// footing rule, as in the income statement) so "Program + Management + Fundraising ==
+// Total" holds EXACTLY per row and "Σ lines == grand total" holds exactly, with no
+// second rounding.
 //
 // DRILL-DOWN (p15.3d): each account×class amount cell carries a DrillPeriod filter
 // narrowed to {that account, that functional class, the period, the cell's native
@@ -68,8 +72,8 @@ func registerFunctionalExpenses(reg *Registry) {
 }
 
 // runFunctionalExpenses computes the 990 Part IX functional-expenses Table. It reads
-// the per-(expense account, class) activity converted to the target at the closing
-// rate (and, separately, native per currency for the drill filter), groups the
+// the per-(expense account, class) activity converted to the target at the transaction-
+// date rate (and, separately, native per currency for the drill filter), groups the
 // accounts by effective Part IX line (D25), and renders one line group per effective
 // code (accounts indented under a per-line subtotal) in the part's report order with
 // the UNMAPPED bucket last, closing with a grand-total row.
@@ -80,8 +84,10 @@ func runFunctionalExpenses(ctx context.Context, tk *Toolkit, p Params) (Table, e
 	b := &feBuilder{tk: tk, p: p, target: target}
 	b.columns()
 
-	// Converted (target, closing rate at To) per (account, class) — one cell each.
-	conv, err := tk.FunctionalMatrix(ctx, scope, p.From, p.To, ConvertOpts{To: target, Mode: RateClosing})
+	// Converted (target, transaction-date rate) per (account, class) — one cell each.
+	// An expense flow is measured at the rate in force when it occurred (D12 RateTxnDate),
+	// so this total ties the income statement's total expenses exactly (p26.71).
+	conv, err := tk.FunctionalMatrix(ctx, scope, p.From, p.To, ConvertOpts{To: target, Mode: RateTxnDate})
 	if err != nil {
 		return Table{}, err
 	}
@@ -207,7 +213,7 @@ func (s classSums) get(cl Class) int64 {
 
 // feBuilder accumulates the functional-expenses rows. Columns are [Line, Program,
 // Management & general, Fundraising, Total]; every money column is the target
-// currency (converted at the closing rate).
+// currency (converted at the transaction-date rate).
 type feBuilder struct {
 	tk     *Toolkit
 	p      Params
@@ -299,7 +305,7 @@ func lineLabel(pl PartLine) string {
 }
 
 // classMinor returns the single converted minor amount for an (account,class) cell in
-// the target currency, or 0 when the class is absent. FunctionalMatrix RateClosing
+// the target currency, or 0 when the class is absent. FunctionalMatrix RateTxnDate
 // yields exactly one target-currency CurAmt per present cell.
 func classMinor(amts []CurAmt, target string) int64 {
 	var m int64

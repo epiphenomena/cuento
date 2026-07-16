@@ -18,8 +18,10 @@ package reports_test
 //   - Part VIII — revenue by effective line: revenue accounts converted at the TXN-DATE
 //     rate (p15.5's flow), rolled to effective Part VIII codes (Group990), Unmapped last.
 //     Line total == p15.5 total revenue = 6,476,594.
-//   - Part IX  — functional-expense line totals: p15.7 FunctionalMatrix(RateClosing),
-//     each line total == p15.7's line total; grand == p15.7 grand = 2,375,014.
+//   - Part IX  — functional-expense line totals: p15.7 FunctionalMatrix(RateTxnDate,
+//     p26.71 — the expense FLOW rate, matching Part VIII revenue and the income
+//     statement), each line total == p15.7's line total; grand == p15.7 grand =
+//     2,377,088 == the income statement's total expenses (GranNone).
 //   - Part X   — balance sheet at year-end (To=2026-06-30): p15.4's path (BalancesAsOf +
 //     restricted split + intercompany elimination), A == L + NA.
 //
@@ -30,8 +32,8 @@ package reports_test
 //	           VIII.2  Program Service Fees         120,000
 //	           (Unmapped) Event Income              300,000
 //	           Total revenue                      6,476,594  (== p15.5)
-//	Part IX    IX.7  1,650,000 · IX.11g 2,500 · IX.16 305,000 · IX.24e 417,514
-//	           Total functional expenses          2,375,014  (== p15.7 grand)
+//	Part IX    IX.7  1,650,000 · IX.11g 2,500 · IX.16 305,000 · IX.24e 419,588
+//	           Total functional expenses          2,377,088  (== p15.7 grand, txn-date)
 //	Part X     Total assets == Total L+NA (A = L + NA); with-restriction split == p15.4.
 
 import (
@@ -129,7 +131,7 @@ func TestForm990Golden(t *testing.T) {
 		"7 — Other salaries and wages":     1_650_000,
 		"11g — Fees for services -- other": 2_500,
 		"16 — Occupancy":                   305_000,
-		"24e — All other expenses":         417_514,
+		"24e — All other expenses":         419_588,
 	}
 	for label, want := range ix {
 		cells, ok := f990RowFor(table, label)
@@ -206,8 +208,8 @@ func TestForm990PartIXCrossCheckP157(t *testing.T) {
 	if nineGrand[2].Minor != feGrand[4].Minor {
 		t.Errorf("Part IX grand = %d, p15.7 grand = %d", nineGrand[2].Minor, feGrand[4].Minor)
 	}
-	if nineGrand[2].Minor != 2_375_014 {
-		t.Errorf("Part IX grand = %d, want 2,375,014 (fixture oracle)", nineGrand[2].Minor)
+	if nineGrand[2].Minor != 2_377_088 {
+		t.Errorf("Part IX grand = %d, want 2,377,088 (fixture oracle, txn-date p26.71)", nineGrand[2].Minor)
 	}
 }
 

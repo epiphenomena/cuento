@@ -415,15 +415,65 @@ func (tk *Toolkit) FundPeriodStatement(ctx context.Context, s Scope, f FundID, f
 
 // FunctionalMatrix returns, per (expense account, class), the per-currency activity
 // over [from,to] in the scope (D21). Only expense splits carry a class, so the
-// result is exactly the functional expense matrix cells. Conversion (RateClosing)
-// collapses each cell's currencies to o.To at the as-of (to) rate; RateNone leaves
-// them native.
+// result is exactly the functional expense matrix cells. RateNone leaves each cell
+// native; RateClosing collapses each cell's currencies to o.To at the as-of (to)
+// rate; RateTxnDate converts each cell's activity month-by-month at each month's rate
+// and rounds the per-cell total HALF-EVEN once (the income-statement / P&L treatment,
+// D12) — an expense FLOW is measured at the rate in force when it occurred, so the
+// functional-expense total (a period expense flow, NOT a year-end balance) matches the
+// income statement's total expenses exactly rather than the closing-rate figure.
 func (tk *Toolkit) FunctionalMatrix(ctx context.Context, s Scope, from, to string, o ConvertOpts) (map[AccountID]map[Class][]CurAmt, error) {
-	rows, err := tk.store.FunctionalActivity(ctx, from, to, s.Sub)
+	excl, err := tk.consolidatedICExclusions(ctx, s.Sub)
 	if err != nil {
 		return nil, err
 	}
-	excl, err := tk.consolidatedICExclusions(ctx, s.Sub)
+
+	if o.Mode == RateTxnDate {
+		// TxnDate: decompose the period into calendar months (like Activity's TxnDate
+		// path), convert each month's native (account,class) activity at that month's
+		// on-or-before rate, accumulate the UNROUNDED product per (account,class), and
+		// round once. Under the monthly rate schedule this is the per-transaction-date
+		// rate for every split in the month — so each expense flow lands at its own rate.
+		unrounded := make(map[AccountID]map[Class]float64)
+		err := tk.ByPeriod(from, to, GranMonth, func(pFrom, pTo string) error {
+			rows, err := tk.store.FunctionalActivity(ctx, pFrom, pTo, s.Sub)
+			if err != nil {
+				return err
+			}
+			for _, r := range rows {
+				if excl[r.AccountID] {
+					continue // intra-group expense, excluded at consolidation (D19)
+				}
+				rr, err := tk.RateOn(ctx, r.Currency, o.To, pTo)
+				if err != nil {
+					return err
+				}
+				exFrom, exTo, err := tk.exponents(ctx, r.Currency, o.To)
+				if err != nil {
+					return err
+				}
+				cl := Class(r.FunctionalClass)
+				if unrounded[r.AccountID] == nil {
+					unrounded[r.AccountID] = make(map[Class]float64)
+				}
+				unrounded[r.AccountID][cl] += float64(r.Amount) * rr.Rate * math.Pow(10, float64(exTo-exFrom))
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		out := make(map[AccountID]map[Class][]CurAmt, len(unrounded))
+		for acct, byClass := range unrounded {
+			out[acct] = make(map[Class][]CurAmt, len(byClass))
+			for cl, v := range byClass {
+				out[acct][cl] = []CurAmt{{Currency: o.To, Minor: RoundHalfEven(v)}}
+			}
+		}
+		return out, nil
+	}
+
+	rows, err := tk.store.FunctionalActivity(ctx, from, to, s.Sub)
 	if err != nil {
 		return nil, err
 	}

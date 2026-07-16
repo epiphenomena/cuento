@@ -21,9 +21,11 @@ import (
 //     the TXN-DATE rate (matching p15.5, the income statement's revenue flow) and rolled
 //     to their effective Part VIII 990 codes via Group990 (D25 inheritance/override,
 //     explicit Unmapped bucket). The line total == p15.5's total revenue.
-//   - Part IX  — Functional-expenses totals: the p15.7 FunctionalMatrix(RateClosing) path
+//   - Part IX  — Functional-expenses totals: the p15.7 FunctionalMatrix(RateTxnDate) path
 //     rolled to effective Part IX lines; each line total (Σ the three functional classes)
-//     equals p15.7's line total exactly.
+//     equals p15.7's line total exactly, and the Part IX grand total ties Part VIII's
+//     basis — revenue and expenses both at the txn-date flow rate (p26.71), so Part IX ==
+//     the income statement's total expenses.
 //   - Part X   — Balance-sheet lines at year-end: the p15.4 balance-sheet path
 //     (BalancesAsOf at fiscal-year-end + the by-restriction net-asset split via fund
 //     tagging + the intercompany elimination on a consolidated scope), converted at the
@@ -360,8 +362,9 @@ func (b *f990Builder) partVIII(ctx context.Context) error {
 // --- Part IX: functional-expenses totals (reuses p15.7 FunctionalMatrix) ----
 
 // partIX renders the p15.7 functional-expenses path: each expense (account,class) cell
-// converted at the CLOSING rate, grouped to its effective Part IX line (D25), and the
-// LINE TOTAL (Σ the three functional classes) emitted per effective code — so each line
+// converted at the TRANSACTION-DATE rate (p26.71 — an expense flow, matching the income
+// statement), grouped to its effective Part IX line (D25), and the LINE TOTAL (Σ the
+// three functional classes) emitted per effective code — so each line
 // total equals p15.7's line total exactly. Accounts with no effective code fall into the
 // Unmapped bucket (empty on this fixture: every expense inherits IX.24e). One converted
 // (USD) figure per line + a grand total.
@@ -369,7 +372,7 @@ func (b *f990Builder) partIX(ctx context.Context) error {
 	b.sectionRow("reports.form_990.part.ix")
 	target := b.target
 
-	conv, err := b.tk.FunctionalMatrix(ctx, Scope{Sub: b.p.Scope}, b.p.From, b.p.To, ConvertOpts{To: target, Mode: RateClosing})
+	conv, err := b.tk.FunctionalMatrix(ctx, Scope{Sub: b.p.Scope}, b.p.From, b.p.To, ConvertOpts{To: target, Mode: RateTxnDate})
 	if err != nil {
 		return err
 	}
