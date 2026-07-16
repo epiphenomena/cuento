@@ -117,12 +117,18 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 		}
 	}
 
-	// --- classify accounts into the Assets and Liabilities sections. Walk the tree
-	// pre-order (stable order + resolved names). Net-debit signs (D2): assets are
+	// --- classify LEAF accounts into the Assets and Liabilities sections. Walk the
+	// tree pre-order (stable order + resolved names). Net-debit signs (D2): assets are
 	// positive as stored; liabilities are stored NEGATIVE (credit), so negate to show
 	// a positive liability balance. Equity/revenue/expense accounts are skipped --
 	// they are absorbed into the net-asset plug below. Intercompany-flagged accounts
 	// are ELIMINATED at a consolidated scope (icAccts is empty at a leaf scope).
+	//
+	// assetLeaf / liabLeaf index each in-section leaf by account id (for the p26.53
+	// tree walk, scoped per section); assets/liabilities keep the flat ordered lists
+	// the section TOTALS sum over.
+	assetLeaf := map[int64]bsLine{}
+	liabLeaf := map[int64]bsLine{}
 	var assets, liabilities []bsLine
 	for _, node := range tree {
 		amts, ok := balances[node.ID]
@@ -139,12 +145,14 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 				line.add(a.Currency, a.Minor)
 			}
 			assets = append(assets, line)
+			assetLeaf[node.ID] = line
 		case "liability":
 			line := bsLine{name: node.Name, acctID: node.ID}
 			for _, a := range amts {
 				line.add(a.Currency, -a.Minor) // stored credit -> positive liability
 			}
 			liabilities = append(liabilities, line)
+			liabLeaf[node.ID] = line
 		}
 	}
 
@@ -202,18 +210,25 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 
 	b := &bsBuilder{tk: tk, ctx: ctx, p: p, target: target, detail: p.DetailCurrency()}
 
-	// --- Assets section.
+	// p26.53: index the account tree so each section renders the NESTED account
+	// hierarchy (placeholder parents as rolled-up subtotal rows, leaves indented under
+	// them) -- consistent with the trial balance / income statement / chart. In the
+	// synthetic base fixture every asset/liability is a top-level leaf (no grouping
+	// parent), so this adds no rows there; on a real chart with parent asset/liability
+	// accounts (e.g. Fixed Assets > Building) the parents now surface with their
+	// rolled subtotals instead of being dropped.
+	tn := toTreeNodes(tree)
+	children, roots, isPlaceholder, name, depth, _ := indexTree(tn)
+
+	// --- Assets section (nested tree; section header at Indent 0, accounts at
+	// treeDepth+1 so a top-level leaf stays at Indent 1 exactly as before).
 	b.sectionHeader("reports.balance_sheet.section.assets")
-	for _, l := range assets {
-		b.accountLine(l)
-	}
+	b.emitSectionTree(children, roots, isPlaceholder, name, depth, assetLeaf)
 	b.totalLine("reports.balance_sheet.total.assets", assetTotal)
 
 	// --- Liabilities section.
 	b.sectionHeader("reports.balance_sheet.section.liabilities")
-	for _, l := range liabilities {
-		b.accountLine(l)
-	}
+	b.emitSectionTree(children, roots, isPlaceholder, name, depth, liabLeaf)
 	b.totalLine("reports.balance_sheet.total.liabilities", liabilityTotal)
 
 	// --- Net Assets section (by-restriction split; synthetic lines only).
@@ -297,16 +312,118 @@ func (b *bsBuilder) sectionHeader(key string) {
 	b.rows = append(b.rows, Row{Cells: b.labelRow(LabelCell(key)), Kind: RowData})
 }
 
-// accountLine appends an asset/liability account line: its converted total (and, in
-// detail mode, one row per native currency with a drill on the native cell). The
-// account name is a proper noun (TextCell). In detail mode the FIRST currency row
-// carries the name and subsequent rows are blank-named continuations.
-func (b *bsBuilder) accountLine(l bsLine) {
+// emitSectionTree walks the account tree pre-order (p26.53) and emits the section's
+// NESTED hierarchy: a PLACEHOLDER parent that has any in-section leaf beneath it becomes
+// a rolled-up SUBTOTAL row; each in-section LEAF becomes an account row. Every account
+// row sits at Indent = treeDepth+1 (the section header is Indent 0), so a TOP-LEVEL leaf
+// stays at Indent 1 exactly as the pre-p26.53 flat layout -- adding a parent above a leaf
+// pushes the leaf to Indent 2, mirroring the trial balance. leaf indexes the in-section
+// leaves (already sign-normalized + intercompany-eliminated); a placeholder with no
+// in-section leaf beneath it is skipped (empty chart branch).
+func (b *bsBuilder) emitSectionTree(
+	children map[int64][]int64, roots []int64, isPlaceholder map[int64]bool,
+	name map[int64]string, depth map[int64]int, leaf map[int64]bsLine,
+) {
+	// hasLeaf marks a node whose subtree carries an in-section leaf (so empty
+	// placeholder branches drop out). A leaf qualifies iff it is in `leaf`.
+	hasLeaf := map[int64]bool{}
+	var mark func(id int64) bool
+	mark = func(id int64) bool {
+		if !isPlaceholder[id] {
+			_, ok := leaf[id]
+			hasLeaf[id] = ok
+			return ok
+		}
+		any := false
+		for _, c := range children[id] {
+			if mark(c) {
+				any = true
+			}
+		}
+		hasLeaf[id] = any
+		return any
+	}
+	for _, r := range roots {
+		mark(r)
+	}
+
+	var walk func(id int64)
+	walk = func(id int64) {
+		if !hasLeaf[id] {
+			return
+		}
+		if isPlaceholder[id] {
+			b.parentSubtotal(name[id], b.subtreeByCcy(id, children, isPlaceholder, leaf), depth[id]+1)
+			for _, c := range children[id] {
+				walk(c)
+			}
+			return
+		}
+		b.accountLine(leaf[id], depth[id]+1)
+	}
+	for _, r := range roots {
+		walk(r)
+	}
+}
+
+// subtreeByCcy sums the per-currency native balances of every in-section LEAF beneath id
+// (id inclusive when it is itself a leaf) -- a placeholder parent's rolled figure. The
+// intercompany elimination and sign normalization already live in the leaf bsLines, so a
+// parent's rollup inherits them (an eliminated child is simply absent from `leaf`, D19).
+func (b *bsBuilder) subtreeByCcy(
+	id int64, children map[int64][]int64, isPlaceholder map[int64]bool, leaf map[int64]bsLine,
+) map[string]int64 {
+	out := map[string]int64{}
+	var add func(n int64)
+	add = func(n int64) {
+		if !isPlaceholder[n] {
+			if l, ok := leaf[n]; ok {
+				for ccy, v := range l.byCcy {
+					out[ccy] += v
+				}
+			}
+			return
+		}
+		for _, c := range children[n] {
+			add(c)
+		}
+	}
+	add(id)
+	return out
+}
+
+// parentSubtotal appends a placeholder parent's rolled-up subtotal row at the given
+// indent: its converted rollup (blank native in detail mode -- a mixed-currency subtree
+// has no single native figure, mirroring the trial balance). Not drillable (a rollup
+// spans many leaves).
+func (b *bsBuilder) parentSubtotal(nm string, byCcy map[string]int64, indent int) {
+	if !b.detail {
+		conv, _ := b.convert(byCcy)
+		b.rows = append(b.rows, Row{
+			Cells:  b.amountRow(TextCell(nm), conv, b.convCcy(), nil),
+			Indent: indent,
+			Kind:   RowSubtotal,
+		})
+		return
+	}
+	conv, _ := b.convert(byCcy)
+	b.rows = append(b.rows, Row{
+		Cells:  []Cell{TextCell(nm), TextCell(""), BlankMoneyCell(), MoneyCell(conv, b.convCcy())},
+		Indent: indent,
+		Kind:   RowSubtotal,
+	})
+}
+
+// accountLine appends an asset/liability account leaf line at the given indent: its
+// converted total (and, in detail mode, one row per native currency with a drill on the
+// native cell). The account name is a proper noun (TextCell). In detail mode the FIRST
+// currency row carries the name and subsequent rows are blank-named continuations.
+func (b *bsBuilder) accountLine(l bsLine, indent int) {
 	if !b.detail {
 		conv, _ := b.convert(l.byCcy)
 		b.rows = append(b.rows, Row{
 			Cells:  b.amountRow(TextCell(l.name), conv, b.convCcy(), b.accountDrillAll(l)),
-			Indent: 1,
+			Indent: indent,
 			Kind:   RowData,
 		})
 		return
@@ -329,7 +446,7 @@ func (b *bsBuilder) accountLine(l bsLine) {
 		}
 		b.rows = append(b.rows, Row{
 			Cells:  []Cell{nameCell, TextCell(ccy), nativeCell, MoneyCell(conv, b.convCcyOr(ccy))},
-			Indent: 1,
+			Indent: indent,
 			Kind:   RowData,
 		})
 	}

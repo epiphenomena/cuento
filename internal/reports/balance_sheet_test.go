@@ -437,6 +437,82 @@ func TestBalanceSheetIntercompanyWarning(t *testing.T) {
 	}
 }
 
+// TestBalanceSheetNestedTree exercises the p26.53 NESTED account tree: with the
+// capital-campaign seam the chart carries a "Fixed Assets" placeholder PARENT over
+// "Land" + "Construction in Progress" leaves. The balance sheet must now surface the
+// parent as a rolled-up SUBTOTAL row (previously it was dropped -- it has no direct
+// balance), with the leaves nested one level deeper. This is the path the flat base
+// fixture cannot exercise (its assets are all top-level leaves), so it is asserted here
+// directly on the returned Table: parent kind, rollup == sum of leaves, and the indent
+// relationship (parent == child indent - 1). NATIVE mode (no target) so the rollup is
+// exact int64 addition per currency, not FX-rounded.
+func TestBalanceSheetNestedTree(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendCapitalCampaign(t)
+	ctx := context.Background()
+	rep := balanceSheetReport(t)
+
+	// As-of end of the campaign year, root scope, native (no target), converted-only.
+	p := reports.Params{Scope: f.IDs.Root, AsOf: "2025-12-31", Lang: "en"}
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run balance sheet: %v", err)
+	}
+
+	// Locate the three rows by name and capture their (row, indent, converted amount).
+	type rowInfo struct {
+		found  bool
+		kind   reports.RowKind
+		indent int
+		amount int64
+	}
+	find := func(name string) rowInfo {
+		for _, row := range table.Rows {
+			if len(row.Cells) < 2 || row.Cells[0].Kind != reports.CellText || row.Cells[0].Text != name {
+				continue
+			}
+			last := row.Cells[len(row.Cells)-1]
+			return rowInfo{found: true, kind: row.Kind, indent: row.Indent, amount: last.Minor}
+		}
+		return rowInfo{}
+	}
+
+	parent := find("Fixed Assets")
+	land := find("Land")
+	constr := find("Construction in Progress")
+
+	// The placeholder PARENT now appears (p26.53 -- previously dropped) as a SUBTOTAL.
+	if !parent.found {
+		t.Fatalf("Fixed Assets placeholder parent not rendered (the nested-tree regression)")
+	}
+	if parent.kind != reports.RowSubtotal {
+		t.Errorf("Fixed Assets parent kind = %v, want RowSubtotal", parent.kind)
+	}
+	if !land.found || !constr.found {
+		t.Fatalf("nested leaf rows missing: land=%v constr=%v", land.found, constr.found)
+	}
+
+	// Leaves nest ONE level below the parent (Indent == parent + 1). The parent itself
+	// is at Indent 1 (a top-level account under the Indent-0 Assets section header), so
+	// the leaves land at Indent 2 -- the flat pre-p26.53 layout would have left them at 1.
+	if parent.indent != 1 {
+		t.Errorf("Fixed Assets parent indent = %d, want 1 (top-level under the section header)", parent.indent)
+	}
+	if land.indent != parent.indent+1 || constr.indent != parent.indent+1 {
+		t.Errorf("leaf indent land=%d constr=%d, want parent+1 (%d)", land.indent, constr.indent, parent.indent+1)
+	}
+
+	// THE ROLLUP ARITHMETIC: the parent's (native, no-target) converted cell equals the
+	// sum of its leaves' cells -- the number that must not drift. Land = 800,000 USD;
+	// Construction = 500,000 USD + 6,000,000 MXN; in native/no-target mode the converted
+	// column is the plain per-currency sum, so the parent = 800,000 + 500,000 + 6,000,000
+	// = 7,300,000 minor across the two currencies, and == land + constr by construction.
+	if parent.amount != land.amount+constr.amount {
+		t.Errorf("Fixed Assets rollup (%d) != Land (%d) + Construction (%d)",
+			parent.amount, land.amount, constr.amount)
+	}
+}
+
 // warningRow returns the first RowWarning in t, or nil.
 func warningRow(t reports.Table) *reports.Row {
 	for i := range t.Rows {
