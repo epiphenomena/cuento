@@ -380,12 +380,14 @@ func TestBalanceSheetScope(t *testing.T) {
 }
 
 // TestBalanceSheetIntercompanyWarning: on a CORRUPTED copy of the fixture the
-// intercompany accounts fail to net to zero, and the balance sheet emits the D19
-// WARNING row. Mirrors p15.2's IntercompanyNet corrupted-copy technique: you cannot
-// post an unbalanced txn, and net-to-zero is a CROSS-transaction property, so post
-// ONE extra BALANCED txn (DR Due-from +250,000 / CR Checking US -250,000) that has no
-// mirroring Due-to credit -- each txn stays zero-sum, but the consolidated
-// intercompany net becomes +250,000 USD.
+// intercompany accounts fail to net to zero, and the balance sheet surfaces the D19
+// residual -- in the NATIVE view (no target) as the reconciling-difference line (RowWarning
+// kind, p26.70: labeled honestly rather than flagged as an unexplained error; there is no
+// single rate in native mode, so it cannot be split into a translation adjustment).
+// Mirrors p15.2's IntercompanyNet corrupted-copy technique: you cannot post an unbalanced
+// txn, and net-to-zero is a CROSS-transaction property, so post ONE extra BALANCED txn
+// (DR Due-from +250,000 / CR Checking US -250,000) that has no mirroring Due-to credit --
+// each txn stays zero-sum, but the consolidated intercompany net becomes +250,000 USD.
 func TestBalanceSheetIntercompanyWarning(t *testing.T) {
 	f := fixture.New(t)
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
@@ -422,10 +424,14 @@ func TestBalanceSheetIntercompanyWarning(t *testing.T) {
 	}
 	wr := warningRow(corrupted)
 	if wr == nil {
-		t.Fatalf("corrupted fixture: expected an intercompany WARNING row, got none")
+		t.Fatalf("corrupted fixture: expected an intercompany reconciling row, got none")
 	}
-	// The warning row's amount cell carries the +250,000 USD residual (converted; no
-	// target here so it is native USD).
+	// It is labeled as the reconciling-difference line (p26.70), not the old bare "do not
+	// net to zero" warning key.
+	if wr.Cells[0].Kind != reports.CellLabel || wr.Cells[0].Text != "reports.balance_sheet.na.ic_reconciling" {
+		t.Errorf("native residual row label = %q, want reports.balance_sheet.na.ic_reconciling", wr.Cells[0].Text)
+	}
+	// The row's amount cell carries the +250,000 USD residual (native USD; no target).
 	var found bool
 	for _, c := range wr.Cells {
 		if c.Kind == reports.CellMoney && !c.Blank && c.Minor == 250_000 {
@@ -433,7 +439,7 @@ func TestBalanceSheetIntercompanyWarning(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Errorf("intercompany warning row does not carry the 250,000 USD residual: %+v", wr.Cells)
+		t.Errorf("intercompany reconciling row does not carry the 250,000 USD residual: %+v", wr.Cells)
 	}
 }
 
@@ -521,6 +527,209 @@ func warningRow(t reports.Table) *reports.Row {
 		}
 	}
 	return nil
+}
+
+// TestBalanceSheetCTASplit is the p26.70 reclassification: a MULTI-currency intercompany
+// residual (a foreign-currency IC advance whose closing-rate value differs from its
+// historical/transaction-date value) is presented in the CONVERTED view as a Cumulative
+// Translation Adjustment line (closing − historical) plus a reconciling-difference line
+// (historical), carved out of the without-restriction figure so the net-assets total and
+// the balance-sheet identity are UNCHANGED. Asserts: (1) the bare "does not net to zero"
+// warning is GONE (replaced by the two labeled lines); (2) A == L + NA still holds
+// exactly; (3) CTA + reconciling reclassify the whole residual (their magnitudes equal
+// the closing residual — no value lost, just relabeled); (4) the CTA equals closing −
+// historical from the toolkit split; (5) without-restriction moved TOWARD its undistorted
+// value (the directional check — the reclassification restores what the elimination
+// distorted). Uses the corrupted-copy technique with an MXN IC advance so closing ≠
+// historical (RULE 11: a store-level structural probe, not a golden).
+func TestBalanceSheetCTASplit(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	rep := balanceSheetReport(t)
+	p := reports.Params{Scope: f.IDs.Root, AsOf: f.Expected.AsOf, Lang: "en", TargetCurrency: "USD"}
+
+	// Baseline (clean, converted): NO CTA / reconciling / warning rows.
+	clean, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run clean: %v", err)
+	}
+	if _, ok := labelAmount(clean, "reports.balance_sheet.na.cta"); ok {
+		t.Fatalf("clean fixture already has a CTA row")
+	}
+	cleanWithout, _ := labelAmount(clean, "reports.balance_sheet.na.without")
+
+	// Corrupt with a FOREIGN-currency (MXN) unmirrored intercompany advance on the MX sub,
+	// dated early (Feb 2025) so its transaction-date rate differs from the closing rate --
+	// giving a nonzero translation component. DueToIntl (liability, IC-flagged) net-debit
+	// +1,000,000 MXN, Cash MXN -1,000,000 MXN keeps the txn zero-sum.
+	_, err = f.Store.PostTransaction(ctx, store.PostTransactionInput{
+		Date:         "2025-02-15",
+		SubsidiaryID: f.IDs.MX,
+		Currency:     "MXN",
+		Memo:         "test: unmirrored MXN intercompany advance",
+		Splits: []store.SplitInput{
+			{AccountID: f.IDs.DueToIntl, Amount: 1_000_000},
+			{AccountID: f.IDs.CashMXN, Amount: -1_000_000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("post corrupting MXN txn: %v", err)
+	}
+
+	// The toolkit split is the oracle for the two components.
+	tk := reports.NewToolkit(f.Store, p)
+	split, err := tk.IntercompanyResidualSplit(ctx, reports.Scope{Sub: f.IDs.Root}, f.Expected.AsOf, "USD")
+	if err != nil {
+		t.Fatalf("residual split: %v", err)
+	}
+	if split.Closing == split.Historical {
+		t.Fatalf("MXN advance produced no translation component (closing %d == historical %d) -- the scenario is not exercising CTA", split.Closing, split.Historical)
+	}
+
+	corr, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run corrupted: %v", err)
+	}
+
+	// (1) The bare warning is GONE (no RowWarning in the converted view; replaced by the
+	// two labeled net-asset lines).
+	if wr := warningRow(corr); wr != nil {
+		t.Errorf("converted view still emits a bare intercompany warning row: %+v", wr.Cells)
+	}
+
+	cta, okC := labelAmount(corr, "reports.balance_sheet.na.cta")
+	rec, okR := labelAmount(corr, "reports.balance_sheet.na.ic_reconciling")
+	if !okC || !okR {
+		t.Fatalf("converted view missing CTA (%v) or reconciling (%v) line", okC, okR)
+	}
+
+	// (4) The residual is a CONTRA-equity adjustment (the eliminated IC legs REDUCED the
+	// plug), so each displayed line is the negation of its raw component: the CTA line
+	// shows −(closing − historical) = historical − closing (the FX translation portion),
+	// and the reconciling line shows −historical (the genuine imbalance). The raw split's
+	// translation magnitude is |closing − historical|.
+	if cta != split.Historical-split.Closing {
+		t.Errorf("CTA line = %d, want historical-closing = %d (contra-equity FX component)", cta, split.Historical-split.Closing)
+	}
+	if rec != -split.Historical {
+		t.Errorf("reconciling line = %d, want -historical = %d", rec, -split.Historical)
+	}
+
+	// (3) No value lost: CTA + reconciling reclassify the whole closing residual (their
+	// sum is the negated closing residual -- the amount the elimination pulled out of the
+	// plug), so |CTA + rec| == the old IntercompanyNet residual (converted at closing).
+	if cta+rec != -split.Closing {
+		t.Errorf("CTA + reconciling = %d, want -closing residual = %d (no value lost)", cta+rec, -split.Closing)
+	}
+
+	// (2) A == L + NA still holds EXACTLY (the reclassification does not touch the plug).
+	assets, _ := labelAmount(corr, "reports.balance_sheet.total.assets")
+	lPlusNA, _ := labelAmount(corr, "reports.balance_sheet.total.liabilities_net_assets")
+	if assets != lPlusNA {
+		t.Errorf("A (%d) != L+NA (%d): the CTA reclassification broke the identity", assets, lPlusNA)
+	}
+
+	// (5) Directional: without-restriction moved TOWARD its undistorted (clean) value --
+	// the reclassification restores what the elimination distorted, it does not push
+	// further away.
+	corrWithout, _ := labelAmount(corr, "reports.balance_sheet.na.without")
+	// Distorted (pre-reclassification) without = cleanWithout - closing (the elimination
+	// shortfall). The shown without should be closer to cleanWithout than the distorted one.
+	distorted := cleanWithout - split.Closing
+	if abs64(corrWithout-cleanWithout) > abs64(distorted-cleanWithout) {
+		t.Errorf("without-restriction moved AWAY from clean: shown %d, clean %d, distorted %d", corrWithout, cleanWithout, distorted)
+	}
+}
+
+// TestBalanceSheetCTADetailNoSplit: the CTA reclassification is a CONVERTED-view
+// presentation. In the per-currency NATIVE DETAIL view (Detail=="currency", even WITH a
+// target) there is no single rate, so the split must NOT run — the residual is shown as
+// the native reconciling-difference line PER NATIVE CURRENCY instead, and no (converted)
+// CTA / reconciling-in-target rows appear, and the native asset/without figures are NOT
+// polluted by a target-currency injection. Regression guard for the detail+target gate.
+func TestBalanceSheetCTADetailNoSplit(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	rep := balanceSheetReport(t)
+
+	// Detail=currency WITH a target (native + converted columns).
+	p := reports.Params{Scope: f.IDs.Root, AsOf: f.Expected.AsOf, Lang: "en", TargetCurrency: "USD", Detail: "currency"}
+
+	// The clean native without-USD figure (oracle for "not polluted").
+	clean, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run clean detail: %v", err)
+	}
+	cleanNativeUSD := detailNative(clean, "reports.balance_sheet.na.without", "USD")
+
+	// MXN unmirrored intercompany advance (a residual with a translation component).
+	_, err = f.Store.PostTransaction(ctx, store.PostTransactionInput{
+		Date:         "2025-02-15",
+		SubsidiaryID: f.IDs.MX,
+		Currency:     "MXN",
+		Memo:         "test: MXN intercompany advance (detail view)",
+		Splits: []store.SplitInput{
+			{AccountID: f.IDs.DueToIntl, Amount: 1_000_000},
+			{AccountID: f.IDs.CashMXN, Amount: -1_000_000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+
+	corr, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run corrupted detail: %v", err)
+	}
+
+	// No converted CTA row in the detail view (the split did not run).
+	if _, ok := labelAmount(corr, "reports.balance_sheet.na.cta"); ok {
+		t.Errorf("detail view emitted a CTA row; the split must not run in per-currency mode")
+	}
+	// The reconciling line IS present, carrying the MXN 1,000,000 NATIVE residual (not a
+	// USD figure).
+	if mxn := detailNative(corr, "reports.balance_sheet.na.ic_reconciling", "MXN"); mxn != 1_000_000 {
+		t.Errorf("detail reconciling native MXN = %d, want 1,000,000 (native residual, not converted USD)", mxn)
+	}
+	// The native without-USD figure is UNCHANGED (no target-currency injection polluted it;
+	// the MXN residual only touches MXN lines/totals).
+	if got := detailNative(corr, "reports.balance_sheet.na.without", "USD"); got != cleanNativeUSD {
+		t.Errorf("detail native without-USD = %d, want %d (unchanged; no converted injection)", got, cleanNativeUSD)
+	}
+}
+
+// detailNative returns the NATIVE (column-2) minor for the synthetic-label row `key` at
+// currency `ccy` in the per-currency detail view (a multi-currency line carries its label
+// on its first currency row and blank-named continuations, so carry the label forward).
+func detailNative(t reports.Table, key, ccy string) int64 {
+	curLabel := ""
+	for _, row := range t.Rows {
+		if len(row.Cells) < 3 {
+			continue
+		}
+		switch row.Cells[0].Kind {
+		case reports.CellLabel:
+			curLabel = row.Cells[0].Text
+		case reports.CellText:
+			if row.Cells[0].Text != "" {
+				curLabel = ""
+			}
+		}
+		if curLabel == key && row.Cells[1].Text == ccy {
+			return row.Cells[2].Minor
+		}
+	}
+	return 0
+}
+
+// abs64 returns the absolute value of an int64.
+func abs64(v int64) int64 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 // TestBalanceSheetDetailToggle: the per-currency detail view has MORE rows than the

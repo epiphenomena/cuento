@@ -28,10 +28,19 @@ import (
 // due-to/due-from accounts are INTERNAL and are ELIMINATED -- dropped from the
 // Assets/Liabilities listings and their totals. On the balanced fixture they net to
 // zero, so the eliminated asset and liability cancel and Net Assets (the plug) is
-// unchanged; a NONZERO residual is surfaced as a WARNING row (never hidden). A
-// LEAF/single-sub scope is NOT a consolidation: its intercompany accounts are that
-// subsidiary's genuine due-to-parent / due-from-child balances, shown as ordinary
-// account rows, never collapsed and never warned.
+// unchanged. A NONZERO residual is NOT hidden and NOT presented as an unexplained error
+// (p26.70): most of it is a legitimate FX TRANSLATION ADJUSTMENT (ASC 830 --
+// retranslating accumulated foreign intercompany balances at the closing rate) plus a
+// smaller genuine-imbalance core. In the CONVERTED (single-target) view it is
+// reclassified into a Cumulative Translation Adjustment line (closing − historical value)
+// and a reconciling-difference line (historical value), both carved OUT of the
+// without-restriction figure so the net-assets total and the balance-sheet identity are
+// unchanged (assets == L + NA still holds; the added net-asset deltas sum to zero). In
+// the per-currency NATIVE view there is no single rate, so the residual is shown as the
+// reconciling-difference line only (no translation component). A LEAF/single-sub scope is
+// NOT a consolidation: its intercompany accounts are that subsidiary's genuine
+// due-to-parent / due-from-child balances, shown as ordinary account rows, never
+// collapsed and never reclassified.
 //
 // PER-CURRENCY DETAIL (Params.Detail == "currency"): the default view shows only the
 // converted total per section line (target currency at the AsOf closing rate, D12);
@@ -197,14 +206,28 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	}
 
 	// Intercompany residual (D19): the flagged accounts, collapsed across the
-	// CONSOLIDATED scope, must net to zero per currency; a nonzero residual => a
-	// warning row. Only computed at a consolidated scope (a leaf scope holds one side
-	// legitimately and is not a consolidation, so it never warns).
+	// CONSOLIDATED scope, ideally net to zero per currency. A nonzero residual is NOT
+	// an unexplained error — most of it is a legitimate FX TRANSLATION ADJUSTMENT (ASC
+	// 830: retranslating accumulated foreign intercompany balances at the closing rate),
+	// with a smaller genuine-imbalance core. p26.70 reclassifies it: in the CONVERTED
+	// (single-target) view the residual is split into a Cumulative Translation Adjustment
+	// line (closing − historical value) and a reconciling-difference line (historical
+	// value), both carved OUT of the without-restriction figure so the net-assets total —
+	// and the balance-sheet identity — are unchanged. In the per-currency NATIVE detail
+	// view there is no single rate, so the native residual is shown as the reconciling
+	// difference only (no translation component). Only at a consolidated scope.
 	var icNet []CurAmt
+	var icSplit ICResidualSplit
 	if consolidated {
 		icNet, err = tk.IntercompanyNet(ctx, Scope{Sub: p.Scope}, p.AsOf)
 		if err != nil {
 			return Table{}, err
+		}
+		if hasNonzero(icNet) && target != "" {
+			icSplit, err = tk.IntercompanyResidualSplit(ctx, Scope{Sub: p.Scope}, p.AsOf, target)
+			if err != nil {
+				return Table{}, err
+			}
 		}
 	}
 
@@ -232,9 +255,50 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	b.totalLine("reports.balance_sheet.total.liabilities", liabilityTotal)
 
 	// --- Net Assets section (by-restriction split; synthetic lines only).
+	//
+	// p26.70 CTA reclassification (converted view only — see the showCTA gate). The
+	// intercompany residual is currently absorbed into the plug: eliminating the IC legs
+	// leaves consolidated assets short by the residual, so the plug (net assets = assets −
+	// liabilities) and thus the without-restriction figure are distorted by −closing. We
+	// carve that distortion out into two labeled lines WITHOUT changing the net-assets
+	// total, so the balance-sheet identity is untouched:
+	//   - restore the without-restriction line to its undistorted value: + closing;
+	//   - CTA line          = historical − closing  (the FX translation component);
+	//   - reconciling line  = − historical          (the genuine imbalance, → 0 as the
+	//                                                 import cutoff fix lands).
+	// The three added deltas sum to zero (+closing) + (historical − closing) + (−historical)
+	// == 0, so without + CTA + reconciling + with still foots to the plug and A == L + NA
+	// holds exactly. The signs are FORCED by the identity: with `without` restored to its
+	// clean value, CTA + reconciling MUST equal −closing (the amount the elimination pulled
+	// out of the plug) — a "+closing" reading would drive without ~2×closing away from clean
+	// and break balance. So the lines are the negation of the raw split components; "no
+	// value lost" holds in magnitude (|CTA + reconciling| == the old closing residual). The
+	// residual is converted (target minor) — injecting {target: v} into a native map
+	// converts identity, so the closing restoration lands exactly on the converted total.
+	// The CTA reclassification is a CONVERTED-view (single-target) presentation: a
+	// translation adjustment only exists under conversion, and the carve injects a
+	// target-currency amount into the converted total. The per-currency NATIVE DETAIL view
+	// (Detail=="currency") has no single rate, so it must NOT run the split — it falls
+	// through to the native reconciling line below (the residual shown per native
+	// currency). Hence the gate excludes detail mode as well as the no-target case.
+	withoutShown := withoutRestriction
+	showCTA := consolidated && hasNonzero(icNet) && target != "" && !b.detail
+	if showCTA {
+		withoutShown = map[string]int64{}
+		for ccy, v := range withoutRestriction {
+			withoutShown[ccy] = v
+		}
+		withoutShown[target] += icSplit.Closing // restore the undistorted figure
+	}
 	b.sectionHeader("reports.balance_sheet.section.net_assets")
-	b.syntheticLine("reports.balance_sheet.na.without", withoutRestriction, false)
+	b.syntheticLine("reports.balance_sheet.na.without", withoutShown, false)
 	b.syntheticLine("reports.balance_sheet.na.surplus_of_which", surplus, true) // "of which" memo, indented
+	if showCTA {
+		cta := map[string]int64{target: icSplit.Historical - icSplit.Closing}
+		reconciling := map[string]int64{target: -icSplit.Historical}
+		b.syntheticLine("reports.balance_sheet.na.cta", cta, false)
+		b.syntheticLine("reports.balance_sheet.na.ic_reconciling", reconciling, false)
+	}
 	b.syntheticLine("reports.balance_sheet.na.with", withRestriction, false)
 	b.totalLine("reports.balance_sheet.total.net_assets", netAssetsTotal)
 
@@ -249,9 +313,14 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	}
 	b.grandTotalLine("reports.balance_sheet.total.liabilities_net_assets", lPlusNA)
 
-	// --- Intercompany warning row (only when nonzero, D19). Surfaced, never hidden.
-	if hasNonzero(icNet) {
-		b.warningLine("reports.balance_sheet.intercompany_warning", icNet)
+	// --- Intercompany residual, native view (no target): there is no single rate, so it
+	// cannot be split into a translation adjustment. Show it as the reconciling-difference
+	// line per native currency (p26.70) — the residual is never hidden, just labeled
+	// honestly rather than flagged as an unexplained error. When the CTA split ran
+	// (converted view) the residual is already presented as the CTA + reconciling lines
+	// above, so no extra row here.
+	if hasNonzero(icNet) && !showCTA {
+		b.warningLine("reports.balance_sheet.na.ic_reconciling", icNet)
 	}
 
 	return b.table(), nil

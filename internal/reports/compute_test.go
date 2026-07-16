@@ -411,6 +411,99 @@ func TestIntercompanyNetCorrupted(t *testing.T) {
 	}
 }
 
+// TestIntercompanyResidualSplitSameCurrency: a USD (same-as-target) intercompany
+// residual has NO translation component -- valued at the closing rate and at the
+// transaction-date rate it is identical (USD->USD is 1:1 at every date), so the split's
+// Closing == Historical and the CTA (Closing − Historical) is zero. This is the p26.70
+// invariant that a same-currency imbalance stays entirely in the genuine-imbalance
+// (Historical) component, with no spurious translation adjustment.
+func TestIntercompanyResidualSplitSameCurrency(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// A USD unmirrored intercompany advance (+250,000 USD residual, single currency).
+	_, err := f.Store.PostTransaction(ctx, store.PostTransactionInput{
+		Date:         "2026-06-15",
+		SubsidiaryID: f.IDs.US,
+		Currency:     "USD",
+		Memo:         "unmatched USD intercompany advance",
+		Splits: []store.SplitInput{
+			{AccountID: f.IDs.DueFromMX, Amount: 250_000},
+			{AccountID: f.IDs.CheckingUS, Amount: -250_000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+
+	split, err := tkFor(f, f.IDs.Root).IntercompanyResidualSplit(ctx, reports.Scope{Sub: f.IDs.Root}, f.Expected.AsOf, "USD")
+	if err != nil {
+		t.Fatalf("IntercompanyResidualSplit: %v", err)
+	}
+	if split.Closing != 250_000 {
+		t.Errorf("Closing = %d, want 250000 (USD residual @ closing 1:1)", split.Closing)
+	}
+	if split.Historical != 250_000 {
+		t.Errorf("Historical = %d, want 250000 (USD 1:1 at every date -> no translation)", split.Historical)
+	}
+	if split.Closing-split.Historical != 0 {
+		t.Errorf("CTA (Closing-Historical) = %d, want 0 for a same-currency residual", split.Closing-split.Historical)
+	}
+}
+
+// TestIntercompanyResidualSplitTranslation: a FOREIGN-currency (MXN) intercompany
+// residual DOES carry a translation component -- valued at the period-end CLOSING rate
+// it differs from its value at the transaction-date (HISTORICAL) rate, so Closing !=
+// Historical and the CTA is nonzero. The historical leg is the amount actually funded
+// (Feb-2025 rate); the closing leg retranslates the same MXN position at the AsOf rate.
+func TestIntercompanyResidualSplitTranslation(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// A foreign (MXN) unmirrored intercompany advance, dated early so the txn-date rate
+	// differs from the closing rate: DueToIntl (IC-flagged liability) +1,000,000 MXN.
+	_, err := f.Store.PostTransaction(ctx, store.PostTransactionInput{
+		Date:         "2025-02-15",
+		SubsidiaryID: f.IDs.MX,
+		Currency:     "MXN",
+		Memo:         "unmatched MXN intercompany advance",
+		Splits: []store.SplitInput{
+			{AccountID: f.IDs.DueToIntl, Amount: 1_000_000},
+			{AccountID: f.IDs.CashMXN, Amount: -1_000_000},
+		},
+	})
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+
+	tk := tkFor(f, f.IDs.Root)
+	split, err := tk.IntercompanyResidualSplit(ctx, reports.Scope{Sub: f.IDs.Root}, f.Expected.AsOf, "USD")
+	if err != nil {
+		t.Fatalf("IntercompanyResidualSplit: %v", err)
+	}
+	// Closing leg == ConvertMinorAt of the native residual at the AsOf rate (the oracle).
+	wantClosing, err := tk.ConvertMinorAt(ctx, 1_000_000, "MXN", "USD", f.Expected.AsOf)
+	if err != nil {
+		t.Fatalf("convert closing: %v", err)
+	}
+	if split.Closing != wantClosing {
+		t.Errorf("Closing = %d, want %d (native residual @ AsOf closing rate)", split.Closing, wantClosing)
+	}
+	// Historical leg == the same MXN converted at its transaction-DATE (Feb 2025) rate.
+	wantHist, err := tk.ConvertMinorAt(ctx, 1_000_000, "MXN", "USD", "2025-02-28")
+	if err != nil {
+		t.Fatalf("convert historical: %v", err)
+	}
+	if split.Historical != wantHist {
+		t.Errorf("Historical = %d, want %d (residual @ txn-date rate)", split.Historical, wantHist)
+	}
+	if split.Closing == split.Historical {
+		t.Errorf("no translation component: Closing == Historical == %d (rates should differ across the period)", split.Closing)
+	}
+}
+
 // TestActivityExcludesIntercompanyConsolidated: an intercompany-flagged R/E account
 // (an intra-group transfer, D19) is DROPPED from Activity at a CONSOLIDATED (root)
 // scope but KEPT at a leaf/single-sub scope (there it is the entity's real line).

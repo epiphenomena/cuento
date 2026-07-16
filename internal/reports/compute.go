@@ -705,6 +705,136 @@ func (tk *Toolkit) IntercompanyNet(ctx context.Context, s Scope, d string) ([]Cu
 	return sortedCurAmts(byCcy), nil
 }
 
+// ICResidualSplit is the intercompany residual (D19) decomposed into its two
+// components for the CTA presentation (p26.70), each already converted to a single
+// target currency (minor): Closing is the residual valued at the as-of CLOSING rate
+// (== ConvertMinorAt of IntercompanyNet); Historical is the SAME residual position
+// valued FLOW-wise at each contributing transaction's-date rate (the amount actually
+// funded, before FX retranslation). Their difference (Closing − Historical) is the
+// Cumulative Translation Adjustment — the FX gain/loss from retranslating accumulated
+// intercompany balances at the closing rate (ASC 830); Historical is the genuine
+// residual (real imbalance) that should approach zero once cutoff timing is fixed. On
+// a single-base-currency residual the two are equal (no FX component → all Historical).
+type ICResidualSplit struct {
+	Closing    int64 // residual @ closing rate, target minor
+	Historical int64 // residual @ transaction-date rate, target minor
+}
+
+// IntercompanyResidualSplit computes the ICResidualSplit for the consolidated scope as
+// of d, converted to `target`. The CLOSING leg converts IntercompanyNet's native
+// residual at the as-of rate (the balance-sheet treatment). The HISTORICAL leg values
+// the intercompany accounts' cumulative activity from inception to d FLOW-wise — month
+// by month at each month's rate, half-even once per currency — exactly the RateTxnDate
+// treatment, but over the intercompany-FLAGGED accounts (which Activity EXCLUDES on a
+// consolidated scope, so this walks them directly like IntercompanyNet). A same-
+// currency-as-target residual has closing == historical (no retranslation), so its CTA
+// is zero and it stays entirely in the Historical (real-imbalance) component.
+func (tk *Toolkit) IntercompanyResidualSplit(ctx context.Context, s Scope, d, target string) (ICResidualSplit, error) {
+	icIDs, err := tk.store.IntercompanyAccountIDs(ctx)
+	if err != nil {
+		return ICResidualSplit{}, err
+	}
+	isIC := make(map[AccountID]bool, len(icIDs))
+	for _, id := range icIDs {
+		isIC[id] = true
+	}
+
+	// CLOSING: native residual per currency, each converted at the as-of rate.
+	net, err := tk.IntercompanyNet(ctx, s, d)
+	if err != nil {
+		return ICResidualSplit{}, err
+	}
+	var closing int64
+	for _, a := range net {
+		conv, err := tk.ConvertMinorAt(ctx, a.Minor, a.Currency, target, d)
+		if err != nil {
+			return ICResidualSplit{}, err
+		}
+		closing += conv
+	}
+
+	// HISTORICAL: the intercompany accounts' cumulative activity to d, converted
+	// month-by-month at each month's rate (the amount actually funded, D12 flow rate).
+	// Accumulate the UNROUNDED product per currency, then round half-even once per
+	// currency and sum — mirroring the Activity TxnDate grain. Start the month walk at
+	// the earliest intercompany-touching transaction date (not the 1900 inception) so a
+	// balanced org with a recent first entry does not decompose a century of empty
+	// months every run; "" (no IC activity) short-circuits to zero historical.
+	from, err := tk.earliestICYear(ctx, s.Sub, isIC, d)
+	if err != nil {
+		return ICResidualSplit{}, err
+	}
+	if from == "" {
+		return ICResidualSplit{Closing: closing, Historical: 0}, nil // no IC activity
+	}
+	unrounded := make(map[string]float64)
+	err = tk.ByPeriod(from, d, GranMonth, func(pFrom, pTo string) error {
+		rows, err := tk.store.PeriodActivity(ctx, pFrom, pTo, s.Sub)
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			if !isIC[r.AccountID] {
+				continue
+			}
+			rr, err := tk.RateOn(ctx, r.Currency, target, pTo)
+			if err != nil {
+				return err
+			}
+			exFrom, exTo, err := tk.exponents(ctx, r.Currency, target)
+			if err != nil {
+				return err
+			}
+			unrounded[r.Currency] += float64(r.Amount) * rr.Rate * math.Pow(10, float64(exTo-exFrom))
+		}
+		return nil
+	})
+	if err != nil {
+		return ICResidualSplit{}, err
+	}
+	var historical int64
+	for _, v := range unrounded {
+		historical += RoundHalfEven(v)
+	}
+
+	return ICResidualSplit{Closing: closing, Historical: historical}, nil
+}
+
+// earliestICYear returns "YYYY-01-01" of the earliest calendar YEAR (from the fixed
+// inception bound to d) in which any intercompany-flagged account has activity, or ""
+// when there is none. It exists so the historical-rate month decomposition
+// (IntercompanyResidualSplit) starts at real intercompany activity rather than the 1900
+// inception — a coarse yearly scan (one PeriodActivity per year) finds the active span
+// cheaply, then the caller month-decomposes only [that year, d]. No store query is added
+// (PeriodActivity carries no min-date); the yearly probe reuses the same read.
+func (tk *Toolkit) earliestICYear(ctx context.Context, scope int64, isIC map[AccountID]bool, d string) (string, error) {
+	var earliest string
+	err := tk.ByPeriod(inceptionDate, d, GranYear, func(pFrom, pTo string) error {
+		if earliest != "" {
+			return nil // already found the first active year
+		}
+		rows, err := tk.store.PeriodActivity(ctx, pFrom, pTo, scope)
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			if isIC[r.AccountID] {
+				y, _, err := yearMonth(pFrom)
+				if err != nil {
+					return err
+				}
+				earliest = firstOfMonth(y, 1)
+				return nil
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return earliest, nil
+}
+
 // NetIncome returns the net revenue+expense activity over [from,to] in the scope,
 // converted to the target (D12). It is the sum of every revenue/expense account's
 // activity (net-debit: a net CREDIT — a surplus — is negative). RateClosing

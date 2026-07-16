@@ -1128,6 +1128,10 @@ other = "Net assets without donor restrictions"
 other = "Net assets with donor restrictions"
 [reports.balance_sheet.na.surplus_of_which]
 other = "of which change in net assets to date"
+[reports.balance_sheet.na.cta]
+other = "Cumulative translation adjustment"
+[reports.balance_sheet.na.ic_reconciling]
+other = "Intercompany reconciling difference"
 [reports.balance_sheet.intercompany_warning]
 other = "Intercompany accounts do not net to zero"
 

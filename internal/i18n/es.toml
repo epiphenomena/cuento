@@ -1125,6 +1125,10 @@ other = "Activos netos sin restricciones de donantes"
 other = "Activos netos con restricciones de donantes"
 [reports.balance_sheet.na.surplus_of_which]
 other = "de los cuales cambio en activos netos a la fecha"
+[reports.balance_sheet.na.cta]
+other = "Ajuste acumulado por conversion"
+[reports.balance_sheet.na.ic_reconciling]
+other = "Diferencia de conciliacion intercompania"
 [reports.balance_sheet.intercompany_warning]
 other = "Las cuentas intercompania no se compensan a cero"
 
