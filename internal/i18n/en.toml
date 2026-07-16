@@ -1576,6 +1576,28 @@ other = "US (MM/DD/YYYY)"
 other = "EU (DD/MM/YYYY)"
 [import.columns_hint]
 other = "Column numbers are zero-based. Use -1 for an unmapped payee or memo column."
+[import.columns_after_upload]
+other = "After you choose a file and preview, label each column below."
+[import.map_columns]
+other = "Map your columns"
+[import.map_columns_hint]
+other = "For each column in your file, choose what it maps to."
+[import.maps_to]
+other = "Maps to"
+[import.role.ignore]
+other = "Ignore"
+[import.role.date]
+other = "Date"
+[import.role.desc]
+other = "Description"
+[import.role.amount]
+other = "Amount"
+[import.role.debit]
+other = "Debit"
+[import.role.credit]
+other = "Credit"
+[import.map_preview_pending]
+other = "Map a Date column and an Amount column (or Debit and Credit) to see a preview."
 [import.col.date]
 other = "Date column"
 [import.col.amount]

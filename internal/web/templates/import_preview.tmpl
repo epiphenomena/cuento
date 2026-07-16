@@ -29,6 +29,142 @@
 <p class="field-error import-error" role="alert">{{if .ErrorArg}}{{t .ErrorKey .ErrorArg}}{{else}}{{t .ErrorKey}}{{end}}</p>
 {{- end}}
 
+{{/*
+  p26.64 import-map-preview (data: importPreviewModel with .Columns set) is the NEW
+  horizontal column-mapping + preview fragment. It shows the file's REAL columns (header
+  name + a sample value) each with a "maps to" select (Date / Description / Amount /
+  Debit / Credit / Ignore), plus the amount MODE select -- a REMAP form that re-POSTs to
+  /import/preview (carrying the CSV base64 + settings) so changing a role or the mode
+  re-renders this fragment with mode-appropriate options, server-side. When the required
+  roles are mapped and the file parses (.HasPreview), the 20-row preview + the CONFIRM
+  form co-render below. A parse/mapping error shows an INLINE hint (the selects stay so
+  the user can fix it), never a workspace-wiping 422 (p26.62 reserves that for
+  file-level problems). Degrades without JS: the remap form has a visible submit button;
+  the per-column selects and the mode select are plain server-rendered form controls.
+*/ -}}
+{{define "import-map-preview" -}}
+<section class="import-map-preview">
+  <h2>{{t "import.map_columns"}}</h2>
+  <p class="hint">{{t "import.map_columns_hint"}}</p>
+
+  <form class="import-map-form" method="post" action="/import/preview"
+        hx-post="/import/preview" hx-target="#import-workspace" hx-swap="innerHTML" id="import-map-form">
+    <input type="hidden" name="csv_b64" value="{{.CSVBase64}}">
+    <input type="hidden" name="filename" value="{{.Filename}}">
+    <input type="hidden" name="account_id" value="{{.AccountID}}">
+    <input type="hidden" name="subsidiary_id" value="{{.SubsidiaryID}}">
+    <input type="hidden" name="delimiter" value="{{.Mapping.Delimiter}}">
+    <input type="hidden" name="has_header" value="{{if .Mapping.HasHeader}}1{{else}}0{{end}}">
+    <input type="hidden" name="sign_flip" value="{{if .Mapping.SignFlip}}1{{else}}0{{end}}">
+    <input type="hidden" name="date_format" value="{{.Mapping.DateFmt}}">
+    <input type="hidden" name="save_profile" value="{{if .SaveProfile}}1{{else}}0{{end}}">
+    <input type="hidden" name="profile_name" value="{{.ProfileName}}">
+
+    <div class="field">
+      <label for="import-map-mode">{{t "import.amount_mode_label"}}</label>
+      <select id="import-map-mode" name="amount_mode" class="import-map-mode"
+              hx-post="/import/preview" hx-target="#import-workspace" hx-swap="innerHTML"
+              hx-include="closest form" hx-trigger="change">
+        <option value="single"{{if eq .AmountModeStr "debit_credit"}}{{else}} selected{{end}}>{{t "import.amount_mode.single"}}</option>
+        <option value="debit_credit"{{if eq .AmountModeStr "debit_credit"}} selected{{end}}>{{t "import.amount_mode.debit_credit"}}</option>
+      </select>
+    </div>
+
+    <table class="import-map-table">
+      <thead>
+        <tr>
+          {{- range .Columns}}
+          <th class="import-map-col">
+            <span class="import-map-col-name">{{if .Name}}{{.Name}}{{end}}</span>
+            {{- if .Sample}}<span class="import-map-col-sample">{{.Sample}}</span>{{end}}
+          </th>
+          {{- end}}
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          {{- range .Columns}}
+          <td class="import-map-cell">
+            <label class="import-map-label" for="import-role-{{.Index}}">{{t "import.maps_to"}}</label>
+            <select id="import-role-{{.Index}}" name="role_{{.Index}}" class="import-role-select"
+                    hx-post="/import/preview" hx-target="#import-workspace" hx-swap="innerHTML"
+                    hx-include="closest form" hx-trigger="change">
+              {{- range .Options}}
+              <option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>
+              {{- end}}
+            </select>
+          </td>
+          {{- end}}
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary import-map-update">{{t "import.preview_btn"}}</button>
+    </div>
+  </form>
+
+  {{- if .ErrorKey}}
+  <p class="field-error import-error import-map-error" role="alert">{{if .ErrorArg}}{{t .ErrorKey .ErrorArg}}{{else}}{{t .ErrorKey}}{{end}}</p>
+  {{- end}}
+
+  {{- if .HasPreview}}
+  <p class="hint import-preview-summary">{{tn "import.preview.count" .TotalRows}}
+    &middot; {{t "import.preview.target"}} <strong>{{.AccountName}}</strong> / <strong>{{.SubsidiaryNm}}</strong></p>
+
+  <table class="import-preview-table">
+    <thead>
+      <tr>
+        <th>{{t "import.col.date"}}</th>
+        <th>{{t "import.col.amount"}}</th>
+        <th>{{t "import.col.desc"}}</th>
+        <th>{{t "import.col.memo"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{- range .Rows}}
+      <tr class="import-preview-row">
+        <td class="import-cell-date">{{.Date}}</td>
+        <td class="import-cell-amount"><span class="amount">{{.AmountFmt}}</span></td>
+        <td class="import-cell-payee">{{.Description}}</td>
+        <td class="import-cell-memo">{{.Memo}}</td>
+      </tr>
+      {{- end}}
+    </tbody>
+  </table>
+  {{- if gt .MoreRows 0}}
+  <p class="hint import-preview-truncated">{{tn "import.preview.more" .MoreRows}}</p>
+  {{- end}}
+
+  <form class="import-confirm-form" method="post" action="/import"
+        hx-post="/import" hx-target="#import-workspace" hx-swap="innerHTML" id="import-confirm-form">
+    <input type="hidden" name="csv_b64" value="{{.CSVBase64}}">
+    <input type="hidden" name="filename" value="{{.Filename}}">
+    <input type="hidden" name="account_id" value="{{.AccountID}}">
+    <input type="hidden" name="subsidiary_id" value="{{.SubsidiaryID}}">
+    <input type="hidden" name="delimiter" value="{{.Mapping.Delimiter}}">
+    <input type="hidden" name="has_header" value="{{if .Mapping.HasHeader}}1{{else}}0{{end}}">
+    <input type="hidden" name="amount_mode" value="{{.Mapping.Amount}}">
+    <input type="hidden" name="sign_flip" value="{{if .Mapping.SignFlip}}1{{else}}0{{end}}">
+    <input type="hidden" name="date_format" value="{{.Mapping.DateFmt}}">
+    <input type="hidden" name="date_col" value="{{.Mapping.DateCol}}">
+    <input type="hidden" name="amount_col" value="{{.Mapping.AmountCol}}">
+    <input type="hidden" name="debit_col" value="{{.Mapping.DebitCol}}">
+    <input type="hidden" name="credit_col" value="{{.Mapping.CreditCol}}">
+    <input type="hidden" name="desc_col" value="{{.Mapping.DescCol}}">
+    <input type="hidden" name="memo_col" value="{{.Mapping.MemoCol}}">
+    <input type="hidden" name="save_profile" value="{{if .SaveProfile}}1{{else}}0{{end}}">
+    <input type="hidden" name="profile_name" value="{{.ProfileName}}">
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{{t "import.stage"}}</button>
+    </div>
+  </form>
+  {{- else}}
+  <p class="hint import-map-pending">{{t "import.map_preview_pending"}}</p>
+  {{- end}}
+</section>
+{{- end}}
+
 {{define "import-preview" -}}
 <section class="import-preview">
   <h2>{{t "import.preview.title"}}</h2>

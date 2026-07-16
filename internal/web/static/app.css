@@ -1294,3 +1294,23 @@ input[aria-invalid="true"] {
 .hub-card-link:hover { border-color: var(--color-primary); }
 .hub-card-label { font-weight: 700; color: var(--color-primary); }
 .hub-card-desc { color: var(--color-text-muted); font-size: 0.9rem; }
+
+/* p26.64 bank-import horizontal column mapping: the file's columns run across the top
+   (name + a sample value stacked), each with a "maps to" select beneath it. */
+.import-map-table { border-collapse: collapse; margin: var(--space-3) 0; }
+.import-map-table th.import-map-col,
+.import-map-table td.import-map-cell {
+  border: var(--border);
+  padding: var(--space-2);
+  vertical-align: top;
+  text-align: left;
+}
+.import-map-col-name { display: block; font-weight: 700; }
+.import-map-col-sample {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin-top: var(--space-1);
+}
+.import-map-label { display: block; font-size: 0.8rem; color: var(--color-text-muted); }
+.import-map-error, .import-map-pending { margin-top: var(--space-3); }

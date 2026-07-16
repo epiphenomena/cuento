@@ -84,42 +84,79 @@ async function createExpenseAccount(page) {
   return name;
 }
 
-// p26.61: the amount-mode select hides the irrelevant amount column inputs. In the
-// default "single" mode the signed amount column shows and the debit/credit columns
-// hide; switching to "debit_credit" flips it (importmapping.js, CSP-safe, toggles on
-// the select's change with no server round-trip).
-test('bank import: amount-mode select shows only the relevant amount fields', async ({ page, server }) => {
-  await login(page, server);
+// uploadCSV picks the target + file on /import and submits the upload; the map+preview
+// fragment (p26.64) swaps into #import-workspace with the file's columns as headers.
+async function uploadCSV(page, acctName, csv, filename) {
   await page.goto('/import');
   await expect(page.getByRole('heading', { name: /import bank csv/i })).toBeVisible();
+  await page.locator('#import-subsidiary').selectOption('1');
+  await page.locator('#import-account').selectOption({ label: acctName });
+  await page.locator('#import-file').setInputFiles({
+    name: filename,
+    mimeType: 'text/csv',
+    buffer: Buffer.from(csv, 'utf8'),
+  });
+  await page.locator('form.import-upload-form button[type="submit"]').click();
+  // Wait for the workspace to be settled (htmx has swapped AND wired the fragment) so a
+  // freshly-swapped role select is ready before we drive it.
+  await expect(page.locator('#import-workspace.e2e-settled')).toBeVisible();
+  await expect(page.locator('form.import-map-form')).toBeVisible();
+}
 
-  const singleField = page.locator('[data-amount-field="single"]');
-  const dcFields = page.locator('[data-amount-field="debit_credit"]');
+// mapRole picks a role for one column via its "maps to" select; each change re-POSTs the
+// map form and re-renders the fragment. The workspace's e2e-settled class persists
+// across swaps, so we CLEAR it first and wait for htmx to re-stamp it after the swap --
+// a deterministic "the new fragment has landed and is wired" signal (avoids the
+// paint->settle wiring race the fixture documents).
+async function mapRole(page, columnIndex, role) {
+  await page.locator('#import-workspace').evaluate((el) => el.classList.remove('e2e-settled'));
+  await page.locator('#import-role-' + columnIndex).selectOption(role);
+  await expect(page.locator('#import-workspace.e2e-settled')).toBeVisible();
+}
 
-  // Default mode is "single": the signed amount column is visible, debit/credit hidden.
-  await expect(page.locator('#import-amount-mode')).toHaveValue('single');
-  await expect(singleField).toBeVisible();
-  await expect(dcFields.first()).toBeHidden();
-  await expect(dcFields.last()).toBeHidden();
+// p26.64: uploading shows the file's REAL columns as headers, and the amount MODE gates
+// which "maps to" options each column offers (Amount in single mode; Debit + Credit in
+// debit_credit mode). Server-rendered option-gating via an htmx re-POST (supersedes the
+// p26.61 client-side field toggle, which is removed).
+test('bank import: columns show as headers; amount-mode gates the maps-to options', async ({ page, server }) => {
+  await login(page, server);
+  const acctName = await createAssetAccount(page);
+  const csv = 'date,amount,desc,memo\n2025-01-15,100.00,Acme,Invoice\n';
+  await uploadCSV(page, acctName, csv, 'cols.csv');
 
-  // Switch to debit/credit: the two D/C columns appear, the signed column hides.
-  await page.locator('#import-amount-mode').selectOption('debit_credit');
-  await expect(dcFields.first()).toBeVisible();
-  await expect(dcFields.last()).toBeVisible();
-  await expect(singleField).toBeHidden();
+  // The file's four columns appear as headers with a sample value.
+  await expect(page.locator('th.import-map-col')).toHaveCount(4);
+  await expect(page.locator('span.import-map-col-name').first()).toHaveText('date');
+  await expect(page.locator('span.import-map-col-sample').first()).toHaveText('2025-01-15');
 
-  // Switch back to single: original state restored.
-  await page.locator('#import-amount-mode').selectOption('single');
-  await expect(singleField).toBeVisible();
-  await expect(dcFields.first()).toBeHidden();
+  // Default mode is single: the first column's "maps to" offers Amount, NOT Debit/Credit.
+  await expect(page.locator('#import-map-mode')).toHaveValue('single');
+  const opt0 = page.locator('#import-role-0 option');
+  await expect(opt0.filter({ hasText: /^Amount$/ })).toHaveCount(1);
+  await expect(opt0.filter({ hasText: /^Debit$/ })).toHaveCount(0);
+  await expect(opt0.filter({ hasText: /^Credit$/ })).toHaveCount(0);
+
+  // Switch to debit/credit mode: the re-POST re-renders options -> Debit + Credit
+  // offered, Amount gone.
+  const settled = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/import/preview' && r.request().method() === 'POST',
+  );
+  await page.locator('#import-map-mode').selectOption('debit_credit');
+  await settled;
+  await expect(page.locator('#import-workspace.e2e-settled')).toBeVisible();
+  const opt0b = page.locator('#import-role-0 option');
+  await expect(opt0b.filter({ hasText: /^Debit$/ })).toHaveCount(1);
+  await expect(opt0b.filter({ hasText: /^Credit$/ })).toHaveCount(1);
+  await expect(opt0b.filter({ hasText: /^Amount$/ })).toHaveCount(0);
 });
 
-// p26.62: a malformed CSV (a row whose amount column is not a number) is rejected at
-// /import/preview with a 422. The error must swap into #import-workspace as a BARE
+// p26.62: a FILE-level error (an empty CSV -> no readable rows) is rejected at
+// /import/preview with a 422, and the error swaps into #import-workspace as a BARE
 // fragment -- NOT a full shell page (which would nest a whole document, duplicating the
-// page frame underneath everything, the p26.35 class of bug). Assert the error text
-// shows in-place AND there is no second <header>/nav nested inside the workspace.
-test('bank import: a malformed CSV shows the error in place, no duplicate page frame', async ({ page, server }) => {
+// page frame, the p26.35 class of bug). Assert the error shows in-place AND there is no
+// second <header>/nav nested inside the workspace. (A bad column MAPPING on the new path
+// is an in-fragment hint, not a 422 -- covered by the map+preview test below.)
+test('bank import: a file-level error shows in place, no duplicate page frame', async ({ page, server }) => {
   await login(page, server);
   const acctName = await createAssetAccount(page);
 
@@ -128,12 +165,11 @@ test('bank import: a malformed CSV shows the error in place, no duplicate page f
   await page.locator('#import-subsidiary').selectOption('1');
   await page.locator('#import-account').selectOption({ label: acctName });
 
-  // The amount column (index 1) holds non-numeric text -> every row fails to parse.
-  const badCsv = 'date,amount,desc,memo\n2025-01-15,notmoney,Acme,Invoice\n';
+  // An empty file -> no readable rows -> a file-level error (bare import-error 422).
   await page.locator('#import-file').setInputFiles({
-    name: 'bad.csv',
+    name: 'empty.csv',
     mimeType: 'text/csv',
-    buffer: Buffer.from(badCsv, 'utf8'),
+    buffer: Buffer.from('', 'utf8'),
   });
 
   const previewResp = page.waitForResponse(
@@ -147,50 +183,38 @@ test('bank import: a malformed CSV shows the error in place, no duplicate page f
   const workspace = page.locator('#import-workspace');
   await expect(workspace.locator('p.import-error[role="alert"]')).toBeVisible();
 
-  // NO nested shell: the workspace must not contain a second <header> or nav (a full
-  // page swapped into the sub-target would duplicate the whole frame). There is exactly
-  // ONE app header on the page, and none inside the workspace.
+  // NO nested shell inside the workspace, exactly one app header on the page.
   await expect(workspace.locator('header')).toHaveCount(0);
   await expect(workspace.locator('nav.app-nav')).toHaveCount(0);
   await expect(page.locator('.app-header')).toHaveCount(1);
-
-  // The original upload form is still present (the page shell survived the swap).
   await expect(page.locator('form.import-upload-form')).toHaveCount(1);
 });
 
-test('bank import: upload, map, preview, stage; a duplicate row is flagged', async ({ page, server }) => {
+test('bank import: upload, map columns, preview, stage; a duplicate row is flagged', async ({ page, server }) => {
   await login(page, server);
   const acctName = await createAssetAccount(page);
 
-  await page.goto('/import');
-  await expect(page.getByRole('heading', { name: /import bank csv/i })).toBeVisible();
-
-  // Pick the target subsidiary (root "Organization", id 1) and the new account.
-  await page.locator('#import-subsidiary').selectOption('1');
-  await page.locator('#import-account').selectOption({ label: acctName });
-
-  // Default mapping (date=0, amount=1, payee=2, memo=3, ISO, comma, header) matches
-  // this CSV. The second line duplicates the first -> flagged within the batch.
+  // The second data line duplicates the first -> flagged within the batch.
   const csv =
-    'date,amount,payee,memo\n' +
+    'when,total,who,note\n' +
     '2025-01-15,100.00,Acme,Invoice 5\n' +
     '2025-01-16,-42.50,Bob,Refund\n' +
     '2025-01-15,100.00,Acme,Invoice 5\n';
+  await uploadCSV(page, acctName, csv, 'statement.csv');
 
-  await page.locator('#import-file').setInputFiles({
-    name: 'statement.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(csv, 'utf8'),
-  });
+  // No default mapping: the pending hint shows and there is no preview yet.
+  await expect(page.locator('p.import-map-pending')).toBeVisible();
+  await expect(page.locator('tr.import-preview-row')).toHaveCount(0);
 
-  // Preview: the form POSTs multipart to /import/preview and swaps the preview into
-  // #import-workspace. Wait for the swap to settle (e2e-settled on the target).
-  await page.locator('form.import-upload-form button[type="submit"]').click();
-  await expect(page.locator('#import-workspace.e2e-settled')).toBeVisible();
+  // Label the real columns: column 0 = Date, column 1 = Amount, column 2 = Description.
+  await mapRole(page, 0, 'date');
+  await mapRole(page, 1, 'amount');
+  await mapRole(page, 2, 'desc');
+
+  // Now the preview co-renders (3 rows).
   await expect(page.locator('tr.import-preview-row')).toHaveCount(3);
 
-  // Stage: the confirm form (carrying the CSV base64) POSTs to /import and swaps the
-  // result in. The result summary shows the staged count and a flagged duplicate.
+  // Stage: the confirm form (carrying the derived mapping + CSV base64) POSTs to /import.
   await page.locator('form.import-confirm-form button[type="submit"]').click();
   await expect(page.locator('p.import-result-summary[role="status"]')).toBeVisible();
   await expect(page.locator('tr.import-result-row')).toHaveCount(3);
@@ -198,6 +222,29 @@ test('bank import: upload, map, preview, stage; a duplicate row is flagged', asy
   // Exactly one row is flagged a duplicate (the repeated Acme line).
   await expect(page.locator('tr.import-row-duplicate')).toHaveCount(1);
   await expect(page.locator('span.import-dupe-flag').first()).toBeVisible();
+});
+
+// p26.64: a bad column MAPPING (Amount pointed at a text column) shows an in-fragment
+// error hint -- the selects stay, NO workspace-wiping 422, no nested shell.
+test('bank import: a bad column mapping is an in-fragment hint, not a 422', async ({ page, server }) => {
+  await login(page, server);
+  const acctName = await createAssetAccount(page);
+  const csv = 'date,amount,desc\n2025-01-15,100.00,Acme\n';
+  await uploadCSV(page, acctName, csv, 'badmap.csv');
+
+  await mapRole(page, 0, 'date');
+  // Point Amount at the DESC column (text) -> every row fails to parse.
+  await mapRole(page, 2, 'amount');
+
+  // In-fragment error hint; the map form (selects) survives; no preview; no nested shell.
+  const hint = page.locator('p.import-map-error[role="alert"]');
+  await expect(hint).toBeVisible();
+  // The message carries its row-number argument (not a dropped-arg artifact).
+  await expect(hint).toContainText(/row\s*1/i);
+  await expect(hint).not.toContainText(/MISSING|%!/);
+  await expect(page.locator('form.import-map-form')).toBeVisible();
+  await expect(page.locator('tr.import-preview-row')).toHaveCount(0);
+  await expect(page.locator('#import-workspace header')).toHaveCount(0);
 });
 
 // p26.63: a saved mapping profile round-trips (save on stage -> appears in the load
@@ -213,7 +260,8 @@ test('bank import: save a mapping profile, then delete it', async ({ page, serve
   await page.goto('/import');
   await page.locator('#import-subsidiary').selectOption('1');
   await page.locator('#import-account').selectOption({ label: acctName });
-  // Save this mapping as a reusable profile.
+  // Save this mapping as a reusable profile (checkbox + name on the upload form; they
+  // carry into the confirm form and persist on stage).
   await page.locator('#import-save-profile').check();
   await page.locator('#import-profile-name').fill(profileName);
 
@@ -225,7 +273,14 @@ test('bank import: save a mapping profile, then delete it', async ({ page, serve
   });
   await page.locator('form.import-upload-form button[type="submit"]').click();
   await expect(page.locator('#import-workspace.e2e-settled')).toBeVisible();
-  // Stage: this is what persists the named profile.
+
+  // Map the columns (date/amount/desc) so the preview + confirm form appear.
+  await mapRole(page, 0, 'date');
+  await mapRole(page, 1, 'amount');
+  await mapRole(page, 2, 'desc');
+  await expect(page.locator('tr.import-preview-row')).toHaveCount(1);
+
+  // Stage: this is what persists the named profile (with its derived column mapping).
   await page.locator('form.import-confirm-form button[type="submit"]').click();
   await expect(page.locator('p.import-result-summary[role="status"]')).toBeVisible();
 
@@ -239,17 +294,38 @@ test('bank import: save a mapping profile, then delete it', async ({ page, serve
     .filter({ has: page.getByText(profileName, { exact: true }) });
   await expect(item).toHaveCount(1);
 
-  // Loading it selects the mapping (proves round-trip: the select value drives
-  // mappingFrom server-side).
+  // Loading it restores the mapping: select the profile, pick the account, upload a
+  // same-shape CSV -> the per-column "maps to" selects come back PRE-SELECTED from the
+  // saved profile (reverse-mapped), and the preview renders without re-mapping.
   await page.locator('#import-profile-id').selectOption({ label: profileName });
   await expect(page.locator('#import-profile-id')).toHaveValue(/\d+/);
+  await page.locator('#import-subsidiary').selectOption('1');
+  await page.locator('#import-account').selectOption({ label: acctName });
+  await page.locator('#import-file').setInputFiles({
+    name: 'again.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('date,amount,desc,memo\n2025-04-01,20.00,Beta,Note2\n', 'utf8'),
+  });
+  await page.locator('form.import-upload-form button[type="submit"]').click();
+  await expect(page.locator('#import-workspace.e2e-settled')).toBeVisible();
+  await expect(page.locator('#import-role-0')).toHaveValue('date');
+  await expect(page.locator('#import-role-1')).toHaveValue('amount');
+  await expect(page.locator('#import-role-2')).toHaveValue('desc');
+  await expect(page.locator('tr.import-preview-row')).toHaveCount(1);
+
+  // Back to a clean page to delete the profile.
+  await page.goto('/import');
+  const item2 = page
+    .locator('li.import-profile-item')
+    .filter({ has: page.getByText(profileName, { exact: true }) });
+  await expect(item2).toHaveCount(1);
 
   // Delete it: the per-profile form POSTs to the soft-delete route and HX-Redirects to
   // /import; wait for the GET reload so the refreshed list is in the SSR DOM.
   const reloaded = page.waitForResponse(
     (r) => new URL(r.url()).pathname === '/import' && r.request().method() === 'GET',
   );
-  await item.locator('button.import-profile-delete').click();
+  await item2.locator('button.import-profile-delete').click();
   await reloaded;
 
   // Gone from both the load list and the manage section.
@@ -272,21 +348,16 @@ test('bank import: review queue -> edit&post one row and discard another', async
   // A counter account (expense) to balance the posted transaction against.
   const expenseName = await createExpenseAccount(page);
 
-  // Stage a 2-row statement.
-  await page.goto('/import');
-  await page.locator('#import-subsidiary').selectOption('1');
-  await page.locator('#import-account').selectOption({ label: bankName });
+  // Stage a 2-row statement: upload, label the columns, then confirm.
   const csv =
-    'date,amount,payee,memo\n' +
+    'date,amount,desc,memo\n' +
     '2025-02-10,-30.00,Landlord,Rent\n' +
     '2025-02-11,-15.00,Cafe,Coffee\n';
-  await page.locator('#import-file').setInputFiles({
-    name: 'feb.csv',
-    mimeType: 'text/csv',
-    buffer: Buffer.from(csv, 'utf8'),
-  });
-  await page.locator('form.import-upload-form button[type="submit"]').click();
-  await expect(page.locator('#import-workspace.e2e-settled')).toBeVisible();
+  await uploadCSV(page, bankName, csv, 'feb.csv');
+  await mapRole(page, 0, 'date');
+  await mapRole(page, 1, 'amount');
+  await mapRole(page, 2, 'desc');
+  await expect(page.locator('tr.import-preview-row')).toHaveCount(2);
   await page.locator('form.import-confirm-form button[type="submit"]').click();
   await expect(page.locator('p.import-result-summary[role="status"]')).toBeVisible();
 

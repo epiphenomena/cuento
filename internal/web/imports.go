@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"cuento/internal/bankimport"
+	"cuento/internal/i18n"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -76,9 +77,10 @@ type importProfileOption struct {
 	Name string
 }
 
-// importPreviewModel is the POST /import/preview result: the parsed rows (capped to
-// 20 for DISPLAY -- staging persists all), the total parsed count, the carried CSV
-// + mapping (as hidden fields for confirm), and the target labels.
+// importPreviewModel is the POST /import/preview result: the file's COLUMNS (for the
+// horizontal "maps to" mapping UI, p26.64), the parsed rows (capped to 20 for DISPLAY
+// -- staging persists all), the total parsed count, the carried CSV + mapping (as
+// hidden fields for confirm), and the target labels.
 type importPreviewModel struct {
 	AccountID    int64
 	AccountName  string
@@ -89,12 +91,93 @@ type importPreviewModel struct {
 	SaveProfile  bool
 	CSVBase64    string
 	Mapping      bankimport.Config
-	Rows         []importPreviewRow
-	TotalRows    int
-	ShownRows    int
-	MoreRows     int // TotalRows - ShownRows (rows staged but not previewed)
-	ErrorKey     string
-	ErrorArg     string
+	// AmountModeStr is the current amount mode ("single"/"debit_credit") for the mode
+	// select in the fragment (p26.64: mode is editable on the map+preview step).
+	AmountModeStr string
+	// Columns is the file's real columns (header + sample) each with its "maps to"
+	// options -- the horizontal mapping UI (p26.64). Empty on the legacy path.
+	Columns []importColumnMap
+	// HasPreview is true when the required roles are mapped and the file parsed, so the
+	// preview table + confirm form render; false shows the mapping selects only.
+	HasPreview bool
+	Rows       []importPreviewRow
+	TotalRows  int
+	ShownRows  int
+	MoreRows   int // TotalRows - ShownRows (rows staged but not previewed)
+	ErrorKey   string
+	ErrorArg   string
+}
+
+// importColumnMap is one CSV column in the horizontal mapping UI: its index, header
+// name, a sample value, and the "maps to" options (already gated to the current mode
+// and label-resolved, with the current pick marked Selected).
+type importColumnMap struct {
+	Index   int
+	Name    string
+	Sample  string
+	Options []importColumnRoleOption
+}
+
+// importColumnRoleOption is one rendered "maps to" <option>: its role value, localized
+// label, and whether it is the column's current pick.
+type importColumnRoleOption struct {
+	Value    bankimport.Role
+	Label    string
+	Selected bool
+}
+
+// importRoleOption is one "maps to" choice. AmountMode names the single amount mode it
+// belongs to ("" == valid in every mode: Ignore / Date / Description), so the options
+// are gated to the current mode server-side (NO-JS-safe; a mode change re-POSTs and
+// re-renders).
+type importRoleOption struct {
+	Value      bankimport.Role
+	LabelKey   string
+	AmountMode bankimport.AmountMode
+}
+
+// importRoleOptions is the fixed "maps to" option set. Amount belongs to single mode;
+// Debit + Credit to debit_credit mode; the rest are mode-independent.
+var importRoleOptions = []importRoleOption{
+	{Value: bankimport.RoleIgnore, LabelKey: "import.role.ignore"},
+	{Value: bankimport.RoleDate, LabelKey: "import.role.date"},
+	{Value: bankimport.RoleDescription, LabelKey: "import.role.desc"},
+	{Value: bankimport.RoleAmount, LabelKey: "import.role.amount", AmountMode: bankimport.AmountSingle},
+	{Value: bankimport.RoleDebit, LabelKey: "import.role.debit", AmountMode: bankimport.AmountDebitCredit},
+	{Value: bankimport.RoleCredit, LabelKey: "import.role.credit", AmountMode: bankimport.AmountDebitCredit},
+}
+
+// roleValidInMode reports whether a role is offered/usable in the given amount mode.
+// Amount belongs to single mode, Debit/Credit to debit_credit; the rest (Ignore, Date,
+// Description) are valid in every mode. An empty/unknown mode is treated as single
+// (parseAmount's default case).
+func roleValidInMode(role bankimport.Role, mode bankimport.AmountMode) bool {
+	dc := mode == bankimport.AmountDebitCredit
+	switch role {
+	case bankimport.RoleAmount:
+		return !dc
+	case bankimport.RoleDebit, bankimport.RoleCredit:
+		return dc
+	default:
+		return true
+	}
+}
+
+// roleOptionsFor builds the "maps to" <option> list for one column: the mode-gated
+// options (label-resolved in lang), with the column's current pick marked Selected.
+func roleOptionsFor(lang string, mode bankimport.AmountMode, selected bankimport.Role) []importColumnRoleOption {
+	var out []importColumnRoleOption
+	for _, opt := range importRoleOptions {
+		if !roleValidInMode(opt.Value, mode) {
+			continue
+		}
+		out = append(out, importColumnRoleOption{
+			Value:    opt.Value,
+			Label:    i18n.T(lang, opt.LabelKey),
+			Selected: opt.Value == selected,
+		})
+	}
+	return out
 }
 
 // importPreviewRow is one previewed parsed row: formatted for display.
@@ -234,50 +317,210 @@ func atoiDefault(s string, def int) int {
 	return n
 }
 
-// importPreview handles POST /import/preview (TxnWrite): parse the uploaded CSV
-// under the submitted mapping and show the first 20 parsed rows. ANY parse error
-// (or a bad file) is a clean 422 with the whole upload rejected -- no batch is
-// created here (batches are created only on confirm). On success the CSV is carried
-// forward base64 for the confirm step.
+// importPreview handles POST /import/preview (TxnWrite). It has TWO paths:
+//
+//   - LEGACY (any *_col field present -- only the Go handler tests send these): parse
+//     the CSV under the typed index mapping and show the 20-row preview, or a bare
+//     import-error 422 on a parse/mapping error (the pre-p26.64 behavior, byte-for-byte).
+//
+//   - NEW (p26.64, the shipped UI): the file's REAL columns are shown horizontally with
+//     a "maps to" select each. The mapping is derived from the per-column role picks
+//     (else a loaded profile, else all-Ignore on the first upload). When the required
+//     roles (Date + Amount, or Date + Debit + Credit) are mapped and the file parses,
+//     the 20-row preview + confirm form co-render in the same fragment; otherwise the
+//     selects render alone (no preview yet). A bad column MAPPING is an IN-FRAGMENT hint,
+//     NOT a workspace-wiping 422 (that stays reserved for FILE-level problems -- no file,
+//     too large, unreadable CSV, zero rows -- where columns can't even be shown).
+//
+// Both paths render only a BARE fragment into #import-workspace (p26.62: never the shell).
+// The first upload is multipart (carries the file); a remap re-POST is urlencoded and
+// carries the CSV forward as csv_b64, so raw comes from the file OR that hidden field.
 func (s *server) importPreview(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(maxImportUpload); err != nil {
-		s.renderImportError(w, r, "import.error.no_file", "")
-		return
-	}
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		s.renderImportError(w, r, "import.error.no_file", "")
-		return
-	}
-	defer func() { _ = file.Close() }()
-
-	raw, err := io.ReadAll(io.LimitReader(file, maxImportUpload+1))
-	if err != nil || len(raw) == 0 {
-		s.renderImportError(w, r, "import.error.no_file", "")
-		return
-	}
-	if len(raw) > maxImportUpload {
-		s.renderImportError(w, r, "import.error.too_large", "")
+	raw, filename, key, arg := s.importPreviewRaw(r)
+	if key != "" {
+		s.renderImportError(w, r, key, arg)
 		return
 	}
 
 	accountID := parseID(r.FormValue("account_id"))
 	subsidiaryID := parseID(r.FormValue("subsidiary_id"))
-	cfg := s.mappingFrom(r)
 
-	model, key, arg := s.parseImportPreview(r, raw, accountID, subsidiaryID, cfg)
-	if key != "" {
-		s.renderImportError(w, r, key, arg)
+	// LEGACY path: a typed *_col field means the old index-based form (tests only).
+	if hasLegacyColumnFields(r) {
+		cfg := s.mappingFrom(r)
+		model, key, arg := s.parseImportPreview(r, raw, accountID, subsidiaryID, cfg)
+		if key != "" {
+			s.renderImportError(w, r, key, arg)
+			return
+		}
+		s.finishPreviewModel(&model, r, filename, raw)
+		s.render(w, r, http.StatusOK, "import-preview", model)
 		return
 	}
-	model.Filename = header.Filename
+
+	// NEW path: the horizontal column-mapping UI.
+	s.importMapPreview(w, r, raw, filename, accountID, subsidiaryID)
+}
+
+// importPreviewRaw resolves the raw CSV bytes and the filename from the request: the
+// multipart file on the first upload, or the carried csv_b64 on a remap re-POST. A
+// FILE-level problem returns an (errKey, errArg) to render as a bare import-error 422.
+func (s *server) importPreviewRaw(r *http.Request) (raw []byte, filename, errKey, errArg string) {
+	// A file upload is multipart; a remap re-POST is urlencoded (csv_b64). Try the
+	// multipart file first, then fall back to the carried base64.
+	if err := r.ParseMultipartForm(maxImportUpload); err == nil {
+		if file, header, ferr := r.FormFile("file"); ferr == nil {
+			defer func() { _ = file.Close() }()
+			b, rerr := io.ReadAll(io.LimitReader(file, maxImportUpload+1))
+			if rerr != nil || len(b) == 0 {
+				return nil, "", "import.error.no_file", ""
+			}
+			if len(b) > maxImportUpload {
+				return nil, "", "import.error.too_large", ""
+			}
+			return b, header.Filename, "", ""
+		}
+	}
+	// No multipart file: a remap re-POST carrying the CSV base64.
+	if b64 := r.FormValue("csv_b64"); b64 != "" {
+		b, err := base64.StdEncoding.DecodeString(b64)
+		if err != nil || len(b) == 0 {
+			return nil, "", "import.error.no_file", ""
+		}
+		if len(b) > maxImportUpload {
+			return nil, "", "import.error.too_large", ""
+		}
+		return b, r.FormValue("filename"), "", ""
+	}
+	return nil, "", "import.error.no_file", ""
+}
+
+// finishPreviewModel stamps the carry fields (filename, profile save + name, the base64
+// CSV) onto a preview model before it renders.
+func (s *server) finishPreviewModel(model *importPreviewModel, r *http.Request, filename string, raw []byte) {
+	model.Filename = filename
 	model.ProfileName = r.FormValue("profile_name")
 	model.SaveProfile = r.FormValue("save_profile") == "1"
 	model.CSVBase64 = base64.StdEncoding.EncodeToString(raw)
+}
 
-	// The preview is swapped into #import-workspace via htmx innerHTML, so render
-	// JUST the fragment (no shell).
-	s.render(w, r, http.StatusOK, "import-preview", model)
+// hasLegacyColumnFields reports whether the request carries a typed column-index field
+// (date_col/amount_col/...). Only the pre-p26.64 tests submit these; the shipped UI
+// never does, so their presence selects the legacy index-based preview path.
+func hasLegacyColumnFields(r *http.Request) bool {
+	for _, f := range []string{"date_col", "amount_col", "debit_col", "credit_col", "desc_col", "memo_col"} {
+		if r.FormValue(f) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// importMapPreview is the NEW horizontal-mapping preview (p26.64). It reads the file's
+// columns, derives the mapping from the per-column role picks (or a loaded profile, or
+// all-Ignore), and co-renders the selects with a preview when the required roles are
+// mapped and the file parses. Bad/incomplete mapping shows the selects only -- never a
+// workspace-wiping 422.
+func (s *server) importMapPreview(w http.ResponseWriter, r *http.Request, raw []byte, filename string, accountID, subsidiaryID int64) {
+	ctx := r.Context()
+	lang := langOf(ctx)
+
+	delim := bankimport.Delimiter(r.FormValue("delimiter"))
+	hasHeader := r.FormValue("has_header") == "1"
+	mode := bankimport.AmountMode(r.FormValue("amount_mode"))
+	signFlip := r.FormValue("sign_flip") == "1"
+	dateFmt := bankimport.DateLayout(r.FormValue("date_format"))
+
+	cols, cerr := bankimport.Columns(raw, delim, hasHeader)
+	if cerr != nil {
+		// Unreadable structure / zero rows: a FILE-level problem -> bare error 422.
+		s.renderImportError(w, r, "import.error.parse", "")
+		return
+	}
+
+	roles := s.rolesForColumns(r, cols)
+	// Coerce any role that is not valid in the current mode to Ignore (e.g. a Debit
+	// pick after switching to single) so the select never carries a value with no
+	// matching option.
+	for i, role := range roles {
+		if !roleValidInMode(role, mode) {
+			roles[i] = bankimport.RoleIgnore
+		}
+	}
+	cfg := bankimport.ConfigFromRoles(roles, delim, hasHeader, mode, signFlip, dateFmt)
+
+	model := importPreviewModel{
+		AccountID:     accountID,
+		AccountName:   s.accountName(ctx, accountID, lang),
+		SubsidiaryID:  subsidiaryID,
+		SubsidiaryNm:  s.subsidiaryName(ctx, subsidiaryID),
+		Mapping:       cfg,
+		AmountModeStr: string(cfg.Amount),
+	}
+	for i, c := range cols {
+		model.Columns = append(model.Columns, importColumnMap{
+			Index: c.Index, Name: c.Name, Sample: c.Sample,
+			Options: roleOptionsFor(lang, mode, roles[i]),
+		})
+	}
+	s.finishPreviewModel(&model, r, filename, raw)
+
+	// Only attempt a preview once the REQUIRED roles for the mode are mapped and the
+	// target is chosen; otherwise show the selects alone (the map step).
+	if accountID != 0 && subsidiaryID != 0 && requiredRolesMapped(cfg) {
+		if prev, key, arg := s.parseImportPreview(r, raw, accountID, subsidiaryID, cfg); key == "" {
+			model.HasPreview = true
+			model.Rows = prev.Rows
+			model.TotalRows = prev.TotalRows
+			model.ShownRows = prev.ShownRows
+			model.MoreRows = prev.MoreRows
+		} else {
+			// A parse/mapping error on the NEW path is an in-fragment hint (the selects
+			// stay so the user can fix the mapping), not a 422. Carry the arg too (e.g.
+			// import.error.row's row number) so the message is complete.
+			model.ErrorKey = key
+			model.ErrorArg = arg
+		}
+	}
+
+	s.render(w, r, http.StatusOK, "import-map-preview", model)
+}
+
+// rolesForColumns resolves the per-column role slice for the columns: from the posted
+// per-column role fields (role_0, role_1, ...) when present; else from a loaded profile
+// (reverse-mapped to roles); else all-Ignore (the first upload). len(result)==len(cols).
+func (s *server) rolesForColumns(r *http.Request, cols []bankimport.ColumnInfo) []bankimport.Role {
+	roles := make([]bankimport.Role, len(cols))
+	posted := false
+	for i := range cols {
+		if v := r.FormValue("role_" + strconv.Itoa(i)); v != "" {
+			roles[i] = bankimport.Role(v)
+			posted = true
+		}
+	}
+	if posted {
+		return roles
+	}
+	// No per-column picks: a loaded profile pre-selects the roles (reverse map).
+	if pid := parseID(r.FormValue("profile_id")); pid > 0 {
+		if prof, err := s.store.GetMappingProfile(r.Context(), pid); err == nil {
+			return bankimport.RolesFromConfig(prof.Config, len(cols))
+		}
+	}
+	return roles // all Ignore: the first upload, nothing mapped yet
+}
+
+// requiredRolesMapped reports whether cfg has the columns a preview needs: a Date
+// column and, per the amount mode, either the single Amount column or BOTH the Debit
+// and Credit columns.
+func requiredRolesMapped(cfg bankimport.Config) bool {
+	if cfg.DateCol < 0 {
+		return false
+	}
+	if cfg.Amount == bankimport.AmountDebitCredit {
+		return cfg.DebitCol >= 0 && cfg.CreditCol >= 0
+	}
+	return cfg.AmountCol >= 0
 }
 
 // parseImportPreview parses raw under cfg for the account's currency exponent and

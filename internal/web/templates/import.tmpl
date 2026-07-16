@@ -4,7 +4,8 @@
 
   The user picks the target SUBSIDIARY and ACCOUNT (subsidiary-first structurally
   guarantees the account maps to the subsidiary; the store re-validates on confirm),
-  assigns which zero-based COLUMN indices carry date/amount/description/memo, and chooses
+  labels the file's real columns (a "maps to" select per column, shown after upload
+  on the preview step), and chooses
   the delimiter / header / amount mode / sign-flip / date format. The form POSTs
   (multipart) to /import/preview, which swaps a 20-row preview into #import-workspace
   (the file input cannot survive an htmx swap, so preview carries the CSV forward
@@ -69,13 +70,9 @@
           {{t "import.has_header"}}
         </label>
       </div>
-      <div class="field">
-        <label for="import-amount-mode">{{t "import.amount_mode_label"}}</label>
-        <select id="import-amount-mode" name="amount_mode" class="import-amount-mode">
-          <option value="single">{{t "import.amount_mode.single"}}</option>
-          <option value="debit_credit">{{t "import.amount_mode.debit_credit"}}</option>
-        </select>
-      </div>
+      {{/* p26.64: the amount MODE lives on the map+preview fragment (editable there via
+           an htmx re-POST so switching it re-renders mode-appropriate "maps to" options
+           server-side and preserves the role picks), NOT here. */ -}}
       <div class="field">
         <label for="import-sign-flip">
           <input type="checkbox" id="import-sign-flip" name="sign_flip" value="1">
@@ -91,31 +88,10 @@
         </select>
       </div>
 
-      <p class="hint">{{t "import.columns_hint"}}</p>
-      <div class="field">
-        <label for="import-date-col">{{t "import.col.date"}}</label>
-        <input type="number" id="import-date-col" name="date_col" value="0" min="0" step="1">
-      </div>
-      <div class="field" data-amount-field="single">
-        <label for="import-amount-col">{{t "import.col.amount"}}</label>
-        <input type="number" id="import-amount-col" name="amount_col" value="1" min="0" step="1">
-      </div>
-      <div class="field" data-amount-field="debit_credit">
-        <label for="import-debit-col">{{t "import.col.debit"}}</label>
-        <input type="number" id="import-debit-col" name="debit_col" value="1" min="0" step="1">
-      </div>
-      <div class="field" data-amount-field="debit_credit">
-        <label for="import-credit-col">{{t "import.col.credit"}}</label>
-        <input type="number" id="import-credit-col" name="credit_col" value="2" min="0" step="1">
-      </div>
-      <div class="field">
-        <label for="import-desc-col">{{t "import.col.desc"}}</label>
-        <input type="number" id="import-desc-col" name="desc_col" value="2" min="-1" step="1">
-      </div>
-      <div class="field">
-        <label for="import-memo-col">{{t "import.col.memo"}}</label>
-        <input type="number" id="import-memo-col" name="memo_col" value="3" min="-1" step="1">
-      </div>
+      {{/* p26.64: columns are labeled AFTER upload -- the map+preview step shows the
+           file's real columns (header + a sample value) with a "maps to" select each.
+           No column-index typing here. */ -}}
+      <p class="hint">{{t "import.columns_after_upload"}}</p>
     </fieldset>
 
     <fieldset class="import-profile">
@@ -178,12 +154,6 @@
 
   {{/* The preview / result is swapped in here by /import/preview (and then /import). */ -}}
   <div id="import-workspace" class="import-workspace"></div>
-
-  {{/* p26.61: amount-mode field toggle. Loaded on the PAGE (the upload form stays put;
-       an injected <script> would not execute). It shows only the amount fields for the
-       chosen mode and re-applies on htmx:afterSwap. The server ignores the hidden set,
-       and the NO-JS fallback leaves both sets visible. */}}
-  <script type="module" src="{{asset "importmapping.js"}}"></script>
   {{- end}}
 {{template "shell-close" .}}
 {{- end}}

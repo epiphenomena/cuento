@@ -1577,6 +1577,28 @@ other = "EE. UU. (MM/DD/AAAA)"
 other = "Europa (DD/MM/AAAA)"
 [import.columns_hint]
 other = "Los numeros de columna empiezan en cero. Usa -1 para una columna de beneficiario o memo no asignada."
+[import.columns_after_upload]
+other = "Despues de elegir un archivo y previsualizar, etiqueta cada columna abajo."
+[import.map_columns]
+other = "Asigna tus columnas"
+[import.map_columns_hint]
+other = "Para cada columna de tu archivo, elige a que corresponde."
+[import.maps_to]
+other = "Corresponde a"
+[import.role.ignore]
+other = "Ignorar"
+[import.role.date]
+other = "Fecha"
+[import.role.desc]
+other = "Descripcion"
+[import.role.amount]
+other = "Monto"
+[import.role.debit]
+other = "Debito"
+[import.role.credit]
+other = "Credito"
+[import.map_preview_pending]
+other = "Asigna una columna de Fecha y una de Monto (o Debito y Credito) para ver una previsualizacion."
 [import.col.date]
 other = "Columna de fecha"
 [import.col.amount]
