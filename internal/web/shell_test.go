@@ -234,6 +234,35 @@ func TestAllLandingCards(t *testing.T) {
 	}
 }
 
+// TestHomeRendersAllGrid (p26.78): GET / (home) now serves the SAME "All" card grid as
+// /more — the card grid is the landing, not the chart of accounts. It renders the full
+// shell (landmarks) with the grouped cards, and the "All" top-nav entry is marked
+// current on the bare "/".
+func TestHomeRendersAllGrid(t *testing.T) {
+	h, _, st, _, sm := newMatrixApp(t)
+	user := makeUser(t, st, store.CreateUserInput{Username: "home_user", TxnPerm: "read"})
+
+	body := getHomeAs(t, h, sm, user).Body.String()
+	// The card grid (a section header + at least the Accounts card) renders on /.
+	if !strings.Contains(body, `class="hub-section-title"`) {
+		t.Errorf("GET / missing the All card grid (no section header):\n%s", body)
+	}
+	if !strings.Contains(body, `href="/accounts"`) {
+		t.Errorf("GET / missing the Accounts card:\n%s", body)
+	}
+	// The "All" entry (served at /more) is the current nav on the bare "/".
+	navStart := strings.Index(body, `<nav class="app-nav"`)
+	navEnd := strings.Index(body[navStart:], "</nav>")
+	nav := body[navStart : navStart+navEnd]
+	if !strings.Contains(nav, `href="/more" aria-current="page"`) {
+		t.Errorf("All nav entry not marked current on /:\n%s", nav)
+	}
+	// Accounts is NOT current on / anymore (the landing moved off accounts).
+	if strings.Contains(nav, `href="/accounts" aria-current="page"`) {
+		t.Errorf("Accounts should NOT be current on / after p26.78:\n%s", nav)
+	}
+}
+
 // TestSettingsStubRendersShell: the p10.2 GET /settings stub renders through the
 // shell (AnyUser), giving the nav a real, permitted, localized target. It must
 // carry the shell landmarks and be localized.

@@ -151,8 +151,9 @@ func (s *server) visibleNav(ctx context.Context, u *store.CurrentUser, currentPa
 		out = append(out, navItem{
 			Label: i18n.T(lang, e.LabelKey),
 			Href:  e.Href,
-			// Accounts is also the landing (p23.8), so highlight it on the bare "/".
-			Current: isCurrentNav(e.Href, currentPath) || (e.Href == "/accounts" && currentPath == "/"),
+			// p26.78: the "All" card grid (served at /more) is now the landing, so
+			// highlight the All entry — not Accounts — on the bare "/".
+			Current: isCurrentNav(e.Href, currentPath) || (e.Href == "/more" && currentPath == "/"),
 		})
 	}
 	return out
@@ -446,19 +447,15 @@ func (s *server) renderShell(w http.ResponseWriter, r *http.Request, status int,
 	s.render(w, r, status, "base.tmpl", s.newShellPage(r, page))
 }
 
-// home is the authenticated landing (GET /{$}). p23.8: the chart of accounts is the
-// landing for anyone who can read the ledger — the old empty welcome was pointless.
-// It renders accounts INLINE (not a redirect) so `/` stays a real shell page (the
-// theme/nav/lang chrome, and the tests that assert on the `/` body, still hold). A
-// user without ledger access (a pure expense submitter) gets the minimal welcome.
+// home is the authenticated landing (GET /{$}). p26.78: the "All" card grid IS the
+// landing — every user (whatever their perms) lands on a grid of the destinations they
+// can reach, replacing the p23.8 chart-of-accounts landing. It renders the SAME
+// full-shell card grid moreHub serves at /more (delegating, so boosted nav and a full
+// page load both return the whole shell — the p26.35 lesson), never a redirect, so `/`
+// stays a real shell page (theme/nav/lang chrome intact). A user with no reachable
+// section still gets a valid page (the all.empty message).
 func (s *server) home(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	u := currentUser(ctx)
-	if u != nil && s.navPermits(ctx, u, TxnRead) {
-		s.accountsPage(w, r)
-		return
-	}
-	s.renderShell(w, r, http.StatusOK, nil)
+	s.moreHub(w, r)
 }
 
 // hubCard is one card on the "All" landing (p26.77, formerly the p23.9 More hub): a

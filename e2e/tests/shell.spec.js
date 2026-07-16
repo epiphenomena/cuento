@@ -35,6 +35,12 @@ test.describe('authenticated shell', () => {
     await expect(page.locator('main#main')).toBeVisible();
     await expect(page.locator('footer.app-footer')).toBeVisible();
 
+    // p26.78: the "All" card grid IS the landing (/). It renders section headers and
+    // destination cards on the bare "/", and the "All" nav entry is current there.
+    await expect(page.locator('main#main .hub-section-title').first()).toBeVisible();
+    await expect(page.locator('main#main a.hub-card-link[href="/accounts"]')).toBeVisible();
+    await expect(page.locator('nav.app-nav a[href="/more"]')).toHaveAttribute('aria-current', 'page');
+
     // p23.9/p26.77: the top nav is lean (Accounts + All + role items); Settings/Admin
     // and every other destination live on the "All" landing as perm-gated cards.
     const nav = page.locator('nav.app-nav');
