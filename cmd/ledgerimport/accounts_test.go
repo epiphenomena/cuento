@@ -5,18 +5,19 @@ import (
 	"testing"
 )
 
-// TestRunAccountsEmitsTwoLevelChain: the account skeleton derives a two-level
-// parent chain from stmt + typ. A leaf's parent is its (stmt, typ) intermediate;
-// the intermediate's parent is the stmt super-parent (Assets/…/Expenses). The
-// intermediate + super-parent rows are emitted once each, with the UNION of their
-// descendants' subsidiaries, and the explicit `parent` column is ignored.
-func TestRunAccountsEmitsTwoLevelChain(t *testing.T) {
+// TestRunAccountsEmitsTypTierRoots: the account skeleton derives a ONE-level tier
+// from stmt + typ (p26.73: the stmt super-parent tier is no longer stored). A
+// leaf's parent is its (stmt, typ) intermediate; that intermediate is a ROOT (nil
+// parent); a blank-typ leaf is itself a root. The intermediate rows are emitted
+// once each, with the UNION of their descendants' subsidiaries, and the explicit
+// `parent` column is ignored.
+func TestRunAccountsEmitsTypTierRoots(t *testing.T) {
 	// Synthetic source (all invented, AGENTS rule 11):
-	//   - Checking: stmt A, typ "Bank", US + MX  -> Assets -> Bank -> Checking
-	//   - Savings : stmt A, typ "Bank", US        -> shares the Assets->Bank tier
+	//   - Checking: stmt A, typ "Bank", US + MX  -> Bank(root) -> Checking
+	//   - Savings : stmt A, typ "Bank", US        -> shares the asset Bank tier
 	//   - Rent    : stmt E, typ "Bank", US        -> a SAME-typ-DIFFERENT-stmt case;
-	//               its Bank tier must be Expenses->Bank, distinct from Assets->Bank.
-	//   - Cash    : stmt A, typ ""  , US          -> BLANK typ: leaf directly under Assets.
+	//               its Bank tier must be the EXPENSE Bank, distinct from the asset Bank.
+	//   - Cash    : stmt A, typ ""  , US          -> BLANK typ: leaf is itself a root.
 	// The explicit `parent` column carries "IGNOREME" on every row to prove it is
 	// not used for structure any more.
 	src := strings.Join([]string{
@@ -45,7 +46,7 @@ func TestRunAccountsEmitsTwoLevelChain(t *testing.T) {
 		byAcct[r.SourceAcct] = r
 	}
 
-	// Leaf Checking -> Assets->Bank intermediate.
+	// Leaf Checking -> asset Bank intermediate.
 	chk := byAcct["Checking"]
 	if chk.CuentoType != "asset" {
 		t.Errorf("Checking type = %q, want asset", chk.CuentoType)
@@ -58,76 +59,63 @@ func TestRunAccountsEmitsTwoLevelChain(t *testing.T) {
 		t.Errorf("Checking subs = %v, want US+MX", chk.Subsidiaries)
 	}
 
-	// Savings shares the SAME Assets->Bank intermediate as Checking.
+	// Savings shares the SAME asset Bank intermediate as Checking.
 	if byAcct["Savings"].CuentoParent != bankAsset {
 		t.Errorf("Savings parent = %q, want %q", byAcct["Savings"].CuentoParent, bankAsset)
 	}
 
-	// The Assets->Bank intermediate exists once, type asset, parent = super-parent
-	// "Assets", subs = UNION of Checking(US,MX)+Savings(US) = {MX,US}.
+	// The asset Bank intermediate exists once, type asset, is a ROOT (no parent),
+	// subs = UNION of Checking(US,MX)+Savings(US) = {MX,US}.
 	ai, ok := byAcct[bankAsset]
 	if !ok {
-		t.Fatalf("Assets->Bank intermediate not emitted; got %v", keysOf(byAcct))
+		t.Fatalf("asset Bank intermediate not emitted; got %v", keysOf(byAcct))
 	}
 	if ai.CuentoType != "asset" {
-		t.Errorf("Assets->Bank type = %q, want asset", ai.CuentoType)
+		t.Errorf("asset Bank type = %q, want asset", ai.CuentoType)
 	}
-	if ai.CuentoParent != superParentKey("Assets") {
-		t.Errorf("Assets->Bank parent = %q, want %q", ai.CuentoParent, superParentKey("Assets"))
+	if ai.CuentoParent != "" {
+		t.Errorf("asset Bank parent = %q, want root (no parent)", ai.CuentoParent)
 	}
 	if ai.NameEN != "Bank" {
-		t.Errorf("Assets->Bank name = %q, want Bank", ai.NameEN)
+		t.Errorf("asset Bank name = %q, want Bank", ai.NameEN)
 	}
 	if len(ai.Subsidiaries) != 2 {
-		t.Errorf("Assets->Bank subs = %v, want union US+MX", ai.Subsidiaries)
+		t.Errorf("asset Bank subs = %v, want union US+MX", ai.Subsidiaries)
 	}
 
-	// SAME-typ-DIFFERENT-stmt: Rent (expense, typ Bank) has a DISTINCT Expenses->Bank
-	// intermediate, keyed by (stmt,typ) so it does not collapse into Assets->Bank.
+	// SAME-typ-DIFFERENT-stmt: Rent (expense, typ Bank) has a DISTINCT expense Bank
+	// intermediate, keyed by (stmt,typ) so it does not collapse into the asset Bank.
 	bankExp := typParentKey("expense", "Bank")
 	if byAcct["Rent"].CuentoParent != bankExp {
 		t.Errorf("Rent parent = %q, want %q", byAcct["Rent"].CuentoParent, bankExp)
 	}
 	ei, ok := byAcct[bankExp]
 	if !ok {
-		t.Fatalf("Expenses->Bank intermediate not emitted")
+		t.Fatalf("expense Bank intermediate not emitted")
 	}
-	if ei.CuentoType != "expense" || ei.CuentoParent != superParentKey("Expenses") {
-		t.Errorf("Expenses->Bank wrong: type=%q parent=%q", ei.CuentoType, ei.CuentoParent)
+	if ei.CuentoType != "expense" || ei.CuentoParent != "" {
+		t.Errorf("expense Bank wrong: type=%q parent=%q (want expense, root)", ei.CuentoType, ei.CuentoParent)
 	}
 	if bankAsset == bankExp {
-		t.Fatal("Assets->Bank and Expenses->Bank collapsed to one key")
+		t.Fatal("asset Bank and expense Bank collapsed to one key")
 	}
 
-	// BLANK typ: Cash is parented DIRECTLY under the Assets super-parent (no tier).
-	if byAcct["Cash"].CuentoParent != superParentKey("Assets") {
-		t.Errorf("Cash (blank typ) parent = %q, want super-parent %q",
-			byAcct["Cash"].CuentoParent, superParentKey("Assets"))
+	// BLANK typ: Cash is itself a ROOT (no intermediate tier, no stmt super-parent).
+	if byAcct["Cash"].CuentoParent != "" {
+		t.Errorf("Cash (blank typ) parent = %q, want root (no parent)", byAcct["Cash"].CuentoParent)
 	}
 
-	// Super-parents Assets + Expenses exist once, top-level (no parent), typed.
-	assets, ok := byAcct[superParentKey("Assets")]
-	if !ok {
-		t.Fatalf("Assets super-parent not emitted")
-	}
-	if assets.CuentoParent != "" {
-		t.Errorf("Assets super-parent has parent %q, want top-level", assets.CuentoParent)
-	}
-	if assets.CuentoType != "asset" || assets.NameEN != "Assets" {
-		t.Errorf("Assets super-parent wrong: type=%q name=%q", assets.CuentoType, assets.NameEN)
-	}
-	if len(assets.Subsidiaries) != 2 { // union of everything asset (US+MX)
-		t.Errorf("Assets super-parent subs = %v, want union US+MX", assets.Subsidiaries)
-	}
-	exp := byAcct[superParentKey("Expenses")]
-	if exp.CuentoType != "expense" || exp.CuentoParent != "" {
-		t.Errorf("Expenses super-parent wrong: type=%q parent=%q", exp.CuentoType, exp.CuentoParent)
+	// No stmt-tier super-parent rows exist any more.
+	for _, r := range rows {
+		if strings.HasPrefix(r.SourceAcct, "::super:") {
+			t.Errorf("stmt-tier super-parent %q still emitted", r.SourceAcct)
+		}
 	}
 
-	// Exact row set: 4 leaves + 2 intermediates (Assets->Bank, Expenses->Bank)
-	// + 2 super-parents (Assets, Expenses) = 8 distinct rows, none duplicated.
-	if len(rows) != 8 {
-		t.Errorf("emitted %d rows, want 8: %v", len(rows), keysOf(byAcct))
+	// Exact row set: 4 leaves + 2 intermediates (asset Bank, expense Bank) = 6
+	// distinct rows, none duplicated (the 2 stmt super-parents are gone).
+	if len(rows) != 6 {
+		t.Errorf("emitted %d rows, want 6: %v", len(rows), keysOf(byAcct))
 	}
 }
 
@@ -182,12 +170,11 @@ func TestRunAccountsTypCollidesWithLeafName(t *testing.T) {
 
 // TestRunAccountsLeafSpansTypsSubsetSubs: the SAME leaf `acct` recurring under
 // DIFFERENT `typ` values (typ is a per-journal-entry classification, so one account
-// records under many typs) keeps its first-sighting parent chain, but the chosen
-// intermediate + super-parent must carry a SUPERSET of the leaf's full subsidiary
-// union (rule 7 / Z12: parent subs superset of children -- else the go-live build's
-// CreateAccount / cuento check reject the chain). The leaf appears as (A,Bank,US)
-// then (A,Transfer,MX); it must stay parented under (asset,Bank) whose subs include
-// BOTH US and MX.
+// records under many typs) keeps its first-sighting parent, but the chosen
+// intermediate must carry a SUPERSET of the leaf's full subsidiary union (rule 7 /
+// Z12: parent subs superset of children -- else the go-live build's CreateAccount /
+// cuento check reject the chain). The leaf appears as (A,Bank,US) then (A,Transfer,
+// MX); it must stay parented under (asset,Bank) whose subs include BOTH US and MX.
 func TestRunAccountsLeafSpansTypsSubsetSubs(t *testing.T) {
 	src := strings.Join([]string{
 		header,
@@ -230,12 +217,11 @@ func TestRunAccountsLeafSpansTypsSubsetSubs(t *testing.T) {
 		return true
 	}
 	inter := byAcct[typParentKey("asset", "Bank")]
+	if inter.CuentoParent != "" {
+		t.Errorf("intermediate parent = %q, want root (no parent)", inter.CuentoParent)
+	}
 	if !subset(leaf.Subsidiaries, inter.Subsidiaries) {
 		t.Errorf("intermediate subs %v are not a superset of leaf subs %v", inter.Subsidiaries, leaf.Subsidiaries)
-	}
-	super := byAcct[superParentKey("Assets")]
-	if !subset(leaf.Subsidiaries, super.Subsidiaries) {
-		t.Errorf("super-parent subs %v are not a superset of leaf subs %v", super.Subsidiaries, leaf.Subsidiaries)
 	}
 }
 

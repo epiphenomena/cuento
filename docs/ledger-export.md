@@ -100,47 +100,55 @@ Order: `country, stmt, typ, acct, kat, dt, v, ndb, fndb, kls, klass, tid, desc, 
 ## Account tree derivation (`stmt` + `typ`, p26.12)
 
 The account hierarchy is DERIVED from `stmt` and `typ` as a deterministic
-**two-level chain**, not from the explicit `parent` column:
+**one-level tier**, not from the explicit `parent` column:
 
-    <stmt super-parent>  ->  <(stmt,typ) intermediate>  ->  <leaf acct>
+    <(stmt,typ) intermediate>  ->  <leaf acct>
 
-e.g. `stmt=A`, `typ="Bank"`, `acct="BOA Checking"` becomes **Assets → Bank → BOA
-Checking**. The `accounts` skeleton (`cmd/ledgerimport/accounts.go`) synthesizes
-the intermediate and super-parent rows into the reviewable account-mapping CSV, so
-`build` (which sees only the reviewed CSV, no `typ`) creates the tree
-parent-before-child with no extra logic.
+e.g. `stmt=A`, `typ="Bank"`, `acct="BOA Checking"` becomes **Bank → BOA Checking**,
+where **Bank is a ROOT account**. The `accounts` skeleton
+(`cmd/ledgerimport/accounts.go`) synthesizes the intermediate rows into the
+reviewable account-mapping CSV, so `build` (which sees only the reviewed CSV, no
+`typ`) creates the tree parent-before-child with no extra logic.
 
-- **stmt → super-parent name:** `A/L/I/E/O → Assets/Liabilities/Revenue/Expenses/
-  Equity` (`stmtToSuperParent`), mirroring the report section headers. The
-  super-parent's cuento `type` is the stmt's type (`stmtToType`).
+**p26.73 — the stmt-tier super-parents are no longer stored.** The derivation used
+to add a top `<stmt super-parent>` tier (Assets/Liabilities/Equity/Revenue/Expenses)
+above the intermediates. But that tier was redundant with each account's `type`
+field (also derived from `stmt`), and every report ALSO injects those tiers as its
+own section headers, so the stored chart DOUBLED the header ("Assets → Assets…").
+The stmt super-parent tier is dropped: the `(stmt,typ)` intermediates (and any
+blank-`typ` leaf) are now ROOTS, each keeping its `type`. Display grouping keys on
+`type`; a follow-up injects a type-tier header into the chart + account selector,
+and reports keep injecting their own section headers.
+
+- **stmt → cuento `type`:** `A/L/I/E/O → asset/liability/revenue/expense/equity`
+  (`stmtToType`). The intermediate's type is the stmt's type; this `type` is what
+  display grouping keys on (the dropped super-parent tier carried nothing more).
 - **Intermediates are keyed by `(cuento-type, typ)`**, not `typ` alone, so the same
   `typ` under two different `stmt` supertypes produces two distinct tiers (e.g. an
   asset "Bank" tier ≠ an expense "Bank" tier). This also enforces **type
   consistency**: a leaf always nests under an intermediate of its OWN stmt type
   (D26: prefer the leaf's own stmt).
-- **Synthetic parent rows are namespaced** (`::super:` / `::typ:` prefixes in the
-  CSV `source_acct` key), so a real leaf `acct` that happens to match a `typ` value
-  or a super-parent name never collides with a synthetic tier. The human-facing
-  `name_en`/`name_es` are the clean names ("Assets", the raw `typ`).
-- **Subsidiary unions (two-pass):** each synthetic parent carries the UNION of the
-  subsidiaries of the leaves ACTUALLY parented under it (rule 7 / Z12: a parent's
+- **Synthetic intermediate rows are namespaced** (the `::typ:` prefix in the CSV
+  `source_acct` key), so a real leaf `acct` that happens to match a `typ` value never
+  collides with a synthetic tier. The human-facing `name_en`/`name_es` are the clean
+  names (the raw `typ`).
+- **Subsidiary unions (two-pass):** each synthetic intermediate carries the UNION of
+  the subsidiaries of the leaves ACTUALLY parented under it (rule 7 / Z12: a parent's
   subsidiary set ⊇ every child's). This matters because `typ` is documented as a
   **per-journal-entry** classification, so one `acct` recurs under many `typ` values
-  and accrues countries from all of them; the derivation fixes each leaf's parent
-  chain at its **first sighting** (file order — deterministic) but then propagates
-  the leaf's FULL country union up that chain, so a leaf spanning several typs never
-  leaves a country only on itself. **Caveat for review:** because `typ` is
-  per-journal-entry (not an account attribute), which `typ` names a leaf's parent is
-  semantically arbitrary; the go-live human review should confirm the resulting tier
-  names make sense (the task's `stmt=A,typ=Bank` example instead treats `typ` as an
-  account subtype — the two readings are surfaced here).
-- **Edge cases:** a blank `typ` parents the leaf DIRECTLY under the super-parent
-  (the intermediate tier is skipped); a `typ` whose text equals the super-parent's
-  own name collapses the tier (no self-parent); a blank/unknown `stmt` leaves the
-  leaf top-level for the human to place in review; a leaf `acct` literally NAMED like
-  a super-parent or a `typ` value coexists with the synthetic tier without collision
-  (the synthetic rows use the reserved `::super:`/`::typ:` keys, the leaf keeps its
-  own name), and stands as an ordinary leaf under its stmt/typ chain.
+  and accrues countries from all of them; the derivation fixes each leaf's parent at
+  its **first sighting** (file order — deterministic) but then propagates the leaf's
+  FULL country union up to it, so a leaf spanning several typs never leaves a country
+  only on itself. **Caveat for review:** because `typ` is per-journal-entry (not an
+  account attribute), which `typ` names a leaf's parent is semantically arbitrary; the
+  go-live human review should confirm the resulting tier names make sense (the task's
+  `stmt=A,typ=Bank` example instead treats `typ` as an account subtype — the two
+  readings are surfaced here).
+- **Edge cases:** a blank `typ` (or blank/unknown `stmt`) makes the leaf itself a
+  ROOT (no intermediate tier to nest it under, and the stmt super-parent it used to
+  nest under is gone); a leaf `acct` literally NAMED like a `typ` value coexists with
+  the synthetic tier without collision (the synthetic rows use the reserved `::typ:`
+  keys, the leaf keeps its own name), and stands as an ordinary leaf under its tier.
 
 The explicit `parent` column is **ignored** for structure (simplest correct
 behavior — the stmt/typ chain is authoritative; the go-live mapping gets human

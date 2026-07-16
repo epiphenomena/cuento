@@ -1010,6 +1010,85 @@ func TestScaffoldCreatesReferenceDataNoTxns(t *testing.T) {
 	}
 }
 
+// TestReloadDisambiguatesSameNamedTypeTierRoots is the p26.73 regression guard: with
+// the stmt super-parent tier gone, two type-tier ROOTS may share a name across
+// different types (e.g. a revenue "Transfers" tier and an expense "Transfers" tier).
+// The per-subsidiary import's reloadAccounts must NOT collide them -- it keys on the
+// account's cuento TYPE plus its name path, so both resolve to distinct ids. Before
+// the fix the reload aborted with "duplicate name path". Synthetic-only (rule 11).
+func TestReloadDisambiguatesSameNamedTypeTierRoots(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// Two same-named "Transfers" ROOTS (asset + liability), each with a leaf, plus the
+	// synthetic counter accounts, all on Test US. The two roots have the SAME NameEN
+	// but DIFFERENT types, which the type-keyed reload separates. (Asset/liability, not
+	// revenue/expense, so no program is required on the splits -- rule 7.)
+	rows := []AccountMap{
+		{SourceAcct: "::asset-transfers", CuentoType: "asset", Subsidiaries: []string{"Test US"}, Active: true, NameEN: "Transfers", NameES: "Transferencias"},
+		{SourceAcct: "Transfer Receivable", CuentoParent: "::asset-transfers", CuentoType: "asset", Subsidiaries: []string{"Test US"}, Active: true, NameEN: "Transfer Receivable", NameES: "Transferencia por Cobrar"},
+		{SourceAcct: "::liab-transfers", CuentoType: "liability", Subsidiaries: []string{"Test US"}, Active: true, NameEN: "Transfers", NameES: "Transferencias"},
+		{SourceAcct: "Transfer Payable", CuentoParent: "::liab-transfers", CuentoType: "liability", Subsidiaries: []string{"Test US"}, Active: true, NameEN: "Transfer Payable", NameES: "Transferencia por Pagar"},
+		{SourceAcct: "FX Clearing", CuentoType: "equity", Subsidiaries: []string{"Test US"}, Active: true, NameEN: "FX Clearing", NameES: "FX"},
+		{SourceAcct: "Opening Balances", CuentoType: "equity", Subsidiaries: []string{"Test US"}, Active: true, NameEN: "Opening Balances", NameES: "Saldos"},
+	}
+	var mapBuf strings.Builder
+	if err := WriteAccountMap(&mapBuf, rows); err != nil {
+		t.Fatalf("WriteAccountMap: %v", err)
+	}
+	accMap, err := ReadAccountMap(strings.NewReader(mapBuf.String()))
+	if err != nil {
+		t.Fatalf("ReadAccountMap: %v", err)
+	}
+	cfg, err := ReadConfig(strings.NewReader(`{
+	  "root_subsidiary_name": "Test Org Root", "root_base_currency": "USD",
+	  "subsidiaries": {"US": {"name": "Test US", "base_currency": "USD"}},
+	  "base_currency": "USD", "fx_clearing_account": "FX Clearing",
+	  "opening_balance_account": "Opening Balances"
+	}`))
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	// One balanced US/USD transaction touching BOTH leaves (Dr receivable / Cr payable).
+	src := header + "\n" +
+		row("US", "A", "xfer", "Transfer Receivable", "", "2025-01-01", "", "1", "in", "", "USD", "1.0", "10.00", "10.00", "0", "0", "") + "\n" +
+		row("US", "L", "xfer", "Transfer Payable", "", "2025-01-01", "", "1", "out", "", "USD", "1.0", "0", "0", "10.00", "10.00", "") + "\n"
+	recs, err := ParseRecords(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("ParseRecords: %v", err)
+	}
+
+	if _, err := runScaffold(ctx, accMap, cfg, nil, st, false); err != nil {
+		t.Fatalf("runScaffold: %v", err)
+	}
+	// The reload inside import-subsidiary is where the collision used to abort.
+	subRes, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, "Test US", false)
+	if err != nil {
+		t.Fatalf("runImportSubsidiary (reload must disambiguate same-named type-tier roots): %v", err)
+	}
+	// Both same-named roots resolved to DISTINCT ids (the type-keyed reload separated
+	// them); the leaves under them likewise.
+	assetRoot, liabRoot := subRes.AccountIDs["::asset-transfers"], subRes.AccountIDs["::liab-transfers"]
+	if assetRoot == 0 || liabRoot == 0 || assetRoot == liabRoot {
+		t.Fatalf("same-named Transfers roots not disambiguated: asset=%d liab=%d", assetRoot, liabRoot)
+	}
+	if subRes.AccountIDs["Transfer Receivable"] == subRes.AccountIDs["Transfer Payable"] {
+		t.Errorf("leaves under the two Transfers roots collided")
+	}
+	// The transaction posted and the db is Error-clean.
+	if n := subRes.txnCountForTid("1"); n != 1 {
+		t.Errorf("tid 1 produced %d transactions, want 1", n)
+	}
+	vs, err := ledger.Check(context.Background(), sqldb)
+	if err != nil {
+		t.Fatalf("ledger.Check: %v", err)
+	}
+	if ledger.HasErrors(vs) {
+		t.Fatalf("ledger.Check has errors: %+v", vs)
+	}
+}
+
 // TestImportSubsidiaryAdditive: scaffold, import Test US, then import Test MX into
 // the SAME db. Each import posts only its own subsidiary's transactions; the second
 // import does not disturb the first; and the cross-currency transfer decomposes

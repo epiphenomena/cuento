@@ -627,12 +627,17 @@ func (b *builder) reloadState(ctx context.Context, accMap []AccountMap) error {
 }
 
 // reloadAccounts rebuilds res.AccountIDs (source_acct -> id) and acctType from the
-// db by matching each account-mapping row to its db account via the FULL
-// number-free NAME PATH (root..self). The path is the only stable key: names are
-// not globally unique (only siblings are disambiguated), but a full name path IS
-// unique (the scaffold created each db name from the row's NameEN), and source_acct
-// is not persisted on the account row. Fails loud on any unmatched row or a
-// duplicate path -- proof the scaffold used this same mapping.
+// db by matching each account-mapping row to its db account via a key of its cuento
+// TYPE + the FULL number-free NAME PATH (root..self). The path is the only stable
+// name-based key (source_acct is not persisted on the account row): names are not
+// globally unique (only siblings are disambiguated), but a full name path is nearly
+// unique. The TYPE prefix is the disambiguator for the p26.73 model, where the stmt
+// super-parent tier is gone and two same-named type-tier ROOTS of DIFFERENT types
+// (e.g. a revenue "Transfers" tier and an expense "Transfers" tier) would otherwise
+// collide on the bare path. Type is constant along a chain (a leaf parents under an
+// intermediate of its own type), so keying on the self's type is consistent between
+// the db and the mapping. Fails loud on any unmatched row or a duplicate (type,path)
+// -- proof the scaffold used this same mapping.
 func (b *builder) reloadAccounts(ctx context.Context, accMap []AccountMap) error {
 	if b.acctType == nil {
 		b.acctType = map[int64]string{}
@@ -643,17 +648,20 @@ func (b *builder) reloadAccounts(ctx context.Context, accMap []AccountMap) error
 	}
 	name := make(map[int64]string, len(rows))
 	parent := make(map[int64]sql.NullInt64, len(rows))
+	typ := make(map[int64]string, len(rows))
 	for _, r := range rows {
 		name[r.ID] = r.Name
 		parent[r.ID] = r.ParentID
+		typ[r.ID] = r.Type
 	}
 	dbPath := make(map[string]int64, len(rows))
 	for _, r := range rows {
-		p := dbAccountPath(r.ID, name, parent)
-		if _, dup := dbPath[p]; dup {
-			return fmt.Errorf("reload accounts: duplicate name path %q in db", strings.ReplaceAll(p, "\x00", ":"))
+		k := typedAccountKey(r.Type, dbAccountPath(r.ID, name, parent))
+		if _, dup := dbPath[k]; dup {
+			return fmt.Errorf("reload accounts: duplicate typed name path %q in db",
+				strings.ReplaceAll(k, "\x00", ":"))
 		}
-		dbPath[p] = r.ID
+		dbPath[k] = r.ID
 	}
 
 	nameEN := make(map[string]string, len(accMap)) // source_acct -> NameEN
@@ -667,15 +675,24 @@ func (b *builder) reloadAccounts(ctx context.Context, accMap []AccountMap) error
 		if err != nil {
 			return fmt.Errorf("reload accounts: %w", err)
 		}
-		id, ok := dbPath[p]
+		k := typedAccountKey(m.CuentoType, p)
+		id, ok := dbPath[k]
 		if !ok {
-			return fmt.Errorf("reload accounts: account %q (path %q) not in db; scaffold with the same mapping first",
-				m.SourceAcct, strings.ReplaceAll(p, "\x00", ":"))
+			return fmt.Errorf("reload accounts: account %q (typed path %q) not in db; scaffold with the same mapping first",
+				m.SourceAcct, strings.ReplaceAll(k, "\x00", ":"))
 		}
 		b.res.AccountIDs[m.SourceAcct] = id
 		b.acctType[id] = m.CuentoType
 	}
 	return nil
+}
+
+// typedAccountKey namespaces a NUL-joined name path by the account's cuento type, so
+// two same-named roots of different types (p26.73: type-tier roots like a revenue vs
+// an expense "Transfers") do not collide. Type is constant along a chain, so the
+// self's type keys the whole path consistently on both the db and mapping sides.
+func typedAccountKey(cuentoType, path string) string {
+	return cuentoType + "\x00" + path
 }
 
 // dbAccountPath returns the NUL-joined name path root..self for a db account.
