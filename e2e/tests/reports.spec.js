@@ -907,6 +907,25 @@ test('reports: open the program statement (comparative), see program columns + a
   await expect(single).toContainText('PS Cost E2E');
   await expect(single).toContainText('Net');
 
+  // p26.54: the OPTIONAL currency selector is present, defaults to NATIVE (empty value),
+  // and its first option is the "— native —" choice (empty value). Native is the default,
+  // so the single view above kept its Currency column (3 columns).
+  const ccy = page.locator('form.report-params select[name="currency"]');
+  await expect(ccy).toBeVisible();
+  await expect(ccy).toHaveValue(''); // native is the default (empty target)
+  // The first option is the "— native —" choice (empty value).
+  await expect(ccy.locator('option').first()).toHaveAttribute('value', '');
+  // Pick a target currency (USD) -> the matrix CONVERTS: the Currency column DROPS, so the
+  // single-program view now has TWO columns (Account, <program>).
+  await ccy.selectOption('USD');
+  await page.locator('form.report-params button[type="submit"]').click();
+  await page.waitForURL('**/reports/program_statement?**');
+  await expect(page.locator('table.report-table')).toBeVisible();
+  await expect(page.locator('table.report-table thead th')).toHaveCount(2);
+
+  // p26.54 sticky headers: the table scrolls inside .report-scroll (present on the page).
+  await expect(page.locator('.report-scroll')).toBeVisible();
+
   // --- the CSV export link is present and the endpoint returns text/csv ---
   await expect(page.locator('a.report-csv-link')).toBeVisible();
   const csvHref = await page.locator('a.report-csv-link').getAttribute('href');

@@ -59,6 +59,65 @@ func psParams(f *fixture.Fixture) reports.Params {
 	}
 }
 
+// TestProgramStatementConverted exercises the p26.54 OPTIONAL currency conversion:
+// setting a target currency converts the whole matrix to one currency at the period-end
+// closing rate, DROPS the Currency column, and collapses each account to ONE row per
+// program column (a multi-currency account no longer emits a row per native currency).
+// Native (empty target) is the default and is covered by every other test + the golden;
+// this is the converted path (no golden -- verify reachability).
+func TestProgramStatementConverted(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := context.Background()
+	rep := psReport(t)
+
+	// Native (default): the leading columns are Account, Currency, then the programs.
+	natP := psParams(f)
+	natT, err := rep.Run(ctx, reports.NewToolkit(f.Store, natP), natP)
+	if err != nil {
+		t.Fatalf("run native: %v", err)
+	}
+	if natT.Columns[1].HeaderKey != "reports.program_statement.col.currency" {
+		t.Fatalf("native column 1 = %q, want the currency column", natT.Columns[1].HeaderKey)
+	}
+
+	// Converted to USD: the Currency column is GONE (column 1 is the first program).
+	convP := psParams(f)
+	convP.TargetCurrency = "USD"
+	convT, err := rep.Run(ctx, reports.NewToolkit(f.Store, convP), convP)
+	if err != nil {
+		t.Fatalf("run converted: %v", err)
+	}
+	if convT.Columns[1].HeaderKey == "reports.program_statement.col.currency" {
+		t.Errorf("converted view still carries a Currency column")
+	}
+	// The account column is still first; the second column is a program name header.
+	if convT.Columns[0].HeaderKey != "reports.program_statement.col.account" {
+		t.Errorf("converted column 0 = %q, want the account column", convT.Columns[0].HeaderKey)
+	}
+	// Converting collapses per-currency rows -> the converted table has FEWER rows than
+	// the native per-currency table (multi-currency accounts + totals collapse).
+	if len(convT.Rows) >= len(natT.Rows) {
+		t.Errorf("converted rows (%d) not fewer than native rows (%d) -- per-currency rows did not collapse",
+			len(convT.Rows), len(natT.Rows))
+	}
+	// Every money cell in the converted table is labelled in the target currency (USD),
+	// and no converted cell is drillable (a converted figure sums across native
+	// currencies, so it is not drillable -- the trial-balance rule).
+	for _, row := range convT.Rows {
+		for _, c := range row.Cells {
+			if c.Kind == reports.CellMoney && !c.Blank {
+				if c.Currency != "USD" {
+					t.Errorf("converted money cell currency = %q, want USD", c.Currency)
+				}
+				if c.Drill != nil {
+					t.Errorf("converted cell is drillable; converted figures must not drill")
+				}
+			}
+		}
+	}
+}
+
 // psColIndex returns the money-cell column index for the program named progName in the
 // comparative table, by matching the header (the leading two columns are Account,
 // Currency, so the first program column is index 2 in the cells).

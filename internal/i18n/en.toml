@@ -1038,6 +1038,8 @@ other = "Reconciliation"
 other = "Budget"
 [reports.params.run]
 other = "Run report"
+[reports.currency.native]
+other = "— native —"
 [reports.detail.converted]
 other = "Converted totals"
 [reports.detail.currency]

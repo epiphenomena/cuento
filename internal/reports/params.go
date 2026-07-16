@@ -188,6 +188,13 @@ type ParamsSpec struct {
 	// Currency: the report converts to a chosen target currency (D12); the form
 	// offers a currency select defaulting to the scope's base currency.
 	Currency bool
+	// CurrencyOptional: the report offers a target-currency select BUT defaults to
+	// NATIVE (no conversion) -- the currency select carries a leading "— native —"
+	// choice and the web layer leaves TargetCurrency EMPTY unless a currency is
+	// explicitly picked (p26.54 program statement, whose default is native per-currency
+	// rows by design). Distinct from Currency (which defaults the target to the scope
+	// base, always converting). A report sets AT MOST one of Currency / CurrencyOptional.
+	CurrencyOptional bool
 	// Detail: the report offers a per-currency detail toggle (p15.4 balance sheet);
 	// the form offers a "converted only" vs "per currency" select bound to
 	// Params.Detail.

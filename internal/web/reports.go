@@ -110,6 +110,15 @@ func (s *server) resolveParams(
 			p.TargetCurrency = v
 		}
 	}
+	if rep.ParamsSpec.CurrencyOptional {
+		// p26.54: NATIVE by default (empty target); convert only when a currency is
+		// explicitly picked. A bare report URL therefore renders native per-currency
+		// rows (the program statement's documented default), unlike Currency (which
+		// always defaults the target to the scope base).
+		if v := first(q, "currency"); v != "" {
+			p.TargetCurrency = v
+		}
+	}
 	if rep.ParamsSpec.Detail {
 		// Only "currency" turns detail on; any other value (incl. empty) is the
 		// default converted-only view.
@@ -447,12 +456,15 @@ type paramsForm struct {
 	ShowPeriod      bool
 	ShowGranularity bool
 	ShowCurrency    bool
-	ShowDetail      bool
-	ShowAccount     bool
-	ShowFund        bool
-	ShowProgram     bool
-	ShowRecon       bool
-	ShowBudget      bool
+	// CurrencyNative marks a CurrencyOptional currency select: it renders a leading
+	// "— native —" option (empty value) and native is the default (p26.54).
+	CurrencyNative bool
+	ShowDetail     bool
+	ShowAccount    bool
+	ShowFund       bool
+	ShowProgram    bool
+	ShowRecon      bool
+	ShowBudget     bool
 
 	// Resolved control values (formatted for display where dated).
 	AsOf        string // user-formatted date
@@ -508,7 +520,8 @@ func (s *server) buildParamsForm(
 		ShowAsOf:        rep.ParamsSpec.AsOf,
 		ShowPeriod:      rep.ParamsSpec.Period,
 		ShowGranularity: rep.ParamsSpec.Granularity,
-		ShowCurrency:    rep.ParamsSpec.Currency,
+		ShowCurrency:    rep.ParamsSpec.Currency || rep.ParamsSpec.CurrencyOptional,
+		CurrencyNative:  rep.ParamsSpec.CurrencyOptional,
 		ShowDetail:      rep.ParamsSpec.Detail,
 		ShowAccount:     rep.ParamsSpec.Account,
 		ShowFund:        rep.ParamsSpec.Fund,
@@ -538,7 +551,7 @@ func (s *server) buildParamsForm(
 	if p.To != "" {
 		f.To = money.FormatDate(parseISOForDisplay(p.To), df)
 	}
-	if rep.ParamsSpec.Currency {
+	if rep.ParamsSpec.Currency || rep.ParamsSpec.CurrencyOptional {
 		curs, err := s.store.Currencies(ctx)
 		if err != nil {
 			return paramsForm{}, err

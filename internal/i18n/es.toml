@@ -1034,6 +1034,8 @@ other = "Conciliación"
 other = "Presupuesto"
 [reports.params.run]
 other = "Generar informe"
+[reports.currency.native]
+other = "— nativa —"
 [reports.detail.converted]
 other = "Totales convertidos"
 [reports.detail.currency]

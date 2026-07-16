@@ -77,6 +77,9 @@
       <div class="report-field">
         <label for="rp-ccy">{{t "reports.params.currency"}}</label>
         <select id="rp-ccy" name="currency">
+          {{- if .Params.CurrencyNative}}
+          <option value=""{{if eq .Params.Currency ""}} selected{{end}}>{{t "reports.currency.native"}}</option>
+          {{- end}}
           {{- range .Params.Currencies}}
           <option value="{{.Code}}"{{if .Selected}} selected{{end}}>{{.Code}}</option>
           {{- end}}
@@ -175,6 +178,13 @@
   </div>
   {{end}}
 
+  {{/* p26.54: the table scrolls inside .report-scroll with STICKY headers -- the top
+       header row and the left (first) column stay visible while a wide/tall matrix (e.g.
+       the program statement) scrolls. Scoped to @media screen so print/PDF/CSV are
+       unaffected. Wrapping the table does not change the golden (the golden renders the
+       Table, not this shell) nor the treetable controls (findControls falls back to the
+       page-level .tree-controls). */}}
+  <div class="report-scroll">
   <table class="report-table{{if .Tree}} tree-table{{end}}">
     <thead>
       <tr>
@@ -195,6 +205,7 @@
       {{- end}}
     </tbody>
   </table>
+  </div>
 
   {{if .Tree}}
   {{/* p26.26: the reusable tree module (p26.25). Loaded on the PAGE; self-inits on
