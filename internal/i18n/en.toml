@@ -1437,6 +1437,8 @@ other = "Reconcile"
 other = "No splits to clear on this account and currency."
 [recon.back_to_list]
 other = "Back to reconciliations"
+[recon.add_txn]
+other = "Add transaction"
 [recon.finalized_note]
 other = "This reconciliation is finalized. Its cleared splits are locked."
 [recon.reopen]

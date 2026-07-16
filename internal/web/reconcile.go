@@ -290,6 +290,7 @@ func reconStartErrorField(err error) (field, key string) {
 // plus its cleared state and the stable toggle/row ids.
 type reconSplitRow struct {
 	SplitID     int64
+	TxnID       int64 // p26.50: the split's transaction id, for the per-row Edit link
 	RowID       string
 	ToggleID    string
 	Date        string
@@ -395,6 +396,7 @@ func (s *server) buildWorkspace(ctx context.Context, reconID int64) (reconWorksp
 		}
 		model.Rows = append(model.Rows, reconSplitRow{
 			SplitID:     sp.SplitID,
+			TxnID:       sp.TxnID,
 			RowID:       reconRowID(sp.SplitID),
 			ToggleID:    reconToggleID(sp.SplitID),
 			Date:        money.FormatDate(parseISOForDisplay(sp.Date), df),
@@ -481,6 +483,7 @@ func (s *server) reconToggle(w http.ResponseWriter, r *http.Request) {
 		Summary:      model.Summary,
 		Base:         model.TogglePathBase,
 		FinalizePath: model.FinalizePath,
+		ReconID:      reconID,
 	})
 }
 
@@ -493,6 +496,7 @@ type reconToggleResponse struct {
 	Summary      reconSummary
 	Base         string
 	FinalizePath string
+	ReconID      int64 // p26.50: kept so the swapped-in row's Edit link rebuilds its from= origin
 }
 
 // ---- FINALIZE / REOPEN ----------------------------------------------------
@@ -567,10 +571,14 @@ type reconRowCtx struct {
 	Row       reconSplitRow
 	Base      string
 	Finalized bool
+	// ReconID is the workspace's reconciliation id (p26.50): the row's Edit link builds
+	// /transactions/{txnID}/edit?from=/reconciliations/{ReconID} so Cancel/Save return
+	// here.
+	ReconID int64
 }
 
-func makeReconRowCtx(row reconSplitRow, base string, finalized bool) reconRowCtx {
-	return reconRowCtx{Row: row, Base: base, Finalized: finalized}
+func makeReconRowCtx(row reconSplitRow, base string, finalized bool, reconID int64) reconRowCtx {
+	return reconRowCtx{Row: row, Base: base, Finalized: finalized, ReconID: reconID}
 }
 
 // reconSummaryCtx wraps the summary for the "recon-summary" template. OOB marks the

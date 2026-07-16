@@ -48,6 +48,11 @@
   <td class="recon-memo">{{if .Memo}}{{.Memo}}{{else}}<span class="muted">&mdash;</span>{{end}}</td>
   <td class="recon-fund">{{if .FundName}}<span class="chip">{{.FundName}}</span>{{end}}</td>
   <td class="recon-amount amount">{{.AmountFmt}}</td>
+  {{/* p26.50: per-row Edit link back to the transaction editor, carrying `from` so
+       Cancel/Save return to THIS workspace. It is a genuine <a> (interactive child), so
+       reconrow.js's whole-row toggle skips it (closest('a, button')) -- clicking Edit
+       navigates, it does NOT toggle. */ -}}
+  <td class="recon-edit"><a href="/transactions/{{.TxnID}}/edit?from=/reconciliations/{{$.ReconID}}">{{t "common.edit"}}</a></td>
 </tr>
 {{- end}}
 {{- end}}
@@ -91,7 +96,7 @@
 {{/* recon-toggle-response: the toggle PARTIAL. NOT a full document -- htmx swaps the
      row in place (hx-target) and the summary OOB. Data is a reconToggleResponse. */ -}}
 {{define "recon-toggle-response" -}}
-{{template "recon-row" (reconRowCtx .Row .Base false)}}
+{{template "recon-row" (reconRowCtx .Row .Base false .ReconID)}}
 {{template "recon-summary" (reconSummaryCtx .Summary true false .FinalizePath)}}
 {{- end}}
 
@@ -111,6 +116,16 @@
 
   {{template "recon-summary" (reconSummaryCtx .Summary false .Finalized .FinalizePath)}}
 
+  {{/* p26.50: add a transaction WITHOUT leaving the reconciliation. The recon state
+       persists server-side, so `from` carries this workspace path; the editor's Cancel
+       AND Save both return here (sanitizeOrigin keeps it same-site). Shown only on an OPEN
+       recon (a finalized one is read-only). */ -}}
+  {{if not .Finalized}}
+  <p class="recon-actions">
+    <a class="btn btn-primary" href="/transactions/new?from=/reconciliations/{{.ReconID}}">{{t "recon.add_txn"}}</a>
+  </p>
+  {{end}}
+
   <table class="recon-table">
     <thead>
       <tr>
@@ -120,12 +135,13 @@
         <th>{{t "recon.col.memo"}}</th>
         <th>{{t "recon.col.fund"}}</th>
         <th>{{t "recon.col.amount"}}</th>
+        <th></th>
       </tr>
     </thead>
     <tbody id="recon-rows">
-      {{range .Rows}}{{template "recon-row" (reconRowCtx . $.Page.TogglePathBase $.Page.Finalized)}}
+      {{range .Rows}}{{template "recon-row" (reconRowCtx . $.Page.TogglePathBase $.Page.Finalized $.Page.ReconID)}}
       {{else}}
-      <tr><td colspan="6">{{t "recon.workspace.empty"}}</td></tr>
+      <tr><td colspan="7">{{t "recon.workspace.empty"}}</td></tr>
       {{end}}
     </tbody>
   </table>

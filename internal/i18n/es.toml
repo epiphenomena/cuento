@@ -1438,6 +1438,8 @@ other = "Conciliar"
 other = "No hay partidas para marcar en esta cuenta y moneda."
 [recon.back_to_list]
 other = "Volver a conciliaciones"
+[recon.add_txn]
+other = "Agregar transacción"
 [recon.finalized_note]
 other = "Esta conciliacion esta finalizada. Sus partidas marcadas estan bloqueadas."
 [recon.reopen]

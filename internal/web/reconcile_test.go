@@ -158,6 +158,41 @@ func TestReconWorkspaceRendersSplits(t *testing.T) {
 	if !strings.Contains(body, `id="recon-summary"`) {
 		t.Errorf("workspace missing sticky summary region")
 	}
+	// p26.50: the "Add transaction" button links to the editor with a `from` origin back
+	// to THIS workspace (so Cancel/Save return here).
+	wantAdd := `href="/transactions/new?from=/reconciliations/` + strconv.FormatInt(id, 10) + `"`
+	if !strings.Contains(body, wantAdd) {
+		t.Errorf("workspace missing Add-transaction link %q; body:\n%s", wantAdd, body)
+	}
+	// p26.50: each split row carries an Edit link to its transaction, carrying the same
+	// `from` origin. Assert the deposit split's transaction edit link is present.
+	wantEdit := `href="/transactions/` + strconv.FormatInt(e.txnDep, 10) + `/edit?from=/reconciliations/` + strconv.FormatInt(id, 10) + `"`
+	if !strings.Contains(body, wantEdit) {
+		t.Errorf("workspace missing per-row Edit link %q; body:\n%s", wantEdit, body)
+	}
+}
+
+// TestReconOriginDest: Save's recon-origin narrowing (p26.50). A bare
+// /reconciliations/{id} workspace path is returned verbatim (Save lands there); any
+// other same-site origin yields "" so Save keeps its default register destination.
+func TestReconOriginDest(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"/reconciliations/7", "/reconciliations/7"},
+		{"/reconciliations/42", "/reconciliations/42"},
+		{"/reconciliations", ""},            // the list, not a workspace
+		{"/reconciliations/", ""},           // empty id
+		{"/reconciliations/7/finalize", ""}, // a sub-route, not the bare workspace
+		{"/reconciliations/abc", ""},        // non-numeric id
+		{"/accounts/3/register", ""},        // an unrelated (register) origin
+		{"", ""},                            // no origin
+	}
+	for _, c := range cases {
+		if got := reconOriginDest(c.in); got != c.want {
+			t.Errorf("reconOriginDest(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
 }
 
 // --- TOGGLE = targeted PARTIAL swap, no full reload ----------------------

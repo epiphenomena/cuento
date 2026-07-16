@@ -582,6 +582,14 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 	if len(splits) > 0 {
 		dest = "/accounts/" + strconv.FormatInt(splits[0].AccountID, 10) + "/register"
 	}
+	// p26.50: when the editor was opened FROM a reconciliation workspace (`from`), Save
+	// returns to THAT workspace -- the new/edited split then appears in the uncleared
+	// list, closing the mid-reconcile loop without hunting for "Continue". Scoped to a
+	// /reconciliations/ origin only (not a general from= honor): the default register
+	// destination is unchanged for every other entry point, so no existing flow regresses.
+	if o := reconOriginDest(model.Origin); o != "" {
+		dest = o
+	}
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Redirect", dest)
 		w.WriteHeader(http.StatusOK)
@@ -1209,6 +1217,27 @@ func sanitizeOrigin(v string) string {
 		return ""
 	}
 	return v
+}
+
+// reconOriginDest returns origin when it is a reconciliation WORKSPACE path
+// (/reconciliations/{id}, id numeric) -- the Save destination that returns the user to
+// the recon they added/edited a transaction from (p26.50). Returns "" for any other
+// origin (Save keeps its default register destination). origin is already sanitized to a
+// same-site path by sanitizeOrigin; this narrows it to the recon-workspace shape so a
+// general from= value cannot redirect Save away from the register for normal entry.
+func reconOriginDest(origin string) string {
+	const prefix = "/reconciliations/"
+	if !strings.HasPrefix(origin, prefix) {
+		return ""
+	}
+	rest := origin[len(prefix):]
+	if rest == "" || strings.ContainsRune(rest, '/') {
+		return "" // not a bare workspace path (list, or a sub-route)
+	}
+	if _, err := strconv.ParseInt(rest, 10, 64); err != nil {
+		return "" // {id} must be numeric
+	}
+	return origin
 }
 
 // defaultSubsidiary resolves the editor's default header subsidiary: the user's

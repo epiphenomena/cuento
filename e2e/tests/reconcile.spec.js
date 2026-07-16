@@ -213,3 +213,71 @@ test('reconcile: start, toggle splits (targeted swap), reach zero, finalize', as
   // 400.00 == closing (opening 0 + cleared 400).
   await expect(reportTable).toContainText('400.00');
 });
+
+// p26.50: add a transaction mid-reconcile and return to the SAME workspace. The recon
+// state persists server-side; the "Add transaction" button carries `from` = this
+// workspace so Save returns here, and the new split appears in the uncleared list.
+test('reconcile: add a transaction from the workspace and land back on it', async ({
+  page,
+  server,
+}) => {
+  test.slow();
+  await login(page, server);
+
+  // Distinct names that do NOT contain another spec's "Checking E2E"/"Income E2E"
+  // substrings (the accounts list is worker-db-shared; a substring collision would break
+  // another spec's getByRole-name link lookup).
+  const checking = 'ReconAdd Bank Acct';
+  const income = 'ReconAdd Grants Acct';
+  await createAccount(page, checking, 'asset', true);
+  await createAccount(page, income, 'revenue', false);
+
+  // One deposit so the account is reconcilable with a statement, then start a recon.
+  await postDeposit(page, checking, income, '100.00');
+  await page.goto('/reconciliations');
+  const acctRow = page.locator('tr.recon-list-row', { hasText: checking });
+  await expect(acctRow).toBeVisible();
+  await acctRow.locator('input[name="statement_date"]').fill('2026-04-30');
+  await acctRow.locator('input[name="balance"]').fill('300.00');
+  await acctRow.getByRole('button', { name: /start reconciliation/i }).click();
+  await page.waitForURL('**/reconciliations/*');
+  const workspaceURL = new URL(page.url()).pathname; // /reconciliations/{id}
+
+  // Exactly one uncleared split so far (the 100.00 deposit), still uncleared.
+  await expect(page.locator('tr.recon-row')).toHaveCount(1);
+  await expect(page.locator('button.recon-toggle')).toHaveAttribute('aria-pressed', 'false');
+
+  // p26.49/p26.50: clicking a row's EDIT link NAVIGATES to the editor and does NOT also
+  // toggle the row (reconrow.js excludes clicks on interactive children). The edit link
+  // carries the recon `from` origin. Prove no toggle fired: return to the workspace and
+  // assert the split is STILL uncleared (a stray toggle would have cleared it).
+  await page.locator('tr.recon-row').first().locator('a[href*="/edit"]').click();
+  await page.waitForURL(/\/transactions\/\d+\/edit/);
+  await expect(page.locator('#txn-origin')).toHaveValue(workspaceURL);
+  await page.goto(workspaceURL);
+  await expect(page.locator('tr.recon-row')).toHaveCount(1);
+  await expect(page.locator('button.recon-toggle')).toHaveAttribute('aria-pressed', 'false');
+
+  // Click "Add transaction": the editor opens with `from` set to THIS workspace.
+  await page.getByRole('link', { name: /add transaction/i }).click();
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await expect(page.locator('#txn-origin')).toHaveValue(workspaceURL);
+  // Cancel too honors the recon origin (p26.33 machinery, extended to recon).
+  await expect(page.locator('.txn-submit a.btn-ghost')).toHaveAttribute('href', workspaceURL);
+
+  // Post a second deposit INTO checking (so the new split lands on the recon's account
+  // and shows up in the workspace uncleared list): checking header +200, income -200.
+  await page.locator('#txn-main-account').selectOption({ label: checking });
+  await page.locator('#txn-account-0').selectOption({ label: income });
+  await page.locator('#txn-amount-0').fill('-200.00');
+  await page.getByRole('button', { name: /^save$/i }).click();
+
+  // p26.50: Save honors the recon origin -> we land back on the SAME workspace (NOT the
+  // account register).
+  await page.waitForURL((u) => u.pathname === workspaceURL);
+  await expect(page.getByRole('heading', { name: /reconcile/i })).toBeVisible();
+  // The new split appears as a second uncleared row.
+  await expect(page.locator('tr.recon-row')).toHaveCount(2);
+  // The workspace now shows the newly-added 200.00 amount among the rows.
+  await expect(page.locator('td.recon-amount', { hasText: '200.00' })).toBeVisible();
+});
