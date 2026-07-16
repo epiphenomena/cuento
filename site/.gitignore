@@ -1,0 +1,6 @@
+# Jekyll build artifacts and local gem state for the documentation site.
+_site/
+.jekyll-cache/
+.jekyll-metadata
+Gemfile.lock
+vendor/

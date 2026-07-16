@@ -1,0 +1,32 @@
+title: cuento
+description: >-
+  Self-hosted double-entry fund accounting for a small multi-subsidiary
+  nonprofit. One Go binary, one SQLite file, server-rendered HTML + htmx,
+  bilingual (en/es).
+
+# just-the-docs is a docs-oriented theme: a left sidebar navigation plus
+# built-in search. Served via remote_theme so no local theme gem is needed on
+# GitHub Pages.
+remote_theme: just-the-docs/just-the-docs
+
+# Plugins allowed on GitHub Pages.
+plugins:
+  - jekyll-remote-theme
+
+# Sidebar / search behaviour.
+search_enabled: true
+heading_anchors: true
+
+# Navigation ordering is driven by each page's `nav_order` front matter.
+color_scheme: light
+
+# Footer.
+aux_links:
+  Repository: "https://github.com"
+aux_links_new_tab: true
+
+# Exclude site scaffolding from the build output.
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor

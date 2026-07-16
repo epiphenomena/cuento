@@ -1,0 +1,8 @@
+# The published documentation site (Jekyll). On GitHub Pages this builds via the
+# github-pages gem; locally, `bundle install && bundle exec jekyll serve` works.
+source "https://rubygems.org"
+
+# Matches GitHub Pages' supported build environment; pulls in a compatible Jekyll
+# and the jekyll-remote-theme plugin used to load just-the-docs.
+gem "github-pages", group: :jekyll_plugins
+gem "jekyll-remote-theme"
