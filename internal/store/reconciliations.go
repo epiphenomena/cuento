@@ -328,6 +328,91 @@ func (s *Store) Reopen(ctx context.Context, reconID int64) error {
 	return nil
 }
 
+// EditReconciliationStatement edits an OPEN reconciliation's statement date +
+// ending (statement) balance (p26.57). The recon must be OPEN
+// (ErrReconciliationNotOpen -- a finalized/discarded statement's figures are fixed);
+// the date must be the loose YYYY-MM-DD shape (ErrBadDate). The opening balance is
+// DERIVED from the prior finalized statement (the chain), not stored, so it is not a
+// parameter. Versioned op='update': the snapshot append reflects the new figures, so
+// the workspace summary (and thus the finalize-until-zero gate) recomputes against
+// them. All validation runs inside fn on the tx-bound q so a rejection rolls the
+// change back (no audit trace).
+func (s *Store) EditReconciliationStatement(ctx context.Context, reconID int64, statementDate string, statementBalance int64) error {
+	if !validDate(statementDate) {
+		return ErrBadDate
+	}
+	_, err := s.write(ctx, "reconciliation.edit", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			recon, err := q.GetReconciliation(ctx, reconID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return ErrReconciliationNotFound
+				}
+				return fmt.Errorf("load reconciliation %d: %w", reconID, err)
+			}
+			// Editing the statement is allowed only while the recon is OPEN.
+			if recon.Status != "open" {
+				return ErrReconciliationNotOpen
+			}
+			if err := q.SetReconciliationStatement(ctx, sqlc.SetReconciliationStatementParams{
+				StatementDate:    statementDate,
+				StatementBalance: statementBalance,
+				ID:               reconID,
+			}); err != nil {
+				return fmt.Errorf("edit reconciliation %d statement: %w", reconID, err)
+			}
+			return insertReconciliationVersion(ctx, q, changeID, "update", reconID)
+		})
+	if err != nil {
+		return fmt.Errorf("edit reconciliation %d: %w", reconID, err)
+	}
+	return nil
+}
+
+// DiscardReconciliation soft-abandons an OPEN reconciliation (p26.58, RULE 14: audit
+// sacred -- NO hard delete). It flips status open -> 'discarded' (a NEW status value,
+// 00023) and RELEASES every split it had cleared (reconciliation_id -> NULL) so those
+// splits are available to a future reconciliation. The recon must be OPEN
+// (ErrReconciliationNotOpen -- a finalized recon must be reopened first, and a
+// discarded one is already discarded). Both effects run in ONE change through the
+// funnel: the un-clear is a LIVE-ONLY column update (00014) minting no split version;
+// the status flip appends a reconciliations version op='update'. NO row is deleted,
+// anywhere -- the recon, its versions, its changes all remain (audit intact). A
+// discarded recon is excluded from every status='open'/status='finalized' predicate
+// automatically, so it no longer blocks a new open recon on the same (account,
+// currency) (ErrOpenReconciliationExists passes), leaves the continue/open list, and
+// is ignored by the opening chain + Z9. All validation runs inside fn on the tx-bound
+// q so a rejection rolls the change back (no audit trace).
+func (s *Store) DiscardReconciliation(ctx context.Context, reconID int64) error {
+	_, err := s.write(ctx, "reconciliation.discard", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			recon, err := q.GetReconciliation(ctx, reconID)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return ErrReconciliationNotFound
+				}
+				return fmt.Errorf("load reconciliation %d: %w", reconID, err)
+			}
+			// Discarding is allowed only while the recon is OPEN.
+			if recon.Status != "open" {
+				return ErrReconciliationNotOpen
+			}
+			// Release the recon's cleared splits FIRST (live-only, no split version).
+			// The recon is still 'open' here, so the finalized-lock trigger never fires.
+			if err := q.UnclearReconciliationSplits(ctx, sql.NullInt64{Int64: reconID, Valid: true}); err != nil {
+				return fmt.Errorf("unclear splits for reconciliation %d: %w", reconID, err)
+			}
+			if err := q.SetReconciliationStatus(ctx, sqlc.SetReconciliationStatusParams{Status: "discarded", ID: reconID}); err != nil {
+				return fmt.Errorf("discard reconciliation %d: %w", reconID, err)
+			}
+			return insertReconciliationVersion(ctx, q, changeID, "update", reconID)
+		})
+	if err != nil {
+		return fmt.Errorf("discard reconciliation %d: %w", reconID, err)
+	}
+	return nil
+}
+
 // ReconciliationSummary is the workspace's sticky summary (p16.3): the recon's
 // statement balance, the opening balance (prior finalized statement, the chain),
 // the cleared total (net-debit sum of this recon's cleared splits), and the

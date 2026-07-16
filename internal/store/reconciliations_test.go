@@ -943,3 +943,86 @@ func TestReconciliationWorkspaceReads(t *testing.T) {
 		t.Errorf("Finalize at nonzero difference: err = %v, want ErrReconciliationDifference", err)
 	}
 }
+
+// --- p26.57 edit statement date + balance --------------------------------
+
+// TestEditReconciliationStatement edits an OPEN recon's date + balance, asserts the
+// mutation is versioned op='update', the live row reflects the new figures, and the
+// workspace summary (difference / finalize gate) recomputes against them.
+func TestEditReconciliationStatement(t *testing.T) {
+	e := newReconEnv(t)
+	ctx := mutCtx()
+
+	// A +250 deposit; statement starts at 0 (opening 0, cleared 0 => diff 0).
+	txn, err := e.s.PostTransaction(ctx, PostTransactionInput{
+		Date: "2026-02-05", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: e.checking, Amount: 25_000, Position: 0},
+			{AccountID: e.revenue, Amount: -25_000, Position: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+	spID := checkingSplitID(t, e.d, txn, e.checking)
+
+	recon, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-02-28", 0)
+	if err != nil {
+		t.Fatalf("StartReconciliation: %v", err)
+	}
+	if err := e.s.SetSplitReconciled(ctx, recon, spID, true); err != nil {
+		t.Fatalf("clear split: %v", err)
+	}
+	// cleared 25000, statement 0, opening 0 => diff = 0 - 25000 = -25000 (not zero).
+	sum, _ := e.s.ReconciliationSummaryFor(ctx, recon)
+	if sum.Difference != -25_000 {
+		t.Fatalf("pre-edit difference = %d, want -25000", sum.Difference)
+	}
+
+	// Edit the statement to 250.00 and a new date: now opening 0 + cleared 25000 ==
+	// statement 25000 => difference 0, Finalize enabled.
+	if err := e.s.EditReconciliationStatement(ctx, recon, "2026-03-02", 25_000); err != nil {
+		t.Fatalf("EditReconciliationStatement: %v", err)
+	}
+	testutil.AssertVersioned(t, e.d, "reconciliations", recon, "update")
+
+	got, _ := e.s.GetReconciliation(ctx, recon)
+	if got.StatementDate != "2026-03-02" || got.StatementBalance != 25_000 {
+		t.Errorf("after edit: date=%q balance=%d, want 2026-03-02/25000", got.StatementDate, got.StatementBalance)
+	}
+	sum2, _ := e.s.ReconciliationSummaryFor(ctx, recon)
+	if sum2.Difference != 0 {
+		t.Errorf("post-edit difference = %d, want 0", sum2.Difference)
+	}
+	// Finalize now accepts (the edit made it balance).
+	if err := e.s.Finalize(ctx, recon); err != nil {
+		t.Errorf("Finalize after balancing edit: %v", err)
+	}
+	assertLedgerClean(t, e.d)
+}
+
+// TestEditReconciliationStatementValidation rejects a bad date and a non-open recon.
+func TestEditReconciliationStatementValidation(t *testing.T) {
+	e := newReconEnv(t)
+	ctx := mutCtx()
+
+	recon, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-02-28", 0)
+	if err != nil {
+		t.Fatalf("StartReconciliation: %v", err)
+	}
+	// Bad date shape rejected (no live change).
+	if err := e.s.EditReconciliationStatement(ctx, recon, "not-a-date", 100); !errors.Is(err, ErrBadDate) {
+		t.Errorf("edit with bad date: err = %v, want ErrBadDate", err)
+	}
+	// Finalize it, then an edit must be rejected (not open).
+	if err := e.s.Finalize(ctx, recon); err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if err := e.s.EditReconciliationStatement(ctx, recon, "2026-03-02", 100); !errors.Is(err, ErrReconciliationNotOpen) {
+		t.Errorf("edit finalized recon: err = %v, want ErrReconciliationNotOpen", err)
+	}
+	// Missing recon -> ErrReconciliationNotFound.
+	if err := e.s.EditReconciliationStatement(ctx, 999_999, "2026-03-02", 100); !errors.Is(err, ErrReconciliationNotFound) {
+		t.Errorf("edit missing recon: err = %v, want ErrReconciliationNotFound", err)
+	}
+}

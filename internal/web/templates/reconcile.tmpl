@@ -113,6 +113,37 @@
     </form>
   </p>
   {{end}}
+  {{if .Discarded}}
+  <p class="recon-discarded-note" role="status">{{t "recon.discarded_note"}}</p>
+  {{end}}
+
+  {{/* p26.57: edit the OPEN recon's statement date + ending balance. Shown only on an
+       OPEN recon (a finalized/discarded one is read-only). On success the workspace
+       re-renders with the new statement, so the summary/difference + Finalize gate
+       recompute. A bad date/balance re-renders this form at 422 with a field error. The
+       opening balance is DERIVED (prior finalized statement), so it is not editable. */ -}}
+  {{if and (not .Finalized) (not .Discarded)}}
+  <form class="recon-edit-form" method="post" action="{{.EditPath}}"
+        hx-post="{{.EditPath}}" hx-target="body" id="recon-edit-form">
+    <fieldset>
+      <legend>{{t "recon.edit.legend"}}</legend>
+      <div class="report-field">
+        <label for="recon-edit-date">{{t "recon.start.statement_date"}}</label>
+        <input type="text" id="recon-edit-date" name="statement_date" class="js-datefield"
+               value="{{.EditForm.StatementDay}}" placeholder="{{t "recon.start.date_hint"}}"
+               {{if eq .EditForm.Errors.FirstInvalid "statement_date"}}autofocus{{end}}>
+        {{if .EditForm.Errors.ErrorKey "statement_date"}}<span class="field-error" role="alert">{{t (.EditForm.Errors.ErrorKey "statement_date")}}</span>{{end}}
+      </div>
+      <div class="report-field">
+        <label for="recon-edit-balance">{{t "recon.start.ending_balance"}}</label>
+        <input type="text" id="recon-edit-balance" name="balance" value="{{.EditForm.Balance}}"
+               {{if eq .EditForm.Errors.FirstInvalid "balance"}}autofocus{{end}}>
+        {{if .EditForm.Errors.ErrorKey "balance"}}<span class="field-error" role="alert">{{t (.EditForm.Errors.ErrorKey "balance")}}</span>{{end}}
+      </div>
+      <button type="submit" class="btn">{{t "recon.edit.save"}}</button>
+    </fieldset>
+  </form>
+  {{end}}
 
   {{template "recon-summary" (reconSummaryCtx .Summary false .Finalized .FinalizePath)}}
 
@@ -120,9 +151,16 @@
        persists server-side, so `from` carries this workspace path; the editor's Cancel
        AND Save both return here (sanitizeOrigin keeps it same-site). Shown only on an OPEN
        recon (a finalized one is read-only). */ -}}
-  {{if not .Finalized}}
+  {{if and (not .Finalized) (not .Discarded)}}
   <p class="recon-actions">
     <a class="btn btn-primary" href="/transactions/new?from=/reconciliations/{{.ReconID}}">{{t "recon.add_txn"}}</a>
+    {{/* p26.58: discard (soft-abandon) this open recon. Soft status change (RULE 14),
+         releasing its cleared splits; on success it returns to the list, where a fresh
+         recon can be started for this account+currency. */ -}}
+    <form method="post" action="{{.DiscardPath}}" class="inline recon-discard-form"
+          hx-post="{{.DiscardPath}}" hx-target="body">
+      <button type="submit" class="btn btn-ghost recon-discard">{{t "recon.discard"}}</button>
+    </form>
   </p>
   {{end}}
 
@@ -139,7 +177,7 @@
       </tr>
     </thead>
     <tbody id="recon-rows">
-      {{range .Rows}}{{template "recon-row" (reconRowCtx . $.Page.TogglePathBase $.Page.Finalized $.Page.ReconID)}}
+      {{range .Rows}}{{template "recon-row" (reconRowCtx . $.Page.TogglePathBase (or $.Page.Finalized $.Page.Discarded) $.Page.ReconID)}}
       {{else}}
       <tr><td colspan="7">{{t "recon.workspace.empty"}}</td></tr>
       {{end}}

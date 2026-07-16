@@ -281,3 +281,55 @@ test('reconcile: add a transaction from the workspace and land back on it', asyn
   // The workspace now shows the newly-added 200.00 amount among the rows.
   await expect(page.locator('td.recon-amount', { hasText: '200.00' })).toBeVisible();
 });
+
+// p26.57: edit an OPEN recon's statement date + ending balance from the workspace and
+// assert the difference/summary recompute and the Finalize gate flips. Start with a
+// statement that does NOT balance (Finalize disabled), clear the deposit, then EDIT the
+// ending balance to the cleared total so the difference reaches zero and Finalize enables.
+test('reconcile: edit the statement date + ending balance updates the summary and gate', async ({
+  page,
+  server,
+}) => {
+  test.slow();
+  await login(page, server);
+
+  const checking = 'ReconEdit Bank Acct';
+  const income = 'ReconEdit Grants Acct';
+  await createAccount(page, checking, 'asset', true);
+  await createAccount(page, income, 'revenue', false);
+
+  // One 250.00 deposit; start a recon with a WRONG ending balance (0.00 => difference 0
+  // before clearing, so clear the split to force a nonzero difference).
+  await postDeposit(page, checking, income, '250.00');
+  await page.goto('/reconciliations');
+  const acctRow = page.locator('tr.recon-list-row', { hasText: checking });
+  await expect(acctRow).toBeVisible();
+  await acctRow.locator('input[name="statement_date"]').fill('2026-05-31');
+  await acctRow.locator('input[name="balance"]').fill('0.00');
+  await acctRow.getByRole('button', { name: /start reconciliation/i }).click();
+  await page.waitForURL('**/reconciliations/*');
+  const workspaceURL = new URL(page.url()).pathname;
+
+  // The OPEN workspace shows the statement-edit form prefilled with the current values.
+  await expect(page.locator('#recon-edit-form')).toBeVisible();
+  await expect(page.locator('#recon-edit-balance')).toHaveValue('0.00');
+
+  // Clear the deposit (cleared 250, statement 0 => difference -250.00, Finalize disabled).
+  await page.locator('button.recon-toggle').first().click();
+  await expect(page.locator('#recon-diff-chip')).toContainText('250.00');
+  await expect(page.locator('#recon-finalize')).toBeDisabled();
+
+  // EDIT the statement: new date + ending balance 250.00 (== opening 0 + cleared 250).
+  // The edit posts and re-renders the workspace with the new statement.
+  await page.locator('#recon-edit-date').fill('2026-06-15');
+  await page.locator('#recon-edit-balance').fill('250.00');
+  await page.locator('#recon-edit-form').getByRole('button', { name: /save statement/i }).click();
+  await page.waitForURL((u) => u.pathname === workspaceURL);
+
+  // The difference is now zero and Finalize is ENABLED (the summary recomputed against
+  // the edited statement). The edit form prefills the NEW balance.
+  await expect(page.locator('#recon-diff-chip')).toContainText('0.00');
+  await expect(page.locator('#recon-finalize')).toBeEnabled();
+  await expect(page.locator('#recon-edit-balance')).toHaveValue('250.00');
+});
+

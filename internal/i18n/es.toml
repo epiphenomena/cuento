@@ -1471,6 +1471,14 @@ other = "Agregar transacción"
 other = "Esta conciliacion esta finalizada. Sus partidas marcadas estan bloqueadas."
 [recon.reopen]
 other = "Reabrir"
+[recon.discarded_note]
+other = "Esta conciliacion fue descartada. Ya no afecta ningun estado de cuenta, y se puede iniciar una nueva conciliacion para esta cuenta."
+[recon.discard]
+other = "Descartar"
+[recon.edit.legend]
+other = "Editar estado de cuenta"
+[recon.edit.save]
+other = "Guardar estado de cuenta"
 [recon.col.cleared]
 other = "Marcada"
 [recon.col.date]

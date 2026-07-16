@@ -1470,6 +1470,14 @@ other = "Add transaction"
 other = "This reconciliation is finalized. Its cleared splits are locked."
 [recon.reopen]
 other = "Reopen"
+[recon.discarded_note]
+other = "This reconciliation was discarded. It no longer affects any statement, and a new reconciliation can be started for this account."
+[recon.discard]
+other = "Discard"
+[recon.edit.legend]
+other = "Edit statement"
+[recon.edit.save]
+other = "Save statement"
 [recon.col.cleared]
 other = "Cleared"
 [recon.col.date]

@@ -43,10 +43,28 @@ SELECT COUNT(*) FROM reconciliations
 WHERE account_id = ? AND currency = ? AND status = 'open';
 
 -- name: SetReconciliationStatus :exec
--- Flip a reconciliation's status (open <-> finalized). The store reads the current
--- row, sets the target status, and writes it here; the version append reflects the
--- new status (runs AFTER this live write).
+-- Flip a reconciliation's status (open <-> finalized, or open -> discarded). The
+-- store reads the current row, sets the target status, and writes it here; the
+-- version append reflects the new status (runs AFTER this live write).
 UPDATE reconciliations SET status = ? WHERE id = ?;
+
+-- name: SetReconciliationStatement :exec
+-- p26.57: edit an OPEN reconciliation's statement_date + statement_balance. The
+-- store validates the recon is open + the inputs parse (money) before this write,
+-- then appends a version snapshot AFTER (so it reflects the new figures). The
+-- opening balance is DERIVED (prior finalized statement), not stored, so it is not
+-- editable here. Params: statement_date, statement_balance, id.
+UPDATE reconciliations SET statement_date = ?, statement_balance = ? WHERE id = ?;
+
+-- name: UnclearReconciliationSplits :exec
+-- p26.58: release (un-clear) every split cleared against a reconciliation --
+-- reconciliation_id -> NULL for all its splits. Used on DISCARD so the abandoned
+-- recon's splits become available to a future reconciliation. LIVE-ONLY column
+-- (00014): NO split version is appended (clearing state is operational metadata, not
+-- audited business content). The recon is OPEN when this runs (discard guards
+-- status='open'), so trg_split_locked_when_finalized never fires. Param:
+-- reconciliation_id.
+UPDATE splits SET reconciliation_id = NULL WHERE reconciliation_id = ?;
 
 -- name: InsertReconciliationVersion :exec
 -- Snapshot-from-live version append for reconciliations (STANDARD single-column

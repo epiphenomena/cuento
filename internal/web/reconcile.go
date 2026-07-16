@@ -61,6 +61,16 @@ func reconReopenPath(id int64) string {
 	return "/reconciliations/" + strconv.FormatInt(id, 10) + "/reopen"
 }
 
+// reconEditPath is the POST target for editing an open recon's statement (p26.57).
+func reconEditPath(id int64) string {
+	return "/reconciliations/" + strconv.FormatInt(id, 10) + "/edit"
+}
+
+// reconDiscardPath is the POST target for discarding an open recon (p26.58).
+func reconDiscardPath(id int64) string {
+	return "/reconciliations/" + strconv.FormatInt(id, 10) + "/discard"
+}
+
 // reconToggleID is the stable DOM id of a split's cleared toggle button (also the
 // focus-restore anchor across the htmx swap).
 func reconToggleID(splitID int64) string {
@@ -319,6 +329,7 @@ type reconWorkspaceModel struct {
 	AccountName string
 	Currency    string
 	Finalized   bool
+	Discarded   bool // p26.58: a discarded recon renders read-only, no actions
 
 	Rows    []reconSplitRow
 	Summary reconSummary
@@ -326,6 +337,21 @@ type reconWorkspaceModel struct {
 	TogglePathBase string // "/reconciliations/{id}/splits" (row builds the rest)
 	FinalizePath   string
 	ReopenPath     string
+
+	// p26.57: the OPEN-recon edit form (statement date + ending balance). The values
+	// are the CURRENT statement, formatted for the user (rule 10) so the form
+	// prefills; Errors carries a 422 field error on a bad edit.
+	EditPath    string
+	EditForm    reconEditForm
+	DiscardPath string // p26.58: POST to discard the open recon
+}
+
+// reconEditForm is the OPEN-recon statement editor's model (p26.57): the echoed
+// statement date + ending balance inputs and any field error.
+type reconEditForm struct {
+	StatementDay string // echoed / prefilled statement date input
+	Balance      string // echoed / prefilled ending-balance input
+	Errors       formErrors
 }
 
 // reconWorkspace handles GET /reconciliations/{id} (TxnRead): the workspace for one
@@ -381,9 +407,18 @@ func (s *server) buildWorkspace(ctx context.Context, reconID int64) (reconWorksp
 		AccountName:    s.accountName(ctx, recon.AccountID, lang),
 		Currency:       recon.Currency,
 		Finalized:      recon.Status == "finalized",
+		Discarded:      recon.Status == "discarded",
 		TogglePathBase: "/reconciliations/" + strconv.FormatInt(reconID, 10) + "/splits",
 		FinalizePath:   reconFinalizePath(reconID),
 		ReopenPath:     reconReopenPath(reconID),
+		EditPath:       reconEditPath(reconID),
+		DiscardPath:    reconDiscardPath(reconID),
+		EditForm: reconEditForm{
+			StatementDay: money.FormatDate(parseISOForDisplay(recon.StatementDate), df),
+			// A round-trippable BARE number (rule 10): the edit form re-parses it with
+			// the same number format, so an untouched save keeps the balance exactly.
+			Balance: money.Format(recon.StatementBalance, exp, money.FormatOpts{Number: numberFormatFor(u)}),
+		},
 	}
 	for _, sp := range splits {
 		fund := ""
@@ -559,6 +594,98 @@ func (s *server) reconReopen(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	redirectAfterForm(w, r, reconWorkspacePath(id))
+}
+
+// ---- EDIT / DISCARD (p26.57 / p26.58) ------------------------------------
+
+// reconEdit handles POST /reconciliations/{id}/edit (TxnWrite): edit an OPEN recon's
+// statement date + ending balance (p26.57). Inputs are parsed via the money parsers
+// honoring the user's date/number format (rule 10). On a bad date/balance the
+// workspace re-renders at 422 with the edit form's field error (and the entered
+// values echoed); on a rejected store edit (not-open) a clean 409/404. On success it
+// redirects back to the workspace, where buildWorkspace recomputes the summary +
+// finalize gate from the new statement.
+func (s *server) reconEdit(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	u := currentUser(ctx)
+	id := parseID(r.PathValue("id"))
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	dayStr := r.PostFormValue("statement_date")
+	balStr := r.PostFormValue("balance")
+
+	recon, err := s.store.GetReconciliation(ctx, id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	// Re-render the workspace at 422 with the edit form carrying a field error and the
+	// user's just-entered values echoed (so nothing typed is lost).
+	renderEditError := func(field, key string) {
+		model, berr := s.buildWorkspace(ctx, id)
+		if berr != nil {
+			s.serverError(w)
+			return
+		}
+		model.EditForm.StatementDay = dayStr
+		model.EditForm.Balance = balStr
+		model.EditForm.Errors.add(field, key)
+		s.render(w, r, http.StatusUnprocessableEntity, "reconcile.tmpl", s.newShellPage(r, model))
+	}
+
+	df := dateFormatFor(u)
+	day, derr := money.ParseDate(dayStr, df, s.now())
+	if derr != nil {
+		renderEditError("statement_date", "error.recon.bad_date")
+		return
+	}
+	exp := s.currencyExponent(ctx, recon.Currency)
+	bal, berr := money.Parse(balStr, exp, numberFormatFor(u))
+	if berr != nil {
+		renderEditError("balance", "error.recon.bad_balance")
+		return
+	}
+
+	if err := s.store.EditReconciliationStatement(s.actorCtx(ctx), id, day.Format("2006-01-02"), bal); err != nil {
+		switch {
+		case errors.Is(err, store.ErrReconciliationNotOpen):
+			http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
+		case errors.Is(err, store.ErrReconciliationNotFound):
+			http.NotFound(w, r)
+		case errors.Is(err, store.ErrBadDate):
+			renderEditError("statement_date", "error.recon.bad_date")
+		default:
+			s.serverError(w)
+		}
+		return
+	}
+	redirectAfterForm(w, r, reconWorkspacePath(id))
+}
+
+// reconDiscard handles POST /reconciliations/{id}/discard (TxnWrite): soft-abandon an
+// OPEN recon (p26.58, RULE 14 -- no hard delete). The store flips status to
+// 'discarded' and releases the recon's cleared splits. On success it redirects to the
+// LIST (the recon is gone from the continue/open state, and a fresh recon can start).
+// A non-open recon is a clean 409, never a 500.
+func (s *server) reconDiscard(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := parseID(r.PathValue("id"))
+	if err := s.store.DiscardReconciliation(s.actorCtx(ctx), id); err != nil {
+		switch {
+		case errors.Is(err, store.ErrReconciliationNotOpen):
+			http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
+		case errors.Is(err, store.ErrReconciliationNotFound):
+			http.NotFound(w, r)
+		default:
+			s.serverError(w)
+		}
+		return
+	}
+	redirectAfterForm(w, r, "/reconciliations")
 }
 
 // ---- template funcs ------------------------------------------------------

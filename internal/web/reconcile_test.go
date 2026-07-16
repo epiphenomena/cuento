@@ -527,3 +527,79 @@ func finalizeDisabled(body string) bool {
 	tag := body[start : i+end]
 	return strings.Contains(tag, "disabled")
 }
+
+// --- p26.57 edit statement (date + ending balance) ------------------------
+
+// TestReconEditWorkspaceShowsForm: an OPEN workspace renders the statement-edit form
+// prefilled with the current date + balance; a finalized workspace does not.
+func TestReconEditWorkspaceShowsForm(t *testing.T) {
+	e := newReconWebEnv(t)
+	id := e.startRecon(t, 25_000)
+	body := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(id), nil).Body.String()
+	if !strings.Contains(body, `id="recon-edit-form"`) {
+		t.Errorf("open workspace missing the statement-edit form; body:\n%s", body)
+	}
+	// Prefilled ending balance (25000 minor => 250.00 in the default number format).
+	if !strings.Contains(body, `value="250.00"`) {
+		t.Errorf("edit form missing prefilled balance 250.00; body:\n%s", body)
+	}
+	// The discard action is present on an open recon.
+	if !strings.Contains(body, reconDiscardPath(id)) {
+		t.Errorf("open workspace missing discard action %q", reconDiscardPath(id))
+	}
+}
+
+// TestReconEditUpdatesSummaryAndGate: editing the statement to the cleared total makes
+// the difference zero and ENABLES Finalize; a bad balance re-renders at 422.
+func TestReconEditUpdatesSummaryAndGate(t *testing.T) {
+	e := newReconWebEnv(t)
+	// Start at statement 0, clear the +250 deposit => difference -250, Finalize disabled.
+	id := e.startRecon(t, 0)
+	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(id, e.spDep), url.Values{}); rec.Code != http.StatusOK {
+		t.Fatalf("toggle deposit = %d", rec.Code)
+	}
+	before := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(id), nil).Body.String()
+	if !finalizeDisabled(before) {
+		t.Fatalf("Finalize should be DISABLED before the edit (diff -250)")
+	}
+
+	// Edit the ending balance to 250.00 (== opening 0 + cleared 250) and a new date.
+	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconEditPath(id), url.Values{
+		"statement_date": {"2026-03-15"},
+		"balance":        {"250.00"},
+	})
+	if rec.Code != http.StatusSeeOther && rec.Code != http.StatusOK {
+		t.Fatalf("edit POST = %d, want redirect/200; body: %s", rec.Code, rec.Body.String())
+	}
+	// The store now has the new statement + a zero difference; Finalize enabled.
+	sum, err := e.st.ReconciliationSummaryFor(context.Background(), id)
+	if err != nil {
+		t.Fatalf("summary: %v", err)
+	}
+	if sum.StatementBalance != 25_000 {
+		t.Errorf("statement after edit = %d, want 25000", sum.StatementBalance)
+	}
+	if sum.Difference != 0 {
+		t.Errorf("difference after balancing edit = %d, want 0", sum.Difference)
+	}
+	got, _ := e.st.GetReconciliation(context.Background(), id)
+	if got.StatementDate != "2026-03-15" {
+		t.Errorf("statement date after edit = %q, want 2026-03-15", got.StatementDate)
+	}
+	after := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(id), nil).Body.String()
+	if finalizeDisabled(after) {
+		t.Errorf("Finalize should be ENABLED after the balancing edit; body:\n%s", after)
+	}
+
+	// A bad balance re-renders the workspace at 422 with a field error (no change).
+	bad := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconEditPath(id), url.Values{
+		"statement_date": {"2026-03-15"},
+		"balance":        {"not-a-number"},
+	})
+	if bad.Code != http.StatusUnprocessableEntity {
+		t.Errorf("edit with bad balance = %d, want 422", bad.Code)
+	}
+	if !strings.Contains(bad.Body.String(), `id="recon-edit-form"`) {
+		t.Errorf("422 edit response missing the re-rendered edit form")
+	}
+}

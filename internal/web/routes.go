@@ -330,6 +330,11 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/reconciliations/{id}/splits/{sid}/toggle", TxnWrite, http.HandlerFunc(s.reconToggle)},
 		{http.MethodPost, "/reconciliations/{id}/finalize", TxnWrite, http.HandlerFunc(s.reconFinalize)},
 		{http.MethodPost, "/reconciliations/{id}/reopen", TxnWrite, http.HandlerFunc(s.reconReopen)},
+		// p26.57 edit an OPEN recon's statement date + ending balance; p26.58 discard
+		// (soft-abandon) an OPEN recon. Both TxnWrite (they mutate the statement chain /
+		// release cleared splits). The permission-matrix test picks them up (rule 8).
+		{http.MethodPost, "/reconciliations/{id}/edit", TxnWrite, http.HandlerFunc(s.reconEdit)},
+		{http.MethodPost, "/reconciliations/{id}/discard", TxnWrite, http.HandlerFunc(s.reconDiscard)},
 
 		// p17.2 bank-CSV import (Appendix B/F: /import** = TxnWrite -- importing feeds
 		// the ledger). GET is the upload + mapping form; POST /import/preview parses the
