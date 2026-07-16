@@ -34,7 +34,7 @@ func testConfig() string {
   },
   "campus_fund": {"name": "Restore the Way", "funder": "", "purpose": "campus",
                   "restriction": "purpose"},
-  "campus_asset_accounts": ["Campus Land"],
+  "campus_asset_accounts": ["Campus Land", "Campus Building"],
   "functional_classes": {"PRG": "program", "MGT": "management"},
   "base_currency": "USD",
   "fx_clearing_account": "FX Clearing",
@@ -52,6 +52,7 @@ func testAccountMap() string {
 		{SourceAcct: "Checking", CuentoType: "asset", CuentoParent: "Assets", Subsidiaries: []string{"Test US"}, NameEN: "Checking", NameES: "Cuenta"},
 		{SourceAcct: "Cash MX", CuentoType: "asset", CuentoParent: "Assets", Subsidiaries: []string{"Test MX"}, NameEN: "Cash MX", NameES: "Efectivo"},
 		{SourceAcct: "Campus Land", CuentoType: "asset", CuentoParent: "Assets", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Campus Land", NameES: "Terreno Campus"},
+		{SourceAcct: "Campus Building", CuentoType: "asset", CuentoParent: "Assets", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Campus Building", NameES: "Edificio Campus"},
 		{SourceAcct: "Revenue", CuentoType: "revenue", CuentoParent: "", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Revenue", NameES: "Ingresos"},
 		{SourceAcct: "Grant Revenue", CuentoType: "revenue", CuentoParent: "Revenue", Subsidiaries: []string{"Test US", "Test MX"}, DefaultProgram: "Education", NameEN: "Grant Revenue", NameES: "Ingreso Beca"},
 		{SourceAcct: "Donations", CuentoType: "revenue", CuentoParent: "Revenue", Subsidiaries: []string{"Test US", "Test MX"}, NameEN: "Donations", NameES: "Donaciones"},
@@ -159,10 +160,56 @@ func testSource() string {
 		// RtW by Pass-2 so the campus subset nets to zero with NO plug.
 		row("US", "A", "buy", "Campus Land", "", "2025-08-15", "", "11", "campus land", "GRANT1", "USD", "1.0", "1000.00", "1000.00", "0", "0", "Assets"),
 		row("US", "A", "buy", "Checking", "", "2025-08-15", "", "11", "paid for land", "", "USD", "1.0", "0", "0", "1000.00", "1000.00", "Assets"),
+		// --- FX-normalized drawdown pool (D p26.47): cross-currency funding ----------
+		// The pre-p26.47 pool was PER CURRENCY, so USD donations could not fund a
+		// non-USD (MXN) campus cost and vice versa. These tids prove the FX-NORMALIZED
+		// (single USD) pool lets a NON-USD campus revenue fund a later USD campus expense
+		// that NO per-currency USD pool could ever cover.
+		//
+		// tid 12 (2025-11-01): a campus REVENUE receipt of MXN 4000 in the MX
+		// subsidiary. Converted at the seeded MXN->USD rate 0.05 it grows the SINGLE USD
+		// pool by USD 200 (4000 * 0.05). Its Cash MX debit offset is retagged RtW.
+		row("MX", "I", "receipt", "Campus Revenue", "campus", "2025-11-01", "PRG", "12", "mx campus gift", "", "MXN", "0.05", "0", "0", "4000.00", "200.00", "Revenue"),
+		row("MX", "A", "receipt", "Cash MX", "", "2025-11-01", "", "12", "mx campus gift in", "", "MXN", "0.05", "4000.00", "200.00", "0", "0", "Assets"),
+		// tid 13 (2025-12-01): a USD campus EXPENSE of 200. At this date USD-only campus
+		// revenue AVAILABLE in the pool is just 40 (tid 7's 100 less tid 8's 60; tid 10
+		// overflowed and drew nothing), so the OLD per-currency USD pool (40 < 200) would
+		// OVERFLOW this to unrestricted. Under the FX-normalized single pool the MXN
+		// revenue's USD 200 (tid 12) lifted the pool to 240, so this expense is RtW -- the
+		// cross-currency BRIDGE. Proves fix (a). Its Checking offset is retagged RtW. The
+		// USD asset column now dips to -160 (100 - 60 - 200); tid 15 below restores it.
+		row("US", "E", "spend", "Campus Costs", "campus", "2025-12-01", "PRG", "13", "us campus paid by mx gift", "", "USD", "1.0", "200.00", "200.00", "0", "0", "Expenses"),
+		row("US", "A", "spend", "Checking", "", "2025-12-01", "", "13", "paid us campus", "", "USD", "1.0", "0", "0", "200.00", "200.00", "Assets"),
+		// tid 15 (2026-01-01): a LATER USD campus REVENUE of 200 -- the domestic revenue
+		// that the tid-13 expense anticipated. It brings the USD asset column back to +40
+		// (>= 0), so per-currency Z18 stays clean even though the MXN bridge funded tid 13
+		// ahead of this receipt. This is the timing-bridge shape (foreign revenue covers a
+		// domestic expense at spend time; domestic revenue arrives later), NOT a permanent
+		// cross-currency subsidy. Its Checking debit offset is retagged RtW.
+		row("US", "I", "receipt", "Campus Revenue", "campus", "2026-01-01", "PRG", "15", "later us campus gift", "", "USD", "1.0", "0", "0", "200.00", "200.00", "Revenue"),
+		row("US", "A", "receipt", "Checking", "", "2026-01-01", "", "15", "later campus gift in", "", "USD", "1.0", "200.00", "200.00", "0", "0", "Assets"),
+		// tid 14 (2025-08-20): a SECOND account-driven campus-asset purchase (D p26.46
+		// widened set, D p26.47 Fix 2): Dr Campus Building 500 / Cr Checking 500. Campus
+		// Building is a marker fixed-asset account (a `1670`-style building line). Like
+		// Campus Land it is tagged RtW directly (asset swap, NOT a pool event, so it does
+		// NOT drain the drawdown pool), with its Checking offset retagged RtW -- one
+		// balanced transaction, no plug.
+		row("US", "A", "buy", "Campus Building", "", "2025-08-20", "", "14", "campus building", "", "USD", "1.0", "500.00", "500.00", "0", "0", "Assets"),
+		row("US", "A", "buy", "Checking", "", "2025-08-20", "", "14", "paid for building", "", "USD", "1.0", "0", "0", "500.00", "500.00", "Assets"),
 		// A consolidation-marker row (country CONSOL) that must be SKIPPED entirely.
 		row("CONSOL", "A", "elim", "Checking", "", "2025-05-01", "", "9", "elim", "", "", "1.0", "0", "0", "0", "0", "Assets"),
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+// testRates returns the synthetic FX rates the build needs (all values invented,
+// rule 11). The MXN->USD row lets the FX-normalized campus drawdown pool (D p26.47)
+// convert testSource's non-USD (MXN) campus revenue into the single USD pool; without
+// it, RateOn returns ErrRateMissing when the pool converts that split. Every all-USD
+// campus tid short-circuits (currency == base) and never hits RateOn, so this rate
+// affects only the cross-currency campus path.
+func testRates() []store.Rate {
+	return []store.Rate{{RateDate: "2025-01-01", Base: "MXN", Quote: "USD", Value: 0.05, Source: "test"}}
 }
 
 // TestReadRatesParses checks the historical-rates CSV reader: header validation,
@@ -239,7 +286,8 @@ func TestBuildLoadsRates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	rates := []store.Rate{{RateDate: "2024-01-01", Base: "HNL", Quote: "USD", Value: 0.04, Source: "import"}}
+	rates := append(testRates(),
+		store.Rate{RateDate: "2024-01-01", Base: "HNL", Quote: "USD", Value: 0.04, Source: "import"})
 	if _, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, rates, st, false); err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
@@ -273,7 +321,7 @@ func TestBuildDeactivatesInactiveAccounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	res, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, nil, st, false)
+	res, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, testRates(), st, false)
 	if err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
@@ -321,7 +369,7 @@ func TestProgramTreeFromKlass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadAccountMap: %v", err)
 	}
-	res, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, nil, st, false)
+	res, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, testRates(), st, false)
 	if err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
@@ -367,7 +415,7 @@ func buildInto(t *testing.T, anonymize bool) (*sql.DB, *store.Store, *BuildResul
 	if err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	res, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, nil, st, anonymize)
+	res, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, testRates(), st, anonymize)
 	if err != nil {
 		t.Fatalf("runBuild: %v", err)
 	}
@@ -458,9 +506,7 @@ func TestCampusFundAssignedByKat(t *testing.T) {
 	// The campus revenue split carries the fund and the Campus program.
 	assertSplitFundProgram(t, sqldb, res, "Campus Revenue", campusID, res.ProgramIDs["Campus"])
 	// tid 7's Checking debit (100) is the offset: it must be RtW (a whole-split retag).
-	if got := checkingCampusDebits(t, sqldb, res, campusID); got != 1 {
-		t.Errorf("tid 7 campus revenue offset: %d RtW Checking debit(s), want 1", got)
-	}
+	assertCheckingCredit(t, sqldb, res, "7", campusID, 10000)
 
 	// (b)+(d) tid 8: campus expense 60 (RtW) + non-campus expense 40, one cash credit
 	// of 100 DIVIDED into a 60 RtW portion + a 40 unrestricted remainder. Exactly ONE
@@ -517,6 +563,57 @@ func TestCampusFundAssignedByKat(t *testing.T) {
 	// The 1000 Checking credit offsetting the land purchase is retagged RtW (whole
 	// split), so tid 11's campus subset nets to zero with no plug.
 	assertCheckingCredit(t, sqldb, res, "11", campusID, -100000)
+
+	// (b3) tid 14: a SECOND account-driven campus-asset marker (D p26.47 Fix 2, the
+	// widened campus fixed-asset set). Campus Building (a `1670`-style building line)
+	// is tagged RtW just like Campus Land, its Checking offset retagged RtW, one
+	// balanced transaction, no plug -- proving the marker set is not special-cased to a
+	// single account and an asset swap does not drain the pool.
+	if n := res.txnCountForTid("14"); n != 1 {
+		t.Fatalf("tid 14 produced %d transactions, want 1", n)
+	}
+	var buildingCampus int
+	if err := sqldb.QueryRow(
+		`SELECT COUNT(*) FROM splits WHERE account_id = ? AND fund_id = ? AND amount = 50000`,
+		res.AccountIDs["Campus Building"], campusID,
+	).Scan(&buildingCampus); err != nil {
+		t.Fatalf("count campus Building splits: %v", err)
+	}
+	if buildingCampus != 1 {
+		t.Errorf("Campus Building split: %d RtW debits, want 1 (account-driven marker)", buildingCampus)
+	}
+	assertCheckingCredit(t, sqldb, res, "14", campusID, -50000)
+
+	// (a2) FX-NORMALIZED POOL (D p26.47): a NON-USD campus revenue funds a later USD
+	// campus expense the OLD per-currency pool could never cover. tid 12 (MXN 4000
+	// campus revenue, USD 200 at rate 0.05) grows the SINGLE USD pool; tid 13 (USD 200
+	// campus expense) exceeds ALL USD campus revenue (only 100, tid 7) yet is RtW
+	// because the converted MXN revenue lifted the USD pool to cover it. Under the old
+	// per-currency pool this expense would have OVERFLOWED. The tid 13 Campus Costs
+	// split carries the campus fund (not NULL), and its Checking offset is retagged RtW.
+	var tid13Campus int
+	if err := sqldb.QueryRow(`
+		SELECT COUNT(*) FROM splits s JOIN transactions t ON t.id = s.transaction_id
+		WHERE s.account_id = ? AND s.fund_id = ? AND s.amount = 20000
+		  AND t.id IN (SELECT transaction_id FROM splits WHERE description = 'us campus paid by mx gift')`,
+		res.AccountIDs["Campus Costs"], campusID,
+	).Scan(&tid13Campus); err != nil {
+		t.Fatalf("count tid 13 campus expense: %v", err)
+	}
+	if tid13Campus != 1 {
+		t.Errorf("tid 13 USD campus expense is %d RtW splits, want 1 (FX-normalized pool must fund it via MXN revenue)", tid13Campus)
+	}
+	// The tid 12 MXN campus revenue is RtW and its Cash MX debit offset retagged RtW.
+	var mxRevCampus int
+	if err := sqldb.QueryRow(
+		`SELECT COUNT(*) FROM splits WHERE account_id = ? AND fund_id = ? AND amount < 0`,
+		res.AccountIDs["Campus Revenue"], campusID,
+	).Scan(&mxRevCampus); err != nil {
+		t.Fatalf("count MXN campus revenue: %v", err)
+	}
+	if mxRevCampus == 0 {
+		t.Errorf("tid 12 MXN campus revenue not RtW")
+	}
 
 	// (c) tid 10: campus expense 80 exceeds the remaining pool (40) -> OVERFLOW to
 	// unrestricted. Its Campus Costs split carries NO fund but still the Campus program.
@@ -594,20 +691,6 @@ func TestCampusFundAssignedByKat(t *testing.T) {
 	}
 }
 
-// checkingCampusDebits counts positive (debit) Checking splits tagged the campus
-// fund -- tid 7's retagged cash-in offset.
-func checkingCampusDebits(t *testing.T, sqldb *sql.DB, res *BuildResult, campusID int64) int {
-	t.Helper()
-	var n int
-	if err := sqldb.QueryRow(
-		`SELECT COUNT(*) FROM splits WHERE account_id = ? AND fund_id = ? AND amount > 0`,
-		res.AccountIDs["Checking"], campusID,
-	).Scan(&n); err != nil {
-		t.Fatalf("count campus Checking debits: %v", err)
-	}
-	return n
-}
-
 // assertCheckingCredit asserts exactly one Checking split in tid `tid`'s transaction
 // with the given fund (fund==0 means NULL/unrestricted) and exact amount.
 func assertCheckingCredit(t *testing.T, sqldb *sql.DB, res *BuildResult, tid string, fund, amount int64) {
@@ -664,7 +747,7 @@ func TestCampusOffsetFallbackPlug(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseRecords: %v", err)
 	}
-	res, err := runScaffold(ctx, accMap, cfg, nil, st, false)
+	res, err := runScaffold(ctx, accMap, cfg, testRates(), st, false)
 	if err != nil {
 		t.Fatalf("runScaffold: %v", err)
 	}
@@ -744,7 +827,7 @@ func TestScaffoldCreatesReferenceDataNoTxns(t *testing.T) {
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	accMap, cfg, _ := parseTestInputs(t)
 
-	res, err := runScaffold(ctx, accMap, cfg, nil, st, false)
+	res, err := runScaffold(ctx, accMap, cfg, testRates(), st, false)
 	if err != nil {
 		t.Fatalf("runScaffold: %v", err)
 	}
@@ -783,7 +866,7 @@ func TestImportSubsidiaryAdditive(t *testing.T) {
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	accMap, cfg, recs := parseTestInputs(t)
 
-	scaf, err := runScaffold(ctx, accMap, cfg, nil, st, false)
+	scaf, err := runScaffold(ctx, accMap, cfg, testRates(), st, false)
 	if err != nil {
 		t.Fatalf("runScaffold: %v", err)
 	}
@@ -836,7 +919,7 @@ func TestImportSubsidiaryGuardRefusesReimport(t *testing.T) {
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	accMap, cfg, recs := parseTestInputs(t)
 
-	scaf, err := runScaffold(ctx, accMap, cfg, nil, st, false)
+	scaf, err := runScaffold(ctx, accMap, cfg, testRates(), st, false)
 	if err != nil {
 		t.Fatalf("runScaffold: %v", err)
 	}
@@ -883,7 +966,7 @@ func TestSharedCounterResolvedNoDuplicate(t *testing.T) {
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	accMap, cfg, recs := parseTestInputs(t)
 
-	scaf, err := runScaffold(ctx, accMap, cfg, nil, st, false)
+	scaf, err := runScaffold(ctx, accMap, cfg, testRates(), st, false)
 	if err != nil {
 		t.Fatalf("runScaffold: %v", err)
 	}
@@ -916,7 +999,7 @@ func TestSubsidiaryNativeReconciliation(t *testing.T) {
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	accMap, cfg, recs := parseTestInputs(t)
 
-	scaf, err := runScaffold(ctx, accMap, cfg, nil, st, false)
+	scaf, err := runScaffold(ctx, accMap, cfg, testRates(), st, false)
 	if err != nil {
 		t.Fatalf("runScaffold: %v", err)
 	}

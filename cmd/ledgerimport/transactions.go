@@ -37,10 +37,12 @@ func (b *builder) transactions(ctx context.Context, recs []Record) error {
 
 	// Pass 1 of the campus (Restore the Way) model: a GLOBAL chronological drawdown
 	// pool over every campus revenue/expense split decides, per split, whether it is
-	// assigned the restricted fund or overflows to unrestricted (D p26.43). It runs
-	// over the SAME skip-filtered `groups` so the (tid, group-index) keys align with
-	// the resolve loop below, and BEFORE any posting so postBucket can consult it.
-	plan, err := b.buildCampusPlan(groups)
+	// assigned the restricted fund or overflows to unrestricted (D p26.43). The pool
+	// is FX-normalized to USD (D p26.47) so cross-currency revenue can fund
+	// cross-currency expense. It runs over the SAME skip-filtered `groups` so the
+	// (tid, group-index) keys align with the resolve loop below, and BEFORE any
+	// posting so postBucket can consult it.
+	plan, err := b.buildCampusPlan(ctx, groups)
 	if err != nil {
 		return err
 	}
