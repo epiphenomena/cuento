@@ -71,7 +71,7 @@
       </div>
       <div class="field">
         <label for="import-amount-mode">{{t "import.amount_mode_label"}}</label>
-        <select id="import-amount-mode" name="amount_mode">
+        <select id="import-amount-mode" name="amount_mode" class="import-amount-mode">
           <option value="single">{{t "import.amount_mode.single"}}</option>
           <option value="debit_credit">{{t "import.amount_mode.debit_credit"}}</option>
         </select>
@@ -96,15 +96,15 @@
         <label for="import-date-col">{{t "import.col.date"}}</label>
         <input type="number" id="import-date-col" name="date_col" value="0" min="0" step="1">
       </div>
-      <div class="field">
+      <div class="field" data-amount-field="single">
         <label for="import-amount-col">{{t "import.col.amount"}}</label>
         <input type="number" id="import-amount-col" name="amount_col" value="1" min="0" step="1">
       </div>
-      <div class="field">
+      <div class="field" data-amount-field="debit_credit">
         <label for="import-debit-col">{{t "import.col.debit"}}</label>
         <input type="number" id="import-debit-col" name="debit_col" value="1" min="0" step="1">
       </div>
-      <div class="field">
+      <div class="field" data-amount-field="debit_credit">
         <label for="import-credit-col">{{t "import.col.credit"}}</label>
         <input type="number" id="import-credit-col" name="credit_col" value="2" min="0" step="1">
       </div>
@@ -157,6 +157,12 @@
 
   {{/* The preview / result is swapped in here by /import/preview (and then /import). */ -}}
   <div id="import-workspace" class="import-workspace"></div>
+
+  {{/* p26.61: amount-mode field toggle. Loaded on the PAGE (the upload form stays put;
+       an injected <script> would not execute). It shows only the amount fields for the
+       chosen mode and re-applies on htmx:afterSwap. The server ignores the hidden set,
+       and the NO-JS fallback leaves both sets visible. */}}
+  <script type="module" src="{{asset "importmapping.js"}}"></script>
   {{- end}}
 {{template "shell-close" .}}
 {{- end}}

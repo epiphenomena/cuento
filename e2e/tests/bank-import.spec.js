@@ -84,6 +84,36 @@ async function createExpenseAccount(page) {
   return name;
 }
 
+// p26.61: the amount-mode select hides the irrelevant amount column inputs. In the
+// default "single" mode the signed amount column shows and the debit/credit columns
+// hide; switching to "debit_credit" flips it (importmapping.js, CSP-safe, toggles on
+// the select's change with no server round-trip).
+test('bank import: amount-mode select shows only the relevant amount fields', async ({ page, server }) => {
+  await login(page, server);
+  await page.goto('/import');
+  await expect(page.getByRole('heading', { name: /import bank csv/i })).toBeVisible();
+
+  const singleField = page.locator('[data-amount-field="single"]');
+  const dcFields = page.locator('[data-amount-field="debit_credit"]');
+
+  // Default mode is "single": the signed amount column is visible, debit/credit hidden.
+  await expect(page.locator('#import-amount-mode')).toHaveValue('single');
+  await expect(singleField).toBeVisible();
+  await expect(dcFields.first()).toBeHidden();
+  await expect(dcFields.last()).toBeHidden();
+
+  // Switch to debit/credit: the two D/C columns appear, the signed column hides.
+  await page.locator('#import-amount-mode').selectOption('debit_credit');
+  await expect(dcFields.first()).toBeVisible();
+  await expect(dcFields.last()).toBeVisible();
+  await expect(singleField).toBeHidden();
+
+  // Switch back to single: original state restored.
+  await page.locator('#import-amount-mode').selectOption('single');
+  await expect(singleField).toBeVisible();
+  await expect(dcFields.first()).toBeHidden();
+});
+
 test('bank import: upload, map, preview, stage; a duplicate row is flagged', async ({ page, server }) => {
   await login(page, server);
   const acctName = await createAssetAccount(page);
