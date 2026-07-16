@@ -1596,6 +1596,8 @@ other = "Amount"
 other = "Debit"
 [import.role.credit]
 other = "Credit"
+[import.role.memo]
+other = "Memo"
 [import.map_preview_pending]
 other = "Map a Date column and an Amount column (or Debit and Credit) to see a preview."
 [import.col.date]

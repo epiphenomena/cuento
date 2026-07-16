@@ -32,6 +32,10 @@ const (
 	RoleDebit Role = "debit"
 	// RoleCredit maps to Config.CreditCol (debit/credit mode).
 	RoleCredit Role = "credit"
+	// RoleMemo maps to Config.MemoCol -- the split's optional memo (p26.65). It is
+	// mode-independent and NOT required: a file with no memo column imports cleanly
+	// (MemoCol stays -1, the split memo is empty).
+	RoleMemo Role = "memo"
 )
 
 // ColumnInfo is one CSV column for the horizontal mapping UI: its header NAME (or a
@@ -136,6 +140,8 @@ func ConfigFromRoles(roles []Role, delim Delimiter, hasHeader bool, mode AmountM
 			cfg.DebitCol = i
 		case RoleCredit:
 			cfg.CreditCol = i
+		case RoleMemo:
+			cfg.MemoCol = i
 		}
 	}
 	return cfg
@@ -146,8 +152,8 @@ func ConfigFromRoles(roles []Role, delim Delimiter, hasHeader bool, mode AmountM
 // to" dropdowns when a saved profile is loaded. A Config column index that is negative
 // (unmapped) or >= n (a profile built for a WIDER file) simply lands no role on any
 // in-range column -- it never panics and never assigns out of range (the p26.64
-// "profile made for a different CSV" edge). MemoCol is not a mapping-UI role and is
-// dropped from the round trip (the horizontal UI maps only date/desc/amount/dr/cr).
+// "profile made for a different CSV" edge). MemoCol round-trips too (p26.65 restored
+// Memo as an OPTIONAL mapping-UI role), so a saved profile's memo column pre-selects.
 func RolesFromConfig(cfg Config, n int) []Role {
 	roles := make([]Role, n)
 	set := func(i int, r Role) {
@@ -160,5 +166,6 @@ func RolesFromConfig(cfg Config, n int) []Role {
 	set(cfg.AmountCol, RoleAmount)
 	set(cfg.DebitCol, RoleDebit)
 	set(cfg.CreditCol, RoleCredit)
+	set(cfg.MemoCol, RoleMemo)
 	return roles
 }

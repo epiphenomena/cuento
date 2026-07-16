@@ -145,6 +145,9 @@ var importRoleOptions = []importRoleOption{
 	{Value: bankimport.RoleAmount, LabelKey: "import.role.amount", AmountMode: bankimport.AmountSingle},
 	{Value: bankimport.RoleDebit, LabelKey: "import.role.debit", AmountMode: bankimport.AmountDebitCredit},
 	{Value: bankimport.RoleCredit, LabelKey: "import.role.credit", AmountMode: bankimport.AmountDebitCredit},
+	// Memo is OPTIONAL and mode-independent (p26.65): a mapped column feeds the split's
+	// memo; unmapped is fine (default Ignore, empty memo, no validation error).
+	{Value: bankimport.RoleMemo, LabelKey: "import.role.memo"},
 }
 
 // roleValidInMode reports whether a role is offered/usable in the given amount mode.

@@ -150,6 +150,57 @@ test('bank import: columns show as headers; amount-mode gates the maps-to option
   await expect(opt0b.filter({ hasText: /^Amount$/ })).toHaveCount(0);
 });
 
+// p26.65: MEMO is an OPTIONAL "maps to" role. A column mapped to Memo feeds the split's
+// memo (it previews + imports); a file with no memo column mapped still imports cleanly
+// (no memo, no error). Memo is mode-independent (offered in single mode).
+test('bank import: a mapped memo column previews and imports; omitting it still works', async ({ page, server }) => {
+  await login(page, server);
+  const acctName = await createAssetAccount(page);
+  const csv = 'date,amount,desc,memo\n2025-05-01,100.00,Acme,Invoice 9\n';
+  await uploadCSV(page, acctName, csv, 'memo.csv');
+
+  // Memo is offered as a "maps to" option (single mode -- it is mode-independent).
+  const opt3 = page.locator('#import-role-3 option');
+  await expect(opt3.filter({ hasText: /^Memo$/ })).toHaveCount(1);
+
+  // Map date/amount/desc + the memo column.
+  await mapRole(page, 0, 'date');
+  await mapRole(page, 1, 'amount');
+  await mapRole(page, 2, 'desc');
+  await mapRole(page, 3, 'memo');
+
+  // Preview renders and the memo cell carries the mapped text.
+  await expect(page.locator('tr.import-preview-row')).toHaveCount(1);
+  await expect(page.locator('td.import-cell-memo').first()).toHaveText('Invoice 9');
+
+  // Stage: the result row shows the memo (it flowed through to the staged row).
+  await page.locator('form.import-confirm-form button[type="submit"]').click();
+  await expect(page.locator('p.import-result-summary[role="status"]')).toBeVisible();
+  await expect(page.locator('tr.import-result-row td.import-cell-memo').first()).toHaveText('Invoice 9');
+
+  // Now a SECOND import of the SAME file, this time leaving memo UNMAPPED: it imports
+  // cleanly (memo empty, no validation error).
+  await page.goto('/import');
+  await page.locator('#import-subsidiary').selectOption('1');
+  await page.locator('#import-account').selectOption({ label: acctName });
+  await page.locator('#import-file').setInputFiles({
+    name: 'nomemo.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('date,amount,desc,memo\n2025-06-01,75.00,Beta,Skip me\n', 'utf8'),
+  });
+  await page.locator('form.import-upload-form button[type="submit"]').click();
+  await expect(page.locator('#import-workspace.e2e-settled')).toBeVisible();
+  await mapRole(page, 0, 'date');
+  await mapRole(page, 1, 'amount');
+  await mapRole(page, 2, 'desc');
+  // Leave column 3 (memo) as Ignore.
+  await expect(page.locator('tr.import-preview-row')).toHaveCount(1);
+  await expect(page.locator('td.import-cell-memo').first()).toHaveText('');
+  await page.locator('form.import-confirm-form button[type="submit"]').click();
+  await expect(page.locator('p.import-result-summary[role="status"]')).toBeVisible();
+  await expect(page.locator('tr.import-result-row')).toHaveCount(1);
+});
+
 // p26.62: a FILE-level error (an empty CSV -> no readable rows) is rejected at
 // /import/preview with a 422, and the error swaps into #import-workspace as a BARE
 // fragment -- NOT a full shell page (which would nest a whole document, duplicating the

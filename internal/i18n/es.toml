@@ -1597,6 +1597,8 @@ other = "Monto"
 other = "Debito"
 [import.role.credit]
 other = "Credito"
+[import.role.memo]
+other = "Memo"
 [import.map_preview_pending]
 other = "Asigna una columna de Fecha y una de Monto (o Debito y Credito) para ver una previsualizacion."
 [import.col.date]

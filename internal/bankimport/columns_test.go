@@ -115,6 +115,37 @@ func TestRolesFromConfigRoundTrip(t *testing.T) {
 	}
 }
 
+// TestConfigFromRolesMemoOptional: a Memo role maps to MemoCol; with no Memo role the
+// MemoCol stays unmapped (-1) -- memo is optional, an import with no memo column is fine
+// (p26.65).
+func TestConfigFromRolesMemoOptional(t *testing.T) {
+	// WITH a memo column mapped.
+	roles := []Role{RoleDate, RoleAmount, RoleDescription, RoleMemo}
+	cfg := ConfigFromRoles(roles, DelimiterComma, true, AmountSingle, false, DateISO)
+	if cfg.MemoCol != 3 {
+		t.Fatalf("cfg.MemoCol = %d, want 3 (memo column mapped)", cfg.MemoCol)
+	}
+
+	// WITHOUT a memo column: MemoCol is unmapped (-1), not an error.
+	noMemo := []Role{RoleDate, RoleAmount, RoleDescription, RoleIgnore}
+	cfgNo := ConfigFromRoles(noMemo, DelimiterComma, true, AmountSingle, false, DateISO)
+	if cfgNo.MemoCol != -1 {
+		t.Fatalf("cfgNo.MemoCol = %d, want -1 (no memo column mapped)", cfgNo.MemoCol)
+	}
+}
+
+// TestRolesFromConfigMemoRoundTrip: a mapped memo column round-trips through
+// ConfigFromRoles -> RolesFromConfig, so a saved profile PRE-SELECTS the memo dropdown
+// (p26.65 restored memo as an optional role).
+func TestRolesFromConfigMemoRoundTrip(t *testing.T) {
+	roles := []Role{RoleDate, RoleAmount, RoleDescription, RoleMemo}
+	cfg := ConfigFromRoles(roles, DelimiterComma, true, AmountSingle, false, DateISO)
+	got := RolesFromConfig(cfg, 4)
+	if !reflect.DeepEqual(got, roles) {
+		t.Fatalf("memo round trip roles = %+v, want %+v", got, roles)
+	}
+}
+
 // TestRolesFromConfigOutOfRange: a profile column index >= this file's column count
 // (a profile built for a WIDER file) lands no role and never panics.
 func TestRolesFromConfigOutOfRange(t *testing.T) {
