@@ -458,6 +458,64 @@ func TestNativeNetDebitSelectsColumnPairByCurrency(t *testing.T) {
 	}
 }
 
+// TestNativeNetDebitReverseConventionBaseRow is the p26.67 guard's unit proof. A tiny
+// set of USD rows (Caja Moneda Extranjera) VIOLATE the base invariant: their db/cr hold
+// the FOREIGN (lempira) figure and their fdb/fcr hold the true USD, backward from every
+// other base row. The tell is xrt != 1 with the base pair the xrt-SCALED (larger)
+// magnitude: |net(db,cr)| == |net(fdb,fcr)| * xrt. The guard must take native from
+// fdb/fcr on such a row, while leaving BOTH a normal base row (db==fdb, xrt=1) AND a
+// normal USD row (db/cr the SMALLER USD side, fdb/fcr the larger scaled counterpart)
+// on the db/cr path.
+func TestNativeNetDebitReverseConventionBaseRow(t *testing.T) {
+	const base = "USD"
+
+	// Reverse-convention USD row: db/cr = HNL 2480.00 (the ~24.8x-scaled figure),
+	// fdb/fcr = USD 100.00 (the true USD), xrt = 24.80. Native must be the USD 100.00
+	// from fdb/fcr -- NOT the lempira 2480.00 from db/cr.
+	reverse := Record{Currency: "USD", Xrt: "24.80", Db: "2480.00", Cr: "0", Fdb: "100.00", Fcr: "0"}
+	got, err := nativeNetDebit(reverse, 2, base)
+	if err != nil {
+		t.Fatalf("nativeNetDebit(reverse): %v", err)
+	}
+	if got != 10000 { // 100.00 USD from fdb/fcr, not 248000 from db/cr
+		t.Errorf("reverse-convention native = %d, want 10000 (from fdb/fcr, not db/cr 248000)", got)
+	}
+
+	// A NORMAL base row: db==fdb, xrt=1. Guard must NOT fire (stays on db/cr).
+	normalBase := Record{Currency: "USD", Xrt: "1.0", Db: "50.00", Cr: "0", Fdb: "50.00", Fcr: "0"}
+	got, err = nativeNetDebit(normalBase, 2, base)
+	if err != nil {
+		t.Fatalf("nativeNetDebit(normalBase): %v", err)
+	}
+	if got != 5000 {
+		t.Errorf("normal base native = %d, want 5000 (unchanged, from db/cr)", got)
+	}
+
+	// A NORMAL USD row with a foreign HNL counterpart: db/cr = USD 100.00 (the SMALLER
+	// USD side), fdb/fcr = HNL 2480.00 (the larger scaled counterpart), xrt = 24.80.
+	// The guard must NOT fire -- db/cr already holds the correct USD, and the base side
+	// is the smaller magnitude (the discriminator's |base| > |foreign| clause fails).
+	normalUSD := Record{Currency: "USD", Xrt: "24.80", Db: "100.00", Cr: "0", Fdb: "2480.00", Fcr: "0"}
+	got, err = nativeNetDebit(normalUSD, 2, base)
+	if err != nil {
+		t.Fatalf("nativeNetDebit(normalUSD): %v", err)
+	}
+	if got != 10000 { // 100.00 USD from db/cr, unchanged
+		t.Errorf("normal USD native = %d, want 10000 (from db/cr, guard must not fire)", got)
+	}
+
+	// Both a reverse row and a normal base row must BALANCE against their credit twin
+	// (the store's per-transaction zero-sum). A reverse credit twin uses fdb/fcr too.
+	revCredit := Record{Currency: "USD", Xrt: "24.80", Db: "0", Cr: "2480.00", Fdb: "0", Fcr: "100.00"}
+	rc, err := nativeNetDebit(revCredit, 2, base)
+	if err != nil {
+		t.Fatalf("nativeNetDebit(revCredit): %v", err)
+	}
+	if got, _ := nativeNetDebit(reverse, 2, base); got+rc != 0 {
+		t.Errorf("reverse debit %d + reverse credit %d != 0 (unbalanced)", got, rc)
+	}
+}
+
 // TestForeignSplitStoresNativeAndConvertsForReport is the p26.56 fix's end-to-end
 // proof on the synthetic build: the MXN campus-revenue split (tid 12, db/cr = USD
 // 200, fdb/fcr = MXN 4000) must STORE the MXN 4000 native (from fdb/fcr, not the

@@ -4,6 +4,9 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"math"
+	"strconv"
+	"strings"
 
 	"cuento/internal/money"
 )
@@ -151,13 +154,70 @@ func NetDebit(dbAmt, crAmt string, exponent int) (int64, error) {
 // (their base USD counterpart), so a uniform column choice would corrupt one side
 // or the other.
 //
+// REVERSE-CONVENTION EDGE CASE (p26.67): a handful of rows carry `currency == base`
+// (USD) yet VIOLATE the base-currency invariant the doc promises. On a well-formed
+// base row `xrt = 1` and the `db`/`cr` pair holds the USD figure. On these rows
+// `xrt != 1` AND the `db`/`cr` pair holds the FOREIGN (lempira) figure while `fdb`/`fcr`
+// holds the true USD -- exactly BACKWARD from every other base row. The tell is that the
+// base pair is the xrt-SCALED (larger) magnitude: `|net(db,cr)| == |net(fdb,fcr)| * xrt`
+// (whereas a normal USD row's `db`/`cr` is the smaller USD side and its `fdb`/`fcr` the
+// larger foreign counterpart). Taking the base branch's `db`/`cr` there stores the
+// lempira magnitude mislabeled as USD (~24x too large). The NARROW guard below detects
+// exactly this violated invariant -- verified against the real export to match precisely
+// the five Caja Moneda Extranjera rows (one account) and NO other row -- and takes native
+// from `fdb`/`fcr` instead. Every normal base row (`db == fdb`, `xrt = 1`, OR the USD side
+// being the smaller magnitude) is unchanged.
+//
 // exp is the split currency's minor-unit exponent (D1); base is the org base
 // currency (cfg.BaseCurrency).
 func nativeNetDebit(r Record, exp int, base string) (int64, error) {
 	if r.Currency == base {
+		if reverseConventionBaseRow(r, exp) {
+			return NetDebit(r.Fdb, r.Fcr, exp)
+		}
 		return NetDebit(r.Db, r.Cr, exp)
 	}
 	return NetDebit(r.Fdb, r.Fcr, exp)
+}
+
+// reverseConventionBaseRow reports whether a base-currency (USD) row is one of the
+// reverse-convention rows whose `db`/`cr` columns hold the FOREIGN (lempira) figure and
+// whose `fdb`/`fcr` hold the true USD (p26.67). It is true ONLY when ALL hold:
+//
+//   - `xrt != 1` (a genuine cross-currency row; a true base row has xrt = 1), AND
+//   - both net-debits are nonzero and DIFFER (the base invariant `db == fdb` is broken), AND
+//   - the base magnitude is the LARGER one and equals the foreign magnitude scaled by
+//     xrt: `|net(db,cr)| == |net(fdb,fcr)| * xrt` (within a small tolerance). This is the
+//     discriminator that separates these rows from a NORMAL USD row -- where `db`/`cr` is
+//     the SMALLER (USD) figure and `fdb`/`fcr` the larger xrt-scaled foreign counterpart.
+//
+// Net-debits are compared as EXACT parsed minor units; only `xrt` (a rate, the one float
+// the ledger permits, D12) and the scaling comparison touch float. A row whose `xrt` is
+// unparseable, or that fails any clause, keeps the normal `db`/`cr` base path.
+func reverseConventionBaseRow(r Record, exp int) bool {
+	xrt, err := strconv.ParseFloat(strings.TrimSpace(r.Xrt), 64)
+	if err != nil || xrt == 1 {
+		return false // xrt = 1 (or unknown) => a true base row; normal db/cr path.
+	}
+	base, err := NetDebit(r.Db, r.Cr, exp)
+	if err != nil {
+		return false
+	}
+	foreign, err := NetDebit(r.Fdb, r.Fcr, exp)
+	if err != nil {
+		return false
+	}
+	if base == 0 || foreign == 0 || base == foreign {
+		return false // one side blank, or the invariant holds (db == fdb).
+	}
+	// The base magnitude must be the LARGER of the two AND equal the foreign magnitude
+	// scaled by xrt (the reverse-convention tell). A normal USD row fails BOTH: its
+	// db/cr is the smaller USD side.
+	fb, ff := math.Abs(float64(base)), math.Abs(float64(foreign))
+	if fb <= ff {
+		return false
+	}
+	return math.Abs(fb-ff*xrt) <= 0.02*fb
 }
 
 // parseAmount maps a blank field to 0 (money.Parse rejects "") and otherwise
