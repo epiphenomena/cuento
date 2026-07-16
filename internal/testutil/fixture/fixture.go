@@ -122,6 +122,7 @@ type IDs struct {
 	FixedAssets  int64 // placeholder parent for the campaign's capital accounts
 	CampaignLand int64 // "Land" leaf under Fixed Assets (the campus.py Land line)
 	Construction int64 // fixed-asset leaf under Fixed Assets (the rollup line)
+	ConstrLoan   int64 // liability: a construction loan that financed a purchase (p26.68)
 }
 
 // Fixture is the built synthetic dataset: the db, a store over it, the entity

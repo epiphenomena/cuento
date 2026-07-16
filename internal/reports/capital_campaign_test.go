@@ -53,7 +53,7 @@ func TestCapitalCampaignRNAIdentityNative(t *testing.T) {
 	f.ExtendCapitalCampaign(t)
 	c := f.Expected.Campaign
 
-	// USD: 20,000 - 1,500 - (8,000 + 5,000) = 5,500.
+	// USD: 22,000 (20,000 gift + 2,000 loan proceeds) - 1,500 - (8,000 + 7,000) = 5,500.
 	if got := c.GrossRevenueUSD - c.GrossExpenseUSD - c.LandUSD - c.ConstructionUSD; got != c.RNAUSD {
 		t.Errorf("USD RNA identity: %d, want %d", got, c.RNAUSD)
 	}
@@ -198,13 +198,20 @@ func TestCapitalCampaignMatrixCells(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 
-	// Q1 rate-free ties (Capitalized col 4, RNA col 5).
+	// Q1 rate-free ties (Gross rev col 1, Capitalized col 4, RNA col 5). Q1 holds only
+	// the gift and the Land buy, so Gross revenue is the gift (2,000,000) and Capitalized
+	// is Land (800,000); RNA == the row's OWN Gross rev - Capitalized (the RNA formula on
+	// the report's own cells, rate-free). The loan-financed construction is in Q3, so Q1's
+	// cells are the pre-loan figures.
 	q1 := quarterRowCells(t, table, "2025-03-31")
+	if got := q1[1].Minor; got != int64(2_000_000) {
+		t.Errorf("Q1 gross revenue = %d, want the gift 2,000,000 (rate-free)", got)
+	}
 	if got := q1[4].Minor; got != f.Expected.Campaign.LandUSD {
 		t.Errorf("Q1 capitalized = %d, want Land %d (rate-free)", got, f.Expected.Campaign.LandUSD)
 	}
-	if got, want := q1[5].Minor, f.Expected.Campaign.GrossRevenueUSD-f.Expected.Campaign.LandUSD; got != want {
-		t.Errorf("Q1 RNA = %d, want rev - land = %d (RNA formula, rate-free)", got, want)
+	if got, want := q1[5].Minor, q1[1].Minor-q1[4].Minor; got != want {
+		t.Errorf("Q1 RNA = %d, want gross rev - capitalized = %d (RNA formula, rate-free)", got, want)
 	}
 
 	// Q2 per-currency conversion tie (Gross revenue col 1): MXN 100,000.00 -> USD at the
@@ -212,6 +219,50 @@ func TestCapitalCampaignMatrixCells(t *testing.T) {
 	q2 := quarterRowCells(t, table, "2025-06-30")
 	if got, want := q2[1].Minor, int64(577_250); got != want {
 		t.Errorf("Q2 gross revenue (converted) = %d, want %d (MXN 100,000 -> USD @ 2025-06 rate)", got, want)
+	}
+}
+
+// TestCapitalCampaignColumnReconciles is the p26.68 correctness contract on the report's
+// EMITTED table: (a) the cumulative Capitalized COLUMN equals the sum of the capital-detail
+// ROWS shown below it, and (b) the cumulative Restricted Net Assets equals Gross Revenue -
+// Gross Expenses - Capitalized (its documented formula). The old report violated BOTH: it
+// netted liability splits into the Capitalized column (which the asset-only detail could
+// not reconcile) and accumulated RNA as an independent spendable balance. Routing the
+// report through FundPeriodStatement makes both hold by construction. Asserted on the
+// converted (USD) run so the residual is the accepted 1-cent FX rounding (the task's
+// exact-formula contract is proven NATIVE in TestCapitalCampaignRNAIdentityNative).
+func TestCapitalCampaignColumnReconciles(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendCapitalCampaign(t)
+	f.ExtendRates(t)
+	ctx := context.Background()
+	rep := capitalCampaignReport(t)
+
+	p := campaignParams(f)
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	total := totalRowCells(t, table)
+	rev, exp, capCol, rna := total[1].Minor, total[2].Minor, total[4].Minor, total[5].Minor
+
+	// (a) Capitalized column == sum of the capital-detail rows (Land + Construction).
+	var detailSum int64
+	for _, row := range table.Rows {
+		if row.Kind == reports.RowData && len(row.Cells) >= 6 && row.Cells[0].Kind == reports.CellText {
+			detailSum += row.Cells[4].Minor
+		}
+	}
+	if detailSum != capCol {
+		t.Errorf("Capitalized column %d != sum of detail rows %d", capCol, detailSum)
+	}
+
+	// (b) RNA == Rev - Exp - Capitalized (within the accepted 1-cent FX rounding residual
+	// on the converted run; it is EXACT natively, see TestCapitalCampaignRNAIdentityNative).
+	want := rev - exp - capCol
+	if diff := rna - want; diff < -1 || diff > 1 {
+		t.Errorf("RNA %d != Rev %d - Exp %d - Capitalized %d (= %d); diff %d", rna, rev, exp, capCol, want, diff)
 	}
 }
 
@@ -294,4 +345,16 @@ func hasTotalRow(t reports.Table) bool {
 		}
 	}
 	return false
+}
+
+// totalRowCells returns the cells of the cumulative RowTotal row, failing if absent.
+func totalRowCells(t *testing.T, tbl reports.Table) []reports.Cell {
+	t.Helper()
+	for _, row := range tbl.Rows {
+		if row.Kind == reports.RowTotal {
+			return row.Cells
+		}
+	}
+	t.Fatalf("no cumulative total row")
+	return nil
 }

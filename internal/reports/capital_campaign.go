@@ -80,40 +80,50 @@ type campaignQuarter struct {
 // runCapitalCampaign builds the quarterly capital-campaign statement for the chosen
 // fund. With no fund chosen it returns an empty Table (the framework's nothing-to-show
 // rule), so a bare hit still renders 200.
+//
+// Every line item is DERIVED FROM the shipped p15.8 FundStatement (p26.68), the same
+// engine the fund-activity report and cuento's fund conservation (D20/Z10) rely on, so
+// the two internal inconsistencies the p26.51 inline classifier carried are gone by
+// construction:
+//
+//   - Gross Revenue  = FundStatement.Received      (per-quarter flow: from qFrom to qTo)
+//   - Gross Expenses = FundStatement.AppliedExpense (per-quarter flow)
+//   - Capitalized    = FundStatement.Capitalized    (as-of balance: from START to qEnd)
+//   - RNA            = FundStatement.Closing         (as-of balance: from START to qEnd)
+//
+// FundStatement.Capitalized accumulates ONLY the capital ASSET accounts (its
+// CapitalAccounts set), and the detail section lists exactly those same accounts -- so
+// the Capitalized COLUMN equals the sum of the detail ROWS by construction (the old
+// report netted liability splits INTO the column while the detail showed only assets, so
+// the two could not reconcile). And because the fund opens at 0, Closing == Received -
+// AppliedExpense - AppliedNonExpense, which for a campaign with no liability applications
+// is exactly Rev - Exp - Capitalized -- the RNA formula the docstring/DECISIONS promise
+// (the old report accumulated RNA as an independent spendable-asset balance that
+// double-counted a construction liability).
 func runCapitalCampaign(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 	if p.Fund == 0 {
 		return Table{}, nil
 	}
 
-	// The fund's whole ledger to the report date (one read; bucketed below). Ordered
-	// by (date, split_id) with IsAsset flagged. All the campaign's splits already live
-	// only in its subsidiaries, so scope narrows nothing but the store honors it.
+	// The fund's whole ledger to the report date: used ONLY for the earliest date (the
+	// span start) and the per-account capital-detail balances. The classification and the
+	// line-item figures come from FundStatement below, not from re-scanning these rows.
 	rows, err := tk.store.FundLedger(ctx, p.Fund, p.To)
 	if err != nil {
 		return Table{}, err
 	}
 
-	// Account type per id (revenue / expense / asset) and the resolved display names,
-	// read once (names in the request language for the capital-detail section).
+	// Resolved display names for the capital-detail section (request language).
 	tree, err := tk.store.Tree(ctx, p.LangOr(), nil)
 	if err != nil {
 		return Table{}, err
 	}
-	acctType := make(map[int64]string, len(tree))
 	acctName := make(map[int64]string, len(tree))
 	for _, r := range tree {
-		acctType[r.ID] = r.Type
 		acctName[r.ID] = r.Name
 	}
 
-	// CAPITAL (non-cash) asset accounts: asset accounts that took a DEBIT on a
-	// disbursement transaction (a txn with no revenue split for this fund) -- the
-	// campaign CAPITALIZING cash into a held asset (Land, Construction). Computed over
-	// the FULL span so it is not period-clipped. Mirrors FundStatement's classification.
-	capitalAccts := capitalAssetAccounts(rows, acctType)
-
-	// Bucket the span into quarters and compute each quarter's cells. The quarter list
-	// runs from From (the campaign start / first activity) to To.
+	// The span runs from From (the campaign start / first activity) to To.
 	from := p.From
 	if from == "" {
 		from = earliestDate(rows)
@@ -122,61 +132,47 @@ func runCapitalCampaign(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 		return Table{}, nil // no activity to show
 	}
 
+	scope := Scope{Sub: p.Scope}
+
+	// The cumulative statement over the whole span gives the capital-account SET (the
+	// detail rows) and the final as-of balances; per-quarter statements give the flows
+	// and the as-of balances at each quarter end.
+	fullSt, err := tk.FundPeriodStatement(ctx, scope, p.Fund, from, p.To)
+	if err != nil {
+		return Table{}, err
+	}
+
 	var quarters []campaignQuarter
 	err = tk.ByPeriod(from, p.To, GranQuarter, func(qFrom, qTo string) error {
-		q := campaignQuarter{
+		// Flows over THIS quarter (Received / AppliedExpense).
+		flow, err := tk.FundPeriodStatement(ctx, scope, p.Fund, qFrom, qTo)
+		if err != nil {
+			return err
+		}
+		// Balances AS OF the quarter end (Capitalized / Closing), from the span start.
+		bal, err := tk.FundPeriodStatement(ctx, scope, p.Fund, from, qTo)
+		if err != nil {
+			return err
+		}
+		quarters = append(quarters, campaignQuarter{
 			end:         qTo,
-			grossRev:    map[string]int64{},
-			grossExp:    map[string]int64{},
-			capitalized: map[string]int64{},
-			rna:         map[string]int64{},
-		}
-		for _, r := range rows {
-			ccy := r.Currency
-			inQuarter := r.Date >= qFrom && r.Date <= qTo
-			asOf := r.Date <= qTo
-			switch acctType[r.AccountID] {
-			case "revenue":
-				if inQuarter {
-					q.grossRev[ccy] += -r.Amount // credit -> positive inflow
-				}
-			case "expense":
-				if inQuarter {
-					q.grossExp[ccy] += r.Amount
-				}
-			case "asset":
-				if !asOf {
-					continue
-				}
-				if capitalAccts[r.AccountID] {
-					q.capitalized[ccy] += r.Amount
-				} else {
-					q.rna[ccy] += r.Amount // spendable (cash) asset running balance = RNA
-				}
-			case "liability":
-				// A liability draw is a receipt; a paydown is a non-expense application.
-				// The campaign fixture has none, but keep the classification honest so a
-				// real campaign with a construction loan reads correctly.
-				if !asOf {
-					continue
-				}
-				q.capitalized[ccy] -= r.Amount // net the liability against capital position
-			}
-		}
-		quarters = append(quarters, q)
+			grossRev:    flow.Received,
+			grossExp:    flow.AppliedExpense,
+			capitalized: bal.Capitalized,
+			rna:         bal.Closing,
+		})
 		return nil
 	})
 	if err != nil {
 		return Table{}, err
 	}
 
-	// As-of-report-date capital position per account (the detail section), native.
+	// As-of-report-date capital position per account (the detail section), native --
+	// summed over exactly the FundStatement capital accounts so the detail reconciles to
+	// the Capitalized column.
 	capByAccount := map[int64]map[string]int64{}
 	for _, r := range rows {
-		if !capitalAccts[r.AccountID] {
-			continue
-		}
-		if r.Date > p.To {
+		if !fullSt.CapitalAccounts[r.AccountID] || r.Date > p.To {
 			continue
 		}
 		if capByAccount[r.AccountID] == nil {
@@ -203,11 +199,7 @@ func runCapitalCampaign(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 	}
 
 	// --- cumulative total row: cumulative flows + the final as-of balances.
-	var final campaignQuarter
-	if len(quarters) > 0 {
-		final = quarters[len(quarters)-1]
-	}
-	if err := b.totalRow(cumRev, cumExp, final.capitalized, final.rna); err != nil {
+	if err := b.totalRow(cumRev, cumExp, fullSt.Capitalized, fullSt.Closing); err != nil {
 		return Table{}, err
 	}
 
@@ -217,27 +209,6 @@ func runCapitalCampaign(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 	}
 
 	return b.table(), nil
-}
-
-// capitalAssetAccounts returns the set of asset accounts the fund CAPITALIZED into: an
-// asset account that received a DEBIT (amount > 0) on a DISBURSEMENT transaction (a txn
-// with no revenue split for this fund). Every other asset account is spendable (cash).
-// Computed over the whole ledger so a quarter's view is not clipped. Mirrors the
-// FundStatement capital classification (compute.go) so the two reports agree.
-func capitalAssetAccounts(rows []storeFundLedgerRow, acctType map[int64]string) map[int64]bool {
-	revenueTxn := map[int64]bool{}
-	for _, r := range rows {
-		if acctType[r.AccountID] == "revenue" {
-			revenueTxn[r.TxnID] = true
-		}
-	}
-	capital := map[int64]bool{}
-	for _, r := range rows {
-		if acctType[r.AccountID] == "asset" && r.Amount > 0 && !revenueTxn[r.TxnID] {
-			capital[r.AccountID] = true
-		}
-	}
-	return capital
 }
 
 // earliestDate returns the earliest transaction date across the fund ledger rows (the

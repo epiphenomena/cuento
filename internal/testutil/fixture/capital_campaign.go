@@ -28,9 +28,12 @@ import (
 //	  Q1 2025-03-20 Land buy    Land          + 8,000.00 / Checking US - 8,000.00
 //	  Q2 2025-06-01 supplies    Program Suppl + 1,500.00 / Checking US - 1,500.00
 //	  Q3 2025-09-15 construct   Construction  + 5,000.00 / Checking US - 5,000.00
-//	  => Gross Revenue 20,000.00 ; Gross Expense 1,500.00 ;
-//	     Land 8,000.00 ; Construction 5,000.00 (Capitalized 13,000.00) ;
-//	     RNA (spendable) = 20,000 - 1,500 - 13,000 = 5,500.00
+//	  Q3 2025-09-25 loan-fin    Construction  + 2,000.00 / Construction Loan - 2,000.00
+//	  => Gross Revenue 22,000.00 (20,000 gift + 2,000 loan proceeds, a receipt D20) ;
+//	     Gross Expense 1,500.00 ;
+//	     Land 8,000.00 ; Construction 7,000.00 (Capitalized 15,000.00 -- the loan
+//	     itself is NOT a capital asset, so it stays OUT of the Capitalized column) ;
+//	     RNA (spendable) = 22,000 - 1,500 - 15,000 = 5,500.00
 //
 //	MXN (MX subsidiary):
 //	  Q2 2025-05-10 grant       Contributions -100,000.00 / Checking MX +100,000.00
@@ -86,6 +89,26 @@ func (f *Fixture) ExtendCapitalCampaign(t *testing.T) {
 	}
 	ids.Construction = constr
 
+	// A construction-loan LIABILITY that DIRECTLY financed a Construction purchase
+	// (DR Construction / CR Construction Loan -- no cash leg, p26.68). A loan credit is
+	// a receipt of resources, which FundStatement folds into Received (Gross Revenue),
+	// NOT Capitalized -- so the Capitalized column stays asset-only and reconciles to the
+	// detail rows. This is the split the OLD inline report mishandled: it netted the
+	// liability INTO the Capitalized column (which the asset-only detail could not match)
+	// and left RNA disagreeing with Rev - Exp - Capitalized. Routing through FundStatement
+	// fixes both. (No cash leg here so the liability draw's cash side cannot trip
+	// FundStatement's capital-asset heuristic -- the asset debit is the genuine capital.)
+	loan, err := f.Store.CreateAccount(ctx, store.CreateAccountInput{
+		Type:            "liability",
+		DefaultCurrency: "USD",
+		Names:           map[string]string{"en": "Construction Loan", "es": "Prestamo de construccion"},
+		Subsidiaries:    []int64{ids.US},
+	})
+	if err != nil {
+		t.Fatalf("fixture: create Construction Loan account: %v", err)
+	}
+	ids.ConstrLoan = loan
+
 	// --- the restricted campaign fund, spanning US + MX (so it holds USD and MXN).
 	fund, err := f.Store.CreateFund(ctx, store.CreateFundInput{
 		Name:         "Restore the Way",
@@ -131,6 +154,14 @@ func (f *Fixture) ExtendCapitalCampaign(t *testing.T) {
 		sp{acct: ids.CheckingUS, amount: -500_000, fund: &fund, desc: "Construction contractor (US)"},
 	)
 
+	// --- Q3 2025: a construction purchase DIRECTLY financed by a loan (no cash leg).
+	// The loan CREDIT is a receipt (Received / Gross Revenue), the Construction DEBIT is
+	// capital -- so Capitalized rises only by the asset, and Gross Revenue by the loan.
+	post(t, ctx, f.Store, "2025-09-25", ids.US, "USD", "Loan-financed construction",
+		sp{acct: ids.Construction, amount: 200_000, fund: &fund},
+		sp{acct: ids.ConstrLoan, amount: -200_000, fund: &fund},
+	)
+
 	f.Expected.Campaign = CampaignExpected{
 		Fund:            fund,
 		LandAccount:     land,
@@ -138,11 +169,11 @@ func (f *Fixture) ExtendCapitalCampaign(t *testing.T) {
 		FixedAssets:     fa,
 		From:            "2025-01-01",
 		To:              "2025-12-31",
-		GrossRevenueUSD: 2_000_000,
+		GrossRevenueUSD: 2_200_000, // 2,000,000 gift + 200,000 loan proceeds (a receipt, D20)
 		GrossExpenseUSD: 150_000,
 		LandUSD:         800_000,
-		ConstructionUSD: 500_000,
-		RNAUSD:          550_000, // 2,000,000 - 150,000 - (800,000 + 500,000)
+		ConstructionUSD: 700_000, // 500,000 cash-paid + 200,000 loan-financed
+		RNAUSD:          550_000, // 2,200,000 - 150,000 - (800,000 + 700,000)
 		GrossRevenueMXN: 10_000_000,
 		GrossExpenseMXN: 0,
 		LandMXN:         0,
