@@ -24,8 +24,16 @@ RETURNING id;
 SELECT id, name, config FROM mapping_profiles WHERE id = ?;
 
 -- name: ListMappingProfiles :many
--- The saved profiles the mapping UI offers for reuse, newest first.
-SELECT id, name, config FROM mapping_profiles ORDER BY id DESC;
+-- The saved profiles the mapping UI offers for reuse, newest first. Soft-deleted
+-- (deactivated) profiles are excluded (p26.63); a batch's profile_id FK still
+-- resolves to the deactivated row (its audit), it is just no longer offered.
+SELECT id, name, config FROM mapping_profiles WHERE active = 1 ORDER BY id DESC;
+
+-- name: DeactivateMappingProfile :execrows
+-- Soft-delete a saved profile: flip active to 0 so it drops out of the load list.
+-- No row is deleted (import_batches.profile_id keeps referencing it). Returns the
+-- affected row count so the store can distinguish a missing/already-gone profile.
+UPDATE mapping_profiles SET active = 0 WHERE id = ? AND active = 1;
 
 -- name: InsertImportBatch :one
 -- One upload, binding ONE account AND ONE subsidiary (the account-maps-to-subsidiary

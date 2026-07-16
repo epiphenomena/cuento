@@ -1596,6 +1596,10 @@ other = "Saved mapping"
 other = "Save this mapping as a reusable profile"
 [import.profile_name]
 other = "Profile name"
+[import.manage_profiles]
+other = "Saved profiles"
+[import.delete_profile]
+other = "Delete"
 [import.file]
 other = "CSV file"
 [import.file_hint]

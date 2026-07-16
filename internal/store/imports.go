@@ -112,6 +112,31 @@ func (s *Store) GetMappingProfile(ctx context.Context, id int64) (MappingProfile
 	return MappingProfile{ID: row.ID, Name: row.Name, Config: cfg}, nil
 }
 
+// DeactivateMappingProfile soft-deletes a saved profile so it stops being offered in
+// the load list. It is a DEACTIVATE, not a hard DELETE, because
+// import_batches.profile_id is a NOT NULL FK into mapping_profiles and every batch
+// references a profile at birth (rule 14 spirit: the mapping that produced a batch is
+// its audit and must survive). A missing or already-deactivated id is
+// ErrMappingProfileNotFound. Non-versioned: funnel, no version append.
+func (s *Store) DeactivateMappingProfile(ctx context.Context, id int64) error {
+	_, err := s.write(ctx, "import.profile.deactivate", "",
+		func(ctx context.Context, q *sqlc.Queries, _ int64) error {
+			n, err := q.DeactivateMappingProfile(ctx, id)
+			if err != nil {
+				return fmt.Errorf("deactivate mapping profile: %w", err)
+			}
+			if n == 0 {
+				return ErrMappingProfileNotFound
+			}
+			return nil
+		})
+	if err != nil {
+		// The sentinel is preserved through %w so a handler can branch on it.
+		return fmt.Errorf("deactivate mapping profile %d: %w", id, err)
+	}
+	return nil
+}
+
 // CreateImportBatch creates an upload batch bound to (accountID, subsidiaryID) and
 // returns its id. It VALIDATES that the account MAPS TO the subsidiary
 // (ErrBatchSubsidiaryMismatch, TestBatchSubValidated) inside the funnel fn so a

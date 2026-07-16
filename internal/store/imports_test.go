@@ -426,3 +426,75 @@ func TestDedupeFlagsExistingSplitsAndPendingRows(t *testing.T) {
 		}
 	}
 }
+
+// TestMappingProfileSaveRoundTrips: a saved profile appears in the load list and
+// GetMappingProfile restores the exact Config (proving p26.63's "save works").
+func TestMappingProfileSaveRoundTrips(t *testing.T) {
+	s := New(testutil.NewDB(t))
+	cfg := bankimport.Config{
+		Delimiter: bankimport.DelimiterSemicolon, HasHeader: true, Amount: bankimport.AmountDebitCredit,
+		SignFlip: true, DateFmt: bankimport.DateEU, DateCol: 0, DebitCol: 1, CreditCol: 2, DescCol: 3, MemoCol: 4,
+	}
+	id, err := s.CreateMappingProfile(mutCtx(), "mybank", cfg)
+	if err != nil {
+		t.Fatalf("CreateMappingProfile: %v", err)
+	}
+
+	list, err := s.ListMappingProfiles(mutCtx())
+	if err != nil {
+		t.Fatalf("ListMappingProfiles: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != id || list[0].Name != "mybank" {
+		t.Fatalf("load list = %+v, want the one saved profile", list)
+	}
+
+	got, err := s.GetMappingProfile(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("GetMappingProfile: %v", err)
+	}
+	if got.Config != cfg {
+		t.Fatalf("restored config = %+v, want %+v", got.Config, cfg)
+	}
+}
+
+// TestDeactivateMappingProfileHidesButKeepsAudit: deactivating a profile that a batch
+// references drops it from the load list yet leaves the batch (its FK audit) intact --
+// a HARD delete would trip the profile_id FK. A second deactivate / a missing id is
+// ErrMappingProfileNotFound.
+func TestDeactivateMappingProfileHidesButKeepsAudit(t *testing.T) {
+	env := newImportEnv(t)
+
+	// A batch references the profile (profile_id FK satisfied at birth).
+	batchID, err := env.s.CreateImportBatch(mutCtx(), "s.csv", env.checking, env.subUS, env.profile, "2025-01-01T00:00:00Z")
+	if err != nil {
+		t.Fatalf("CreateImportBatch: %v", err)
+	}
+
+	if err := env.s.DeactivateMappingProfile(mutCtx(), env.profile); err != nil {
+		t.Fatalf("DeactivateMappingProfile: %v", err)
+	}
+
+	// Gone from the load list.
+	list, err := env.s.ListMappingProfiles(mutCtx())
+	if err != nil {
+		t.Fatalf("ListMappingProfiles: %v", err)
+	}
+	for _, p := range list {
+		if p.ID == env.profile {
+			t.Fatalf("deactivated profile %d still in the load list", env.profile)
+		}
+	}
+
+	// The batch (its FK audit) survives -- GetImportBatch still resolves.
+	if _, err := env.s.GetImportBatch(mutCtx(), batchID); err != nil {
+		t.Fatalf("GetImportBatch after profile deactivate: %v (the batch FK audit must survive)", err)
+	}
+
+	// A second deactivate (already gone) and a missing id both report not-found.
+	if err := env.s.DeactivateMappingProfile(mutCtx(), env.profile); !errors.Is(err, ErrMappingProfileNotFound) {
+		t.Fatalf("re-deactivate err = %v, want ErrMappingProfileNotFound", err)
+	}
+	if err := env.s.DeactivateMappingProfile(mutCtx(), 999999); !errors.Is(err, ErrMappingProfileNotFound) {
+		t.Fatalf("deactivate missing err = %v, want ErrMappingProfileNotFound", err)
+	}
+}

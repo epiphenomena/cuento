@@ -348,6 +348,11 @@ func (s *server) routes() []Route {
 		{http.MethodGet, "/import", TxnWrite, http.HandlerFunc(s.importPage)},
 		{http.MethodPost, "/import/preview", TxnWrite, http.HandlerFunc(s.importPreview)},
 		{http.MethodPost, "/import", TxnWrite, http.HandlerFunc(s.importConfirm)},
+		// p26.63: soft-delete a saved mapping profile (deactivate; the batch FK keeps
+		// referencing it). TxnWrite -- managing import mappings is part of the import
+		// workflow. "/import/profiles/{id}/delete" is distinct from the batches/rows
+		// literals (Go 1.22+ mux); the permission-matrix test picks it up (rule 8).
+		{http.MethodPost, "/import/profiles/{id}/delete", TxnWrite, http.HandlerFunc(s.importProfileDelete)},
 		// p17.3 review queue -> post. The batch queue (pending list + progress
 		// indicator), "edit & post" (the phase-12 editor prefilled with the batch's
 		// subsidiary LOCKED), post (create the balanced txn + link the row), and

@@ -290,11 +290,28 @@ func (q *Queries) LedgerSplitDedupeKeys(ctx context.Context, accountID int64) ([
 	return items, nil
 }
 
-const listMappingProfiles = `-- name: ListMappingProfiles :many
-SELECT id, name, config FROM mapping_profiles ORDER BY id DESC
+const deactivateMappingProfile = `-- name: DeactivateMappingProfile :execrows
+UPDATE mapping_profiles SET active = 0 WHERE id = ? AND active = 1
 `
 
-// The saved profiles the mapping UI offers for reuse, newest first.
+// Soft-delete a saved profile: flip active to 0 so it drops out of the load list.
+// No row is deleted (import_batches.profile_id keeps referencing it). Returns the
+// affected row count so the store can distinguish a missing/already-gone profile.
+func (q *Queries) DeactivateMappingProfile(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deactivateMappingProfile, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const listMappingProfiles = `-- name: ListMappingProfiles :many
+SELECT id, name, config FROM mapping_profiles WHERE active = 1 ORDER BY id DESC
+`
+
+// The saved profiles the mapping UI offers for reuse, newest first. Soft-deleted
+// (deactivated) profiles are excluded (p26.63); a batch's profile_id FK still
+// resolves to the deactivated row (its audit), it is just no longer offered.
 func (q *Queries) ListMappingProfiles(ctx context.Context) ([]MappingProfile, error) {
 	rows, err := q.db.QueryContext(ctx, listMappingProfiles)
 	if err != nil {

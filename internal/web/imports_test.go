@@ -223,6 +223,52 @@ func TestImportProfileReuse(t *testing.T) {
 	}
 }
 
+// TestImportProfileDelete: a saved profile shows in the upload page's load list and
+// manage section; POSTing the delete route soft-deletes it (303), and it is gone from
+// the page afterward. A missing profile id is a 404.
+func TestImportProfileDelete(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	book := mkUser(t, st, "book", "write", false)
+
+	pid, err := st.CreateMappingProfile(
+		store.WithActor(context.Background(), store.Actor{ID: 1}),
+		"deletable", bankimport.Config{
+			Delimiter: bankimport.DelimiterComma, HasHeader: true, Amount: bankimport.AmountSingle,
+			DateFmt: bankimport.DateISO, DateCol: 0, AmountCol: 1, DescCol: 2, MemoCol: 3,
+		},
+	)
+	if err != nil {
+		t.Fatalf("CreateMappingProfile: %v", err)
+	}
+
+	// The upload page lists the profile (load option + manage-delete control).
+	page := asUser(t, h, sm, book, http.MethodGet, "/import", nil)
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "deletable") {
+		t.Fatalf("upload page missing the saved profile; code=%d", page.Code)
+	}
+	if !strings.Contains(page.Body.String(), "/import/profiles/"+strconv.FormatInt(pid, 10)+"/delete") {
+		t.Fatalf("upload page missing the delete control for profile %d", pid)
+	}
+
+	// Delete it: NO-JS form POST -> 303 back to /import.
+	del := asUser(t, h, sm, book, http.MethodPost, "/import/profiles/"+strconv.FormatInt(pid, 10)+"/delete", url.Values{})
+	if del.Code != http.StatusSeeOther {
+		t.Fatalf("delete = %d, want 303; body: %s", del.Code, del.Body.String())
+	}
+
+	// Gone from the page.
+	after := asUser(t, h, sm, book, http.MethodGet, "/import", nil)
+	if strings.Contains(after.Body.String(), "deletable") {
+		t.Fatalf("deleted profile still shows on the upload page")
+	}
+
+	// A missing/already-gone id is a clean 404.
+	miss := asUser(t, h, sm, book, http.MethodPost, "/import/profiles/"+strconv.FormatInt(pid, 10)+"/delete", url.Values{})
+	if miss.Code != http.StatusNotFound {
+		t.Fatalf("re-delete = %d, want 404", miss.Code)
+	}
+}
+
 // TestImportBadMappingIs422NoBatch: a mapping pointing the amount column at a
 // non-numeric column (payee) makes every row fail to parse -> a clean 422 at the
 // PREVIEW step, and NO batch is created.

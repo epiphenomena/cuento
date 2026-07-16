@@ -455,6 +455,29 @@ func (s *server) renderImportError(w http.ResponseWriter, r *http.Request, key, 
 		importPreviewModel{ErrorKey: key, ErrorArg: arg})
 }
 
+// importProfileDelete handles POST /import/profiles/{id}/delete (TxnWrite):
+// soft-delete (deactivate) a saved mapping profile so it stops appearing in the load
+// list; the batch FK that referenced it stays intact (its audit). On success it
+// redirects back to the upload page (HX-Redirect for the htmx delete control, a plain
+// 303 for the NO-JS form). A missing/already-gone profile is a clean 404.
+func (s *server) importProfileDelete(w http.ResponseWriter, r *http.Request) {
+	id := parseID(r.PathValue("id"))
+	if err := s.store.DeactivateMappingProfile(s.actorCtx(r.Context()), id); err != nil {
+		if errors.Is(err, store.ErrMappingProfileNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		s.serverError(w)
+		return
+	}
+	if r.Header.Get("HX-Request") == "true" {
+		w.Header().Set("HX-Redirect", "/import")
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	http.Redirect(w, r, "/import", http.StatusSeeOther)
+}
+
 // subsidiaryName returns a subsidiary's name, or "" on any error (display only).
 func (s *server) subsidiaryName(ctx context.Context, id int64) string {
 	sub, err := s.store.GetSubsidiary(ctx, id)

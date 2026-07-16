@@ -155,6 +155,27 @@
     </div>
   </form>
 
+  {{- if .Profiles}}
+  {{/* p26.63: manage saved profiles (delete). OUTSIDE the upload form (nested forms are
+       invalid HTML): each profile gets its own tiny POST form to the soft-delete route.
+       The handler HX-Redirects back to /import (a plain 303 for NO-JS), so the list
+       refreshes and the deleted profile is gone. */ -}}
+  <section class="import-profile-manage">
+    <h2>{{t "import.manage_profiles"}}</h2>
+    <ul class="import-profile-list">
+      {{- range .Profiles}}
+      <li class="import-profile-item">
+        <span class="import-profile-item-name">{{.Name}}</span>
+        <form method="post" action="/import/profiles/{{.ID}}/delete"
+              hx-post="/import/profiles/{{.ID}}/delete" class="import-profile-delete-form">
+          <button type="submit" class="btn btn-ghost import-profile-delete">{{t "import.delete_profile"}}</button>
+        </form>
+      </li>
+      {{- end}}
+    </ul>
+  </section>
+  {{- end}}
+
   {{/* The preview / result is swapped in here by /import/preview (and then /import). */ -}}
   <div id="import-workspace" class="import-workspace"></div>
 

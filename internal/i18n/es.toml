@@ -1597,6 +1597,10 @@ other = "Asignacion guardada"
 other = "Guardar esta asignacion como perfil reutilizable"
 [import.profile_name]
 other = "Nombre del perfil"
+[import.manage_profiles]
+other = "Perfiles guardados"
+[import.delete_profile]
+other = "Eliminar"
 [import.file]
 other = "Archivo CSV"
 [import.file_hint]

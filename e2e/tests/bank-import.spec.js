@@ -200,6 +200,67 @@ test('bank import: upload, map, preview, stage; a duplicate row is flagged', asy
   await expect(page.locator('span.import-dupe-flag').first()).toBeVisible();
 });
 
+// p26.63: a saved mapping profile round-trips (save on stage -> appears in the load
+// list -> loading it restores the mapping) and can be DELETED (soft-delete; gone from
+// the list). The profile is saved by checking "save this mapping" + naming it and
+// staging an upload; then a fresh /import shows it, and the per-profile delete removes
+// it.
+test('bank import: save a mapping profile, then delete it', async ({ page, server }) => {
+  await login(page, server);
+  const acctName = await createAssetAccount(page);
+  const profileName = 'E2E Profile ' + Math.random().toString(36).slice(2, 8);
+
+  await page.goto('/import');
+  await page.locator('#import-subsidiary').selectOption('1');
+  await page.locator('#import-account').selectOption({ label: acctName });
+  // Save this mapping as a reusable profile.
+  await page.locator('#import-save-profile').check();
+  await page.locator('#import-profile-name').fill(profileName);
+
+  const csv = 'date,amount,desc,memo\n2025-03-01,10.00,Acme,Note\n';
+  await page.locator('#import-file').setInputFiles({
+    name: 'mar.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from(csv, 'utf8'),
+  });
+  await page.locator('form.import-upload-form button[type="submit"]').click();
+  await expect(page.locator('#import-workspace.e2e-settled')).toBeVisible();
+  // Stage: this is what persists the named profile.
+  await page.locator('form.import-confirm-form button[type="submit"]').click();
+  await expect(page.locator('p.import-result-summary[role="status"]')).toBeVisible();
+
+  // Fresh upload page: the profile appears in the load list AND the manage section.
+  await page.goto('/import');
+  await expect(
+    page.locator('#import-profile-id option').filter({ hasText: profileName }),
+  ).toHaveCount(1);
+  const item = page
+    .locator('li.import-profile-item')
+    .filter({ has: page.getByText(profileName, { exact: true }) });
+  await expect(item).toHaveCount(1);
+
+  // Loading it selects the mapping (proves round-trip: the select value drives
+  // mappingFrom server-side).
+  await page.locator('#import-profile-id').selectOption({ label: profileName });
+  await expect(page.locator('#import-profile-id')).toHaveValue(/\d+/);
+
+  // Delete it: the per-profile form POSTs to the soft-delete route and HX-Redirects to
+  // /import; wait for the GET reload so the refreshed list is in the SSR DOM.
+  const reloaded = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/import' && r.request().method() === 'GET',
+  );
+  await item.locator('button.import-profile-delete').click();
+  await reloaded;
+
+  // Gone from both the load list and the manage section.
+  await expect(
+    page.locator('#import-profile-id option').filter({ hasText: profileName }),
+  ).toHaveCount(0);
+  await expect(
+    page.locator('li.import-profile-item').filter({ has: page.getByText(profileName, { exact: true }) }),
+  ).toHaveCount(0);
+});
+
 // p17.3 review queue -> post: upload+stage two rows, open the review queue, "edit &
 // post" the first pending row (the editor opens prefilled with the subsidiary LOCKED;
 // a counter-split is added to balance, then posted), and discard the second with a
