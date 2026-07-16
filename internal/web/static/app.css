@@ -168,6 +168,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
   font-weight: 600;
 }
 
+/* p26.48: "New transaction" is a DISTINCT right-aligned primary action, not an inline
+   nav link. .app-nav flexes to fill, so margin-left:auto pins this button (and the
+   logout after it) to the right edge, visually separated from the section links. It
+   reuses the .btn/.btn-primary tokens, so it themes for light + dark automatically. */
+.app-newtxn { margin-left: auto; white-space: nowrap; text-decoration: none; }
+
 /* p23.5 second-row section navigation: a lighter bar under the header carrying the
    current section's sub-pages (and, later, per-page filters/search). Rendered only
    when the section has sub-nav. */

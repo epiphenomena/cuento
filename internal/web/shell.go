@@ -50,12 +50,10 @@ func navSections() []navEntry {
 		// p23.8: the brand logo is "home" (-> the chart of accounts); no separate
 		// Home entry. Accounts leads the nav and is the landing.
 		{"nav.accounts", "/accounts", TxnRead},
-		// p26.33: "New transaction" is a canonical top-nav action (TxnWrite), the
-		// primary entry point for daily data entry -- previously it only lived inside
-		// register pages. Perm-gated like the rest; visibleNav drops it for a user who
-		// cannot write (and if the route were ever unregistered). isCurrentNav lights it
-		// only on /transactions/new, never Accounts.
-		{"nav.new_txn", "/transactions/new", TxnWrite},
+		// p26.48: "New transaction" is NO LONGER in the plain nav loop. It is a canonical
+		// top-nav action (TxnWrite, p26.33) but rendered as a DISTINCT right-aligned button
+		// (see newTxnAction / baseData.NewTxn), not an inline nav link -- so it reads as the
+		// primary daily-data-entry action, separate from the section links.
 		{"nav.reports", "/reports", ReportGroup("")},
 		// p24: ONE top-level "Expenses" section consolidating the submit workspace
 		// (p20.2) and the review queue (p20.3); the section bar (subNavGroups) carries
@@ -81,6 +79,30 @@ type navItem struct {
 	Label   string
 	Href    string
 	Current bool
+}
+
+// newTxnEntry is the "New transaction" action (p26.48): the same route/perm the plain
+// nav loop used to carry, resolved SEPARATELY so the shell can render it as a distinct
+// right-aligned button rather than an inline section link.
+var newTxnEntry = navEntry{LabelKey: "nav.new_txn", Href: "/transactions/new", Perm: TxnWrite}
+
+// newTxnAction resolves the right-aligned "New transaction" button for the current
+// request (p26.48): a localized label + href, shown only when the route is REGISTERED
+// and the user SATISFIES TxnWrite (reusing the same registered+navPermits gates as the
+// nav, so the button and the route never disagree). Returns nil when it must be hidden
+// (the template then renders no button). Perm-gated and boost-safe: a boosted click on
+// the button still returns the full shell (renderEditor honors HX-Boosted, p26.35).
+func (s *server) newTxnAction(ctx context.Context, u *store.CurrentUser) *navItem {
+	if !s.registeredGetPaths()[newTxnEntry.Href] {
+		return nil
+	}
+	if !s.navPermits(ctx, u, newTxnEntry.Perm) {
+		return nil
+	}
+	return &navItem{
+		Label: i18n.T(langOf(ctx), newTxnEntry.LabelKey),
+		Href:  newTxnEntry.Href,
+	}
 }
 
 // visibleNav resolves navSections for the current request: it keeps an entry only
@@ -309,9 +331,13 @@ func (s *server) registeredGetPaths() map[string]bool {
 // footer. Page handlers wrap their own data in shellPage so the template can reach
 // both.
 type baseData struct {
-	Lang   string
-	Theme  string
-	Nav    []navItem
+	Lang  string
+	Theme string
+	Nav   []navItem
+	// NewTxn is the right-aligned "New transaction" action (p26.48), rendered as a
+	// distinct button in the header (not an inline nav link). nil = hidden (route
+	// unregistered or the user lacks TxnWrite).
+	NewTxn *navItem
 	SubNav []navItem // p23.5 second-row section nav (nil = no section bar)
 	// SubNavControls names a page-specific controls partial (p23.10) the section bar
 	// renders alongside the sub-nav — filters/buttons a page moves out of its body
@@ -367,6 +393,7 @@ func (s *server) newShellPage(r *http.Request, page any) shellPage {
 			Lang:       langOf(ctx),
 			Theme:      resolveTheme(r, u),
 			Nav:        s.visibleNav(ctx, u, r.URL.Path),
+			NewTxn:     s.newTxnAction(ctx, u),
 			SubNav:     s.subNav(ctx, u, r.URL.Path),
 			Version:    s.cfg.Version,
 			DateFormat: dateFormatCode(u),

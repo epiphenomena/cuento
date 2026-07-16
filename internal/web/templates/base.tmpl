@@ -60,6 +60,14 @@
       {{end}}
     </ul>
   </nav>
+  {{/* p26.48: "New transaction" is pulled OUT of the nav loop and rendered as a
+       DISTINCT, right-aligned primary button (perm-gated: nil when the user lacks
+       TxnWrite). It is hx-boosted like the nav so the click swaps <body>; renderEditor
+       returns the full shell for a boosted request (p26.35), so the editor JS re-inits.
+       .app-newtxn margin-left:auto pins it (and the logout) to the right. */ -}}
+  {{if .Shell.NewTxn}}
+  <a class="btn btn-primary app-newtxn" href="{{.Shell.NewTxn.Href}}" hx-boost="true">{{.Shell.NewTxn.Label}}</a>
+  {{end}}
   <form class="app-logout" method="post" action="/logout">
     <button type="submit" class="btn btn-ghost">{{t "auth.sign_out"}}</button>
   </form>

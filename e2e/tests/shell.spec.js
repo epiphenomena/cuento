@@ -41,6 +41,24 @@ test.describe('authenticated shell', () => {
     await expect(nav.getByRole('link', { name: 'Accounts' })).toBeVisible();
     await expect(nav.getByRole('link', { name: 'More' })).toBeVisible();
 
+    // p26.48: "New transaction" is a DISTINCT right-aligned button in the header, NOT an
+    // inline nav link. It reuses the .btn/.btn-primary tokens and routes to the full
+    // editor (boost-safe). Assert it exists, is not in .app-nav, is right-aligned
+    // (margin-left:auto -> its left edge is right of the nav's right edge), and routes.
+    await expect(nav.getByRole('link', { name: /new transaction/i })).toHaveCount(0);
+    const newTxn = page.locator('header.app-header a.app-newtxn', { hasText: /new transaction/i });
+    await expect(newTxn).toBeVisible();
+    await expect(newTxn).toHaveClass(/btn-primary/);
+    const navBox = await nav.boundingBox();
+    const btnBox = await newTxn.boundingBox();
+    expect(btnBox.x).toBeGreaterThanOrEqual(navBox.x + navBox.width - 1);
+    await newTxn.click();
+    await page.waitForURL('**/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    // The full editor shell rendered (nav present + the distinct button re-rendered).
+    await expect(page.locator('header.app-header a.app-newtxn')).toHaveCount(1);
+    await page.goto('/');
+
     // p18.1: the footer surfaces the build version (the release binary bakes it
     // via -X main.version; the e2e binary is a plain `make build`, so it shows
     // "Version dev"). Assert the localized label + a non-empty version token by

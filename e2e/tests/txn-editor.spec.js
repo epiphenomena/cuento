@@ -543,9 +543,13 @@ test.describe('transaction editor', () => {
     await login(page, server);
     await createAsset(page, 'Origin Checking');
 
-    // The top nav carries a "New transaction" link (perm-gated; admin has TxnWrite).
-    const navNew = page.locator('.app-nav a', { hasText: /new transaction/i });
+    // p26.48: "New transaction" is a DISTINCT right-aligned button in the header (pulled
+    // out of the nav-link list), perm-gated (admin has TxnWrite). It is not inside
+    // .app-nav; it is .app-newtxn in the header.
+    const navNew = page.locator('.app-header a.app-newtxn', { hasText: /new transaction/i });
     await expect(navNew).toHaveCount(1);
+    // It must NOT appear as an inline nav link.
+    await expect(page.locator('.app-nav a', { hasText: /new transaction/i })).toHaveCount(0);
     await navNew.click();
     await expect(page.locator('form#txn-form')).toBeVisible();
 
@@ -553,7 +557,7 @@ test.describe('transaction editor', () => {
     // bare partial. Assert the nav shell is still present AND the editor JS wired up -- the
     // account combobox overlay exists and accepts typing (proves htmx:afterSwap re-init ran,
     // identical to entering from a register).
-    await expect(page.locator('.app-nav a', { hasText: /new transaction/i })).toHaveCount(1);
+    await expect(page.locator('.app-header a.app-newtxn', { hasText: /new transaction/i })).toHaveCount(1);
     const navCombo = page.locator('.txn-row[data-row="0"] .txn-account-cell .combo-text');
     await expect(navCombo).toBeVisible();
     await navCombo.click();
@@ -626,7 +630,7 @@ test.describe('transaction editor', () => {
 
     // Open a NEW transaction from the top nav (no register origin) -> the header account is
     // prefilled to the last-used account (Savings), not blank.
-    await page.locator('.app-nav a', { hasText: /new transaction/i }).click();
+    await page.locator('.app-header a.app-newtxn', { hasText: /new transaction/i }).click();
     await expect(page.locator('form#txn-form')).toBeVisible();
     const savingsVal = await page
       .locator('#txn-main-account option', { hasText: 'Prefill Savings' })
