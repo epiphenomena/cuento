@@ -333,3 +333,52 @@ test('reconcile: edit the statement date + ending balance updates the summary an
   await expect(page.locator('#recon-edit-balance')).toHaveValue('250.00');
 });
 
+
+// p26.58: discard an OPEN recon. Start a recon, clear a split, discard it, then assert
+// (a) it is gone from the open/continue list, (b) the split is uncleared/available, and
+// (c) a fresh recon can be started for the same account.
+test('reconcile: discard an in-progress reconciliation releases its splits', async ({
+  page,
+  server,
+}) => {
+  test.slow();
+  await login(page, server);
+
+  const checking = 'ReconDiscard Bank Acct';
+  const income = 'ReconDiscard Grants Acct';
+  await createAccount(page, checking, 'asset', true);
+  await createAccount(page, income, 'revenue', false);
+
+  await postDeposit(page, checking, income, '175.00');
+  await page.goto('/reconciliations');
+  const acctRow = page.locator('tr.recon-list-row', { hasText: checking });
+  await expect(acctRow).toBeVisible();
+  await acctRow.locator('input[name="statement_date"]').fill('2026-07-31');
+  await acctRow.locator('input[name="balance"]').fill('175.00');
+  await acctRow.getByRole('button', { name: /start reconciliation/i }).click();
+  await page.waitForURL('**/reconciliations/*');
+
+  // Clear the deposit split against this recon.
+  await page.locator('button.recon-toggle').first().click();
+  await expect(page.locator('#recon-diff-chip')).toContainText('0.00');
+
+  // DISCARD: the form posts and redirects to the list.
+  await page.locator('.recon-discard-form').getByRole('button', { name: /discard/i }).click();
+  await page.waitForURL((u) => u.pathname === '/reconciliations');
+
+  // (a) The account row no longer offers "Continue" -- it shows a fresh START form again.
+  const rowAfter = page.locator('tr.recon-list-row', { hasText: checking });
+  await expect(rowAfter.getByRole('link', { name: /continue reconciliation/i })).toHaveCount(0);
+  await expect(rowAfter.locator('input[name="statement_date"]')).toBeVisible();
+
+  // (c) A FRESH recon can be started for the same account+currency.
+  await rowAfter.locator('input[name="statement_date"]').fill('2026-08-31');
+  await rowAfter.locator('input[name="balance"]').fill('0.00');
+  await rowAfter.getByRole('button', { name: /start reconciliation/i }).click();
+  await page.waitForURL('**/reconciliations/*');
+
+  // (b) In the fresh workspace the deposit split is available again and UNCLEARED (its
+  // prior clearing was released by the discard). Exactly one split row, aria-pressed false.
+  await expect(page.locator('tr.recon-row')).toHaveCount(1);
+  await expect(page.locator('button.recon-toggle')).toHaveAttribute('aria-pressed', 'false');
+});

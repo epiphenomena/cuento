@@ -1026,3 +1026,108 @@ func TestEditReconciliationStatementValidation(t *testing.T) {
 		t.Errorf("edit missing recon: err = %v, want ErrReconciliationNotFound", err)
 	}
 }
+
+// --- p26.58 discard -------------------------------------------------------
+
+// TestDiscardReconciliation abandons an OPEN recon: the status flips to 'discarded'
+// (versioned op='update'), its cleared split is released (reconciliation_id NULL,
+// live-only so NO split version), no row is deleted (audit intact), the open-recon
+// uniqueness guard now excludes it (a fresh recon starts), and the ledger stays clean.
+func TestDiscardReconciliation(t *testing.T) {
+	e := newReconEnv(t)
+	ctx := mutCtx()
+
+	txn, err := e.s.PostTransaction(ctx, PostTransactionInput{
+		Date: "2026-02-05", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: e.checking, Amount: 25_000, Position: 0},
+			{AccountID: e.revenue, Amount: -25_000, Position: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+	spID := checkingSplitID(t, e.d, txn, e.checking)
+
+	recon, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-02-28", 25_000)
+	if err != nil {
+		t.Fatalf("StartReconciliation: %v", err)
+	}
+	if err := e.s.SetSplitReconciled(ctx, recon, spID, true); err != nil {
+		t.Fatalf("clear split: %v", err)
+	}
+	if got := reconOf(t, e.d, spID); got != recon {
+		t.Fatalf("split cleared against %d, want %d", got, recon)
+	}
+	preSplitVersions := splitVersionCount(t, e.d, spID)
+
+	// A second open recon is blocked while this one is open.
+	if _, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-03-31", 0); !errors.Is(err, ErrOpenReconciliationExists) {
+		t.Fatalf("second start before discard: err = %v, want ErrOpenReconciliationExists", err)
+	}
+
+	// Discard.
+	if err := e.s.DiscardReconciliation(ctx, recon); err != nil {
+		t.Fatalf("DiscardReconciliation: %v", err)
+	}
+	testutil.AssertVersioned(t, e.d, "reconciliations", recon, "update")
+
+	got, _ := e.s.GetReconciliation(ctx, recon)
+	if got.Status != "discarded" {
+		t.Errorf("status after discard = %q, want discarded", got.Status)
+	}
+	// The split is released (uncleared) and available again.
+	if got := reconOf(t, e.d, spID); got != 0 {
+		t.Errorf("split reconciliation_id after discard = %d, want 0 (released)", got)
+	}
+	// Un-clear is live-only: NO new split version was minted.
+	if n := splitVersionCount(t, e.d, spID); n != preSplitVersions {
+		t.Errorf("split versions after discard = %d, want %d (live-only)", n, preSplitVersions)
+	}
+	// Audit intact: the discarded recon row and its versions still exist.
+	var reconRows, versionRows int
+	e.d.QueryRow(`SELECT COUNT(*) FROM reconciliations WHERE id = ?`, recon).Scan(&reconRows)
+	e.d.QueryRow(`SELECT COUNT(*) FROM reconciliations_versions WHERE entity_id = ?`, recon).Scan(&versionRows)
+	if reconRows != 1 {
+		t.Errorf("reconciliation rows after discard = %d, want 1 (soft status, not deleted)", reconRows)
+	}
+	if versionRows < 2 {
+		t.Errorf("reconciliation version rows after discard = %d, want >=2 (create + discard)", versionRows)
+	}
+
+	// The open-recon guard now excludes the discarded one: a fresh recon starts.
+	fresh, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-03-31", 0)
+	if err != nil {
+		t.Fatalf("start fresh recon after discard: %v", err)
+	}
+	if fresh == recon {
+		t.Fatalf("fresh recon id collided with discarded id")
+	}
+	// The released split is available to the fresh recon.
+	if err := e.s.SetSplitReconciled(ctx, fresh, spID, true); err != nil {
+		t.Errorf("clear released split against fresh recon: %v", err)
+	}
+	assertLedgerClean(t, e.d)
+}
+
+// TestDiscardReconciliationValidation rejects discard on a non-open recon.
+func TestDiscardReconciliationValidation(t *testing.T) {
+	e := newReconEnv(t)
+	ctx := mutCtx()
+
+	recon, err := e.s.StartReconciliation(ctx, e.checking, "USD", "2026-02-28", 0)
+	if err != nil {
+		t.Fatalf("StartReconciliation: %v", err)
+	}
+	if err := e.s.Finalize(ctx, recon); err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	// Discarding a finalized recon is rejected (reopen first).
+	if err := e.s.DiscardReconciliation(ctx, recon); !errors.Is(err, ErrReconciliationNotOpen) {
+		t.Errorf("discard finalized: err = %v, want ErrReconciliationNotOpen", err)
+	}
+	// Missing recon -> ErrReconciliationNotFound.
+	if err := e.s.DiscardReconciliation(ctx, 999_999); !errors.Is(err, ErrReconciliationNotFound) {
+		t.Errorf("discard missing: err = %v, want ErrReconciliationNotFound", err)
+	}
+}

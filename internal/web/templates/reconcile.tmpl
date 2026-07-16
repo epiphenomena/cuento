@@ -145,7 +145,10 @@
   </form>
   {{end}}
 
-  {{template "recon-summary" (reconSummaryCtx .Summary false .Finalized .FinalizePath)}}
+  {{/* A discarded recon is read-only too: pass (or Finalized Discarded) so the summary
+       hides the Finalize button (a discarded recon is not finalizable; the server also
+       rejects a forced finalize). */ -}}
+  {{template "recon-summary" (reconSummaryCtx .Summary false (or .Finalized .Discarded) .FinalizePath)}}
 
   {{/* p26.50: add a transaction WITHOUT leaving the reconciliation. The recon state
        persists server-side, so `from` carries this workspace path; the editor's Cancel

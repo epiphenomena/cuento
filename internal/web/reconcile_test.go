@@ -603,3 +603,84 @@ func TestReconEditUpdatesSummaryAndGate(t *testing.T) {
 		t.Errorf("422 edit response missing the re-rendered edit form")
 	}
 }
+
+// --- p26.58 discard -------------------------------------------------------
+
+// TestReconDiscardReleasesAndRemovesFromList: discarding an OPEN recon removes it from
+// the continue/open list, un-clears its split, and lets a fresh recon start.
+func TestReconDiscardReleasesAndRemovesFromList(t *testing.T) {
+	e := newReconWebEnv(t)
+	id := e.startRecon(t, 0)
+	// Clear the deposit split against this recon.
+	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(id, e.spDep), url.Values{}); rec.Code != http.StatusOK {
+		t.Fatalf("toggle = %d", rec.Code)
+	}
+
+	// The list offers "Continue" for the open recon before discard.
+	listBefore := asUser(t, e.h, e.sm, e.reader, http.MethodGet, "/reconciliations", nil).Body.String()
+	if !strings.Contains(listBefore, `href="/reconciliations/`+strconv.FormatInt(id, 10)+`"`) {
+		t.Fatalf("list should offer Continue for the open recon before discard")
+	}
+
+	// Discard.
+	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconDiscardPath(id), url.Values{})
+	if rec.Code != http.StatusSeeOther && rec.Code != http.StatusOK {
+		t.Fatalf("discard POST = %d, want redirect/200; body: %s", rec.Code, rec.Body.String())
+	}
+
+	// (a) gone from the open/continue list (no continue link to this recon id).
+	listAfter := asUser(t, e.h, e.sm, e.reader, http.MethodGet, "/reconciliations", nil).Body.String()
+	if strings.Contains(listAfter, `href="/reconciliations/`+strconv.FormatInt(id, 10)+`"`) {
+		t.Errorf("discarded recon still offered as Continue in the list; body:\n%s", listAfter)
+	}
+	// The account row now shows a START form again (a fresh recon can begin).
+	if !strings.Contains(listAfter, `id="recon-start-form-`+strconv.FormatInt(e.checking, 10)+`"`) {
+		t.Errorf("list should show a start form for the account after discard; body:\n%s", listAfter)
+	}
+
+	// (b) the split is uncleared / available again.
+	ws, err := e.st.ReconciliationWorkspaceSplits(context.Background(), id)
+	if err != nil {
+		t.Fatalf("workspace splits: %v", err)
+	}
+	for _, sp := range ws {
+		if sp.SplitID == e.spDep && sp.Cleared {
+			t.Errorf("deposit split still cleared after discard")
+		}
+	}
+
+	// (c) a fresh recon can be started for the same account+currency via the list POST.
+	start := asUser(t, e.h, e.sm, e.writer, http.MethodPost, "/reconciliations", url.Values{
+		"account_id":     {strconv.FormatInt(e.checking, 10)},
+		"currency":       {"USD"},
+		"statement_date": {"2026-04-30"},
+		"balance":        {"0.00"},
+	})
+	if start.Code != http.StatusSeeOther && start.Code != http.StatusOK {
+		t.Fatalf("fresh start after discard = %d, want redirect; body: %s", start.Code, start.Body.String())
+	}
+}
+
+// TestReconDiscardedWorkspaceReadOnly: a discarded recon's workspace renders read-only
+// -- no Finalize button, no toggles, no edit/discard forms, and a discarded note.
+func TestReconDiscardedWorkspaceReadOnly(t *testing.T) {
+	e := newReconWebEnv(t)
+	id := e.startRecon(t, 0)
+	// Discard it (no need to clear anything).
+	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconDiscardPath(id), url.Values{}); rec.Code != http.StatusSeeOther && rec.Code != http.StatusOK {
+		t.Fatalf("discard = %d", rec.Code)
+	}
+	body := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(id), nil).Body.String()
+	if !strings.Contains(body, "recon-discarded-note") {
+		t.Errorf("discarded workspace missing the discarded note; body:\n%s", body)
+	}
+	if strings.Contains(body, `id="recon-finalize"`) {
+		t.Errorf("discarded workspace should not render the Finalize button")
+	}
+	if strings.Contains(body, "recon-toggle") {
+		t.Errorf("discarded workspace should not render cleared toggles (read-only)")
+	}
+	if strings.Contains(body, `id="recon-edit-form"`) || strings.Contains(body, "recon-discard-form") {
+		t.Errorf("discarded workspace should not render the edit/discard forms")
+	}
+}
