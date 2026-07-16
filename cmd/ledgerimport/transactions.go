@@ -313,7 +313,7 @@ func (b *builder) resolveSplit(tid string, idx int, r Record) (pending, error) {
 	if !ok {
 		return pending{}, fmt.Errorf("unknown currency %q", r.Currency)
 	}
-	amt, err := NetDebit(r.Db, r.Cr, exp)
+	amt, err := nativeNetDebit(r, exp, b.cfg.BaseCurrency)
 	if err != nil {
 		return pending{}, err
 	}

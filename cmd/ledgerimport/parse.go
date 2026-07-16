@@ -133,6 +133,33 @@ func NetDebit(dbAmt, crAmt string, exponent int) (int64, error) {
 	return d - c, nil
 }
 
+// nativeNetDebit computes a split's exact signed net-debit IN ITS OWN CURRENCY'S
+// minor units (rule 3), choosing the authoritative column pair by currency:
+//
+//   - The `db`/`cr` pair is the BASE-currency (org functional, e.g. USD) amount.
+//   - The `fdb`/`fcr` pair is the OTHER-currency (native, e.g. HNL) amount.
+//
+// These are the two sides of the base/native pair related by `xrt`
+// (docs/ledger-export.md "Amounts"), and which pair is native depends ONLY on the
+// split's `currency`, NOT on which column reads larger. When the split is already
+// in the base currency the two pairs are equal and `xrt = 1`, so `db`/`cr` is
+// used. When the split is in the foreign currency the native amount lives in
+// `fdb`/`fcr` -- using `db`/`cr` there would store the USD magnitude mislabeled as
+// native, which reports then convert a second time (the p26.56 corruption). The
+// branch is REQUIRED, not cosmetic: on the real export `db != fdb` on a large
+// fraction of BOTH USD splits (their foreign HNL counterpart) and foreign splits
+// (their base USD counterpart), so a uniform column choice would corrupt one side
+// or the other.
+//
+// exp is the split currency's minor-unit exponent (D1); base is the org base
+// currency (cfg.BaseCurrency).
+func nativeNetDebit(r Record, exp int, base string) (int64, error) {
+	if r.Currency == base {
+		return NetDebit(r.Db, r.Cr, exp)
+	}
+	return NetDebit(r.Fdb, r.Fcr, exp)
+}
+
 // parseAmount maps a blank field to 0 (money.Parse rejects "") and otherwise
 // parses an exact minor-unit integer with the plain (dot-decimal, no grouping)
 // number format the export uses (docs/ledger-export.md "Amounts").

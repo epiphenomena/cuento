@@ -212,13 +212,18 @@ func (b *builder) recordAcctType(r Record) (string, bool, error) {
 	return at, at == "revenue" || at == "expense", nil
 }
 
-// recordAmount returns a source record's exact signed net-debit (rule 3).
+// recordAmount returns a source record's exact signed net-debit in ITS OWN
+// currency's minor units (rule 3), from the base-vs-native column pair selected by
+// currency (nativeNetDebit -- p26.56). recordAmountUSD then converts this native
+// figure to USD for the drawdown-pool DECISION only; the stored split amount stays
+// native. This MUST match resolveSplit's amount exactly so the pool basis and the
+// posted splits agree.
 func (b *builder) recordAmount(r Record) (int64, error) {
 	exp, ok := b.exponent[r.Currency]
 	if !ok {
 		return 0, fmt.Errorf("unknown currency %q", r.Currency)
 	}
-	return NetDebit(r.Db, r.Cr, exp)
+	return nativeNetDebit(r, exp, b.cfg.BaseCurrency)
 }
 
 // offsetRtW performs Pass 2 for one currency bucket: it appends, to `splits`, the

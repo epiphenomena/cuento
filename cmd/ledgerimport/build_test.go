@@ -169,8 +169,13 @@ func testSource() string {
 		// tid 12 (2025-11-01): a campus REVENUE receipt of MXN 4000 in the MX
 		// subsidiary. Converted at the seeded MXN->USD rate 0.05 it grows the SINGLE USD
 		// pool by USD 200 (4000 * 0.05). Its Cash MX debit offset is retagged RtW.
-		row("MX", "I", "receipt", "Campus Revenue", "campus", "2025-11-01", "PRG", "12", "mx campus gift", "", "MXN", "0.05", "0", "0", "4000.00", "200.00", "Revenue"),
-		row("MX", "A", "receipt", "Cash MX", "", "2025-11-01", "", "12", "mx campus gift in", "", "MXN", "0.05", "4000.00", "200.00", "0", "0", "Assets"),
+		// COLUMN CONVENTION (p26.56): db/cr carry the BASE (USD) amount and fdb/fcr the
+		// NATIVE (MXN) amount -- matching the real export (db/cr = org functional, fdb/fcr
+		// = foreign). So the stored MXN native comes from fdb/fcr (4000), and the pool
+		// decision converts that 4000 MXN * 0.05 = 200 USD. (The old importer read db/cr,
+		// storing 200 as if native -- the corruption this step fixes.)
+		row("MX", "I", "receipt", "Campus Revenue", "campus", "2025-11-01", "PRG", "12", "mx campus gift", "", "MXN", "0.05", "0", "0", "200.00", "4000.00", "Revenue"),
+		row("MX", "A", "receipt", "Cash MX", "", "2025-11-01", "", "12", "mx campus gift in", "", "MXN", "0.05", "200.00", "4000.00", "0", "0", "Assets"),
 		// tid 13 (2025-12-01): a USD campus EXPENSE of 200. At this date USD-only campus
 		// revenue AVAILABLE in the pool is just 40 (tid 7's 100 less tid 8's 60; tid 10
 		// overflowed and drew nothing), so the OLD per-currency USD pool (40 < 200) would
@@ -420,6 +425,97 @@ func buildInto(t *testing.T, anonymize bool) (*sql.DB, *store.Store, *BuildResul
 		t.Fatalf("runBuild: %v", err)
 	}
 	return sqldb, st, res
+}
+
+// TestNativeNetDebitSelectsColumnPairByCurrency is the p26.56 fix's unit proof: a
+// split's stored native amount comes from db/cr when the split is in the org BASE
+// currency and from fdb/fcr otherwise. In the real export db/cr always carry the
+// BASE (USD) figure and fdb/fcr the FOREIGN native figure -- and the two DIFFER on
+// a large fraction of BOTH USD splits (their foreign counterpart) and foreign
+// splits (their USD counterpart) -- so a uniform column choice corrupts one side.
+// This test uses db != fdb to prove the branch, which db==fdb fixtures cannot.
+func TestNativeNetDebitSelectsColumnPairByCurrency(t *testing.T) {
+	const base = "USD"
+	// A non-USD (MXN, exp 2) split: db/cr = USD 200, fdb/fcr = MXN 4000 native. The
+	// stored native must be the MXN 4000 (from fdb/fcr), NOT the USD 200 (db/cr).
+	mxn := Record{Currency: "MXN", Db: "0", Cr: "200.00", Fdb: "4000.00", Fcr: "0"}
+	got, err := nativeNetDebit(mxn, 2, base)
+	if err != nil {
+		t.Fatalf("nativeNetDebit(MXN): %v", err)
+	}
+	if got != 400000 { // 4000.00 MXN native, a DEBIT (fdb) -> positive net-debit
+		t.Errorf("MXN native = %d, want 400000 (from fdb/fcr, not the USD db/cr 20000)", got)
+	}
+	// A USD (base) split whose fdb/fcr carry an HNL-style ~24x foreign counterpart:
+	// the native must come from db/cr (the USD figure), NOT fdb/fcr.
+	usd := Record{Currency: "USD", Db: "10.00", Cr: "0", Fdb: "242.61", Fcr: "0"}
+	got, err = nativeNetDebit(usd, 2, base)
+	if err != nil {
+		t.Fatalf("nativeNetDebit(USD): %v", err)
+	}
+	if got != 1000 { // 10.00 USD native, from db/cr (uniform fdb would give 24261)
+		t.Errorf("USD native = %d, want 1000 (from db/cr, not the foreign fdb 24261)", got)
+	}
+}
+
+// TestForeignSplitStoresNativeAndConvertsForReport is the p26.56 fix's end-to-end
+// proof on the synthetic build: the MXN campus-revenue split (tid 12, db/cr = USD
+// 200, fdb/fcr = MXN 4000) must STORE the MXN 4000 native (from fdb/fcr, not the
+// USD 200), and the drawdown-pool DECISION converts that native back to USD 200
+// (4000 * 0.05) -- shown by tid 13's USD 200 campus expense being funded (RtW). A
+// single-currency non-USD (MXN) transaction must still balance (the store rejects
+// otherwise). Under the OLD importer the MXN split stored USD 200 as if native, and
+// a report converting MXN->USD would shrink it ~20x -- the corruption this fixes.
+func TestForeignSplitStoresNativeAndConvertsForReport(t *testing.T) {
+	sqldb, _, res := buildInto(t, false)
+	ctx := context.Background()
+
+	// The tid 12 MXN campus-revenue split stores 4000.00 MXN native (400000 minor,
+	// a credit -> negative net-debit), NOT the USD 200 (which db/cr held).
+	var mxnNative int64
+	if err := sqldb.QueryRow(`
+		SELECT s.amount FROM splits s JOIN transactions t ON t.id = s.transaction_id
+		WHERE s.account_id = ? AND t.currency = 'MXN' AND s.amount < 0
+		  AND t.id IN (SELECT transaction_id FROM splits WHERE description = 'mx campus gift')`,
+		res.AccountIDs["Campus Revenue"],
+	).Scan(&mxnNative); err != nil {
+		t.Fatalf("query tid 12 MXN campus revenue native: %v", err)
+	}
+	if mxnNative != -400000 {
+		t.Errorf("tid 12 MXN campus revenue stored native = %d, want -400000 (4000.00 MXN from fdb/fcr, not USD 200)", mxnNative)
+	}
+
+	// The converted-to-USD pool decision (4000 MXN * 0.05 = 200 USD) funded tid 13's
+	// USD 200 campus expense as RtW -- proving the report-basis conversion is correct.
+	campusID := *res.CampusFundID
+	var tid13RtW int
+	if err := sqldb.QueryRow(`
+		SELECT COUNT(*) FROM splits s JOIN transactions t ON t.id = s.transaction_id
+		WHERE s.account_id = ? AND s.fund_id = ? AND s.amount = 20000
+		  AND t.id IN (SELECT transaction_id FROM splits WHERE description = 'us campus paid by mx gift')`,
+		res.AccountIDs["Campus Costs"], campusID,
+	).Scan(&tid13RtW); err != nil {
+		t.Fatalf("query tid 13 RtW: %v", err)
+	}
+	if tid13RtW != 1 {
+		t.Errorf("tid 13 USD campus expense RtW = %d, want 1 (MXN native must convert to USD 200 in the pool)", tid13RtW)
+	}
+
+	// A single-currency non-USD (MXN) transaction still balances: tid 3 (MXN grant
+	// receipt) posted, and the store enforces per-transaction zero-sum on write, so
+	// its very existence proves balance. Assert its two MXN splits net to zero.
+	var mxnTxnSum sql.NullInt64
+	if err := sqldb.QueryRow(`
+		SELECT SUM(s.amount) FROM splits s JOIN transactions t ON t.id = s.transaction_id
+		WHERE t.currency = 'MXN'
+		  AND t.id IN (SELECT transaction_id FROM splits WHERE description = 'grant in')`,
+	).Scan(&mxnTxnSum); err != nil {
+		t.Fatalf("sum tid 3 MXN splits: %v", err)
+	}
+	if !mxnTxnSum.Valid || mxnTxnSum.Int64 != 0 {
+		t.Errorf("single-currency MXN transaction net-debit sum = %v, want 0 (must balance)", mxnTxnSum)
+	}
+	_ = ctx
 }
 
 func TestMappingAppliesSubFundProgramFunction(t *testing.T) {

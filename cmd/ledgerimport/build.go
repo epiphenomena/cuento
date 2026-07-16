@@ -17,8 +17,9 @@ import (
 // build (p09.3) converts the cleaned full-ledger export into a cuento SQLite db
 // by DRIVING internal/store -- so every produced row passes the same store
 // invariants (rule 2/7). It never opens a transaction itself and never touches
-// the amount columns via floating point (rule 3): amounts come from NetDebit over
-// the authoritative db/cr columns.
+// the amount columns via floating point (rule 3): amounts come from nativeNetDebit
+// over the authoritative base (db/cr) or native (fdb/fcr) column pair, selected by
+// the split's currency (p26.56).
 //
 // The core (runBuild) takes an io.Reader + a *store.Store so tests exercise it
 // with synthetic content into a temp db (AGENTS rule 11: no real value here); the
