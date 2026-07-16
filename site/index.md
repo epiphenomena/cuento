@@ -44,6 +44,7 @@ with filesystem access to the server; those are handled operationally
 | [Security](security.md) | Passwords, sessions, cross-origin protection, rate-limiting, the permission-gated route registry, the strict CSP, and the security headers — with the tests that enforce each. |
 | [Data integrity](data-integrity.md) | Exact money, the single write funnel, append-only versioning, migrations-as-truth, sqlc-only SQL, and the ledger invariants enforced twice. |
 | [Features](features.md) | The full feature set: fund accounting, subsidiaries and consolidation, programs and functional classes, the report catalog, bank import, reconciliation, budgeting, and expense reports. |
+| [Rules](rules.md) | The fourteen non-negotiable engineering rules the project is held to, each with the reason behind it and a link to the mechanism that satisfies it. |
 
 ## Enabling GitHub Pages for this site
 
