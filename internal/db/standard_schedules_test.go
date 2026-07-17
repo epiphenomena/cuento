@@ -33,13 +33,40 @@ type wantSchedule struct {
 func ip(v int) *int       { return &v }
 func sp(v string) *string { return &v }
 
-// standardSchedules is the exact seeded set the migration must produce.
+// standardSchedules is the exact seeded set the two migrations must produce: the
+// four from 00022 (p26.28) plus the fuller common set from 00025 (p26.79). The two
+// blocks are kept separate so a reader sees which migration owns which row and the
+// 00025 additions never duplicate an 00022 name. Quarterly / semi-annual are
+// deliberately ABSENT: the recurrence model (00016 kind enum + budget.ExpandSchedule)
+// has no >monthly interval kind, so those are an engine change deferred from this
+// seed step (DECISIONS p26.79).
 func standardSchedules() []wantSchedule {
+	return append(schedules00022(), schedules00025()...)
+}
+
+// schedules00022 is the original four (p26.28); unchanged.
+func schedules00022() []wantSchedule {
 	return []wantSchedule{
 		{name: "Monthly (1st)", kind: "monthly", dayOfMonth: ip(1)},
 		{name: "Monthly (last day)", kind: "monthly", dayOfMonth: ip(-1)},
 		{name: "Weekly (Friday)", kind: "weekly", weekday: ip(5), anchor: sp("2000-01-07")},
 		{name: "Semimonthly (15th & last)", kind: "semimonthly", dayOfMonth: ip(15), dayOfMon2: ip(-1)},
+	}
+}
+
+// schedules00025 is the fuller common set added by 00025 (p26.79). Each row is a
+// recurrence the model CAN express and none duplicates an 00022 name: another
+// weekly weekday (Monday), the biweekly stride kind, the complementary semimonthly
+// pairing (1st & 15th), a mid-month monthly, and an annual anchor. 2000-01-03 is a
+// Monday and 2000-01-07 a Friday (the biweekly stride anchor); the annual anchor's
+// weekday is irrelevant (annual repeats a fixed month+day).
+func schedules00025() []wantSchedule {
+	return []wantSchedule{
+		{name: "Weekly (Monday)", kind: "weekly", weekday: ip(1), anchor: sp("2000-01-03")},
+		{name: "Biweekly", kind: "biweekly", anchor: sp("2000-01-07")},
+		{name: "Semimonthly (1st & 15th)", kind: "semimonthly", dayOfMonth: ip(1), dayOfMon2: ip(15)},
+		{name: "Monthly (15th)", kind: "monthly", dayOfMonth: ip(15)},
+		{name: "Annual (Jan 1)", kind: "annual", anchor: sp("2000-01-01")},
 	}
 }
 
