@@ -74,9 +74,19 @@ func (b *builder) postCorrection(ctx context.Context, idx int, c Correction) err
 			Position:  int64(j),
 		}
 		if cs.Fund != "" {
+			// A correction split's fund is a donor key (res.FundIDs, like the rest of
+			// the import). The marker-driven campus fund (cfg.CampusFund, D p26.40) is
+			// NOT donor-keyed -- it is created under its own name and tagged by kat=campus
+			// at import, never by donor -- so it is absent from FundIDs. A correction that
+			// reclassifies WITHIN the campus restricted fund (e.g. re-recognizing a campus
+			// intercompany balance so it eliminates) must be able to name it, so a split's
+			// fund also resolves against the campus fund's configured NAME as a fallback.
 			fid, ok := b.res.FundIDs[cs.Fund]
+			if !ok && b.cfg.CampusFund != nil && b.res.CampusFundID != nil && cs.Fund == b.cfg.CampusFund.Name {
+				fid, ok = *b.res.CampusFundID, true
+			}
 			if !ok {
-				return fmt.Errorf("split %d: fund (donor) %q not configured", j, cs.Fund)
+				return fmt.Errorf("split %d: fund %q not configured (donor key or campus fund name)", j, cs.Fund)
 			}
 			s.FundID = &fid
 		}

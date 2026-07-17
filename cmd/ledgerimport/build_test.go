@@ -1733,3 +1733,82 @@ func TestCorrectionRejectsUnbalanced(t *testing.T) {
 		t.Errorf("error %q does not name the offending correction", err)
 	}
 }
+
+// TestCorrectionResolvesCampusFundByName proves a correction split can name the
+// marker-driven campus fund (cfg.CampusFund) by its configured NAME. That fund is
+// NOT donor-keyed (it is tagged at import by kat=campus, never by donor), so it is
+// absent from res.FundIDs; a correction that reclassifies WITHIN the campus fund
+// (D p26.89: re-recognizing a campus intercompany balance so it eliminates) must be
+// able to reference it. Both legs must land on the campus fund id so the store's
+// per-fund zero-sum (rule 7) holds. Synthetic-only (rule 11).
+func TestCorrectionResolvesCampusFundByName(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	accMap, err := ReadAccountMap(strings.NewReader(testAccountMap()))
+	if err != nil {
+		t.Fatalf("ReadAccountMap: %v", err)
+	}
+	base := strings.TrimSuffix(strings.TrimSpace(testConfig()), "}")
+	cfg, err := ReadConfig(strings.NewReader(base + `,
+  "corrections": [
+    {
+      "date": "2025-12-31",
+      "subsidiary": "Test US",
+      "currency": "USD",
+      "memo": "campus IC re-recognition",
+      "splits": [
+        {"account": "Opening Balances", "amount": 50000, "fund": "Restore the Way"},
+        {"account": "Campus Revenue", "amount": -50000, "fund": "Restore the Way", "program": "Campus"}
+      ]
+    }
+  ]
+}`))
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	res, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, testRates(), st, false)
+	if err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+	if res.CampusFundID == nil {
+		t.Fatal("campus fund not created")
+	}
+	campusID := *res.CampusFundID
+
+	txns := res.tidTxns["correction-0"]
+	if len(txns) != 1 {
+		t.Fatalf("correction produced %d transactions, want 1", len(txns))
+	}
+	rows, err := sqldb.Query(
+		`SELECT account_id, amount, fund_id FROM splits WHERE transaction_id = ? ORDER BY position`, txns[0])
+	if err != nil {
+		t.Fatalf("load splits: %v", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var n int
+	for rows.Next() {
+		var acct, amount int64
+		var fund sql.NullInt64
+		if err := rows.Scan(&acct, &amount, &fund); err != nil {
+			t.Fatalf("scan split: %v", err)
+		}
+		n++
+		if !fund.Valid || fund.Int64 != campusID {
+			t.Errorf("split acct=%d fund=%v, want campus fund %d", acct, fund, campusID)
+		}
+	}
+	if n != 2 {
+		t.Fatalf("correction has %d splits, want 2", n)
+	}
+
+	// The whole produced db is Error-clean (per-fund zero-sum held on the campus fund).
+	vs, err := ledger.Check(context.Background(), sqldb)
+	if err != nil {
+		t.Fatalf("ledger.Check: %v", err)
+	}
+	if ledger.HasErrors(vs) {
+		t.Fatalf("ledger.Check has errors: %+v", vs)
+	}
+}
