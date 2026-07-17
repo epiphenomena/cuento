@@ -672,6 +672,85 @@ func TestUpdateDiffsSplits(t *testing.T) {
 	testutil.AssertVersioned(t, e.d, "transactions", id, "update")
 }
 
+// TestUpdateDuplicateExistingSplitIDRejected proves the worked audit case: an
+// UpdateTransaction input carrying the SAME existing split id twice (with different
+// amounts) is REJECTED with ErrDuplicateSplitID and leaves NO audit trace. Both
+// copies pass the overall zero-sum check together, but without the guard the update
+// loop applies UpdateSplit twice to the one live row (last-write-wins), persisting an
+// UNBALANCED set that the zero-sum check could not have caught.
+func TestUpdateDuplicateExistingSplitIDRejected(t *testing.T) {
+	e := newTxnEnv(t)
+	// Post a balanced 3-split txn: two salaries debits (100 + 300) + one -400 credit.
+	in := PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: e.salaries, Amount: 100, Position: 0},
+			{AccountID: e.salaries, Amount: 300, Position: 1},
+			{AccountID: e.checking, Amount: -400, Position: 2},
+		},
+	}
+	id, err := e.s.PostTransaction(mutCtx(), in)
+	if err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+	live := txnSplits(t, e.d, id)
+	if len(live) != 3 {
+		t.Fatalf("want 3 splits")
+	}
+	// Pick the first salaries split (id "5" in the worked case) and the credit split.
+	var dupID, creditID int64
+	for _, sp := range live {
+		switch {
+		case sp.AccountID == e.salaries && sp.Amount == 100:
+			dupID = sp.ID
+		case sp.AccountID == e.checking:
+			creditID = sp.ID
+		}
+	}
+	if dupID == 0 || creditID == 0 {
+		t.Fatalf("could not identify splits (dup=%d credit=%d)", dupID, creditID)
+	}
+
+	// The worked case: [{id:dup,amt:100},{id:dup,amt:300},{id:credit,amt:-400}].
+	// The two dup copies sum to 400 so the input balances OVERALL, but they name one
+	// live row twice.
+	upd := PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{ID: &dupID, AccountID: e.salaries, Amount: 100, Position: 0},
+			{ID: &dupID, AccountID: e.salaries, Amount: 300, Position: 1},
+			{ID: &creditID, AccountID: e.checking, Amount: -400, Position: 2},
+		},
+	}
+	before := countChanges(t, e.d)
+	err = e.s.UpdateTransaction(mutCtx(), id, upd)
+	if !errors.Is(err, ErrDuplicateSplitID) {
+		t.Fatalf("err = %v, want ErrDuplicateSplitID", err)
+	}
+	// No audit trace: the change count is unchanged (the rejected update rolled back).
+	if n := countChanges(t, e.d); n != before {
+		t.Errorf("changes = %d, want %d (rejected update leaves no trace)", n, before)
+	}
+	// The live splits are untouched: still the original 100 / 300 / -400 set.
+	after := txnSplits(t, e.d, id)
+	if len(after) != 3 {
+		t.Fatalf("live splits = %d, want 3 (unchanged)", len(after))
+	}
+	var sum int64
+	for _, sp := range after {
+		sum += sp.Amount
+	}
+	if sum != 0 {
+		t.Errorf("live splits sum = %d, want 0 (still balanced)", sum)
+	}
+	// The dup row still holds its ORIGINAL amount (last-write-wins never happened).
+	for _, sp := range after {
+		if sp.ID == dupID && sp.Amount != 100 {
+			t.Errorf("dup split amount = %d, want 100 (unchanged)", sp.Amount)
+		}
+	}
+}
+
 // --- Update: a pre-existing split may keep a now-inactive account (p26.13) --
 
 // TestUpdateKeepsInactiveAccountOnUnchangedSplit posts a balanced txn, deactivates

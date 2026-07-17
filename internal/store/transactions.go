@@ -66,6 +66,12 @@ var (
 	ErrTransactionNotFound = errors.New("store: transaction not found")
 	// ErrSplitNotFound: an UpdateTransaction input carried a split id not on this txn.
 	ErrSplitNotFound = errors.New("store: split id not on this transaction")
+	// ErrDuplicateSplitID: an UpdateTransaction input carried the SAME existing split
+	// id twice. Both copies pass the zero-sum check together, but the update loop would
+	// apply UpdateSplit twice to one live row (last-write-wins), so the persisted rows
+	// would not sum to zero -- an unbalanced commit. Rejected before any write so the
+	// change rolls back with no audit trace.
+	ErrDuplicateSplitID = errors.New("store: existing split id appears more than once")
 	// ErrAccountMissing: a split references a non-existent account.
 	ErrAccountMissing = errors.New("store: split account not found")
 	// ErrFundMissing: a split references a non-existent fund.
@@ -557,8 +563,24 @@ func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in Post
 	}
 
 	resolved := make([]resolvedSplit, 0, len(in.Splits))
+	// On an UPDATE (liveAccountByID != nil) reject a repeated EXISTING split id.
+	// Both copies count toward the zero-sum below, but the update loop applies
+	// UpdateSplit twice to the one live row (last-write-wins), so the persisted
+	// rows would not sum to zero -- an unbalanced commit that the zero-sum check
+	// cannot catch. Rejecting here, before any write, rolls the change back with no
+	// audit trace.
+	var seenID map[int64]bool
+	if liveAccountByID != nil {
+		seenID = make(map[int64]bool, len(in.Splits))
+	}
 	for i := range in.Splits {
 		sp := in.Splits[i]
+		if seenID != nil && sp.ID != nil {
+			if seenID[*sp.ID] {
+				return nil, ErrDuplicateSplitID
+			}
+			seenID[*sp.ID] = true
+		}
 		// A pre-existing split whose account is unchanged may keep a now-inactive
 		// account (p26.13); a new or account-changed split still requires active.
 		allowInactive := sp.ID != nil && liveAccountByID[*sp.ID] == sp.AccountID
