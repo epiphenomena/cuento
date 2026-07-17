@@ -14,7 +14,12 @@ commands:
   check           run the ledger integrity suite ([-db PATH] [--strict])
   ratesync        fetch configured currency pairs from Yahoo Finance into exchange rates ([-db PATH])
   expense-report  maintenance over expense reports (reject <id> --reason ...) ([-db PATH])
+  demo            generate a fresh, fully-populated, SYNTHETIC demo database (-o PATH [-force])
 ```
+
+(`devseed`, a local-only synthetic dev-data seeder, is intentionally omitted from
+this deploy-facing reference — it is a developer convenience, never run in
+production.)
 
 One command is **long-running** — `serve`, the application server. The rest are
 **operator / one-shot** commands (`migrate`, `user`, `check`, `ratesync`,
@@ -346,6 +351,40 @@ missing reason, wrong report state, or store error.
 
 ```sh
 cuento expense-report reject 42 --reason "duplicate submission" -db /var/lib/cuento/cuento.db
+```
+
+---
+
+## `cuento demo` — generate a synthetic demo database
+
+Generates a fresh, fully-populated, **100% synthetic** database (a fictional
+multi-subsidiary nonprofit with a full chart of accounts, restricted funds
+including a capital campaign, several years of multi-currency transactions, a
+sample budget, expense reports in every state, a finalized and an in-progress
+reconciliation, a bank-import profile + staged batch, and three demo logins) for
+a public hosted demo. It is **built on the store** (the write funnel + every
+invariant) via `internal/synth`, so a schema/feature change forces it to keep up;
+**deterministic** (fixed dates, no `time.Now`, no network); and safe to host
+publicly (AGENTS rule 11).
+
+```sh
+cuento demo -o PATH [-force]
+```
+
+| Flag     | Default | Meaning |
+|----------|---------|---------|
+| `-o`     | (empty) | Output path for the generated db (**required**; must not exist). |
+| `-force` | `false` | Overwrite the output file (and its `-wal`/`-shm`) if it exists — the auto-reset host uses this. |
+
+On success it prints the path and the demo login credentials (username /
+password / role). See [docs/deploy.md](deploy.md) §9 for hosting the auto-resetting
+public demo. The related `-force` reset is driven by
+`deploy/cuento-demo-reset.{service,timer}`.
+
+**Example**
+
+```sh
+cuento demo -o /var/lib/cuento-demo/cuento.db -force
 ```
 
 ---
