@@ -29,11 +29,11 @@
 {{define "report-filters" -}}
 {{- /* Dot is a paramsForm. */ -}}
 <form class="report-params" method="get" action="/reports/{{.ReportID}}">
-  {{/* p26.52: the fieldset LEGEND labels the box ("Filters"); each control keeps its
-       OWN inner label. Each label+control is a .report-field flex unit so the label
-       always stays with its input and the From/To pair flows together. */}}
+  {{/* p26.86: filters live in the second-level nav bar now, so the "Filters" legend is
+       DROPPED — with the controls in the subnav their purpose is obvious. Each control
+       keeps its OWN inner label. Each label+control is a .report-field flex unit so the
+       label always stays with its input and the From/To pair flows together. */}}
   <fieldset class="report-scope">
-    <legend>{{t "reports.params.filters"}}</legend>
     <div class="report-field">
       <label for="rp-scope">{{t "reports.params.scope"}}</label>
       <select id="rp-scope" name="scope" class="report-scope-select">
@@ -171,11 +171,8 @@
   {{- with .Page}}
   <h1>{{.Title}}</h1>
 
-  {{/* p26.76: most reports render their filter form in the SECOND-LEVEL nav bar
-       (base.tmpl's SubNavControls="report" case). A DENSE report keeps it inline here. */}}
-  {{if .FiltersInline}}
-  {{template "report-filters" .Params}}
-  {{end}}
+  {{/* p26.86: EVERY report renders its filter form in the SECOND-LEVEL nav bar
+       (base.tmpl's SubNavControls="report" case). None inline. */}}
 
   <p class="report-export">
     <a href="{{.CSVHref}}" class="report-csv-link" download>{{t "reports.export.csv"}}</a>

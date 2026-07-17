@@ -618,65 +618,6 @@ type reportPageModel struct {
 	// collapse/expand tree-controls above the table, and loads treetable.js to enhance
 	// it. False leaves the report table byte-identical (no controls, no data-depth).
 	Tree bool
-	// FiltersInline is true for a DENSE report (p26.76) whose filter controls stay in
-	// the page BODY (an inline fieldset) rather than the second-level nav bar, because
-	// they are too many/wide to fit the bar cleanly. When false the SAME filter form is
-	// rendered in the subnav (SubNavControls="report") instead. It is derived from the
-	// SAME predicate (reportFiltersInline) that sets SubNavControls, so the two can never
-	// disagree. Chrome only — the params, persistence, and CSV link are unchanged.
-	FiltersInline bool
-}
-
-// reportFiltersInline reports whether rep's filter controls should stay INLINE in the
-// page body (p26.76) rather than move to the second-level nav bar. The subnav is a
-// single compact row; a report with many/wide controls (the densest reports) would
-// cramp it, so those stay inline. The rule counts the visible controls from the spec
-// (the scope selector is ALWAYS shown; a period is a from+to PAIR, so it counts twice):
-// >4 controls => inline. This puts income statement, program statement, capital
-// campaign, and the two budget reports inline (Period+Granularity/entity+Currency), and
-// everything else in the subnav. It is the single source of truth for both the model
-// flag and the SubNavControls slot, so they cannot drift.
-func reportFiltersInline(rep reports.Report) bool {
-	return reportControlCount(rep) > 4
-}
-
-// reportControlCount is the number of visible filter controls for rep: the always-shown
-// subsidiary scope selector, plus one per declared param — with a Period counting as TWO
-// (the from + to inputs). It drives reportFiltersInline's overflow threshold.
-func reportControlCount(rep reports.Report) int {
-	spec := rep.ParamsSpec
-	n := 1 // the subsidiary scope selector is always present (D18).
-	if spec.AsOf {
-		n++
-	}
-	if spec.Period {
-		n += 2 // from + to
-	}
-	if spec.Granularity {
-		n++
-	}
-	if spec.Currency || spec.CurrencyOptional {
-		n++
-	}
-	if spec.Detail {
-		n++
-	}
-	if spec.Account {
-		n++
-	}
-	if spec.Fund {
-		n++
-	}
-	if spec.Program {
-		n++
-	}
-	if spec.Reconciliation {
-		n++
-	}
-	if spec.Budget {
-		n++
-	}
-	return n
 }
 
 // renderedTable is a Table prepared for the HTML template: localized column headers
@@ -890,24 +831,20 @@ func (s *server) reportPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	inline := reportFiltersInline(rep)
 	model := reportPageModel{
-		Title:         i18n.T(lang, rep.TitleKey),
-		Params:        form,
-		Table:         renderTable(table, rep.ID, lang, formatOptsFor(u), dateFormatFor(u), exps),
-		CSVHref:       "/reports/" + rep.ID + ".csv?" + r.Form.Encode(),
-		Tree:          rep.Tree, // p26.26: nested-account reports emit data-depth + tree controls.
-		FiltersInline: inline,   // p26.76: dense reports keep filters in the body.
+		Title:   i18n.T(lang, rep.TitleKey),
+		Params:  form,
+		Table:   renderTable(table, rep.ID, lang, formatOptsFor(u), dateFormatFor(u), exps),
+		CSVHref: "/reports/" + rep.ID + ".csv?" + r.Form.Encode(),
+		Tree:    rep.Tree, // p26.26: nested-account reports emit data-depth + tree controls.
 	}
-	// p26.76: for most reports the filter controls live in the SECOND-LEVEL nav bar
-	// (SubNavControls="report" renders the SAME form there); a dense report keeps them
-	// inline (FiltersInline) and no subnav controls are set. Both arms render the one
-	// shared "report-filters" partial off the same paramsForm, so semantics are identical
-	// — only the location changes.
+	// p26.86: EVERY report renders its filter controls in the SECOND-LEVEL nav bar
+	// (SubNavControls="report" renders the shared "report-filters" partial off the
+	// paramsForm). The wider filter sets wrap within the subnav band (flex-wrap); no
+	// report keeps its filters inline any more. Semantics are unchanged — the form still
+	// submits GET, persists params, and drives CSVHref; only the location is the bar.
 	page := s.newShellPage(r, model)
-	if !inline {
-		page.Shell.SubNavControls = "report"
-	}
+	page.Shell.SubNavControls = "report"
 	s.render(w, r, http.StatusOK, "report.tmpl", page)
 }
 

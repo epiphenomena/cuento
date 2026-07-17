@@ -1029,8 +1029,6 @@ other = "This transaction has a split cleared in a finalized reconciliation. Reo
 # fallback, and the throwaway framework SMOKE report's title/labels (replaced when
 # p15.3+ land the real reports). Group NAMES (financial/funds/programs/tax) are raw
 # reference values shown verbatim in the admin grant UI, not catalog entries.
-[reports.params.filters]
-other = "Filters"
 [reports.params.scope]
 other = "Subsidiary scope"
 [reports.params.asof]

@@ -197,11 +197,12 @@ test('reports: open the income statement, set period + granularity, see the R/E 
   await expect(page.locator('form.report-params')).toBeVisible();
   await expect(page.locator('select.report-scope-select[name="scope"]')).toBeVisible();
 
-  // p26.76: the income statement is a DENSE report (scope + period + granularity +
-  // currency), so its filters stay INLINE in the page body — NOT the subnav. This is the
-  // "leave it inline when it would cramp the bar" arm of the experiment.
-  await expect(page.locator('main#main form.report-params')).toBeVisible();
-  await expect(page.locator('nav.app-subnav form.report-params')).toHaveCount(0);
+  // p26.86: ALL reports now render their filters in the SECOND-LEVEL nav bar — the
+  // income statement (a previously-inline dense report) included. Its filter form is in
+  // the subnav, NOT the page body, and there is no visible "Filters" legend heading.
+  await expect(page.locator('nav.app-subnav form.report-params')).toBeVisible();
+  await expect(page.locator('main#main form.report-params')).toHaveCount(0);
+  await expect(page.locator('form.report-params legend')).toHaveCount(0);
 
   // The GRANULARITY select is present (an income-statement comparative control), set to
   // "quarter" from the query round trip.

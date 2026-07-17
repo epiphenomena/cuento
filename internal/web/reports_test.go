@@ -158,11 +158,12 @@ func TestScopeSelectorOnEveryReport(t *testing.T) {
 	}
 }
 
-// TestReportFilterPlacement (p26.76): a LIGHT report renders its filter form in the
-// SECOND-LEVEL nav bar (SubNavControls="report" -> the form inside .app-subnav), while a
-// DENSE report keeps it INLINE in the page body. The predicate reportFiltersInline is the
-// single source of truth; this test pins the rendered LOCATION for one report of each
-// kind so a regression (form vanishing from the bar, or leaking into both) is caught.
+// TestReportFilterPlacement (p26.86): EVERY report renders its filter form in the
+// SECOND-LEVEL nav bar (SubNavControls="report" -> the form inside .app-subnav), and
+// NONE inline in the page body. It pins one light report (trial_balance) AND one of the
+// previously-inline dense reports (income_statement) so a regression — a form vanishing
+// from the bar, leaking into the body, or the p26.76 inline fallback creeping back — is
+// caught. There is no "Filters" heading now the controls live in the bar.
 func TestReportFilterPlacement(t *testing.T) {
 	h, st, _, sm := reportsApp(t)
 	admin := mkUser(t, st, "admin", "none", true)
@@ -178,41 +179,19 @@ func TestReportFilterPlacement(t *testing.T) {
 		return j >= 0 && strings.Contains(body[j:], `class="report-params"`)
 	}
 
-	// trial_balance: 3 controls (scope + as-of + currency) => subnav.
-	tb := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.TrialBalanceReportID, nil).Body.String()
-	if !subnavForm(tb) {
-		t.Errorf("trial_balance: filter form not in the subnav (should be):\n%s", tb)
-	}
-	if mainForm(tb) {
-		t.Errorf("trial_balance: filter form leaked into the body (should be subnav-only)")
-	}
-
-	// income_statement: 5 controls (scope + period + granularity + currency) => inline.
-	is := asUser(t, h, sm, admin, http.MethodGet, "/reports/income_statement", nil).Body.String()
-	if !mainForm(is) {
-		t.Errorf("income_statement: filter form not inline in the body (should be):\n%s", is)
-	}
-	if subnavForm(is) {
-		t.Errorf("income_statement: filter form leaked into the subnav (should be inline-only)")
-	}
-}
-
-// TestReportFiltersInlinePredicate pins the p26.76 inline/subnav split for the shipped
-// reports, so a future spec change surfaces here (and the coordinator can re-review the
-// experiment) rather than silently cramming a dense report into the bar.
-func TestReportFiltersInlinePredicate(t *testing.T) {
-	wantInline := map[string]bool{
-		"income_statement":    true,
-		"program_statement":   true,
-		"capital_campaign":    true,
-		"actuals_vs_budget":   true,
-		"cashflow_projection": true,
-	}
-	for _, rep := range reports.Default().All() {
-		got := reportFiltersInline(rep)
-		if got != wantInline[rep.ID] {
-			t.Errorf("report %q: reportFiltersInline = %v, want %v (control count %d)",
-				rep.ID, got, wantInline[rep.ID], reportControlCount(rep))
+	// Both a light report (trial_balance) and a dense one (income_statement, previously
+	// inline) render their filter form in the subnav, never in the body.
+	for _, id := range []string{reports.TrialBalanceReportID, "income_statement"} {
+		body := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+id, nil).Body.String()
+		if !subnavForm(body) {
+			t.Errorf("%s: filter form not in the subnav (should be)", id)
+		}
+		if mainForm(body) {
+			t.Errorf("%s: filter form leaked into the body (should be subnav-only)", id)
+		}
+		// The dropped "Filters" legend must not render as a visible heading.
+		if strings.Contains(body, "<legend>") {
+			t.Errorf("%s: a <legend> heading still renders (the Filters legend was dropped)", id)
 		}
 	}
 }
