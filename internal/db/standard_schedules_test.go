@@ -28,6 +28,10 @@ type wantSchedule struct {
 	ordinal    *int
 	weekday    *int
 	anchor     *string
+	// customDates is the explicit-date list for a kind='custom' (dated) schedule
+	// (p26.84), in the budget_schedule_dates child table. nil for every rule-based
+	// kind (which carries no child dates).
+	customDates []string
 }
 
 func ip(v int) *int       { return &v }
@@ -41,7 +45,8 @@ func sp(v string) *string { return &v }
 // has no >monthly interval kind, so those are an engine change deferred from this
 // seed step (DECISIONS p26.79).
 func standardSchedules() []wantSchedule {
-	return append(schedules00022(), schedules00025()...)
+	out := append(schedules00022(), schedules00025()...)
+	return append(out, schedules00026()...)
 }
 
 // schedules00022 is the original four (p26.28); unchanged.
@@ -69,6 +74,29 @@ func schedules00025() []wantSchedule {
 		{name: "Annual (Jan 1)", kind: "annual", anchor: sp("2000-01-01")},
 	}
 }
+
+// schedules00026 is the two DATED (explicit-date) schedules added by 00026 (p26.84):
+// kind='custom' rows whose occurrences are an explicit list of calendar days in the
+// budget_schedule_dates child table (NOT a recurrence rule). They give quarterly and
+// semiannual budgeting WITHOUT a >monthly engine kind (the owner's no-engine-change
+// constraint) -- expandCustom yields exactly the stored dates. A representative 2026
+// year; all four dates are 2026 weekdays. All rule-based columns are NULL.
+func schedules00026() []wantSchedule {
+	return []wantSchedule{
+		{
+			name: "Quarterly (quarter-end)", kind: "custom",
+			customDates: []string{"2026-03-31", "2026-06-30", "2026-09-30", "2026-12-31"},
+		},
+		{
+			name: "Semiannual (Jun 30 & Dec 31)", kind: "custom",
+			customDates: []string{"2026-06-30", "2026-12-31"},
+		},
+	}
+}
+
+// datedSchedules is just the p26.84 custom rows -- the ones with an explicit child-date
+// list -- so the dedicated wiring test can assert schedule row -> child dates -> engine.
+func datedSchedules() []wantSchedule { return schedules00026() }
 
 // TestStandardSchedulesSeeded proves the four standard schedules exist on a fresh
 // migrated db with the expected kind + params.
@@ -140,7 +168,7 @@ func TestStandardSchedulesEngineValid(t *testing.T) {
 	sqldb := testutil.NewDB(t)
 
 	rows, err := sqldb.Query(
-		`SELECT name, kind, day_of_month, day_of_month_2, ordinal, weekday, anchor_date, weekend_adjust
+		`SELECT id, name, kind, day_of_month, day_of_month_2, ordinal, weekday, anchor_date, weekend_adjust
 		   FROM budget_schedules ORDER BY id`)
 	if err != nil {
 		t.Fatalf("list seeded schedules: %v", err)
@@ -150,11 +178,12 @@ func TestStandardSchedulesEngineValid(t *testing.T) {
 	seen := 0
 	for rows.Next() {
 		var (
+			id                   int64
 			name, kind, weekend  string
 			dom, dom2, ord, wday sql.NullInt64
 			anchor               sql.NullString
 		)
-		if err := rows.Scan(&name, &kind, &dom, &dom2, &ord, &wday, &anchor, &weekend); err != nil {
+		if err := rows.Scan(&id, &name, &kind, &dom, &dom2, &ord, &wday, &anchor, &weekend); err != nil {
 			t.Fatalf("scan schedule: %v", err)
 		}
 		seen++
@@ -166,6 +195,12 @@ func TestStandardSchedulesEngineValid(t *testing.T) {
 			Weekday:       intOr0(wday),
 			AnchorDate:    strOrEmpty(anchor),
 			WeekendAdjust: weekend,
+		}
+		// A dated (kind='custom') schedule carries its occurrences in the child date
+		// table, not the parent columns (p26.84). Load them so the engine can expand it;
+		// without this, expandCustom sees an empty list and rejects the schedule.
+		if kind == budget.KindCustom {
+			sched.CustomDates = loadCustomDates(t, sqldb, id)
 		}
 		occ, err := budget.ExpandSchedule(sched, "2026-01-01", "2026-12-31")
 		if err != nil {
@@ -181,7 +216,103 @@ func TestStandardSchedulesEngineValid(t *testing.T) {
 	}
 }
 
+// TestDatedSchedulesExpand proves the p26.84 dated (kind='custom') schedules are wired
+// end to end: each seeded schedule row has its explicit dates in budget_schedule_dates,
+// and feeding those to budget.ExpandSchedule over a covering 2026 horizon yields EXACTLY
+// the stored dates (sorted) -- i.e. quarterly / semiannual budgeting works via the dated
+// path, with NO recurrence-engine change. It loads the dates from the db (not the want
+// literal) so it also proves the migration seeded the child rows.
+func TestDatedSchedulesExpand(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+
+	for _, w := range datedSchedules() {
+		var id int64
+		var kind string
+		if err := sqldb.QueryRow(
+			`SELECT id, kind FROM budget_schedules WHERE name = ?`, w.name,
+		).Scan(&id, &kind); err != nil {
+			t.Fatalf("dated schedule %q not found (seed missing?): %v", w.name, err)
+		}
+		if kind != budget.KindCustom {
+			t.Errorf("%q kind = %q, want %q (a dated schedule is kind=custom)", w.name, kind, budget.KindCustom)
+		}
+		dates := loadCustomDates(t, sqldb, id)
+		if len(dates) != len(w.customDates) {
+			t.Fatalf("%q: seeded %d child dates, want %d (%v)", w.name, len(dates), len(w.customDates), dates)
+		}
+		occ, err := budget.ExpandSchedule(budget.Schedule{Kind: kind, CustomDates: dates}, "2026-01-01", "2026-12-31")
+		if err != nil {
+			t.Fatalf("%q rejected by engine: %v", w.name, err)
+		}
+		if !equalStrings(occ, w.customDates) {
+			t.Errorf("%q expanded to %v, want the explicit dates %v", w.name, occ, w.customDates)
+		}
+	}
+}
+
+// TestDatedSchedulesDatesVersioned proves each seeded explicit date carries its
+// op='create' membership version (rule 5) -- the set-versioned child twin, so the
+// budget_schedule_dates parity check in cuento check stays clean.
+func TestDatedSchedulesDatesVersioned(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+
+	for _, w := range datedSchedules() {
+		for _, d := range w.customDates {
+			var n int
+			if err := sqldb.QueryRow(
+				`SELECT count(*)
+				   FROM budget_schedule_dates c
+				   JOIN budget_schedules s ON s.id = c.schedule_id
+				   JOIN budget_schedule_dates_versions v
+				     ON v.entity_id = c.schedule_id AND v.occurs_on = c.occurs_on
+				   JOIN changes ch ON ch.id = v.change_id
+				  WHERE s.name = ? AND c.occurs_on = ?
+				    AND v.op = 'create' AND v.valid_from = ch.at`, w.name, d,
+			).Scan(&n); err != nil {
+				t.Fatalf("query date version for %q %s: %v", w.name, d, err)
+			}
+			if n != 1 {
+				t.Errorf("%q date %s: found %d create-version rows, want 1", w.name, d, n)
+			}
+		}
+	}
+}
+
 // --- helpers -----------------------------------------------------------------
+
+// loadCustomDates returns a schedule's explicit occurrence dates from the child table,
+// sorted ascending (the on-disk order the composite PK yields).
+func loadCustomDates(t *testing.T, sqldb *sql.DB, scheduleID int64) []string {
+	t.Helper()
+	rows, err := sqldb.Query(
+		`SELECT occurs_on FROM budget_schedule_dates WHERE schedule_id = ? ORDER BY occurs_on`, scheduleID)
+	if err != nil {
+		t.Fatalf("load custom dates for schedule %d: %v", scheduleID, err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			t.Fatalf("scan custom date: %v", err)
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
+// equalStrings reports whether two string slices are element-wise equal.
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
 
 func assertNullInt(t *testing.T, name, col string, got sql.NullInt64, want *int) {
 	t.Helper()
