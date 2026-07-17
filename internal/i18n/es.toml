@@ -191,6 +191,8 @@ other = "Administre operadores, subsidiarias, monedas y ajustes de la organizaci
 other = "Usuarios"
 [admin.users.intro]
 other = "Operadores que pueden iniciar sesion. Deshabilite una cuenta para revocar el acceso; no puede deshabilitar al ultimo administrador."
+[admin.users.grants_hint]
+other = "El acceso a grupos de informes y el envio de gastos se configuran en la pagina del usuario, despues de crearlo."
 [admin.users.new]
 other = "Nuevo usuario"
 [admin.users.empty]

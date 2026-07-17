@@ -61,6 +61,11 @@ test('admin: create a user, set its permission, grant a report group, add a curr
   await page.goto('/admin/users');
   await expect(page.locator('main#main h1')).toHaveText('Users');
 
+  // p26.88: a discoverability hint tells the admin that report-group access +
+  // expense-submit are set on the user's OWN page after creation (they are not on the
+  // create form). It renders on page load near the create form.
+  await expect(page.locator('.user-grants-hint')).toContainText(/report-group access and expense-submit/i);
+
   await page.getByRole('button', { name: /new user/i }).click();
   // Wait for the swapped-in form to settle (htmx wires hx-post on the settle tick).
   await expect(page.locator('form#user-create-form.e2e-settled')).toBeVisible();

@@ -197,6 +197,8 @@ other = "Manage operators, subsidiaries, currencies, and organization settings."
 other = "Users"
 [admin.users.intro]
 other = "Operators who can sign in. Disable an account to revoke access; you cannot disable the last admin."
+[admin.users.grants_hint]
+other = "Report-group access and expense-submit are set on the user's own page, after you create them."
 [admin.users.new]
 other = "New user"
 [admin.users.empty]

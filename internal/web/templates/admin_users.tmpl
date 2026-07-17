@@ -27,6 +27,11 @@
       {{t "admin.users.new"}}
     </button>
   </div>
+  {{/* p26.88: the create form only sets username/password/admin/txn-perm; report-group
+       access and expense-submit are GRANTS set on the per-user detail page. Admins miss
+       this, so a concise hint near the create form points them there. Rendered on page
+       load (not inside the swapped-in create partial) so it's always visible. */}}
+  <p class="hint user-grants-hint">{{t "admin.users.grants_hint"}}</p>
 
   <table class="data-table admin-users-table">
     <thead>
