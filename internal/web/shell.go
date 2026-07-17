@@ -468,12 +468,19 @@ type hubCard struct {
 	LabelKey string
 	Href     string
 	Perm     Perm
+	// DescKey is the i18n key for the one-line description shown under the card title
+	// (p26.83, restoring the descriptions the old More hub carried). Every section card
+	// declares one; report cards derive theirs from the report's TitleKey.
+	DescKey string
 }
 
-// hubCardItem is a resolved card for the template (localized, no Perm/keys leaked).
+// hubCardItem is a resolved card for the template (localized, no Perm/keys leaked). Desc
+// is the localized one-line description rendered as muted secondary text under the label
+// (p26.83).
 type hubCardItem struct {
 	Label string
 	Href  string
+	Desc  string
 }
 
 // allSection is one titled group of cards on the "All" landing (p26.77): a localized
@@ -503,32 +510,32 @@ type allCardGroup struct {
 func allCardGroups() []allCardGroup {
 	return []allCardGroup{
 		{"nav.accounts", []hubCard{
-			{"nav.accounts", "/accounts", TxnRead},
-			{"nav.funds", "/funds", TxnRead},
-			{"nav.programs", "/programs", TxnRead},
-			{"nav.reconciliations", "/reconciliations", TxnRead},
+			{"nav.accounts", "/accounts", TxnRead, "all.desc.accounts"},
+			{"nav.funds", "/funds", TxnRead, "all.desc.funds"},
+			{"nav.programs", "/programs", TxnRead, "all.desc.programs"},
+			{"nav.reconciliations", "/reconciliations", TxnRead, "all.desc.reconciliations"},
 		}},
 		{"nav.budgets", []hubCard{
-			{"nav.budgets", "/budgets", TxnRead},
-			{"budget.schedules.title", "/schedules", TxnRead},
+			{"nav.budgets", "/budgets", TxnRead, "all.desc.budgets"},
+			{"budget.schedules.title", "/schedules", TxnRead, "all.desc.schedules"},
 		}},
 		{"nav.expenses", []hubCard{
-			{"nav.myexpenses", "/expenses", ExpenseSubmit},
-			{"nav.expensereview", "/expenses/review", TxnWrite},
+			{"nav.myexpenses", "/expenses", ExpenseSubmit, "all.desc.myexpenses"},
+			{"nav.expensereview", "/expenses/review", TxnWrite, "all.desc.expensereview"},
 		}},
 		{"nav.import", []hubCard{
-			{"nav.import", "/import", TxnWrite},
+			{"nav.import", "/import", TxnWrite, "all.desc.import"},
 		}},
 		{"all.section.personal", []hubCard{
-			{"nav.settings", "/settings", AnyUser},
+			{"nav.settings", "/settings", AnyUser, "all.desc.settings"},
 		}},
 		{"nav.admin", []hubCard{
-			{"admin.users.title", "/admin/users", Admin},
-			{"subsidiaries.title", "/admin/subsidiaries", Admin},
-			{"admin.currencies.title", "/admin/currencies", Admin},
-			{"admin.rates.title", "/admin/rates", Admin},
-			{"org.title", "/admin/org", Admin},
-			{"admin.ops.title", "/admin/ops", Admin},
+			{"admin.users.title", "/admin/users", Admin, "all.desc.users"},
+			{"subsidiaries.title", "/admin/subsidiaries", Admin, "all.desc.subsidiaries"},
+			{"admin.currencies.title", "/admin/currencies", Admin, "all.desc.currencies"},
+			{"admin.rates.title", "/admin/rates", Admin, "all.desc.rates"},
+			{"org.title", "/admin/org", Admin, "all.desc.org"},
+			{"admin.ops.title", "/admin/ops", Admin, "all.desc.ops"},
 		}},
 	}
 }
@@ -547,9 +554,21 @@ func (s *server) visibleAllCards(ctx context.Context, u *store.CurrentUser, card
 		out = append(out, hubCardItem{
 			Label: i18n.T(lang, c.LabelKey),
 			Href:  c.Href,
+			Desc:  i18n.T(lang, c.DescKey),
 		})
 	}
 	return out
+}
+
+// reportDescKey derives a report card's description i18n key from its TitleKey: the
+// convention is reports.<id>.title for the title and reports.<id>.desc for the one-line
+// blurb (p26.83). It swaps only a trailing ".title"; a TitleKey not ending that way is
+// returned unchanged (so i18n.T echoes it, and the card-desc test flags the gap).
+func reportDescKey(titleKey string) string {
+	if base, ok := strings.CutSuffix(titleKey, ".title"); ok {
+		return base + ".desc"
+	}
+	return titleKey
 }
 
 // reportSections builds one allSection per report GROUP the user can reach, each
@@ -569,6 +588,11 @@ func (s *server) reportSections(ctx context.Context, u *store.CurrentUser) []all
 		byGroup[rep.Group] = append(byGroup[rep.Group], hubCardItem{
 			Label: i18n.T(lang, rep.TitleKey),
 			Href:  "/reports/" + rep.ID,
+			// p26.83: report cards carry a one-line description too. The desc key is the
+			// report's TitleKey with its ".title" suffix swapped for ".desc" (reports.X.title
+			// -> reports.X.desc), so each report owns its blurb without touching the reports
+			// registry — one new i18n key per report in both catalogs.
+			Desc: i18n.T(lang, reportDescKey(rep.TitleKey)),
 		})
 	}
 	var out []allSection

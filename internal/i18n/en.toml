@@ -2155,3 +2155,68 @@ other = "Every page you can reach — the ledger, budgeting, expenses, imports, 
 other = "Nothing here for your account."
 [all.section.personal]
 other = "Personal"
+
+# p26.83: one-line card descriptions on the "All" landing (restoring the blurbs the
+# pre-p26.77 "More" hub carried). Section cards use all.desc.*; report cards derive
+# reports.<id>.desc from their title key (below, grouped with each report's strings).
+[all.desc.accounts]
+other = "The chart of accounts — every ledger account across subsidiaries."
+[all.desc.funds]
+other = "Donor-restricted and unrestricted funds."
+[all.desc.programs]
+other = "The program dimension for revenue and expense."
+[all.desc.reconciliations]
+other = "Reconcile accounts against statements."
+[all.desc.budgets]
+other = "Budgets and recurring schedules."
+[all.desc.schedules]
+other = "Recurring and dated schedules that drive budgets and projections."
+[all.desc.myexpenses]
+other = "Submit and track your own expense reports."
+[all.desc.expensereview]
+other = "Review and post expense reports submitted for approval."
+[all.desc.import]
+other = "Import transactions from bank CSV files."
+[all.desc.settings]
+other = "Your language, number and date formats, theme, and defaults."
+[all.desc.users]
+other = "People with access, their roles, and permissions."
+[all.desc.subsidiaries]
+other = "The legal entities the ledger consolidates."
+[all.desc.currencies]
+other = "Currencies used across the organization and their settings."
+[all.desc.rates]
+other = "Exchange rates for currency conversion in reports."
+[all.desc.org]
+other = "Organization-wide settings and the functional-expense allocation."
+[all.desc.ops]
+other = "Backups, integrity checks, and other maintenance tasks."
+
+# p26.83: report-card descriptions on the "All" landing (reports.<id>.desc, paired
+# with each report's title key).
+[reports.trial_balance.desc]
+other = "Debit and credit balances for every account, proving the ledger nets to zero."
+[reports.balance_sheet.desc]
+other = "Assets, liabilities, and net assets at a point in time."
+[reports.income_statement.desc]
+other = "Revenue and expense over a period, per subsidiary or consolidated."
+[reports.account_ledger.desc]
+other = "Every posting to a single account over a period, with a running balance."
+[reports.functional_expenses.desc]
+other = "Expenses by natural line and functional class for Form 990 Part IX."
+[reports.fund_activity.desc]
+other = "Opening balance, activity, and closing balance for each fund."
+[reports.capital_campaign.desc]
+other = "Pledges, contributions, and capitalized costs for the capital campaign."
+[reports.activities_by_restriction.desc]
+other = "Revenue and expense split by donor restriction, with net-asset releases."
+[reports.program_statement.desc]
+other = "Revenue and expense by program — the basis for Form 990 Part III."
+[reports.form_990.desc]
+other = "The full 990 package: revenue, functional expenses, and net assets."
+[reports.reconciliation_statement.desc]
+other = "The cleared and outstanding items for a completed reconciliation."
+[reports.actuals_vs_budget.desc]
+other = "Budgeted versus actual amounts with the variance for each line."
+[reports.cashflow_projection.desc]
+other = "Projected cash inflows and outflows from schedules and budgets."

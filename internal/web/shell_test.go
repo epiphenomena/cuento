@@ -234,6 +234,49 @@ func TestAllLandingCards(t *testing.T) {
 	}
 }
 
+// TestAllCardsHaveDescription (p26.83): every resolved card on the "All" landing —
+// section cards AND report cards — carries a non-empty description under its title. It
+// resolves the FULL card set for an admin (who reaches every section and every report),
+// then asserts each card's Desc is present and is REAL localized text, not the raw i18n
+// key echoed back (i18n.T returns the key verbatim when it is absent from the catalog, so
+// a missing/typo'd key would otherwise pass a bare non-empty check). This is the check
+// that matches the requirement "every card has a description"; the e2e asserts only one.
+func TestAllCardsHaveDescription(t *testing.T) {
+	app := newTestApp(t, Config{})
+	s := app.srv
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	if err := SyncReportGroups(ctx, s.store); err != nil {
+		t.Fatalf("sync report groups: %v", err)
+	}
+	admin := makeUser(t, s.store, store.CreateUserInput{Username: "desc_admin", IsAdmin: true})
+
+	sections := s.allSections(ctx, admin)
+	if len(sections) == 0 {
+		t.Fatal("admin resolved no sections on the All landing")
+	}
+	cardCount := 0
+	for _, sec := range sections {
+		for _, c := range sec.Cards {
+			cardCount++
+			if strings.TrimSpace(c.Desc) == "" {
+				t.Errorf("card %q (href %q) has no description", c.Label, c.Href)
+			}
+			// The description must be resolved catalog text, not the raw key i18n.T echoes
+			// for an absent key. Every desc key is "all.desc.*" or "reports.*.desc"; real
+			// text neither starts with "all.desc." nor ends with ".desc".
+			if strings.HasPrefix(c.Desc, "all.desc.") || strings.HasSuffix(c.Desc, ".desc") {
+				t.Errorf("card %q (href %q) shows the raw desc key %q (catalog gap)", c.Label, c.Href, c.Desc)
+			}
+		}
+	}
+	// Guard the guard: an admin must resolve the full grid (16 section cards + 13 report
+	// cards). If the card model ever changes, this pins that the loop actually exercised
+	// every card rather than silently iterating an empty set.
+	if cardCount < 29 {
+		t.Errorf("admin resolved only %d cards; expected the full grid (>=29)", cardCount)
+	}
+}
+
 // TestHomeRendersAllGrid (p26.78): GET / (home) now serves the SAME "All" card grid as
 // /more — the card grid is the landing, not the chart of accounts. It renders the full
 // shell (landmarks) with the grouped cards, and the "All" top-nav entry is marked

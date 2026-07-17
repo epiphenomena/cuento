@@ -39,6 +39,11 @@ test.describe('authenticated shell', () => {
     // destination cards on the bare "/", and the "All" nav entry is current there.
     await expect(page.locator('main#main .hub-section-title').first()).toBeVisible();
     await expect(page.locator('main#main a.hub-card-link[href="/accounts"]')).toBeVisible();
+    // p26.83: every card shows its title AND a one-line description below it. The
+    // Accounts card renders both a .hub-card-label and a non-empty .hub-card-desc.
+    const acctCard = page.locator('main#main a.hub-card-link[href="/accounts"]');
+    await expect(acctCard.locator('.hub-card-label')).toHaveText(/\S/);
+    await expect(acctCard.locator('.hub-card-desc')).toHaveText(/\S/);
     await expect(page.locator('nav.app-nav a[href="/more"]')).toHaveAttribute('aria-current', 'page');
 
     // p23.9/p26.77: the top nav is lean (Accounts + All + role items); Settings/Admin

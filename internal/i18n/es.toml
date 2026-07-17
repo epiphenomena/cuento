@@ -2145,3 +2145,67 @@ other = "Todas las páginas a tu alcance: el libro, presupuestos, gastos, import
 other = "No hay nada aquí para tu cuenta."
 [all.section.personal]
 other = "Personal"
+
+# p26.83: descripciones de una línea para las tarjetas de la página "Todo" (restaura los
+# textos que tenía el antiguo menú "Más"). Las tarjetas de sección usan all.desc.*; las
+# de reportes derivan reports.<id>.desc de su clave de título (más abajo).
+[all.desc.accounts]
+other = "El catálogo de cuentas — todas las cuentas contables de las subsidiarias."
+[all.desc.funds]
+other = "Fondos restringidos y no restringidos por donantes."
+[all.desc.programs]
+other = "La dimensión de programa para ingresos y gastos."
+[all.desc.reconciliations]
+other = "Concilia cuentas con los estados de cuenta."
+[all.desc.budgets]
+other = "Presupuestos y programaciones recurrentes."
+[all.desc.schedules]
+other = "Programaciones recurrentes y con fechas que impulsan presupuestos y proyecciones."
+[all.desc.myexpenses]
+other = "Envía y da seguimiento a tus propios reportes de gastos."
+[all.desc.expensereview]
+other = "Revisa y contabiliza los reportes de gastos enviados para aprobación."
+[all.desc.import]
+other = "Importa transacciones desde archivos CSV bancarios."
+[all.desc.settings]
+other = "Tu idioma, formatos de número y fecha, tema y valores predeterminados."
+[all.desc.users]
+other = "Personas con acceso, sus roles y permisos."
+[all.desc.subsidiaries]
+other = "Las entidades legales que consolida el libro mayor."
+[all.desc.currencies]
+other = "Monedas usadas en la organización y sus ajustes."
+[all.desc.rates]
+other = "Tipos de cambio para la conversión de monedas en los reportes."
+[all.desc.org]
+other = "Ajustes de toda la organización y la asignación de gastos funcionales."
+[all.desc.ops]
+other = "Respaldos, verificaciones de integridad y otras tareas de mantenimiento."
+
+# p26.83: descripciones de las tarjetas de reportes en la página "Todo" (reports.<id>.desc).
+[reports.trial_balance.desc]
+other = "Saldos deudores y acreedores de cada cuenta, comprobando que el libro cuadra en cero."
+[reports.balance_sheet.desc]
+other = "Activos, pasivos y activos netos en un momento dado."
+[reports.income_statement.desc]
+other = "Ingresos y gastos de un período, por subsidiaria o consolidado."
+[reports.account_ledger.desc]
+other = "Cada movimiento de una cuenta en un período, con saldo acumulado."
+[reports.functional_expenses.desc]
+other = "Gastos por línea natural y clase funcional para la Parte IX del Formulario 990."
+[reports.fund_activity.desc]
+other = "Saldo inicial, actividad y saldo final de cada fondo."
+[reports.capital_campaign.desc]
+other = "Promesas, contribuciones y costos capitalizados de la campaña capital."
+[reports.activities_by_restriction.desc]
+other = "Ingresos y gastos divididos por restricción de donantes, con liberaciones de activos netos."
+[reports.program_statement.desc]
+other = "Ingresos y gastos por programa — la base de la Parte III del Formulario 990."
+[reports.form_990.desc]
+other = "El paquete completo del 990: ingresos, gastos funcionales y activos netos."
+[reports.reconciliation_statement.desc]
+other = "Las partidas conciliadas y pendientes de una conciliación completada."
+[reports.actuals_vs_budget.desc]
+other = "Montos presupuestados frente a reales con la variación de cada línea."
+[reports.cashflow_projection.desc]
+other = "Entradas y salidas de efectivo proyectadas a partir de programaciones y presupuestos."

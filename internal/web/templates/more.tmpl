@@ -20,6 +20,7 @@
     <li class="hub-card">
       <a class="hub-card-link" href="{{.Href}}">
         <span class="hub-card-label">{{.Label}}</span>
+        {{- if .Desc}}<span class="hub-card-desc">{{.Desc}}</span>{{end}}
       </a>
     </li>
     {{end}}
