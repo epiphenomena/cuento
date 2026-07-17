@@ -321,9 +321,17 @@ func (tk *Toolkit) FundPeriodStatement(ctx context.Context, s Scope, f FundID, f
 	}
 
 	// PASS 1: find the CAPITAL asset accounts — asset accounts that received a
-	// non-expense application DEBIT (amount > 0) inside the period on a DISBURSEMENT
-	// transaction (a txn with no revenue split for this fund). These are excluded from
-	// the spendable position; every OTHER asset account is "cash" (spendable).
+	// non-expense application DEBIT (amount > 0) on a DISBURSEMENT transaction (a txn
+	// with no revenue split for this fund). These are excluded from the spendable
+	// position; every OTHER asset account is "cash" (spendable).
+	//
+	// The classification scans the fund's CUMULATIVE position up to the window end
+	// (every row here is already <= to via FundLedger), NOT just the in-window rows:
+	// a fund that capitalized an asset BEFORE the window start is still holding that
+	// capital asset during the window, so its opening/closing debit balance must be
+	// excluded from the spendable figure. Restricting PASS 1 to [from,to] would leave
+	// a pre-window capitalized asset classified as "cash", overstating spendable
+	// Opening (and thus Closing) for any window that starts after the capitalization.
 	revenueTxn := make(map[int64]bool) // txn id -> has a revenue split for this fund
 	for _, r := range rows {
 		if acctType[r.AccountID] == "revenue" {
@@ -332,8 +340,8 @@ func (tk *Toolkit) FundPeriodStatement(ctx context.Context, s Scope, f FundID, f
 	}
 	capital := make(map[AccountID]bool)
 	for _, r := range rows {
-		if r.Date < from || r.Date > to {
-			continue
+		if r.Date > to {
+			continue // defensive; FundLedger already bounds rows at <= to
 		}
 		if acctType[r.AccountID] == "asset" && r.Amount > 0 && !revenueTxn[r.TxnID] {
 			// A positive (debit) asset movement on a disbursement txn = capitalizing

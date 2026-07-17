@@ -411,6 +411,41 @@ func TestIntercompanyNetCorrupted(t *testing.T) {
 	}
 }
 
+// TestFundPeriodStatementPreWindowCapitalExcluded (p26.94 regression) proves the
+// capital classification scans the fund's CUMULATIVE position up to the window end,
+// not just the in-window rows. The fixture's Building Fund capitalizes the Building
+// asset on 2025-06-15 (Dr Building 40,000 / Cr CheckingUS). For a window that STARTS
+// AFTER that date (2025-07-01..2025-12-31), the capitalization is a PRE-window row:
+// the Building account carries a 40,000 opening debit and CheckingUS carries the
+// remaining 10,000 spendable gift. If PASS 1 only looked at in-window rows, Building
+// would be misclassified as "cash" and its 40,000 debit would inflate spendable
+// Opening (and thus Closing) to 50,000; the fix classifies Building as capital from
+// the cumulative history, so spendable Opening/Closing exclude it (== 10,000).
+func TestFundPeriodStatementPreWindowCapitalExcluded(t *testing.T) {
+	f := fixture.New(t)
+	ctx := context.Background()
+
+	st, err := reports.NewToolkit(f.Store, reports.Params{}).
+		FundPeriodStatement(ctx, reports.Scope{Sub: f.IDs.Root}, f.IDs.BuildingFund, "2025-07-01", "2025-12-31")
+	if err != nil {
+		t.Fatalf("fund statement: %v", err)
+	}
+	// Building was capitalized BEFORE the window; it must be a capital account even
+	// though no in-window row touches it.
+	if !st.CapitalAccounts[f.IDs.Building] {
+		t.Errorf("Building not classified as capital (pre-window capitalization missed)")
+	}
+	// Spendable Opening excludes the 40,000 pre-window Building debit: only the
+	// remaining CheckingUS gift (5,000,000 gift - 4,000,000 capitalized = 1,000,000).
+	if st.Opening["USD"] != 1_000_000 {
+		t.Errorf("USD opening = %d, want 1000000 (pre-window capital excluded)", st.Opening["USD"])
+	}
+	// No in-window activity, so Closing == Opening; still excludes the capital asset.
+	if st.Closing["USD"] != 1_000_000 {
+		t.Errorf("USD closing = %d, want 1000000 (pre-window capital excluded)", st.Closing["USD"])
+	}
+}
+
 // TestIntercompanyResidualSplitSameCurrency: a USD (same-as-target) intercompany
 // residual has NO translation component -- valued at the closing rate and at the
 // transaction-date rate it is identical (USD->USD is 1:1 at every date), so the split's
