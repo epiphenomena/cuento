@@ -123,6 +123,15 @@ type IDs struct {
 	CampaignLand int64 // "Land" leaf under Fixed Assets (the campus.py Land line)
 	Construction int64 // fixed-asset leaf under Fixed Assets (the rollup line)
 	ConstrLoan   int64 // liability: a construction loan that financed a purchase (p26.68)
+
+	// --- Sample-budget seam (ExtendSampleBudget, opt-in) -----------------------
+	// Zero until (*Fixture).ExtendSampleBudget(t) is called; New does NOT call it, so
+	// the default fixture carries no budget and every existing golden/tally is
+	// untouched. The seam creates a SAMPLE operating budget (a budget + several
+	// budget lines across a few programs/accounts/funds/subsidiaries, on the seeded
+	// common schedules, with SYNTHETIC amounts) so the budget-group reports
+	// (actuals_vs_budget / cashflow_projection) finally have a budget to exercise.
+	SampleBudget int64 // the sample budget
 }
 
 // Fixture is the built synthetic dataset: the db, a store over it, the entity

@@ -250,6 +250,94 @@ func TestCashflowProjectionGolden(t *testing.T) {
 	checkGolden(t, "cashflow_projection.csv", csvBuf.Bytes())
 }
 
+// --- p26.80: the SAMPLE-BUDGET seam goldens --------------------------------
+// The two tests above build a tiny bespoke budget inline to pin one hand-verified
+// figure each. These two run BOTH budget reports over the canonical, opt-in
+// fixture.ExtendSampleBudget seam (a fuller budget: several lines across programs /
+// accounts / funds / subsidiaries on the seeded common schedules), giving the
+// reports realistic coverage and a reviewed golden. They emit NEW golden files
+// (*_sample.{txt,csv}) so the existing inline goldens are untouched. Numbers are
+// SYNTHETIC (rule 11); the goldens are the oracle (reviewed via `make golden`),
+// with a couple of structural cell assertions to catch a silently-empty table.
+
+// TestActualsVsBudgetSampleGolden runs actuals-vs-budget over the sample-budget seam
+// at monthly granularity, root scope (consolidated), and compares text + CSV goldens.
+func TestActualsVsBudgetSampleGolden(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendSampleBudget(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	sb := f.Expected.SampleBudget
+	rep := budgetReport(t, reports.ActualsVsBudgetReportID)
+	p := reports.Params{
+		Scope: f.IDs.Root, Budget: sb.Budget, From: sb.From, To: sb.To,
+		Granularity: reports.GranMonth, Lang: "en",
+	}
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run actuals-vs-budget (sample): %v", err)
+	}
+
+	// Structural sanity: the sample budget must produce data rows (a silently-empty
+	// table would still "pass" a golden compare against an empty golden).
+	if dataRows := countDataRows(table); dataRows == 0 {
+		t.Fatalf("sample actuals-vs-budget produced no data rows")
+	}
+
+	exps := goldenExps(t, f)
+	textDump := reports.DumpTable(table, goldenLocalize, exps)
+	var csvBuf bytes.Buffer
+	if err := reports.WriteCSV(&csvBuf, localizeLabels(table), goldenLocalize, exps); err != nil {
+		t.Fatalf("write csv: %v", err)
+	}
+	checkGolden(t, "actuals_vs_budget_sample.txt", []byte(textDump))
+	checkGolden(t, "actuals_vs_budget_sample.csv", csvBuf.Bytes())
+}
+
+// TestCashflowProjectionSampleGolden runs cashflow-projection over the sample-budget
+// seam at monthly granularity, root scope, and compares text + CSV goldens.
+func TestCashflowProjectionSampleGolden(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendSampleBudget(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	sb := f.Expected.SampleBudget
+	rep := budgetReport(t, reports.CashflowProjectionReportID)
+	p := reports.Params{
+		Scope: f.IDs.Root, Budget: sb.Budget, From: sb.From, To: sb.To,
+		Granularity: reports.GranMonth, Lang: "en",
+	}
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run cashflow projection (sample): %v", err)
+	}
+
+	if dataRows := countDataRows(table); dataRows == 0 {
+		t.Fatalf("sample cashflow projection produced no data rows")
+	}
+
+	exps := goldenExps(t, f)
+	textDump := reports.DumpTable(table, goldenLocalize, exps)
+	var csvBuf bytes.Buffer
+	if err := reports.WriteCSV(&csvBuf, localizeLabels(table), goldenLocalize, exps); err != nil {
+		t.Fatalf("write csv: %v", err)
+	}
+	checkGolden(t, "cashflow_projection_sample.txt", []byte(textDump))
+	checkGolden(t, "cashflow_projection_sample.csv", csvBuf.Bytes())
+}
+
+// countDataRows counts the RowData rows in a table (structural sanity for the sample
+// goldens -- a nonzero count proves the budget actually produced report rows).
+func countDataRows(t reports.Table) int {
+	n := 0
+	for _, r := range t.Rows {
+		if r.Kind == reports.RowData {
+			n++
+		}
+	}
+	return n
+}
+
 // TestBudgetReportsNoBudget: with no budget chosen (Budget == 0) each report returns
 // an empty Table (the framework's nothing-to-show rule) so a bare hit renders 200.
 func TestBudgetReportsNoBudget(t *testing.T) {
