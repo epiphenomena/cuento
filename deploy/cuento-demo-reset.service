@@ -1,0 +1,43 @@
+# cuento-demo-reset.service — regenerate the public demo db, then restart the
+# demo server (one-shot, triggered by cuento-demo-reset.timer).
+#
+# This is the AUTO-RESET mechanism (p26.82). It is deliberately an EXTERNAL
+# regenerate-and-restart rather than an in-process swap: the running server holds
+# an open connection pool and live scs sessions over the SQLite file, so swapping
+# the file underneath a running process is fragile. Stopping the server, rewriting
+# the file, and starting it again is robust and trivially correct.
+#
+# The reset:
+#   1. stops cuento-demo.service (releases the db file),
+#   2. regenerates CUENTO_DATA_DIR/cuento.db from scratch (`cuento demo -o … -force`),
+#   3. starts cuento-demo.service again.
+#
+# `-force` overwrites the previous demo db (and its -wal/-shm) so every reset is a
+# pristine synthetic set — visitor edits never persist across a reset.
+#
+#   sudo cp deploy/cuento-demo-reset.service deploy/cuento-demo-reset.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now cuento-demo-reset.timer
+#
+# Runs as the same non-root user and against the same DEMO data dir as
+# cuento-demo.service.
+
+[Unit]
+Description=Regenerate the cuento public demo database and restart the demo server
+Documentation=https://example.com/cuento/docs/deploy.md
+# Order the restart cleanly around this unit's ExecStart.
+Wants=cuento-demo.service
+
+[Service]
+Type=oneshot
+
+# Stop the server so it releases the db file, regenerate the file, restart. The
+# generation itself runs as the cuento user (file ownership); the stop/start use
+# systemctl, so this unit runs as root. Regeneration is deterministic and offline
+# (no network), so it is fast and cannot hang on an external dependency.
+ExecStart=/bin/systemctl stop cuento-demo.service
+ExecStart=/usr/bin/sudo -u cuento /usr/local/bin/cuento demo -o /var/lib/cuento-demo/cuento.db -force
+ExecStart=/bin/systemctl start cuento-demo.service
+
+[Install]
+WantedBy=multi-user.target

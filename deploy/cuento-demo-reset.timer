@@ -1,0 +1,26 @@
+# cuento-demo-reset.timer — schedules cuento-demo-reset.service (the p26.82
+# auto-reset).
+#
+# Regenerates the public demo database on a fixed interval so visitors' edits do
+# not persist. Hourly is a reasonable default (long enough that a visitor's
+# session is not yanked mid-click, short enough that the demo stays pristine);
+# tune OnUnitActiveSec to taste. Persistent=true catches up a missed reset after
+# downtime; the reset causes a brief (sub-second) blip while the server restarts.
+#
+# Enable with:  sudo systemctl enable --now cuento-demo-reset.timer
+# Inspect with: systemctl list-timers cuento-demo-reset
+
+[Unit]
+Description=Periodic reset of the cuento public demo database
+Documentation=https://example.com/cuento/docs/deploy.md
+
+[Timer]
+# First reset 15 min after boot, then every hour. OnUnitActiveSec measures from
+# the last completion, so a slow reset never stacks.
+OnBootSec=15min
+OnUnitActiveSec=1h
+Persistent=true
+Unit=cuento-demo-reset.service
+
+[Install]
+WantedBy=timers.target

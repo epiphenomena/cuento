@@ -258,5 +258,87 @@ schema is already current, so an upgrade never needs a manual `migrate` step and
 a restart is safe to repeat. Litestream keeps replicating across the restart; no
 Litestream action is needed for an upgrade.
 
+---
+
+## 9. Hosting the public demo (auto-resetting, synthetic)
+
+The `cuento demo` subcommand generates a **fully synthetic**, richly-populated
+database so prospective users can click around a live instance without any real
+data. It is a fictional multi-subsidiary nonprofit ("Rio Verde Internacional")
+with a full chart of accounts across all five types, restricted funds (including
+a multi-currency capital campaign), several years of multi-currency
+transactions, a sample budget with lines, expense reports in draft / submitted /
+posted states, a finalized **and** an in-progress reconciliation, a bank-import
+mapping profile with a staged batch, bilingual (en/es) account names, and three
+demo logins across permission levels. Every value is invented (AGENTS rule 11),
+so the result is **safe to host publicly**.
+
+> **Never point the demo at real data.** The demo host runs its own unit
+> (`cuento-demo.service`) with its own DEMO-ONLY data dir
+> (`/var/lib/cuento-demo`). Do **not** run `cuento demo` against a data dir a
+> real-data server uses, and do not co-host the demo and a real instance in the
+> same data dir. The demo keeps the full production security posture — it does
+> **not** set `CUENTO_DEV` (rule 13).
+
+The generator is **deterministic** (fixed seed dates, no `time.Now`, no network):
+repeat runs produce identical business data. The one non-reproducible surface is
+the argon2id password salts on the seeded users — the passwords below are stable,
+only the stored hashes differ run-to-run.
+
+### Demo login credentials
+
+| Username    | Password           | Role                                 |
+|-------------|--------------------|--------------------------------------|
+| `admin`     | `demo-admin-2026`  | administrator (full access)          |
+| `submitter` | `demo-submit-2026` | expense submitter (write, can submit)|
+| `viewer`    | `demo-view-2026`   | read-only viewer                     |
+
+These are DEMO-ONLY credentials for a throwaway, auto-resetting database — they
+are printed by `cuento demo` on generation and defined once in
+`internal/synth` so this table cannot drift from what the generator seeds.
+
+### Generate, serve, auto-reset
+
+Install the binary (§3) and create a **demo** service user + data dir, mirroring
+the real one but under `/var/lib/cuento-demo`:
+
+```sh
+sudo useradd --system --home-dir /var/lib/cuento-demo --shell /usr/sbin/nologin cuento
+sudo install -d -o cuento -g cuento -m 0750 /var/lib/cuento-demo
+```
+
+Generate the first demo db (as the `cuento` user so ownership is right), then
+install and start the demo server unit (edit `CUENTO_DOMAIN` first):
+
+```sh
+sudo -u cuento cuento demo -o /var/lib/cuento-demo/cuento.db
+sudo cp deploy/cuento-demo.service /etc/systemd/system/cuento-demo.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now cuento-demo.service
+```
+
+**Auto-reset** so visitor edits never persist: install the reset timer. It is a
+deliberately simple, robust **external regenerate-and-restart** (an in-process
+file swap under a running server's open connection pool + live sessions is
+fragile). The `cuento-demo-reset.service` one-shot stops the server, regenerates
+the db from scratch (`cuento demo -o … -force`, overwriting the previous file and
+its `-wal`/`-shm`), and starts the server again; `cuento-demo-reset.timer` fires
+it hourly (tune `OnUnitActiveSec`):
+
+```sh
+sudo cp deploy/cuento-demo-reset.service deploy/cuento-demo-reset.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now cuento-demo-reset.timer
+systemctl list-timers cuento-demo-reset        # confirm the next reset
+sudo systemctl start cuento-demo-reset.service # optional: reset once now
+```
+
+Each reset is a sub-second server blip; between resets, visitors edit freely and
+every hour the database returns to the pristine synthetic set. The demo does not
+need Litestream (there is nothing to back up — it regenerates from code) and does
+not need the ratesync timer (rates are seeded synthetically).
+
+---
+
 For the full list of subcommands and flags used above (`serve`, `migrate`,
-`user add`, `check --strict`, `ratesync`), see [docs/cli.md](cli.md).
+`user add`, `check --strict`, `ratesync`, `demo`), see [docs/cli.md](cli.md).
