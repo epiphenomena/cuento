@@ -110,3 +110,4 @@ Latest stable Go. gofumpt. Errors wrapped with `%w` and context (`fmt.Errorf("po
 - [ ] i18n: any new UI string exists in **both** catalogs
 - [ ] PLAN.md checkbox ticked; DECISIONS.md updated if any choice was made
 - [ ] Commit message in format, scoped to this step only
+- [ ] **Demo/sample generator kept current.** If the step adds or changes a feature, an entity, a schema, or a report the demo should showcase, update the shared synthetic builder (`internal/synth`) + the `cuento demo` generator and its anti-drift test (`cmd/cuento/demo_test.go`), which asserts `cuento check`-clean + feature coverage — so a feature never ships without demo data and the demo never drifts from the schema.
