@@ -26,9 +26,19 @@
      SUBSIDIARY SCOPE selector is ALWAYS present (D18); the other controls render only
      when the report's spec declares them. Relocating the form does not change its
      inputs/names, so params, persistence, and the CSV link are unchanged. */ -}}
+{{/* p26.90: the filter form AUTO-APPLIES on change — hx-get back to the same report,
+     swapping ONLY #report-results (hx-target). Every control lives inside the <form>, so
+     htmx serializes them all into the GET (no hx-include needed). hx-push-url keeps the
+     URL in sync so reload/bookmark/back replay the same filter (the report's ONLY
+     persistence is the query string). hx-sync="this:replace" ABORTS any in-flight request
+     when a new change fires, so rapid changes settle on the LATEST response (ordering
+     correctness). No-JS: the form is still a plain method="get" GET, and the Run button —
+     kept in <noscript> — submits it (full reload). */ -}}
 {{define "report-filters" -}}
 {{- /* Dot is a paramsForm. */ -}}
-<form class="report-params" method="get" action="/reports/{{.ReportID}}">
+<form class="report-params" method="get" action="/reports/{{.ReportID}}"
+      hx-get="/reports/{{.ReportID}}" hx-trigger="change" hx-target="#report-results"
+      hx-swap="outerHTML" hx-push-url="true" hx-sync="this:replace">
   {{/* p26.86: filters live in the second-level nav bar now, so the "Filters" legend is
        DROPPED — with the controls in the subnav their purpose is obvious. Each control
        keeps its OWN inner label. Each label+control is a .report-field flex unit so the
@@ -161,19 +171,25 @@
     </div>
     {{end}}
 
-    <button type="submit" class="btn btn-primary report-run">{{t "reports.params.run"}}</button>
+    {{/* No-JS fallback: without htmx the change-trigger can't fire, so keep a submit
+         (parsed as DOM only when JS is OFF). With JS the form auto-applies on change. */}}
+    <noscript><button type="submit" class="btn btn-primary report-run">{{t "reports.params.run"}}</button></noscript>
   </fieldset>
 </form>
 {{- end}}
 
-{{define "report.tmpl" -}}
-{{template "shell-open" (shellTitle . .Page.Title)}}
-  {{- with .Page}}
-  <h1>{{.Title}}</h1>
-
-  {{/* p26.86: EVERY report renders its filter form in the SECOND-LEVEL nav bar
-       (base.tmpl's SubNavControls="report" case). None inline. */}}
-
+{{/* p26.90: the report RESULTS FRAGMENT — the CSV export link + (for tree reports) the
+     collapse/expand controls + the report table, wrapped in a stable #report-results
+     div. A filter change (the subnav form's hx-get, hx-target #report-results) swaps ONLY
+     this region; the treetable.js <script> stays on the PAGE (a script injected via an
+     htmx innerHTML swap does not execute) and re-wires on htmx:afterSwap. The CSV link
+     lives INSIDE the fragment so its href (recomputed from the current filter state in the
+     handler) refreshes on every swap — a stale export href is impossible. Dot is the
+     reportPageModel (so $.Tree here, not $.Page.Tree). Wrapping the table in a div is
+     chrome-only: the golden renders the Table, not this shell. */ -}}
+{{define "report-results" -}}
+{{- with .}}
+<div id="report-results">
   <p class="report-export">
     <a href="{{.CSVHref}}" class="report-csv-link" download>{{t "reports.export.csv"}}</a>
   </p>
@@ -181,8 +197,10 @@
   {{/* p26.26: reports presenting a NESTED account hierarchy (trial balance, balance
        sheet, income statement, functional expenses) reuse the p26.25 collapse/expand
        tree control. The controls carry `hidden` (no-JS shows the full tree with inert
-       hidden buttons); treetable.js reveals + wires them. Non-tree reports skip this
-       block and emit no data-depth, so their tables render byte-identically. */}}
+       hidden buttons); treetable.js reveals + wires them. They live INSIDE #report-results
+       so a filter swap re-renders controls + table together (no stale references).
+       Non-tree reports skip this block and emit no data-depth, so their tables render
+       byte-identically. */}}
   {{if .Tree}}
   <div class="report-controls tree-controls">
     <button type="button" class="btn btn-ghost tree-collapse-all" hidden>{{t "tree.collapse_all"}}</button>
@@ -208,7 +226,7 @@
     </thead>
     <tbody>
       {{- range .Table.Rows}}
-      <tr class="report-row report-indent-{{.Indent}}{{if .Subtotal}} report-subtotal{{end}}{{if .Total}} report-total{{end}}{{if .Warning}} report-warning{{end}}"{{if $.Page.Tree}} data-depth="{{.Indent}}"{{end}}{{if .Warning}} role="alert"{{end}}>
+      <tr class="report-row report-indent-{{.Indent}}{{if .Subtotal}} report-subtotal{{end}}{{if .Total}} report-total{{end}}{{if .Warning}} report-warning{{end}}"{{if $.Tree}} data-depth="{{.Indent}}"{{end}}{{if .Warning}} role="alert"{{end}}>
         {{- range .Cells}}
         <td{{if .Right}} class="amount"{{end}}>{{if .Href}}<a class="report-drill-link" href="{{.Href}}">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>
         {{- end}}
@@ -219,11 +237,26 @@
     </tbody>
   </table>
   </div>
+</div>
+{{- end}}
+{{- end}}
+
+{{define "report.tmpl" -}}
+{{template "shell-open" (shellTitle . .Page.Title)}}
+  {{- with .Page}}
+  <h1>{{.Title}}</h1>
+
+  {{/* p26.86: EVERY report renders its filter form in the SECOND-LEVEL nav bar
+       (base.tmpl's SubNavControls="report" case). None inline.
+       p26.90: the CSV link + tree-controls + table now live in the #report-results
+       fragment a filter change swaps. */}}
+  {{template "report-results" .}}
 
   {{if .Tree}}
-  {{/* p26.26: the reusable tree module (p26.25). Loaded on the PAGE; self-inits on
-       DOMContentLoaded and re-runs on htmx:afterSwap. It enhances every
-       table.tree-table, looking up the sibling .tree-controls container. */}}
+  {{/* p26.26: the reusable tree module (p26.25). Loaded on the PAGE (a <script> injected
+       via an htmx innerHTML swap would not execute); self-inits on DOMContentLoaded and
+       re-runs on htmx:afterSwap when a filter change replaces #report-results. It
+       enhances every table.tree-table, looking up the sibling .tree-controls container. */}}
   <script type="module" src="{{asset "treetable.js"}}"></script>
   {{end}}
   {{- end}}

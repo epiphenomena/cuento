@@ -98,12 +98,11 @@ test('reports: open the trial balance, set as-of/scope, see the balancing total,
   await expect(scope).toBeVisible();
   await expect(scope.locator('option')).not.toHaveCount(0);
 
-  // The subnav filters DRIVE the report: set the as-of + scope and click Run (a plain GET
-  // submit from the bar), and the report table re-renders (no-JS-friendly, persistence
-  // intact — same round trip the URL navigation below makes).
-  await page.locator('nav.app-subnav form.report-params [name="asof"]').fill('2026-06-30');
-  await page.locator('nav.app-subnav form.report-params button[type="submit"]').click();
-  await page.waitForURL(/asof=/);
+  // p26.90: the subnav filters AUTO-APPLY on change now (no Run button for JS users — it
+  // lives in <noscript>). The dedicated apply-on-change / latest-wins / CSV-href behavior
+  // test is below; here we confirm the same GET round trip via navigation (the no-JS path)
+  // renders the table.
+  await page.goto(`${TB}?asof=2026-06-30`);
   await expect(page.locator('table.report-table')).toBeVisible();
 
   // The as-of date control is present (trial balance is an as-of report). It is a
@@ -139,6 +138,66 @@ test('reports: open the trial balance, set as-of/scope, see the balancing total,
   // A CSV body has at least the localized header row (comma-separated columns).
   const body = await resp.text();
   expect(body.split('\n')[0]).toContain(',');
+});
+
+// p26.90 APPLY-ON-CHANGE: the report filter form auto-applies on change (no Run button for
+// JS users), swapping ONLY #report-results, keeping the CSV export href fresh, pushing the
+// URL for persistence, and settling on the LATEST response when changes fire in quick
+// succession (hx-sync="this:replace"). Drives the trial balance's AS-OF date control — a
+// plain text input (rule 12) at the SCOPE BASE currency (USD), so the report renders WITHOUT
+// any exchange-rate conversion (the fresh worker db has no rates; picking a non-base target
+// currency would legitimately error, unrelated to this chrome). The as-of `change` fires on
+// blur. READ-ONLY (opens a report; mutates nothing durable). Strict CSP (script-src 'self')
+// => NO page.waitForFunction; only locator/URL/attribute waits.
+test('reports: the filter form auto-applies on change (no Run), refreshes the CSV href, persists, latest-wins', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  await page.goto(`${TB}?scope=1`);
+  await expect(page.locator('#report-results table.report-table')).toBeVisible();
+
+  // With JS active, the Run button is inside <noscript> — it is NOT a DOM element, so a JS
+  // user has no submit button (apply-on-change is the whole interaction).
+  await expect(page.locator('form.report-params button[type="submit"]')).toHaveCount(0);
+
+  const asof = page.locator('nav.app-subnav form.report-params [name="asof"]');
+  await expect(asof).toBeVisible();
+
+  // --- change the as-of date (ONE deliberate change, no Run click): fill + blur fires
+  // `change`, the hx-get swaps #report-results, and hx-push-url syncs the URL. Assert the
+  // eventual state with a retrying expect (generous timeout). The CSV export href lives
+  // INSIDE the swapped fragment, so it reflecting the new as-of proves the swap landed AND
+  // the export link is recomputed from the current filter (never stale). Do NOT re-fire —
+  // hx-sync="this:replace" would abort the in-flight request. */
+  await asof.fill('2026-03-31');
+  await asof.blur();
+  await expect(page.locator('a.report-csv-link')).toHaveAttribute('href', /asof=2026-03-31/, { timeout: 15000 });
+  await expect(page.locator('#report-results table.report-table')).toBeVisible();
+  await expect(page).toHaveURL(/asof=2026-03-31/); // hx-push-url synced the query (persistence)
+
+  // Persistence: a full reload replays the pushed filter (the report's ONLY persistence is
+  // the query string; the server re-reads it and re-renders the same as-of).
+  await page.reload();
+  await expect(page).toHaveURL(/asof=2026-03-31/);
+  await expect(page.locator('a.report-csv-link')).toHaveAttribute('href', /asof=2026-03-31/);
+
+  // --- latest-wins: fire TWO as-of changes in quick succession (an intermediate date, then
+  // the final one). hx-sync="this:replace" aborts the in-flight intermediate request when
+  // the final change fires, so the results + URL + CSV href all settle on the LAST change,
+  // never on a stale out-of-order intermediate response. ---
+  const asof2 = page.locator('nav.app-subnav form.report-params [name="asof"]');
+  await asof2.fill('2026-05-15'); // intermediate (should be aborted / never the final state)
+  await asof2.blur();
+  await asof2.fill('2026-06-30'); // final (wins)
+  await asof2.blur();
+  // The CSV href lives INSIDE the swapped #report-results, so it reflects whichever response
+  // LANDED LAST — the discriminating check: it settles on the FINAL date (the aborted
+  // intermediate never wins).
+  await expect(page.locator('a.report-csv-link')).toHaveAttribute('href', /asof=2026-06-30/, { timeout: 15000 });
+  await expect(page.locator('a.report-csv-link')).not.toHaveAttribute('href', /asof=2026-05-15/);
+  await expect(page).toHaveURL(/asof=2026-06-30/); // hx-push-url, latest-wins
 });
 
 // p15.12 REPORTS INDEX (/reports): the grant-filtered directory of reports, grouped by
@@ -411,13 +470,12 @@ test('reports: open the account ledger, pick an account + range, see opening/lin
   const acctSelect = page.locator('select.report-account-select[name="account"]');
   await expect(acctSelect).toBeVisible();
 
-  // Pick the account and set a wide period, then Run (the GET form round trip). The
-  // account's option value is its id; select by its (unique) label.
-  await acctSelect.selectOption({ label: 'Ledger Checking' });
-  await page.locator('form.report-params [name="from"]').fill('2025-01-01');
-  // The default To is today, which includes the just-posted (today-dated) txn.
-  await page.locator('form.report-params button[type="submit"]').click();
-  await page.waitForURL('**/reports/account_ledger?**');
+  // p26.90: pick the account + a wide period. The report AUTO-APPLIES on change now; the
+  // account option value is its id, resolved via the account-ledger options — navigate the
+  // equivalent GET (the no-JS round trip) so this render test stays deterministic. The
+  // default To is today, which includes the just-posted (today-dated) txn.
+  const acctVal = await acctSelect.locator('option', { hasText: 'Ledger Checking' }).getAttribute('value');
+  await page.goto(`${AL}?account=${acctVal}&from=2025-01-01`);
 
   // The report table renders with the OPENING (subtotal) and CLOSING (total) framing
   // rows and at least one in-range data line.
@@ -721,11 +779,10 @@ test('reports: open the fund report (list), pick a fund, see its period statemen
   await expect(listTable).toContainText('Unrestricted');
 
   // --- pick the fund -> the SINGLE-FUND STATEMENT with the applied split ---
-  await fundSelect.selectOption({ label: 'Stmt Fund E2E' });
-  await page.locator('form.report-params [name="from"]').fill('2025-01-01');
-  await page.locator('form.report-params [name="to"]').fill('2030-12-31');
-  await page.locator('form.report-params button[type="submit"]').click();
-  await page.waitForURL('**/reports/fund_activity?**');
+  // p26.90: the report AUTO-APPLIES on change; navigate the equivalent GET (no-JS round
+  // trip) for a deterministic render test. The fund option value is its id.
+  const fundVal = await fundSelect.locator('option', { hasText: 'Stmt Fund E2E' }).getAttribute('value');
+  await page.goto(`${FA}?scope=1&fund=${fundVal}&from=2025-01-01&to=2030-12-31`);
 
   // The statement renders Opening/Received/Applied(expense + NON-expense)/Closing +
   // the total-fund-assets reconciliation line. Assert the localized line labels (en)
@@ -794,13 +851,12 @@ test('reports: open the activities-by-restriction statement, see the two restric
   await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
   // --- open the statement over a wide period, root scope ---
-  await page.goto(`${ABR}?scope=1`);
+  // p26.90: the report AUTO-APPLIES on change; navigate the equivalent GET (no-JS round
+  // trip) with the wide period for a deterministic render test.
+  await page.goto(`${ABR}?scope=1&from=2025-01-01&to=2030-12-31`);
   await expect(page.locator('form.report-params')).toBeVisible();
   await expect(page.locator('select.report-scope-select[name="scope"]')).toBeVisible();
-  await page.locator('form.report-params [name="from"]').fill('2025-01-01');
-  await page.locator('form.report-params [name="to"]').fill('2030-12-31');
-  await page.locator('form.report-params button[type="submit"]').click();
-  await page.waitForURL('**/reports/activities_by_restriction?**');
+  await expect(page.locator('form.report-params [name="from"]')).toBeVisible();
 
   const abrStmt = page.locator('table.report-table');
   await expect(abrStmt).toBeVisible();
@@ -915,11 +971,10 @@ test('reports: open the program statement (comparative), see program columns + a
   await expect(page.locator('a.report-drill-link').first()).toBeVisible();
 
   // --- pick the SINGLE program -> the subtree statement (Account | Currency | Amount) ---
-  await progSelect.selectOption({ label: 'PS Outreach E2E' });
-  await page.locator('form.report-params [name="from"]').fill('2025-01-01');
-  await page.locator('form.report-params [name="to"]').fill('2030-12-31');
-  await page.locator('form.report-params button[type="submit"]').click();
-  await page.waitForURL('**/reports/program_statement?**');
+  // p26.90: the report AUTO-APPLIES on change; navigate the equivalent GET (no-JS round
+  // trip) for a deterministic render test. The program option value is its id.
+  const progVal = await progSelect.locator('option', { hasText: 'PS Outreach E2E' }).getAttribute('value');
+  await page.goto(`${PS}?scope=1&program=${progVal}&from=2025-01-01&to=2030-12-31`);
 
   const single = page.locator('table.report-table');
   await expect(single).toBeVisible();
@@ -937,10 +992,9 @@ test('reports: open the program statement (comparative), see program columns + a
   // The first option is the "— native —" choice (empty value).
   await expect(ccy.locator('option').first()).toHaveAttribute('value', '');
   // Pick a target currency (USD) -> the matrix CONVERTS: the Currency column DROPS, so the
-  // single-program view now has TWO columns (Account, <program>).
-  await ccy.selectOption('USD');
-  await page.locator('form.report-params button[type="submit"]').click();
-  await page.waitForURL('**/reports/program_statement?**');
+  // single-program view now has TWO columns (Account, <program>). p26.90: navigate the
+  // equivalent GET (no-JS round trip) for a deterministic render test.
+  await page.goto(`${PS}?scope=1&program=${progVal}&from=2025-01-01&to=2030-12-31&currency=USD`);
   await expect(page.locator('table.report-table')).toBeVisible();
   await expect(page.locator('table.report-table thead th')).toHaveCount(2);
 
@@ -1114,11 +1168,10 @@ test('reports: open the capital campaign report, pick a fund, see the quarterly 
   await expect(page.locator('form.report-params [name="to"]')).toBeVisible();
 
   // --- pick the fund + a wide period + USD -> the quarterly campaign statement ---
-  await fundSelect.selectOption({ label: 'Campaign Fund E2E' });
-  await page.locator('form.report-params [name="from"]').fill('2025-01-01');
-  await page.locator('form.report-params [name="to"]').fill('2030-12-31');
-  await page.locator('form.report-params button[type="submit"]').click();
-  await page.waitForURL('**/reports/capital_campaign?**');
+  // p26.90: the report AUTO-APPLIES on change; navigate the equivalent GET (no-JS round
+  // trip) for a deterministic render test. The fund option value is its id.
+  const ccFundVal = await fundSelect.locator('option', { hasText: 'Campaign Fund E2E' }).getAttribute('value');
+  await page.goto(`${CC}?scope=1&fund=${ccFundVal}&from=2025-01-01&to=2030-12-31`);
 
   // The table renders the campaign line-item column headers (localized en) + the Quarter
   // column, the cumulative total row, and the capital-detail Land row (the point: Land is

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -193,6 +194,52 @@ func TestReportFilterPlacement(t *testing.T) {
 		if strings.Contains(body, "<legend>") {
 			t.Errorf("%s: a <legend> heading still renders (the Filters legend was dropped)", id)
 		}
+	}
+}
+
+// TestReportResultsFragmentSwap (p26.90): a filter change is the subnav form's hx-get
+// targeting #report-results (HX-Target header), so the handler must serve the BARE
+// results FRAGMENT (the CSV link + table wrapped in #report-results) — not a whole
+// document injected into the swap target. It also confirms the fragment's CSV href
+// reflects the request's params (the export link is recomputed from the current filter
+// state and swapped in with the results), and that the shell chrome is absent.
+func TestReportResultsFragmentSwap(t *testing.T) {
+	h, st, _, sm := reportsApp(t)
+	admin := mkUser(t, st, "admin", "none", true)
+
+	req := httptest.NewRequest(http.MethodGet, "/reports/"+reports.TrialBalanceReportID+"?scope=1&asof=2026-06-30", strings.NewReader(""))
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "report-results")
+	req.AddCookie(mintCookie(t, sm, admin))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("results-fragment GET status = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	// The bare fragment: the #report-results wrapper + the table are present.
+	if !strings.Contains(body, `id="report-results"`) {
+		t.Errorf("results fragment missing the #report-results wrapper; body: %s", body)
+	}
+	if !strings.Contains(body, "report-table") {
+		t.Errorf("results fragment missing the report table; body: %s", body)
+	}
+	// NOT a full document: no shell nav chrome (would inject a whole doc into the swap).
+	if strings.Contains(body, `class="app-nav"`) {
+		t.Errorf("results fragment returned full shell chrome; body: %s", body)
+	}
+	// The filter form is OUTSIDE the swapped region, so it must NOT be in the fragment.
+	if strings.Contains(body, `class="report-params"`) {
+		t.Errorf("results fragment leaked the filter form (it lives outside #report-results); body: %s", body)
+	}
+	// The CSV export href is recomputed from the request params and rides in the fragment,
+	// so a filter change refreshes the export link (never stale).
+	if !strings.Contains(body, `report-csv-link`) {
+		t.Errorf("results fragment missing the CSV export link; body: %s", body)
+	}
+	if !strings.Contains(body, "asof=2026-06-30") {
+		t.Errorf("results fragment CSV href does not reflect the request params (asof); body: %s", body)
 	}
 }
 

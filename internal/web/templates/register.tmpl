@@ -35,9 +35,12 @@
      degrades to a plain GET form with no JS (the noscript Apply). */ -}}
 {{define "register-controls" -}}
 {{- with .}}
+{{/* p26.90: hx-sync="this:replace" ABORTS any in-flight filter GET when a new change
+     fires (date/text/fund/sub/program can change in quick succession), so the LATEST
+     response always wins — no out-of-order swap. */ -}}
 <form class="subnav-filters" method="get" action="/accounts/{{.AccountID}}/register"
       hx-get="/accounts/{{.AccountID}}/register" hx-trigger="change"
-      hx-target="#register-results" hx-swap="outerHTML">
+      hx-target="#register-results" hx-swap="outerHTML" hx-sync="this:replace">
   <label for="reg-from">{{t "register.filter.from"}}</label>
   <input type="text" id="reg-from" name="from" class="js-datefield" value="{{.FilterFrom}}" placeholder="{{t "register.filter.date_hint"}}">
   <label for="reg-to">{{t "register.filter.to"}}</label>

@@ -18,8 +18,12 @@
 {{/* accounts-controls: the section-bar controls (p23.10). Dot is the accountsPageModel. */ -}}
 {{define "accounts-controls" -}}
 {{- with .}}
+{{/* p26.90: hx-sync="this:replace" ABORTS any in-flight filter GET when a new change
+     fires (sub/type/active can change in quick succession), so the LATEST response always
+     wins — no out-of-order swap. */ -}}
 <form class="subnav-filters" method="get" action="/accounts"
-      hx-get="/accounts" hx-trigger="change" hx-target="#accounts-results" hx-swap="outerHTML">
+      hx-get="/accounts" hx-trigger="change" hx-target="#accounts-results" hx-swap="outerHTML"
+      hx-sync="this:replace">
   <label for="sub-filter">{{t "accounts.filter.subsidiary"}}</label>
   <select id="sub-filter" name="sub">
     <option value="0">{{t "accounts.filter.all_subsidiaries"}}</option>

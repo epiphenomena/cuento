@@ -838,6 +838,16 @@ func (s *server) reportPage(w http.ResponseWriter, r *http.Request) {
 		CSVHref: "/reports/" + rep.ID + ".csv?" + r.Form.Encode(),
 		Tree:    rep.Tree, // p26.26: nested-account reports emit data-depth + tree controls.
 	}
+	// p26.90: a filter change is the subnav form's hx-get targeting #report-results
+	// (HX-Target header), so swap ONLY the results fragment (CSV link + tree controls +
+	// table); a full load or a boosted nav (HX-Target absent / "body") renders the whole
+	// page. The CSVHref is recomputed above from r.Form, so the swapped fragment always
+	// carries a fresh export link, and hx-push-url keeps the URL in sync for persistence.
+	if r.Header.Get("HX-Target") == "report-results" {
+		s.render(w, r, http.StatusOK, "report-results", model)
+		return
+	}
+
 	// p26.86: EVERY report renders its filter controls in the SECOND-LEVEL nav bar
 	// (SubNavControls="report" renders the shared "report-filters" partial off the
 	// paramsForm). The wider filter sets wrap within the subnav band (flex-wrap); no
