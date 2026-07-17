@@ -257,6 +257,8 @@ other = "Username"
 other = "Display name"
 [admin.users.form.password]
 other = "Password"
+[admin.users.form.regenerate]
+other = "Regenerate"
 [admin.users.form.txn_perm]
 other = "Transaction permission"
 [admin.users.form.is_admin]

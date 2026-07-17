@@ -65,7 +65,24 @@ test('admin: create a user, set its permission, grant a report group, add a curr
   // Wait for the swapped-in form to settle (htmx wires hx-post on the settle tick).
   await expect(page.locator('form#user-create-form.e2e-settled')).toBeVisible();
   await page.locator('#uc-username').fill(username);
-  await page.locator('#uc-password').fill('e2e-user-passw0rd');
+
+  // p26.87: the password field is PRE-FILLED with a generated strong password on load
+  // (pwgen.js self-inits on the htmx swap). It is non-empty and readable (type=text so
+  // the admin can copy it). Capture the first value, click Regenerate, and confirm the
+  // value CHANGED — the generator produced a fresh password.
+  const pwField = page.locator('#uc-password');
+  await expect(pwField).toHaveValue(/.+/);
+  await expect(pwField).toHaveAttribute('type', 'text');
+  const firstPw = await pwField.inputValue();
+  expect(firstPw.length).toBeGreaterThanOrEqual(16);
+  await page.getByRole('button', { name: /regenerate/i }).click();
+  const secondPw = await pwField.inputValue();
+  expect(secondPw).not.toEqual(firstPw);
+  expect(secondPw.length).toBeGreaterThanOrEqual(16);
+  // Use the GENERATED password to create the user (the whole point — the admin hands
+  // this to the new user); we log in with it at the end of the test.
+  const generatedPw = secondPw;
+
   await page.locator('#uc-perm').selectOption('none');
 
   // The inline create redirects (HX-Redirect) back to /admin/users; wait for that
@@ -131,4 +148,17 @@ test('admin: create a user, set its permission, grant a report group, add a curr
   const curRow = page.locator(`tr.currency-row[data-code="${code}"]`);
   await expect(curRow).toBeVisible();
   await expect(curRow.locator('.currency-status')).toHaveText(/active/i);
+
+  // --- p26.87: the GENERATED password actually works: log out the admin and log in as
+  // the new user with the password the generator produced. The new username is unique
+  // so its login shares NO rate-limit bucket with the admin (the limiter keys on
+  // ip+username), keeping this second login well under the per-key burst. ---
+  await page.locator('form.app-logout button[type="submit"]').click();
+  await page.waitForURL('**/login**');
+  await page.locator('#username').fill(username);
+  await page.locator('#password').fill(generatedPw);
+  await page.getByRole('button', { name: /.+/ }).click();
+  // A successful login lands on the authenticated landing page (not back on /login).
+  await page.waitForURL('**/');
+  await expect(page).not.toHaveURL(/\/login/);
 });

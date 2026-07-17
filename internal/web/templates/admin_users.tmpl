@@ -72,6 +72,10 @@
     </tbody>
   </table>
   {{- end}}
+  {{/* p26.87: new-user password generator. Self-inits on load AND after the htmx swap
+       that brings in the create form (GET /admin/users/new), so the swapped-in
+       password field is pre-filled. External module, script-src 'self' (rule 12). */}}
+  <script type="module" src="{{asset "pwgen.js"}}"></script>
 {{template "shell-close" .}}
 {{- end}}
 
@@ -103,9 +107,17 @@
 
   <div class="field">
     <label for="uc-password">{{t "admin.users.form.password"}}</label>
-    <input id="uc-password" name="password" type="password" autocomplete="new-password"
-      {{- if .Errors.ErrorKey "password"}} aria-invalid="true" aria-describedby="uc-password-err"{{end}}
-      {{- if eq .Errors.FirstInvalid "password"}} autofocus{{end}}>
+    {{/* p26.87: pwgen.js fills this with a generated password on load, reveals it
+         (type=text) so the admin can copy it, and unhides + wires the Regenerate button.
+         No-JS fallback: it stays a normal type=password input the admin types into, and
+         the Regenerate button stays `hidden` + inert (strict CSP — external module, no
+         inline script). The server argon2id-hashes whatever value is submitted. */}}
+    <div class="pwgen-field">
+      <input id="uc-password" name="password" type="password" autocomplete="new-password"
+        {{- if .Errors.ErrorKey "password"}} aria-invalid="true" aria-describedby="uc-password-err"{{end}}
+        {{- if eq .Errors.FirstInvalid "password"}} autofocus{{end}}>
+      <button type="button" class="btn btn-ghost pwgen-regenerate" hidden>{{t "admin.users.form.regenerate"}}</button>
+    </div>
     {{with .Errors.ErrorKey "password"}}<p id="uc-password-err" class="field-error" role="alert">{{t .}}</p>{{end}}
   </div>
 

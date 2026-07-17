@@ -251,6 +251,8 @@ other = "Nombre de usuario"
 other = "Nombre visible"
 [admin.users.form.password]
 other = "Contrasena"
+[admin.users.form.regenerate]
+other = "Regenerar"
 [admin.users.form.txn_perm]
 other = "Permiso de transacciones"
 [admin.users.form.is_admin]

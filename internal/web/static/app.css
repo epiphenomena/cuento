@@ -335,6 +335,11 @@ input[type="password"] {
   border-radius: var(--radius);
   background: var(--color-surface);
 }
+/* p26.87: the new-user password field + its Regenerate button on one row. The button
+   is server-rendered `hidden` (no-JS fallback) and pwgen.js unhides it, so the wrap
+   collapses to just the input when JS is off. */
+.pwgen-field { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.pwgen-field input { flex: 1 1 16rem; }
 
 /* Alerts / flash. */
 .alert {
