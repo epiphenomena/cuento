@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math"
 	"math/rand"
+	"strings"
 	"testing"
 )
 
@@ -223,6 +224,12 @@ func TestParseRejectsMalformed(t *testing.T) {
 		{"unbalancedParen", "(1.00", 2, NumberUS},
 		{"decimalOnExpZero", "1.5", 0, NumberUS},
 		{"bothSignAndParens", "-(1.00)", 2, NumberUS},
+		// Overflow: a 20+ digit integer must be rejected, not silently wrapped
+		// (parseDigits digit cap). 25 nines is well past int64's 19-digit ceiling.
+		{"integerOverflowDigitCap", "9999999999999999999999999", 2, NumberUS},
+		// Combine overflow: an 18-digit integer FITS int64 but times the exp=2 scale
+		// (x100) exceeds MaxInt64 -- caught by the checked combine, not the digit cap.
+		{"integerOverflowScaleCombine", "999999999999999999", 2, NumberUS},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -230,6 +237,37 @@ func TestParseRejectsMalformed(t *testing.T) {
 				t.Fatalf("Parse(%q) = nil error, want error", tt.in)
 			}
 		})
+	}
+}
+
+// TestParseOverflowMessage pins the clean out-of-range message (rather than a
+// silent wrap) for the two overflow paths: the digit-count cap in parseDigits and
+// the checked intVal*scale+fracVal combine.
+func TestParseOverflowMessage(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		exp  int
+	}{
+		{"digitCap", "12345678901234567890", 2},      // 20 digits > cap
+		{"scaleCombine", "999999999999999999.99", 2}, // 18 int digits * 100 overflows
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := Parse(c.in, c.exp, NumberUS)
+			if err == nil {
+				t.Fatalf("Parse(%q) = nil error, want out-of-range error", c.in)
+			}
+			if !strings.Contains(err.Error(), "out of range") {
+				t.Errorf("Parse(%q) error = %q, want it to contain %q", c.in, err.Error(), "out of range")
+			}
+		})
+	}
+	// A boundary in-range value near MaxInt64 minor units still parses (no false
+	// rejection): 9.2 quintillion cents ~ MaxInt64. Use an 18-digit integer at exp=0
+	// so no scale multiply is applied.
+	if _, err := Parse("922337203685477580", 0, NumberUS); err != nil {
+		t.Errorf("Parse of an 18-digit exp=0 amount errored: %v", err)
 	}
 }
 

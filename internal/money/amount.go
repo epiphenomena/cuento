@@ -321,24 +321,49 @@ func Parse(s string, exponent int, nf NumberFormat) (int64, error) {
 	// Right-pad the fractional part to the exponent width, then combine.
 	scale := pow10(exponent)
 	// fracVal currently represents fracPart as an integer of len(fracPart)
-	// digits; shift it up to exponent width.
+	// digits; shift it up to exponent width. fracVal < 10^exponent (guarded by the
+	// len(fracPart) > exponent check above), so this shift cannot overflow.
 	fracVal *= pow10(exponent - len(fracPart))
 
-	minor := intVal*scale + fracVal
+	// Checked combine: intVal*scale + fracVal must fit int64. parseDigits already
+	// capped the integer digit count, but a large in-range integer times the scale
+	// can still exceed MaxInt64 (e.g. 18-digit integer * 100), so verify explicitly
+	// rather than let it wrap silently (rule 3; matches this func's own out-of-range
+	// contract).
+	hi := intVal * scale
+	if intVal != 0 && hi/scale != intVal {
+		return 0, fmt.Errorf("parse amount %q: out of range", raw)
+	}
+	minor := hi + fracVal
+	if minor < hi { // fracVal >= 0, so a smaller sum means the add overflowed
+		return 0, fmt.Errorf("parse amount %q: out of range", raw)
+	}
 	if neg {
 		minor = -minor
 	}
 	return minor, nil
 }
 
+// maxAmountDigits bounds the digit count parseDigits will accept. An int64 holds at
+// most 19 decimal digits (MaxInt64 = 9_223_372_036_854_775_807), so an 18-digit run
+// always fits and is a generous ceiling for any real monetary integer; capping here
+// stops a 20+ digit string from silently wrapping during accumulation before the
+// checked combine even runs.
+const maxAmountDigits = 18
+
 // parseDigits converts a run of ASCII digits to int64. An empty string yields 0
-// when allowEmpty is set. Any non-digit rune is an error.
+// when allowEmpty is set. Any non-digit rune is an error. A run longer than
+// maxAmountDigits is rejected as out of range BEFORE accumulation can wrap (the
+// v = v*10 + d recurrence overflows silently past ~19 digits otherwise).
 func parseDigits(s string, allowEmpty bool) (int64, error) {
 	if s == "" {
 		if allowEmpty {
 			return 0, nil
 		}
 		return 0, errors.New("no digits")
+	}
+	if len(s) > maxAmountDigits {
+		return 0, errors.New("out of range")
 	}
 	var v int64
 	for _, r := range s {
