@@ -1075,6 +1075,11 @@ other = "Anual"
 other = "Descargar CSV"
 [reports.empty]
 other = "No hay datos para estos parámetros."
+# p26.95 error a nivel de informe: la moneda de destino elegida no tiene tipo de
+# cambio registrado, por lo que el informe no puede convertir. Se muestra en línea en
+# la región de resultados (no un error 500).
+[reports.error.no_rate]
+other = "No hay tipo de cambio disponible para %s; agregue uno o elija la moneda nativa."
 
 # p15.12 índice de informes (/reports). El título del índice, el mensaje de estado
 # vacío (mostrado a un usuario sin concesiones de informes: la página es visible para

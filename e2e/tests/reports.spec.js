@@ -200,6 +200,54 @@ test('reports: the filter form auto-applies on change (no Run), refreshes the CS
   await expect(page).toHaveURL(/asof=2026-06-30/); // hx-push-url, latest-wins
 });
 
+// p26.95 MISSING-RATE INLINE ERROR: converting a report to a target currency with NO
+// exchange rate on file must show a CLEAN inline error in the results region, NOT a
+// 500 (under apply-on-change a 5xx leaves htmx swapping nothing — a silent no-op). We
+// first SEED a balanced USD posting (the fresh worker db has no rates), so converting
+// to MXN (a seeded currency) needs a USD->MXN rate that does not exist and the report
+// genuinely errors. The `change` on the currency <select> fires the hx-get; the swapped
+// #report-results shows the error message and drops the table + CSV link. Strict CSP =>
+// only locator/response waits.
+test('reports: converting to a rate-less currency shows an inline error, not a 500', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  // Seed a balanced USD transfer so the trial balance has non-zero USD figures to
+  // convert (an EMPTY report converts nothing and would never hit the rate lookup).
+  await createAsset(page, 'NoRate Checking');
+  await createAsset(page, 'NoRate Savings');
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await page.locator('#txn-main-account').selectOption({ label: 'NoRate Checking' });
+  await page.locator('#txn-account-0').selectOption({ label: 'NoRate Savings' });
+  await page.locator('#txn-amount-0').fill('42.00');
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+  // Open at the DEFAULT as-of (today) so the just-posted txn is in range and the report
+  // has USD figures.
+  await page.goto(`${TB}?scope=1`);
+  await expect(page.locator('#report-results table.report-table')).toBeVisible();
+
+  const ccy = page.locator('nav.app-subnav form.report-params select[name="currency"]');
+  await expect(ccy).toBeVisible();
+
+  // Watch the swap response: it must be 200 (a clean inline error), never 5xx.
+  const respP = page.waitForResponse(
+    (r) => r.url().includes('/reports/trial_balance') && r.request().method() === 'GET',
+  );
+  await ccy.selectOption('MXN'); // `change` fires the hx-get
+  const resp = await respP;
+  expect(resp.status()).toBe(200);
+
+  // The results region now shows the inline no-rate error and NO table / CSV export.
+  await expect(page.locator('#report-results .report-error')).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('#report-results a.report-csv-link')).toHaveCount(0);
+  await expect(page.locator('#report-results table.report-table')).toHaveCount(0);
+});
+
 // p15.12 REPORTS INDEX (/reports): the grant-filtered directory of reports, grouped by
 // report group, each a link to /reports/{id}. The seeded admin is is_admin, so it sees
 // EVERY group/report (the per-persona grant filtering is unit-tested in the Go layer).

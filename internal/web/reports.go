@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -613,6 +614,12 @@ type reportPageModel struct {
 	Params  paramsForm
 	Table   renderedTable
 	CSVHref string
+	// Error is a localized report-LEVEL error message (currently: a required
+	// exchange rate is missing for the chosen target currency). When set, the
+	// results region renders the message inline INSTEAD of the table + CSV link,
+	// with an HTTP 200 -- so under apply-on-change (p26.90) htmx swaps the fragment
+	// and the user sees the reason, rather than a silent no-op from an un-swapped 5xx.
+	Error string
 	// Tree is true for a report presenting a NESTED account hierarchy (p26.26): the
 	// template then emits `data-depth` on every table row, renders the shared
 	// collapse/expand tree-controls above the table, and loads treetable.js to enhance
@@ -819,8 +826,24 @@ func (s *server) reportPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	model := reportPageModel{
+		Title:  i18n.T(lang, rep.TitleKey),
+		Params: form,
+		Tree:   rep.Tree, // p26.26: nested-account reports emit data-depth + tree controls.
+	}
+
 	table, err := rep.Run(ctx, reports.NewToolkit(s.store, params), params)
 	if err != nil {
+		// A missing exchange rate for the chosen target currency is a USER-level
+		// condition (no rate on file), not a server fault: render a clean inline
+		// message in the results region with a 200 so the apply-on-change fragment
+		// swaps (a 5xx would leave htmx showing nothing). Any other error is a real
+		// 500.
+		if errors.Is(err, store.ErrRateMissing) {
+			model.Error = i18n.T(lang, "reports.error.no_rate", params.TargetCurrency)
+			s.renderReportResults(w, r, model)
+			return
+		}
 		s.serverError(w)
 		return
 	}
@@ -831,28 +854,28 @@ func (s *server) reportPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	model := reportPageModel{
-		Title:   i18n.T(lang, rep.TitleKey),
-		Params:  form,
-		Table:   renderTable(table, rep.ID, lang, formatOptsFor(u), dateFormatFor(u), exps),
-		CSVHref: "/reports/" + rep.ID + ".csv?" + r.Form.Encode(),
-		Tree:    rep.Tree, // p26.26: nested-account reports emit data-depth + tree controls.
-	}
-	// p26.90: a filter change is the subnav form's hx-get targeting #report-results
-	// (HX-Target header), so swap ONLY the results fragment (CSV link + tree controls +
-	// table); a full load or a boosted nav (HX-Target absent / "body") renders the whole
-	// page. The CSVHref is recomputed above from r.Form, so the swapped fragment always
-	// carries a fresh export link, and hx-push-url keeps the URL in sync for persistence.
+	model.Table = renderTable(table, rep.ID, lang, formatOptsFor(u), dateFormatFor(u), exps)
+	model.CSVHref = "/reports/" + rep.ID + ".csv?" + r.Form.Encode()
+	s.renderReportResults(w, r, model)
+}
+
+// renderReportResults writes the report page: p26.90 a filter change is the subnav
+// form's hx-get targeting #report-results (HX-Target header), so swap ONLY the
+// results fragment (CSV link + tree controls + table, OR the inline error); a full
+// load or a boosted nav (HX-Target absent / "body") renders the whole page. The
+// CSVHref is recomputed by the caller from r.Form, so the swapped fragment always
+// carries a fresh export link, and hx-push-url keeps the URL in sync for persistence.
+// Both the success and the missing-rate error path route through here so the error
+// renders in the SAME results region with a 200 (htmx swaps it), never a 5xx.
+func (s *server) renderReportResults(w http.ResponseWriter, r *http.Request, model reportPageModel) {
 	if r.Header.Get("HX-Target") == "report-results" {
 		s.render(w, r, http.StatusOK, "report-results", model)
 		return
 	}
-
 	// p26.86: EVERY report renders its filter controls in the SECOND-LEVEL nav bar
 	// (SubNavControls="report" renders the shared "report-filters" partial off the
 	// paramsForm). The wider filter sets wrap within the subnav band (flex-wrap); no
-	// report keeps its filters inline any more. Semantics are unchanged — the form still
-	// submits GET, persists params, and drives CSVHref; only the location is the bar.
+	// report keeps its filters inline any more.
 	page := s.newShellPage(r, model)
 	page.Shell.SubNavControls = "report"
 	s.render(w, r, http.StatusOK, "report.tmpl", page)

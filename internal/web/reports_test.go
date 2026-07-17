@@ -243,6 +243,74 @@ func TestReportResultsFragmentSwap(t *testing.T) {
 	}
 }
 
+// TestReportMissingRateInlineError (p26.95): converting a report to a target
+// currency with NO exchange rate on file returns a CLEAN report-level error in the
+// results region with HTTP 200 -- NOT a 500. Under apply-on-change (p26.90) a 5xx
+// would leave htmx showing nothing (silent no-op); a 200 with an inline message lets
+// the filter render the reason. The reportsApp db has USD-only data and no rates, so
+// converting to MXN (a seeded currency) needs a USD->MXN rate that does not exist.
+func TestReportMissingRateInlineError(t *testing.T) {
+	h, st, _, sm := reportsApp(t)
+	admin := mkUser(t, st, "admin", "none", true)
+
+	// As the auto-apply fragment swap would arrive: HX-Target report-results.
+	req := httptest.NewRequest(http.MethodGet,
+		"/reports/"+reports.TrialBalanceReportID+"?scope=1&asof=2026-06-30&currency=MXN",
+		strings.NewReader(""))
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Target", "report-results")
+	req.AddCookie(mintCookie(t, sm, admin))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	// A clean 200 (not a 500) so htmx swaps the fragment.
+	if rec.Code != http.StatusOK {
+		t.Fatalf("rate-less conversion status = %d, want 200 (clean inline error, not 5xx); body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	// The inline error region carries the localized no-rate message naming the currency.
+	if !strings.Contains(body, i18n.T("en", "reports.error.no_rate", "MXN")) {
+		t.Errorf("results fragment missing the localized no-rate error for MXN; body: %s", body)
+	}
+	// The results fragment is still the bare region (no shell chrome) and shows NO
+	// table / CSV link (the report did not produce a valid result).
+	if !strings.Contains(body, `id="report-results"`) {
+		t.Errorf("error fragment missing the #report-results wrapper; body: %s", body)
+	}
+	if strings.Contains(body, "report-csv-link") {
+		t.Errorf("error fragment should not offer a CSV export for an errored report; body: %s", body)
+	}
+}
+
+// TestReportMissingRateFullPageError (p26.95): the FULL-PAGE path (a reload / bookmark
+// replay with the bad currency in the URL — no HX-Target) also renders the inline
+// no-rate error, not a 500. p26.90's hx-push-url syncs ?currency=MXN into the URL, so a
+// reload after the fragment error issues a plain GET; report.tmpl delegates to the
+// report-results define, so .Error flows through and the whole page shows the message.
+func TestReportMissingRateFullPageError(t *testing.T) {
+	h, st, _, sm := reportsApp(t)
+	admin := mkUser(t, st, "admin", "none", true)
+
+	// A plain full-page GET (no HX-Request / HX-Target), as a reload of the pushed URL.
+	rec := asUser(t, h, sm, admin, http.MethodGet,
+		"/reports/"+reports.TrialBalanceReportID+"?scope=1&asof=2026-06-30&currency=MXN", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("full-page rate-less conversion status = %d, want 200 (inline error, not 5xx); body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, i18n.T("en", "reports.error.no_rate", "MXN")) {
+		t.Errorf("full page missing the localized no-rate error for MXN; body: %s", body)
+	}
+	// The whole shell rendered (this is NOT a fragment) but the results region shows the
+	// error, with no table / CSV export.
+	if !strings.Contains(body, `id="report-results"`) {
+		t.Errorf("full page missing the #report-results region; body: %s", body)
+	}
+	if strings.Contains(body, "report-csv-link") {
+		t.Errorf("full page should not offer a CSV export for an errored report; body: %s", body)
+	}
+}
+
 // TestTrialBalanceReportRenders: the trial-balance report renders its typed cells (a
 // money cell formatted with a currency prefix and a native total row) into the HTML
 // page. Proves the framework is end-to-end: route -> params -> toolkit -> store ->

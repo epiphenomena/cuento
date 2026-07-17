@@ -190,6 +190,14 @@
 {{define "report-results" -}}
 {{- with .}}
 <div id="report-results">
+  {{/* p26.95: a report-LEVEL error (currently: a required exchange rate is missing
+       for the chosen target currency) renders inline here INSTEAD of the table/CSV.
+       The handler returns HTTP 200 with .Error set so htmx swaps this fragment on an
+       apply-on-change filter, rather than leaving a silent no-op from an un-swapped
+       5xx. */}}
+  {{if .Error}}
+  <p class="report-error" role="alert">{{.Error}}</p>
+  {{else}}
   <p class="report-export">
     <a href="{{.CSVHref}}" class="report-csv-link" download>{{t "reports.export.csv"}}</a>
   </p>
@@ -237,6 +245,7 @@
     </tbody>
   </table>
   </div>
+  {{end}}
 </div>
 {{- end}}
 {{- end}}

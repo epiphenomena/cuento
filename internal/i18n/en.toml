@@ -1079,6 +1079,10 @@ other = "Annual"
 other = "Download CSV"
 [reports.empty]
 other = "No data for these parameters."
+# p26.95 report-level error: the chosen target currency has no exchange rate on file,
+# so the report cannot convert. Rendered inline in the results region (not a 500).
+[reports.error.no_rate]
+other = "No exchange rate is available for %s; add a rate or choose native currency."
 
 # p15.12 reports index (/reports). The index page title, the empty-state message
 # (shown to a user with no report grants -- the page is visible to any user but lists
