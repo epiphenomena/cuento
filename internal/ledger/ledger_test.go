@@ -334,6 +334,23 @@ func TestZ3TamperedComposite(t *testing.T) {
 	assertFlags(t, w.d, "Z3")
 }
 
+// TestZ3TamperedGrant covers the composite-membership Z3 branch for
+// user_report_grants: a live grant with NO version snapshot at all (inserted
+// bypassing the store) is a Z3 miss, exactly like a tampered account_subsidiaries
+// membership. The system user (id 1) and a real report group keep the FKs valid so
+// only Z3 fires -- the grant simply has no versions row.
+func TestZ3TamperedGrant(t *testing.T) {
+	w := newWorld(t)
+	// A real report group so the group_name FK is satisfied (Z4 stays clean).
+	if err := w.s.SyncReportGroups(mutCtx(), []string{"reports_financial"}); err != nil {
+		t.Fatalf("SyncReportGroups: %v", err)
+	}
+	// Insert a live grant for the seeded system user with NO version row -- the
+	// membership block flags v.id IS NULL. FKs stay ON (user 1 + the group exist).
+	exec(t, w.d, `INSERT INTO user_report_grants(user_id, group_name) VALUES (1, 'reports_financial')`)
+	assertFlags(t, w.d, "Z3")
+}
+
 func TestZ3MissingVersion(t *testing.T) {
 	w := newWorld(t)
 	// A live row with NO version at all (insert bypassing the store): a programs row

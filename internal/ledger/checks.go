@@ -38,10 +38,11 @@ WHERE EXISTS (SELECT 1 FROM accounts c WHERE c.parent_id = s.account_id)`
 // For every versioned table, a current live row is a violation when its latest
 // version (max valid_from, id) is MISSING, is op='delete', or differs in any
 // business column. Composite-key tables (account_names, account_subsidiaries,
-// fund_subsidiaries) match the version on the composite identity; membership
-// tables (account_subsidiaries, fund_subsidiaries) have no 'update' op, so a live
-// membership whose latest version is 'delete' or missing is the violation, and a
-// version whose latest op is 'create' but has no live row is a dangling snapshot.
+// fund_subsidiaries, user_report_grants) match the version on the composite
+// identity; membership tables (account_subsidiaries, fund_subsidiaries,
+// user_report_grants) have no 'update' op, so a live membership whose latest
+// version is 'delete' or missing is the violation, and a version whose latest op is
+// 'create' but has no live row is a dangling snapshot.
 //
 // The per-table blocks are UNION ALL'd; each yields details like 'accounts:5'.
 // Every block finds the latest version via a correlated-id subquery so the
@@ -142,6 +143,29 @@ WHERE v.id = (SELECT id FROM fund_subsidiaries_versions x
   AND v.op <> 'delete'
   AND NOT EXISTS (SELECT 1 FROM fund_subsidiaries c
                   WHERE c.fund_id = v.entity_id AND c.subsidiary_id = v.subsidiary_id)
+UNION ALL
+-- user_report_grants (composite membership: user_id + group_name). Like
+-- account_subsidiaries / fund_subsidiaries this is a live, store-written, versioned
+-- set with no 'update' op, so a live grant whose latest version is 'delete' or
+-- missing is the violation (a tampered/orphaned grant otherwise slips past check).
+SELECT 'user_report_grants:' || CAST(c.user_id AS TEXT) || '/' || c.group_name
+FROM user_report_grants c
+LEFT JOIN user_report_grants_versions v
+  ON v.id = (SELECT id FROM user_report_grants_versions x
+             WHERE x.entity_id = c.user_id AND x.group_name = c.group_name
+             ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
+WHERE v.id IS NULL OR v.op = 'delete'
+UNION ALL
+-- user_report_grants: a grant whose latest version is 'create' but that has no live
+-- row is a dangling snapshot (deleted live without a delete version).
+SELECT 'user_report_grants(dangling):' || CAST(v.entity_id AS TEXT) || '/' || v.group_name
+FROM user_report_grants_versions v
+WHERE v.id = (SELECT id FROM user_report_grants_versions x
+              WHERE x.entity_id = v.entity_id AND x.group_name = v.group_name
+              ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
+  AND v.op <> 'delete'
+  AND NOT EXISTS (SELECT 1 FROM user_report_grants c
+                  WHERE c.user_id = v.entity_id AND c.group_name = v.group_name)
 UNION ALL
 -- budget_schedules (p19.1 single-id twin)
 SELECT 'budget_schedules:' || CAST(c.id AS TEXT)
