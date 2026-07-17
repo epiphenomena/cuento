@@ -25,6 +25,18 @@ Its guiding constraints:
 
 ## What it is (and is not)
 
+**cuento is a customized, single-organization tool, not a general-purpose
+accounting package.** Its data model and its design decisions are deliberately
+tailored to one nonprofit's real workflows — name-keyed receivables, this
+organization's fund / program / subsidiary structure, cash-flow-first budgeting
+— rather than trying to fit every organization. It is not configurable into
+someone else's chart of accounts, tax regime, or bookkeeping process, and does
+not try to be. Building a bespoke line-of-business tool this complete — one that
+fits the organization exactly instead of forcing the organization to fit the
+software — is what AI-assisted coding now makes practical: the marginal cost of
+a purpose-built system has fallen far enough that adapting the work to a generic
+package is no longer the only sensible option.
+
 cuento is intentionally small and boring. It runs as a single process on a
 single VM behind TLS, with the entire database in one SQLite file. There is no
 framework, no bundler, no CDN, no external database, and no bank connection —

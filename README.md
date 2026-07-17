@@ -8,6 +8,18 @@ tracks money exactly as integer minor units, versions every change into an
 append-only audit trail, conserves donor-restricted funds through every account
 they touch, and produces the reports a Form 990 preparer needs.
 
+**cuento is a customized, single-organization tool — not a general-purpose
+accounting package.** Its data model and design decisions are deliberately
+tailored to one nonprofit's real workflows (name-keyed receivables, this
+organization's fund / program / subsidiary structure, cash-flow-first
+budgeting) rather than trying to fit every organization. It makes no attempt to
+be configurable into someone else's chart of accounts, tax regime, or process.
+Building a bespoke line-of-business tool this complete — one that fits the org
+exactly instead of forcing the org to fit the software — is what AI-assisted
+coding now makes practical: the marginal cost of a purpose-built system has
+fallen far enough that "buy a generic package and adapt your work to it" is no
+longer the only sensible option.
+
 Full documentation site: **[GitHub Pages site](site/index.md)** (see
 "Documentation site" below for how it is served).
 
