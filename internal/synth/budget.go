@@ -2,18 +2,10 @@ package synth
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	"cuento/internal/store"
 )
-
-// queryer is the subset of *sql.DB the reconciliation seam needs to READ live split
-// ids (a builder wiring read, not an app write path -- all writes go through the
-// store). *sql.DB satisfies it.
-type queryer interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-}
 
 // SampleBudgetName is the name the sample-budget seam gives its budget. Exported so a
 // caller can locate it (and so it is documented as the one synthetic budget name).

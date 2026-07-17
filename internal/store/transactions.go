@@ -403,6 +403,33 @@ func (s *Store) SubsidiaryTxnCount(ctx context.Context, subsidiaryID int64) (int
 	return n, nil
 }
 
+// AccountSplitRef is one live split on an account (its id + its transaction id),
+// returned by SplitsByAccountCurrency for callers that need to enumerate an account's
+// splits filtered by transaction currency (e.g. the demo reconciliation seam).
+type AccountSplitRef struct {
+	ID            int64
+	TransactionID int64
+}
+
+// SplitsByAccountCurrency returns every live split on accountID whose transaction is
+// in `currency` and not soft-deleted, ordered by split id (deterministic). Read-only;
+// sqlc. It lets a caller enumerate an account's clearable splits without hand-written
+// SQL (rule 2): the demo reconciliation seam uses it to pick the splits to clear.
+func (s *Store) SplitsByAccountCurrency(ctx context.Context, accountID int64, currency string) ([]AccountSplitRef, error) {
+	rows, err := s.q.SplitsByAccountCurrency(ctx, sqlc.SplitsByAccountCurrencyParams{
+		AccountID: accountID,
+		Currency:  currency,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store: splits of account %d in %s: %w", accountID, currency, err)
+	}
+	out := make([]AccountSplitRef, len(rows))
+	for i, r := range rows {
+		out[i] = AccountSplitRef{ID: r.ID, TransactionID: r.TransactionID}
+	}
+	return out, nil
+}
+
 // NativeTotal is one (currency, account type) net-debit total for a subsidiary.
 type NativeTotal struct {
 	Currency string

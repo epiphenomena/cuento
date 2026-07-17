@@ -751,6 +751,53 @@ func TestUpdateDuplicateExistingSplitIDRejected(t *testing.T) {
 	}
 }
 
+// TestSplitsByAccountCurrency (p26.97) covers the store read backing the demo
+// reconciliation seam: it returns every live split on an account whose transaction is
+// in the given currency and not soft-deleted, ordered by split id. A split on a
+// DIFFERENT-currency txn is excluded.
+func TestSplitsByAccountCurrency(t *testing.T) {
+	e := newTxnEnv(t)
+	// Two USD transactions touching checking, and one MXN transaction touching it.
+	usd1, err := e.s.PostTransaction(mutCtx(), e.balancedInput(10_000))
+	if err != nil {
+		t.Fatalf("post usd1: %v", err)
+	}
+	usd2, err := e.s.PostTransaction(mutCtx(), e.balancedInput(20_000))
+	if err != nil {
+		t.Fatalf("post usd2: %v", err)
+	}
+	// An MXN txn on the same checking account (currency is a txn-level field; MXN is a
+	// seeded active currency).
+	if _, err := e.s.PostTransaction(mutCtx(), PostTransactionInput{
+		Date: "2025-03-02", SubsidiaryID: e.subUS, Currency: "MXN",
+		Splits: []SplitInput{
+			{AccountID: e.salaries, Amount: 5_000, Position: 0},
+			{AccountID: e.checking, Amount: -5_000, Position: 1},
+		},
+	}); err != nil {
+		t.Fatalf("post mxn: %v", err)
+	}
+
+	refs, err := e.s.SplitsByAccountCurrency(mutCtx(), e.checking, "USD")
+	if err != nil {
+		t.Fatalf("SplitsByAccountCurrency: %v", err)
+	}
+	// Exactly the two USD checking splits, ordered by id (ascending).
+	if len(refs) != 2 {
+		t.Fatalf("USD checking splits = %d, want 2 (MXN excluded)", len(refs))
+	}
+	if refs[0].ID >= refs[1].ID {
+		t.Errorf("splits not ordered by id ascending: %d then %d", refs[0].ID, refs[1].ID)
+	}
+	// Both belong to the two USD transactions (never the MXN one).
+	wantTxns := map[int64]bool{usd1: true, usd2: true}
+	for _, r := range refs {
+		if !wantTxns[r.TransactionID] {
+			t.Errorf("split %d on unexpected txn %d (want a USD txn)", r.ID, r.TransactionID)
+		}
+	}
+}
+
 // --- Update: a pre-existing split may keep a now-inactive account (p26.13) --
 
 // TestUpdateKeepsInactiveAccountOnUnchangedSplit posts a balanced txn, deactivates

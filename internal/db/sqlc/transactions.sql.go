@@ -579,6 +579,52 @@ func (q *Queries) SplitVersionsAsOf(ctx context.Context, arg SplitVersionsAsOfPa
 	return items, nil
 }
 
+const splitsByAccountCurrency = `-- name: SplitsByAccountCurrency :many
+SELECT s.id, s.transaction_id
+FROM splits s
+JOIN transactions t ON t.id = s.transaction_id
+WHERE s.account_id = ? AND t.currency = ? AND t.deleted = 0
+ORDER BY s.id
+`
+
+type SplitsByAccountCurrencyParams struct {
+	AccountID int64
+	Currency  string
+}
+
+type SplitsByAccountCurrencyRow struct {
+	ID            int64
+	TransactionID int64
+}
+
+// Every live split on an account whose transaction is in the given currency and NOT
+// soft-deleted, with its transaction id, ordered by split id (deterministic). The
+// demo reconciliation seam (internal/synth) uses it to enumerate the clearable
+// Checking US / USD splits so it can skip the two uncleared items -- a store read
+// (rule 2), replacing the seam's former raw-SQL string literal.
+func (q *Queries) SplitsByAccountCurrency(ctx context.Context, arg SplitsByAccountCurrencyParams) ([]SplitsByAccountCurrencyRow, error) {
+	rows, err := q.db.QueryContext(ctx, splitsByAccountCurrency, arg.AccountID, arg.Currency)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SplitsByAccountCurrencyRow
+	for rows.Next() {
+		var i SplitsByAccountCurrencyRow
+		if err := rows.Scan(&i.ID, &i.TransactionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const splitsByTransaction = `-- name: SplitsByTransaction :many
 SELECT id, transaction_id, account_id, amount, fund_id, program_id,
        functional_class, memo, position, reconciliation_id, description

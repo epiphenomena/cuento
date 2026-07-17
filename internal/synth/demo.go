@@ -2,7 +2,6 @@ package synth
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	"cuento/internal/auth"
@@ -83,9 +82,9 @@ type DemoIDs struct {
 // the campaign splits and fail. The campaign's 2025 splits then land as pre-statement
 // outstanding items (ledger-valid; cosmetically fine for a demo). Do not reorder.
 //
-// db is the SAME database handle the store writes through -- ExtendReconciliation READS
-// live split ids off it (builder wiring, not an app write path; all WRITES go through s).
-func BuildDemo(ctx context.Context, s *store.Store, db *sql.DB) (DemoIDs, error) {
+// Everything reads and writes through the store s (rule 2): ExtendReconciliation now
+// enumerates the clearable splits via s.SplitsByAccountCurrency, so no *sql.DB is threaded.
+func BuildDemo(ctx context.Context, s *store.Store) (DemoIDs, error) {
 	var d DemoIDs
 
 	ids, err := Build(ctx, s)
@@ -102,7 +101,7 @@ func BuildDemo(ctx context.Context, s *store.Store, db *sql.DB) (DemoIDs, error)
 
 	// Reconciliation BEFORE the campaign (see ordering note): finalize Checking US
 	// against the base-fixture statement balance while only base splits exist.
-	if _, err := ExtendReconciliation(ctx, s, db, &d.IDs); err != nil {
+	if _, err := ExtendReconciliation(ctx, s, &d.IDs); err != nil {
 		return d, err
 	}
 

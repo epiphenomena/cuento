@@ -289,6 +289,18 @@ WHERE t.subsidiary_id = ?
 GROUP BY t.currency, a.type
 ORDER BY t.currency, a.type;
 
+-- name: SplitsByAccountCurrency :many
+-- Every live split on an account whose transaction is in the given currency and NOT
+-- soft-deleted, with its transaction id, ordered by split id (deterministic). The
+-- demo reconciliation seam (internal/synth) uses it to enumerate the clearable
+-- Checking US / USD splits so it can skip the two uncleared items -- a store read
+-- (rule 2), replacing the seam's former raw-SQL string literal.
+SELECT s.id, s.transaction_id
+FROM splits s
+JOIN transactions t ON t.id = s.transaction_id
+WHERE s.account_id = ? AND t.currency = ? AND t.deleted = 0
+ORDER BY s.id;
+
 -- name: CountReconciledSplitsForAccount :one
 -- How many splits on an account carry a non-NULL reconciliation_id (p22.5). The
 -- merge block-guard uses this: repointing a reconciled split to the destination

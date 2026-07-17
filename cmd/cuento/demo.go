@@ -96,7 +96,7 @@ func generateDemo(ctx context.Context, path string) error {
 	s := store.New(sqldb, store.WithClock(synth.BuildClock()))
 	ctx = store.WithActor(ctx, systemActor)
 
-	if _, err := synth.BuildDemo(ctx, s, sqldb); err != nil {
+	if _, err := synth.BuildDemo(ctx, s); err != nil {
 		return fmt.Errorf("demo: build: %w", err)
 	}
 	return nil

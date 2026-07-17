@@ -178,7 +178,7 @@ func (f *Fixture) ExtendReconciliation(t *testing.T) {
 	t.Helper()
 	ctx := store.WithActor(context.Background(), synth.SystemActor)
 
-	cleared, err := synth.ExtendReconciliation(ctx, f.Store, f.DB, &f.IDs)
+	cleared, err := synth.ExtendReconciliation(ctx, f.Store, &f.IDs)
 	if err != nil {
 		t.Fatalf("fixture: ExtendReconciliation: %v", err)
 	}

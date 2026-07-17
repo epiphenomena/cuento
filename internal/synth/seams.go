@@ -77,10 +77,11 @@ const ReconStatementBalance int64 = 3_673_500
 // SetSplitReconciled(on) for every live non-deleted Checking US USD split EXCEPT the
 // two on the captured uncleared txns, then Finalize at ReconStatementBalance. Live
 // split ids are QUERIED (not hardcoded): the edited txn's Checking US split is a
-// 3rd-generation id, so a live query is the only deterministic source. The query is
-// direct SQL on the passed *sql.DB handle -- this is builder wiring reading the
-// versions/splits shape, not an app write path (all WRITES stay in the store).
-func ExtendReconciliation(ctx context.Context, s *store.Store, db queryer, ids *IDs) (clearedCount int, err error) {
+// 3rd-generation id, so a live query is the only deterministic source. The read goes
+// through the store's SplitsByAccountCurrency (sqlc, ORDER BY s.id) -- rule 2, no raw
+// SQL in the shipped binary -- so the seam threads no *sql.DB (all reads and writes
+// stay in the store).
+func ExtendReconciliation(ctx context.Context, s *store.Store, ids *IDs) (clearedCount int, err error) {
 	reconID, err := s.StartReconciliation(ctx, ids.CheckingUS, "USD", "2026-05-31", ReconStatementBalance)
 	if err != nil {
 		return 0, fmt.Errorf("StartReconciliation: %w", err)
@@ -88,36 +89,19 @@ func ExtendReconciliation(ctx context.Context, s *store.Store, db queryer, ids *
 	ids.CheckingUSRecon = reconID
 
 	// Every live, non-deleted Checking US split on a USD transaction, plus the id of
-	// its transaction (so we can skip the two uncleared ones).
-	rows, err := db.QueryContext(ctx, `
-		SELECT s.id, s.transaction_id
-		FROM splits s
-		JOIN transactions t ON t.id = s.transaction_id
-		WHERE s.account_id = ? AND t.currency = 'USD' AND t.deleted = 0`, ids.CheckingUS)
+	// its transaction (so we can skip the two uncleared ones), ordered by split id.
+	splits, err := s.SplitsByAccountCurrency(ctx, ids.CheckingUS, "USD")
 	if err != nil {
 		return 0, fmt.Errorf("load Checking US splits: %w", err)
 	}
 
 	skip := map[int64]bool{ids.MayRentTxn: true, ids.JuneDonationTxn: true}
 	var toClear []int64
-	for rows.Next() {
-		var splitID, txnID int64
-		if err := rows.Scan(&splitID, &txnID); err != nil {
-			_ = rows.Close()
-			return 0, fmt.Errorf("scan Checking US split: %w", err)
-		}
-		if skip[txnID] {
+	for _, sp := range splits {
+		if skip[sp.TransactionID] {
 			continue
 		}
-		toClear = append(toClear, splitID)
-	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return 0, fmt.Errorf("iterate Checking US splits: %w", err)
-	}
-	// Close before further store writes so the read connection is released.
-	if err := rows.Close(); err != nil {
-		return 0, fmt.Errorf("close Checking US splits: %w", err)
+		toClear = append(toClear, sp.ID)
 	}
 
 	for _, splitID := range toClear {
