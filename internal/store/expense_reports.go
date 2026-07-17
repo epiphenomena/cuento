@@ -481,9 +481,8 @@ func (s *Store) ConvertExpenseReport(ctx context.Context, reportID, postedTxnID 
 			if err != nil {
 				return err
 			}
-			if rep.Status == "converted" {
-				return ErrExpenseReportState
-			}
+			// Only a SUBMITTED report can convert; any other status (draft, rejected,
+			// or already-converted) is rejected by the single guard below.
 			if rep.Status != "submitted" {
 				return ErrExpenseReportState
 			}

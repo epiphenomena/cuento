@@ -301,7 +301,9 @@ func (s *Store) RegisterPage(
 	subActive := b2i(filters.Subsidiary != nil)
 	progActive := b2i(filters.ProgramID != nil)
 
-	like := "%" + filters.Text + "%"
+	// Neutralize LIKE metacharacters so a literal % or _ in the register text filter
+	// matches itself rather than acting as a wildcard (same helper descriptions.go uses).
+	like := likeContains(filters.Text)
 
 	rows, err := s.q.RegisterPage(ctx, sqlc.RegisterPageParams{
 		AccountID:    accountID,

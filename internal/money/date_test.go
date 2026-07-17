@@ -1,6 +1,7 @@
 package money
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -108,7 +109,7 @@ func TestParseDateRejects(t *testing.T) {
 				t.Fatalf("ParseDate(%q, %v) = %v, want error", tt.in, tt.df, got)
 			}
 			// Error message should be meaningful: mention the offending input.
-			if !containsInput(err.Error(), tt.in) && tt.in != "" {
+			if tt.in != "" && !strings.Contains(err.Error(), tt.in) {
 				t.Fatalf("ParseDate(%q) error %q does not mention the input", tt.in, err.Error())
 			}
 		})
@@ -155,17 +156,4 @@ func TestParseDateFlexible(t *testing.T) {
 			}
 		})
 	}
-}
-
-func containsInput(msg, in string) bool {
-	return in != "" && stringsContains(msg, in)
-}
-
-func stringsContains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
 }

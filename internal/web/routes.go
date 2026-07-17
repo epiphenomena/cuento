@@ -614,7 +614,10 @@ func (s *server) enforce(perm Perm, h http.Handler) http.Handler {
 // A grant-read error fails closed (no grant), so a transient DB fault denies
 // rather than leaks access.
 func (s *server) grantChecker(ctx context.Context, u *store.CurrentUser, perm Perm) func(string) bool {
-	if perm.kind != permReportGroup || u == nil {
+	// An admin is allowed by decide's u.IsAdmin short-circuit BEFORE the grant closure
+	// is ever consulted (routes.go decide), so an admin ReportGroup request needs no
+	// grant query: return the always-false closure (never called; fails closed anyway).
+	if perm.kind != permReportGroup || u == nil || u.IsAdmin {
 		return func(string) bool { return false }
 	}
 	grants, err := s.store.ReportGrants(ctx, u.ID)

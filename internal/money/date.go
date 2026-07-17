@@ -107,6 +107,12 @@ func ParseDate(s string, df DateFormat, now time.Time) (time.Time, error) {
 // separated integers, most-significant first. Three parts are Y-M-D; two parts are
 // M-D with the year taken from now. A 2-digit year is pivoted. It returns ok=false
 // (never an error) so ParseDate can fall through to its single error return.
+//
+// Leniency (accepted, do not change): strings.FieldsFunc IGNORES empty
+// separator-delimited fields, so runs of separators and leading/trailing separators
+// collapse -- "2025--3-1", "2025-3-1-", "/3/1" all parse as if the empties were
+// absent. This is deliberately forgiving for hand-typed input; the digits, not the
+// separator placement, carry the meaning (mirrors Parse's grouping-separator stance).
 func parseFlexibleDate(s string, now time.Time) (time.Time, bool) {
 	parts := strings.FieldsFunc(s, func(r rune) bool { return r == '-' || r == '/' || r == '.' })
 	nums := make([]int, 0, len(parts))
