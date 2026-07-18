@@ -667,8 +667,17 @@ input[aria-invalid="true"] {
 .report-indent-1 td:first-child { padding-left: calc(var(--space-4) * 1.5); }
 .report-indent-2 td:first-child { padding-left: calc(var(--space-4) * 3); }
 .report-indent-3 td:first-child { padding-left: calc(var(--space-4) * 4.5); }
-.report-subtotal { font-weight: 600; }
-.report-total { font-weight: 700; border-top: 2px solid var(--color-border); }
+/* p28.24: accounting rules. A subtotal (Total Revenue/Total Expense =
+   RowSubtotal) gets a single rule above the row; a grand total (Change in Net
+   Assets = RowTotal) gets a single rule above AND a double underline below, the
+   accounting convention for a final figure. Uses the --color-border token so it
+   stays legible in both light and dark themes. */
+.report-subtotal { font-weight: 600; border-top: 1px solid var(--color-border); }
+.report-total {
+  font-weight: 700;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 3px double var(--color-border);
+}
 .report-warning { background: var(--color-danger-bg); color: var(--color-danger); font-weight: 600; }
 
 /* p26.54: a wide/tall report matrix (e.g. the program statement) scrolls inside
