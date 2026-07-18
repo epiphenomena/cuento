@@ -202,6 +202,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
   gap: var(--space-2) var(--space-3);
   margin-left: auto;
 }
+/* p28.28: on pages whose section bar carries ONLY filters (reports, accounts,
+   register -- no sub-nav links), drop the margin-left:auto so the filter labels
+   sit flush at the space-6 gutter, lined up under the page content, instead of
+   floating mid-bar. On link pages the controls stay pushed right of their links. */
+.app-subnav-controls:only-child { margin-left: 0; }
 .subnav-filters {
   display: inline-flex;
   flex-wrap: wrap;
