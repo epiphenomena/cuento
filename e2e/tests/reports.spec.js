@@ -265,9 +265,11 @@ test('reports: open the index, see grouped report links, click one, land on the 
   // --- open the index page ---
   await page.goto('/reports');
 
-  // At least one group SECTION with a report LIST renders (admin sees all four groups).
-  await expect(page.locator('section.reports-group').first()).toBeVisible();
-  await expect(page.locator('ul.reports-list').first()).toBeVisible();
+  // At least one group SECTION with a card grid renders (admin sees every group). p28.12
+  // rewrote the index from a flat <ul> link list to the shared card grid (the same
+  // .hub-section / .hub-cards markup the "All" landing uses), so both pages match.
+  await expect(page.locator('section.hub-section').first()).toBeVisible();
+  await expect(page.locator('ul.hub-cards').first()).toBeVisible();
 
   // The trial-balance report is a link (admin reaches the financial group). Its href is
   // the concrete report route -- clicking it lands on the real report (no dead link).
