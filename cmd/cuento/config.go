@@ -102,9 +102,10 @@ func resolveConfig(env map[string]string, fs *flag.FlagSet, set map[string]bool)
 // defaultDBFile is the SQLite filename inside the data dir when -db is not given.
 const defaultDBFile = "cuento.db"
 
-// truthyEnv interprets CUENTO_DEV: "1", "true", "yes", "on" (any case) are true;
-// everything else (incl. empty) is false. Kept liberal so operators can write
-// CUENTO_DEV=1 in a unit file without surprises.
+// truthyEnv interprets CUENTO_DEV: "1", and "true"/"yes"/"on" in lower-, Title-,
+// or UPPER-case (the exact spellings listed below) are true; everything else
+// (incl. empty and mixed-case like "tRuE") is false. Kept liberal so operators can
+// write CUENTO_DEV=1 in a unit file without surprises.
 func truthyEnv(v string) bool {
 	switch v {
 	case "1", "true", "TRUE", "True", "yes", "YES", "on", "ON":

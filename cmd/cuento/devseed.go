@@ -63,6 +63,10 @@ func devseedBudgetCmd(args []string) error {
 	fs := flag.NewFlagSet("devseed budget", flag.ContinueOnError)
 	dbPath := fs.String("db", defaultDBPath, "path to the SQLite database file")
 	if err := fs.Parse(args); err != nil {
+		// flag.ErrHelp (from -h) is not a failure: usage was already printed.
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 

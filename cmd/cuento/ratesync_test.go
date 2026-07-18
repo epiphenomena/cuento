@@ -43,12 +43,12 @@ func ratesyncStore(t *testing.T) (*store.Store, context.Context) {
 func TestRatesyncPairsFromCurrencies(t *testing.T) {
 	st, ctx := ratesyncStore(t)
 
-	pairs, base, err := ratesyncPairs(ctx, st)
+	pairs, err := ratesyncPairs(ctx, st)
 	if err != nil {
 		t.Fatalf("ratesyncPairs: %v", err)
 	}
-	if base != "USD" {
-		t.Fatalf("base = %q, want USD", base)
+	if len(pairs) == 0 {
+		t.Fatal("ratesyncPairs returned no pairs; expected USD against the other active currencies")
 	}
 	got := map[string]bool{}
 	for _, p := range pairs {

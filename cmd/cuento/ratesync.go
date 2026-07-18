@@ -35,6 +35,10 @@ func ratesyncCmd(args []string) error {
 	fs := flag.NewFlagSet("ratesync", flag.ContinueOnError)
 	dbPath := fs.String("db", defaultDBPath, "path to the SQLite database file")
 	if err := fs.Parse(args); err != nil {
+		// flag.ErrHelp (from -h) is not a failure: usage was already printed.
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 
@@ -62,7 +66,7 @@ func ratesyncCmd(args []string) error {
 // bound here (not just in the dispatch) so callers -- including tests passing a bare
 // context.Background() -- always write as the system user, satisfying the funnel.
 func runRatesync(ctx context.Context, st *store.Store, src rates.RateSource) (int, error) {
-	pairs, _, err := ratesyncPairs(ctx, st)
+	pairs, err := ratesyncPairs(ctx, st)
 	if err != nil {
 		return 0, err
 	}
@@ -85,21 +89,21 @@ func runRatesync(ctx context.Context, st *store.Store, src rates.RateSource) (in
 // ratesyncPairs derives the base->quote pairs to fetch: the org base currency (the
 // root subsidiary's base_currency) against every ACTIVE currency, skipping the
 // identity pair. Quotes are ordered by currency code for deterministic fetch order.
-// It returns the pairs and the base currency (for callers/logging). An empty
-// subsidiary tree (no root) is a clear error, never an index panic.
-func ratesyncPairs(ctx context.Context, st *store.Store) ([]rates.Pair, string, error) {
+// The base currency it derives is carried on every returned pair's Base field. An
+// empty subsidiary tree (no root) is a clear error, never an index panic.
+func ratesyncPairs(ctx context.Context, st *store.Store) ([]rates.Pair, error) {
 	tree, err := st.SubTree(ctx)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	if len(tree) == 0 {
-		return nil, "", errors.New("ratesync: no root subsidiary (empty tree); cannot determine base currency")
+		return nil, errors.New("ratesync: no root subsidiary (empty tree); cannot determine base currency")
 	}
 	base := tree[0].BaseCurrency // SubTree is pre-order: the root is first.
 
 	curs, err := st.Currencies(ctx)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	var pairs []rates.Pair
 	for _, c := range curs {
@@ -109,5 +113,5 @@ func ratesyncPairs(ctx context.Context, st *store.Store) ([]rates.Pair, string, 
 		pairs = append(pairs, rates.Pair{Base: base, Quote: c.Code})
 	}
 	sort.Slice(pairs, func(i, j int) bool { return pairs[i].Quote < pairs[j].Quote })
-	return pairs, base, nil
+	return pairs, nil
 }

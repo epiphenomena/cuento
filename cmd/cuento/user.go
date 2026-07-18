@@ -118,13 +118,19 @@ func parseUserAdd(args []string) (userAddArgs, error) {
 	if len(pos) == 0 || pos[0] == "" {
 		return userAddArgs{}, errors.New("user add: username required")
 	}
+	if len(pos) > 1 {
+		return userAddArgs{}, fmt.Errorf("user add: exactly one <username> is required (got %d)", len(pos))
+	}
 	return userAddArgs{dbPath: *dbPath, username: pos[0], display: *display, admin: *admin}, nil
 }
 
 func userAddCmd(ctx context.Context, args []string) error {
 	pa, err := parseUserAdd(args)
 	if err != nil {
-		userUsage()
+		// flag.ErrHelp (from -h) is not a failure: flag already printed usage.
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 
@@ -142,7 +148,7 @@ func userAddCmd(ctx context.Context, args []string) error {
 	if err := userAdd(ctx, st, pa.username, pa.display, pa.admin, password); err != nil {
 		return err
 	}
-	fmt.Printf("created user %q\n", pa.username)
+	fmt.Fprintf(stdout, "created user %q\n", pa.username)
 	return nil
 }
 
@@ -151,11 +157,18 @@ func userPasswdCmd(ctx context.Context, args []string) error {
 	dbPath := fs.String("db", defaultDBPath, "path to the SQLite database file")
 	pos, err := parseInterspersed(fs, args)
 	if err != nil {
+		// flag.ErrHelp (from -h) is not a failure: flag already printed usage.
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if len(pos) == 0 || pos[0] == "" {
 		userUsage()
 		return errors.New("user passwd: username required")
+	}
+	if len(pos) > 1 {
+		return fmt.Errorf("user passwd: exactly one <username> is required (got %d)", len(pos))
 	}
 	username := pos[0]
 
@@ -173,7 +186,7 @@ func userPasswdCmd(ctx context.Context, args []string) error {
 	if err := userPasswd(ctx, st, username, password); err != nil {
 		return err
 	}
-	fmt.Printf("password updated for %q\n", username)
+	fmt.Fprintf(stdout, "password updated for %q\n", username)
 	return nil
 }
 
@@ -182,11 +195,18 @@ func userDisableCmd(ctx context.Context, args []string) error {
 	dbPath := fs.String("db", defaultDBPath, "path to the SQLite database file")
 	pos, err := parseInterspersed(fs, args)
 	if err != nil {
+		// flag.ErrHelp (from -h) is not a failure: flag already printed usage.
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if len(pos) == 0 || pos[0] == "" {
 		userUsage()
 		return errors.New("user disable: username required")
+	}
+	if len(pos) > 1 {
+		return fmt.Errorf("user disable: exactly one <username> is required (got %d)", len(pos))
 	}
 	username := pos[0]
 
@@ -199,7 +219,7 @@ func userDisableCmd(ctx context.Context, args []string) error {
 	if err := userDisable(ctx, st, username); err != nil {
 		return err
 	}
-	fmt.Printf("disabled user %q\n", username)
+	fmt.Fprintf(stdout, "disabled user %q\n", username)
 	return nil
 }
 

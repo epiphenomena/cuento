@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -22,6 +23,10 @@ func checkCmd(args []string) error {
 	dbPath := fs.String("db", defaultDBPath, "path to the SQLite database file")
 	strict := fs.Bool("strict", false, "treat warnings as failures (non-zero exit on any warning)")
 	if err := fs.Parse(args); err != nil {
+		// flag.ErrHelp (from -h) is not a failure: usage was already printed.
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 

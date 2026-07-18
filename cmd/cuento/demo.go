@@ -33,7 +33,7 @@ import (
 // and regenerates it on an interval (see docs/deploy.md).
 func demoCmd(args []string) error {
 	fs := flag.NewFlagSet("demo", flag.ContinueOnError)
-	out := fs.String("o", "", "output path for the generated demo database (required; must not exist)")
+	out := fs.String("o", "", "output path for the generated demo database (required; refuses an existing file unless -force)")
 	force := fs.Bool("force", false, "overwrite the output file if it already exists (the auto-reset host uses this)")
 	if err := fs.Parse(args); err != nil {
 		if err == flag.ErrHelp {

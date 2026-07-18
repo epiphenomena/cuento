@@ -225,6 +225,12 @@ func TestParseUserAddInterspersed(t *testing.T) {
 	if _, err := parseUserAdd(nil); err == nil {
 		t.Error("parseUserAdd with no username should error")
 	}
+
+	// A second positional must be REJECTED, not silently dropped: `user add alice
+	// bob` used to keep "alice" and discard "bob" (mirrors expense-report's guard).
+	if _, err := parseUserAdd([]string{"alice", "bob"}); err == nil {
+		t.Error("parseUserAdd with two usernames should error, not drop the second")
+	}
 }
 
 // assertHashAbsentFromVersion scans every column of the entity's latest

@@ -56,6 +56,10 @@ func expenseReportRejectCmd(ctx context.Context, args []string) error {
 	reason := fs.String("reason", "", "the rejection reason (required)")
 	positionals, err := parseInterspersed(fs, args)
 	if err != nil {
+		// flag.ErrHelp (from -h) is not a failure: flag already printed usage.
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if len(positionals) != 1 {
@@ -78,6 +82,6 @@ func expenseReportRejectCmd(ctx context.Context, args []string) error {
 	if err := st.RejectExpenseReport(store.WithActor(ctx, systemActor), id, *reason); err != nil {
 		return fmt.Errorf("expense-report reject %d: %w", id, err)
 	}
-	fmt.Printf("expense report %d rejected\n", id)
+	fmt.Fprintf(stdout, "expense report %d rejected\n", id)
 	return nil
 }
