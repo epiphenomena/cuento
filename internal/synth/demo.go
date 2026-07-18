@@ -6,10 +6,11 @@ import (
 
 	"cuento/internal/auth"
 	"cuento/internal/bankimport"
+	"cuento/internal/reports"
 	"cuento/internal/store"
 )
 
-// Demo login credentials. The `cuento demo` generator seeds these three users and
+// Demo login credentials. The `cuento demo` generator seeds these four users and
 // docs/deploy.md prints the same contract, so the constants are the single source of
 // truth. They are DEMO-ONLY passwords for a throwaway, publicly-hosted, auto-resetting
 // database -- never real credentials (rule 11 / rule 13). Each covers one permission
@@ -26,6 +27,15 @@ const (
 	// DemoViewerUser is a read-only viewer (read txn perm, no admin, no submit).
 	DemoViewerUser = "viewer"
 	DemoViewerPass = "demo-view-2026"
+
+	// DemoCampDirectorUser is a read-only user with a PROGRAM-SUBTREE-SCOPED report
+	// grant (p27.4d): the "financial" report group scoped to the Educacion program
+	// subtree. It demonstrates the p27.4 data-scoping axis in the hosted demo -- this
+	// user's income statement (a program-dimensioned report) shows ONLY Educacion's
+	// rows, and the demoted activities_by_restriction report in the same group is denied
+	// (needs an unscoped grant). Named for the "camp director" persona in PLAN Q5.
+	DemoCampDirectorUser = "campdir"
+	DemoCampDirectorPass = "demo-camp-2026"
 )
 
 // DemoUser pairs a demo login with its human-readable role, for docs + the CLI.
@@ -42,6 +52,7 @@ func DemoUsers() []DemoUser {
 		{DemoAdminUser, DemoAdminPass, "administrator (full access)"},
 		{DemoSubmitterUser, DemoSubmitterPass, "expense submitter (write, can submit)"},
 		{DemoViewerUser, DemoViewerPass, "read-only viewer"},
+		{DemoCampDirectorUser, DemoCampDirectorPass, "program-scoped viewer (financial reports, Educacion subtree only)"},
 	}
 }
 
@@ -51,9 +62,10 @@ func DemoUsers() []DemoUser {
 type DemoIDs struct {
 	IDs
 
-	AdminUser     int64
-	SubmitterUser int64
-	ViewerUser    int64
+	AdminUser        int64
+	SubmitterUser    int64
+	ViewerUser       int64
+	CampDirectorUser int64
 
 	DraftReport     int64
 	SubmittedReport int64
@@ -67,7 +79,8 @@ type DemoIDs struct {
 
 // BuildDemo builds the FULL demo dataset into the store: the canonical synthetic org
 // (Build) + every opt-in seam (rates, reconciliation, capital campaign, sample budget)
-// + demo-only data (three users across permission levels, expense reports in
+// + demo-only data (four users across permission levels incl. a program-scoped viewer,
+// expense reports in
 // draft/submitted/posted states, an in-progress reconciliation, and a bank-import
 // mapping profile with a staged batch) so EVERY feature/report renders substantively.
 //
@@ -131,9 +144,10 @@ func BuildDemo(ctx context.Context, s *store.Store) (DemoIDs, error) {
 	return d, nil
 }
 
-// buildDemoUsers seeds the three demo logins across permission levels with known
+// buildDemoUsers seeds the four demo logins across permission levels with known
 // passwords (DemoUsers). Passwords are hashed via auth.Hash (argon2id) exactly like
-// `cuento user add`, so login works out of the box.
+// `cuento user add`, so login works out of the box. The fourth (camp director) is a
+// read-only user carrying a program-subtree-scoped report grant (p27.4d).
 func buildDemoUsers(ctx context.Context, s *store.Store, d *DemoIDs) error {
 	admin, err := createDemoUser(ctx, s, DemoAdminUser, "Demo Administrator", true, "write")
 	if err != nil {
@@ -155,6 +169,29 @@ func buildDemoUsers(ctx context.Context, s *store.Store, d *DemoIDs) error {
 		return err
 	}
 	d.ViewerUser = viewer
+
+	// A program-subtree-scoped viewer (p27.4d): read-only, holding the "financial" report
+	// group scoped to the Educacion program subtree. income_statement (program-dimensioned)
+	// then shows only Educacion's rows; activities_by_restriction (demoted, same group) is
+	// denied. GrantReportGroup versions the grant under the actor already in ctx.
+	//
+	// The report groups are code-declared reference data (D10) the SERVE path syncs at
+	// startup (web.SyncReportGroups); the demo generator has no server boot, so sync them
+	// here first -- else the grant's group_name FK has nothing to reference. Sync via the
+	// canonical reports.Groups() set (the same one web syncs), an idempotent upsert outside
+	// the write funnel (reference data, rule 2 -- like currencies).
+	if err := s.SyncReportGroups(ctx, reports.Groups()); err != nil {
+		return fmt.Errorf("sync report groups for demo grant: %w", err)
+	}
+	campDir, err := createDemoUser(ctx, s, DemoCampDirectorUser, "Demo Camp Director", false, "read")
+	if err != nil {
+		return err
+	}
+	educacion := d.Educacion
+	if err := s.GrantReportGroup(ctx, campDir, "financial", &educacion); err != nil {
+		return fmt.Errorf("grant scoped financial to demo camp director: %w", err)
+	}
+	d.CampDirectorUser = campDir
 	return nil
 }
 

@@ -287,11 +287,12 @@ only the stored hashes differ run-to-run.
 
 ### Demo login credentials
 
-| Username    | Password           | Role                                 |
-|-------------|--------------------|--------------------------------------|
-| `admin`     | `demo-admin-2026`  | administrator (full access)          |
-| `submitter` | `demo-submit-2026` | expense submitter (write, can submit)|
-| `viewer`    | `demo-view-2026`   | read-only viewer                     |
+| Username    | Password           | Role                                                        |
+|-------------|--------------------|-------------------------------------------------------------|
+| `admin`     | `demo-admin-2026`  | administrator (full access)                                 |
+| `submitter` | `demo-submit-2026` | expense submitter (write, can submit)                       |
+| `viewer`    | `demo-view-2026`   | read-only viewer                                            |
+| `campdir`   | `demo-camp-2026`   | program-scoped viewer (financial reports, Educacion subtree only) |
 
 These are DEMO-ONLY credentials for a throwaway, auto-resetting database — they
 are printed by `cuento demo` on generation and defined once in

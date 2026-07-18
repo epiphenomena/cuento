@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"cuento/internal/db"
 	"cuento/internal/ledger"
+	"cuento/internal/reports"
+	"cuento/internal/store"
 	"cuento/internal/synth"
 )
 
@@ -131,6 +135,117 @@ func TestDemoGeneratorAntiDrift(t *testing.T) {
 
 	// Rates so the multi-currency conversion / consolidation reports populate.
 	atLeast("exchange rates", count(`SELECT count(*) FROM exchange_rates`), 1)
+
+	// p27.4d: a PROGRAM-SUBTREE-SCOPED report grant EXISTS (the feature ships with demo
+	// data). This is the load-bearing anti-drift line -- if the demo generator ever stops
+	// minting the scoped grant, the program-scope feature would be undemonstrable in the
+	// hosted demo and this fails.
+	atLeast("program-scoped report grants", count(`SELECT count(*) FROM user_report_grants WHERE program_id IS NOT NULL`), 1)
+	assertDemoProgramScopedGrant(ctx, t, sqldb)
+}
+
+// assertDemoProgramScopedGrant verifies the p27.4d camp-director scoped grant end to
+// end on the generated demo db: (a) the grant has the expected SHAPE (the camp director
+// holds exactly "financial" scoped to the Educacion program subtree); (b) it FILTERS --
+// running income_statement (a program-dimensioned report) under that subtree shows only
+// Educacion's rows, NOT the Food Pantry sibling; (c) the DENY PRECONDITION holds -- the
+// demoted activities_by_restriction report is in the SAME granted group yet is NOT
+// program-dimensioned, so a purely program-scoped grant cannot reach it. The runtime 403
+// for such a user is proven by the web layer's TestPermissionMatrix/TestDecidePolicy and
+// the p27.4c e2e (report-grant-scope.spec.js); here we assert the demo satisfies the
+// precondition, which is the reachable-from-cmd analogue (decide/grantChecker are
+// unexported web internals, deliberately not reimplemented here per the advisor note).
+func assertDemoProgramScopedGrant(ctx context.Context, t *testing.T, sqldb *sql.DB) {
+	t.Helper()
+
+	// (a) shape: the camp director holds exactly one grant -- "financial" scoped to the
+	// program named "Educacion".
+	var group, progName string
+	err := sqldb.QueryRowContext(ctx, `
+		SELECT g.group_name, p.name
+		FROM user_report_grants g
+		JOIN users u ON u.id = g.user_id
+		JOIN programs p ON p.id = g.program_id
+		WHERE u.username = ? AND g.program_id IS NOT NULL`,
+		synth.DemoCampDirectorUser).Scan(&group, &progName)
+	if err != nil {
+		t.Fatalf("camp-director scoped grant: %v", err)
+	}
+	if group != "financial" {
+		t.Errorf("camp-director scoped grant group = %q, want financial", group)
+	}
+	if progName != "Educacion" {
+		t.Errorf("camp-director scope program = %q, want Educacion", progName)
+	}
+
+	// Resolve the Educacion program id + the demo Root subsidiary, then compute the
+	// grant's subtree via the SAME primitive production uses (ProgramSubtree).
+	st := store.New(sqldb)
+	var educacionID, rootSub int64
+	if err := sqldb.QueryRowContext(ctx, `SELECT id FROM programs WHERE name = 'Educacion'`).Scan(&educacionID); err != nil {
+		t.Fatalf("resolve Educacion id: %v", err)
+	}
+	if err := sqldb.QueryRowContext(ctx, `SELECT id FROM subsidiaries WHERE parent_id IS NULL`).Scan(&rootSub); err != nil {
+		t.Fatalf("resolve root subsidiary: %v", err)
+	}
+	subtree, err := st.ProgramSubtree(ctx, educacionID)
+	if err != nil {
+		t.Fatalf("program subtree: %v", err)
+	}
+
+	// (b) filters: run income_statement under the scope. Educacion's "Program Supplies"
+	// (in-subtree) is present; the Food Pantry sibling's "Food Purchases" is absent.
+	rep, ok := reports.Default().Get(reports.IncomeStatementReportID)
+	if !ok {
+		t.Fatalf("income_statement not registered")
+	}
+	p := reports.Params{
+		Scope:          rootSub,
+		From:           "2025-01-01",
+		To:             "2030-12-31",
+		Granularity:    reports.GranNone,
+		TargetCurrency: "USD",
+		Lang:           "en",
+		ProgramScope:   subtree,
+	}
+	table, err := rep.Run(ctx, reports.NewToolkit(st, p), p)
+	if err != nil {
+		t.Fatalf("run scoped income_statement: %v", err)
+	}
+	text := tableText(table)
+	if !strings.Contains(text, "Program Supplies") {
+		t.Errorf("scoped income_statement missing Educacion's Program Supplies (in-subtree)")
+	}
+	if strings.Contains(text, "Food Purchases") {
+		t.Errorf("scoped income_statement leaks Food Pantry's Food Purchases (sibling subtree)")
+	}
+
+	// (c) deny precondition: activities_by_restriction is in the granted "financial" group
+	// but is NOT program-dimensioned -> a purely program-scoped grant cannot reach it.
+	demoted, ok := reports.Default().Get(reports.ActivitiesByRestrictionReportID)
+	if !ok {
+		t.Fatalf("activities_by_restriction not registered")
+	}
+	if demoted.Group != "financial" {
+		t.Errorf("activities_by_restriction group = %q, want financial (same group as the scoped grant)", demoted.Group)
+	}
+	if demoted.ProgramDimensioned {
+		t.Errorf("activities_by_restriction is ProgramDimensioned; a scoped grant would reach it (deny precondition broken)")
+	}
+}
+
+// tableText concatenates every cell's literal text across a rendered report Table --
+// enough to assert the PRESENCE / ABSENCE of a stored account name (a proper noun
+// rendered verbatim) without depending on cell positions.
+func tableText(tb reports.Table) string {
+	var b []byte
+	for _, row := range tb.Rows {
+		for _, c := range row.Cells {
+			b = append(b, c.Text...)
+			b = append(b, '\n')
+		}
+	}
+	return string(b)
 }
 
 // TestDemoGeneratorDeterministic asserts the generator produces the SAME business data
@@ -188,8 +303,8 @@ func TestDemoGeneratorDeterministic(t *testing.T) {
 // the CLI output cannot silently drift from what the generator seeds.
 func TestDemoCredentialsDocumented(t *testing.T) {
 	users := synth.DemoUsers()
-	if len(users) != 3 {
-		t.Fatalf("expected 3 demo users, got %d", len(users))
+	if len(users) != 4 {
+		t.Fatalf("expected 4 demo users, got %d", len(users))
 	}
 	for _, u := range users {
 		if u.Username == "" || u.Password == "" || u.Role == "" {
