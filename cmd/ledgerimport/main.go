@@ -13,9 +13,11 @@
 //	ledgerimport build -source <csv> -map <mapping-accounts.csv>
 //	                   -config <mapping.json> -o <out.db> [--anonymize]
 //	    Convert the source into a cuento db: subsidiaries, programs, funds, the
-//	    account tree, opening balances, payees, and transactions (single-currency
-//	    directly; multi-currency decomposed through FX Clearing, D3). --anonymize
-//	    hashes payees/memos so a shareable sample db carries no real names/notes.
+//	    account tree, opening balances, and transactions (single-currency directly;
+//	    multi-currency decomposed through FX Clearing, D3). --anonymize hashes ONLY
+//	    the per-split (and correction) DESCRIPTIONS; entity names (funds, donors,
+//	    subsidiaries, accounts) are NOT anonymized, so the result is NOT publicly
+//	    shareable — use `cuento demo` for a fully synthetic database.
 //
 // The subcommand CORES (runAccounts/runBuild) take io.Reader/io.Writer and a
 // *store.Store so they are unit-tested against SYNTHETIC data (AGENTS rule 11 --
@@ -133,7 +135,7 @@ func buildCmd(ctx context.Context, args []string) error {
 	configPath := fs.String("config", "", "path to the global mapping config JSON")
 	ratesPath := fs.String("rates", "", "optional path to a historical FX-rates CSV (rate_date,base,quote,rate,source)")
 	outPath := fs.String("o", "fixtures/sample.db", "output SQLite db path")
-	anonymize := fs.Bool("anonymize", false, "hash payees/memos so the sample db carries no real names/notes")
+	anonymize := fs.Bool("anonymize", false, "hash per-split/correction DESCRIPTIONS only; entity names are NOT anonymized (use `cuento demo` for a shareable synthetic db)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -291,7 +293,7 @@ func importSubCmd(ctx context.Context, args []string) error {
 	configPath := fs.String("config", "", "path to the global mapping config JSON")
 	outPath := fs.String("o", "", "existing scaffolded SQLite db path")
 	subName := fs.String("subsidiary", "", "the subsidiary NAME to import (must match the config)")
-	anonymize := fs.Bool("anonymize", false, "hash payees/memos so the db carries no real names/notes")
+	anonymize := fs.Bool("anonymize", false, "hash per-split/correction DESCRIPTIONS only; entity names are NOT anonymized (use `cuento demo` for a shareable synthetic db)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}

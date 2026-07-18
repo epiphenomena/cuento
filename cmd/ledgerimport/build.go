@@ -856,8 +856,12 @@ func topoAccounts(rows []AccountMap) ([]AccountMap, error) {
 
 var errSkip = errors.New("skip")
 
-// hashText returns a short hex digest of s, used when --anonymize hides real
-// payee/memo text so a shareable sample db carries no names or notes.
+// hashText returns a short hex digest of s. It is applied ONLY to per-split (and
+// correction) DESCRIPTIONS under --anonymize; that is the sole redaction the flag
+// performs. Entity names (funds, donors, subsidiaries, accounts) and every other
+// field pass through raw, so an --anonymize db is NOT safe to share publicly — use
+// `cuento demo` (a fully synthetic database) for that. See the --anonymize flag
+// usage strings and DECISIONS (p26.106).
 func hashText(s string) string {
 	if s == "" {
 		return ""
