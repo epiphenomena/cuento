@@ -12,6 +12,8 @@ import (
 	"strings"
 	"syscall"
 
+	"golang.org/x/term"
+
 	"cuento/internal/auth"
 	"cuento/internal/db"
 	"cuento/internal/store"
@@ -223,15 +225,32 @@ func userDisableCmd(ctx context.Context, args []string) error {
 	return nil
 }
 
-// readPassword reads one line from r. On a terminal it first prints prompt to
-// stderr. The trailing newline is stripped; the raw content is otherwise kept
-// verbatim (a password may contain spaces). An empty password is rejected.
+// readPassword reads one line from r. The trailing newline is stripped; the raw
+// content is otherwise kept verbatim (a password may contain spaces). An empty
+// password is rejected.
+//
+// When r is an interactive terminal it prints prompt to stderr and reads with
+// ECHO SUPPRESSED (term.ReadPassword), so the secret never appears on screen. The
+// PIPED/scripted path (a file, pipe, or non-terminal char device — the case tests
+// and CI drive) is unchanged, byte for byte: a plain bufio line read with no
+// terminal handling.
 func readPassword(r io.Reader, prompt string) (string, error) {
-	if f, ok := r.(*os.File); ok {
-		if info, err := f.Stat(); err == nil && info.Mode()&os.ModeCharDevice != 0 {
-			fmt.Fprint(os.Stderr, prompt)
+	if f, ok := r.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
+		fmt.Fprint(os.Stderr, prompt)
+		b, err := term.ReadPassword(int(f.Fd()))
+		// ReadPassword leaves the cursor on the prompt line (the user's Enter was
+		// not echoed), so emit the newline ourselves for clean output.
+		fmt.Fprintln(os.Stderr)
+		if err != nil {
+			return "", fmt.Errorf("read password: %w", err)
 		}
+		password := strings.TrimRight(string(b), "\r\n")
+		if password == "" {
+			return "", errors.New("password must not be empty")
+		}
+		return password, nil
 	}
+
 	line, err := bufio.NewReader(r).ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		return "", fmt.Errorf("read password: %w", err)

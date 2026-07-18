@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -12,6 +13,37 @@ import (
 	"cuento/internal/testutil"
 	"cuento/internal/web"
 )
+
+// TestReadPasswordPipedPath pins the NON-terminal (piped/scripted) branch of
+// readPassword: the branch tests and CI drive. term.ReadPassword must NOT be
+// engaged for a non-terminal reader (it would fail with an ioctl error); the plain
+// bufio line read stays byte-for-byte as before. Covers a strings.Reader, a real
+// *os.File pipe (not a char device), a trailing-CRLF strip, and empty rejection.
+func TestReadPasswordPipedPath(t *testing.T) {
+	if got, err := readPassword(strings.NewReader("s3cret pass\n"), "New password: "); err != nil || got != "s3cret pass" {
+		t.Fatalf("readPassword(strings) = %q, %v; want %q, nil", got, err, "s3cret pass")
+	}
+
+	// A real *os.File that is a PIPE (not a terminal): must take the piped branch,
+	// not attempt terminal echo suppression.
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	go func() {
+		_, _ = pw.WriteString("filepass\r\n")
+		_ = pw.Close()
+	}()
+	if got, err := readPassword(pr, "New password: "); err != nil || got != "filepass" {
+		t.Fatalf("readPassword(pipe) = %q, %v; want %q, nil (CRLF stripped)", got, err, "filepass")
+	}
+	_ = pr.Close()
+
+	// An empty piped line is rejected.
+	if _, err := readPassword(strings.NewReader("\n"), ""); err == nil {
+		t.Error("readPassword with an empty piped line should error")
+	}
+}
 
 // postLogin drives the real web login handler end to end, mirroring the p06.2
 // login tests: a same-origin POST /login (no Sec-Fetch-Site header, so
