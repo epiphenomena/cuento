@@ -440,13 +440,6 @@ func resolveTheme(r *http.Request, u *store.CurrentUser) string {
 	return defaultTheme
 }
 
-// renderShell renders a shell page (base.tmpl + a page body block) for the
-// request's language, wrapping page in the shell chrome. It mirrors render but
-// always executes base.tmpl and passes the shellPage model.
-func (s *server) renderShell(w http.ResponseWriter, r *http.Request, status int, page any) {
-	s.render(w, r, status, "base.tmpl", s.newShellPage(r, page))
-}
-
 // home is the authenticated landing (GET /{$}). p26.78: the "All" card grid IS the
 // landing — every user (whatever their perms) lands on a grid of the destinations they
 // can reach, replacing the p23.8 chart-of-accounts landing. It renders the SAME

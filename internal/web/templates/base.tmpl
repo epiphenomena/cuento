@@ -160,13 +160,3 @@
 </body>
 </html>
 {{- end}}
-
-{{/* base.tmpl entry point = the authenticated landing (GET /{$}). Title is the
-     localized "Home" nav label. .Shell/.Page come from the shellPage model; the
-     wrapper struct adds the localized .Title the head needs. */ -}}
-{{define "base.tmpl" -}}
-{{template "shell-open" (shellTitle . (t "nav.home"))}}
-  <h1>{{t "app.name"}}</h1>
-  <p>{{t "home.welcome"}}</p>
-{{template "shell-close" .}}
-{{- end}}

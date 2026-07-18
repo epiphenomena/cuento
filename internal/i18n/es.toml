@@ -11,14 +11,6 @@ other = "cuento"
 [brand.tagline]
 other = "contabilidad abierta para el bien común"
 
-# Marcador de la pagina de inicio autenticada (p06.3). El panel/nav real es la
-# fase 10; GET /{$} muestra esto para ejercer la ruta AnyUser con una ruta real
-# e internacionalizada en vez de un stub.
-[home.title]
-other = "cuento"
-[home.welcome]
-other = "Sesion iniciada."
-
 [common.save]
 other = "Guardar"
 [common.cancel]
@@ -902,8 +894,6 @@ other = "Nota"
 other = "Error"
 [register.new_txn]
 other = "Nueva transaccion"
-[register.edit_txn]
-other = "Editar"
 [error.txn.unbalanced]
 other = "La transaccion no cuadra a cero."
 [error.txn.fund_unbalanced]

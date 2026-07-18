@@ -18,14 +18,6 @@ other = "cuento"
 [brand.tagline]
 other = "contabilidad abierta para el bien común"
 
-# Authenticated landing placeholder (p06.3). The real dashboard/nav is phase 10;
-# GET /{$} renders this so the AnyUser permission path is exercised by a real,
-# i18n'd route rather than a stub.
-[home.title]
-other = "cuento"
-[home.welcome]
-other = "Signed in."
-
 [common.save]
 other = "Save"
 [common.cancel]
@@ -908,8 +900,6 @@ other = "Memo"
 other = "Error"
 [register.new_txn]
 other = "New transaction"
-[register.edit_txn]
-other = "Edit"
 [error.txn.unbalanced]
 other = "The transaction does not balance to zero."
 [error.txn.fund_unbalanced]
