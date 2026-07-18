@@ -685,6 +685,10 @@ input[aria-invalid="true"] {
   border-bottom: 3px double var(--color-border);
 }
 .report-warning { background: var(--color-danger-bg); color: var(--color-danger); font-weight: 600; }
+/* p28.26: highlight the hovered data row (mirrors .recon-row:hover). The sticky
+   first-column override lives in the @media screen block below, so the frozen
+   column picks up the same highlight instead of masking it with its opaque bg. */
+.report-table tbody tr:hover { background: var(--color-surface-alt); }
 
 /* p26.54: a wide/tall report matrix (e.g. the program statement) scrolls inside
    .report-scroll with STICKY headers -- the top header ROW and the left (first) COLUMN
@@ -715,6 +719,12 @@ input[aria-invalid="true"] {
      first cell the matching surface so the frozen column matches the row it belongs to. */
   .report-scroll .report-table tr.report-warning td:first-child {
     background: var(--color-danger-bg);
+  }
+  /* p28.26: the sticky first cell is opaque, so on hover it would keep its own
+     surface bg and break the row highlight at the frozen column. Give the hovered
+     row's first cell the same hover surface so the highlight spans the full row. */
+  .report-scroll .report-table tbody tr:hover td:first-child {
+    background: var(--color-surface-alt);
   }
 }
 
