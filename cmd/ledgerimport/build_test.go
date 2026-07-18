@@ -1812,3 +1812,132 @@ func TestCorrectionResolvesCampusFundByName(t *testing.T) {
 		t.Fatalf("ledger.Check has errors: %+v", vs)
 	}
 }
+
+// parseTestInputsWithCorrections is parseTestInputs but with the corrections config
+// (configWithCorrections), for the finalize path.
+func parseTestInputsWithCorrections(t *testing.T) ([]AccountMap, Config, []Record) {
+	t.Helper()
+	accMap, err := ReadAccountMap(strings.NewReader(testAccountMap()))
+	if err != nil {
+		t.Fatalf("ReadAccountMap: %v", err)
+	}
+	cfg, err := ReadConfig(strings.NewReader(configWithCorrections()))
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	recs, err := ParseRecords(strings.NewReader(testSource()))
+	if err != nil {
+		t.Fatalf("ParseRecords: %v", err)
+	}
+	return accMap, cfg, recs
+}
+
+// TestFinalizePostsSameCorrectionsAsBuild proves the split go-live path
+// (scaffold -> import-subsidiary each -> finalize) posts the SAME corrections as
+// the monolithic runBuild: the finalize step rehydrates the id maps in a fresh
+// builder (reloadState, no source recs) and posts cfg.Corrections through the store.
+// This is the p27.0 gap fix -- the split path had no correction tail. Synthetic (rule 11).
+func TestFinalizePostsSameCorrectionsAsBuild(t *testing.T) {
+	accMap, cfg, recs := parseTestInputsWithCorrections(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// Reference: the monolithic build posts the correction and is Error-clean.
+	monoDB := testutil.NewDB(t)
+	monoRes, err := runBuild(ctx, strings.NewReader(testSource()), accMap, cfg, testRates(), store.New(monoDB), false)
+	if err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+	if got := len(monoRes.tidTxns["correction-0"]); got != 1 {
+		t.Fatalf("monolithic build posted %d correction txns, want 1", got)
+	}
+
+	// The split path: scaffold + import each subsidiary + finalize, into a SEPARATE db.
+	splitDB := testutil.NewDB(t)
+	st := store.New(splitDB)
+	if _, err := runScaffold(ctx, accMap, cfg, testRates(), st, false); err != nil {
+		t.Fatalf("runScaffold: %v", err)
+	}
+	for _, sub := range configuredSubsidiaryNames(cfg) {
+		if _, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, sub, false); err != nil {
+			t.Fatalf("import subsidiary %q: %v", sub, err)
+		}
+	}
+	finRes, err := runFinalize(ctx, accMap, cfg, st, false)
+	if err != nil {
+		t.Fatalf("runFinalize: %v", err)
+	}
+
+	// Finalize posted the SAME number of correction transactions as the build.
+	if got, want := len(finRes.tidTxns["correction-0"]), len(monoRes.tidTxns["correction-0"]); got != want {
+		t.Fatalf("finalize posted %d correction txns, build posted %d", got, want)
+	}
+
+	// The two dbs hold the same number of correction-shaped transactions overall: a
+	// correction is the ONLY txn dated 2025-12-31 with the cutoff memo. Count in both.
+	const q = `SELECT COUNT(*) FROM transactions WHERE date = '2025-12-31' AND memo = 'FY cutoff adjustment'`
+	var monoN, splitN int
+	if err := monoDB.QueryRow(q).Scan(&monoN); err != nil {
+		t.Fatalf("count mono corrections: %v", err)
+	}
+	if err := splitDB.QueryRow(q).Scan(&splitN); err != nil {
+		t.Fatalf("count split corrections: %v", err)
+	}
+	if monoN != 1 || splitN != 1 {
+		t.Fatalf("correction txn count: build=%d, split+finalize=%d, want 1 each", monoN, splitN)
+	}
+
+	// The split+finalize db is Error-clean, matching the monolithic build's result.
+	vs, err := ledger.Check(context.Background(), splitDB)
+	if err != nil {
+		t.Fatalf("ledger.Check: %v", err)
+	}
+	if ledger.HasErrors(vs) {
+		t.Fatalf("split+finalize db has integrity errors: %+v", vs)
+	}
+}
+
+// TestFinalizeRefusesBeforeLastSubsidiary proves finalize fails loudly if a
+// configured subsidiary has not been imported yet -- a correction can reference
+// accounts across subsidiaries, so it must run only after the LAST import. The error
+// names the missing subsidiary so the operator imports it first.
+func TestFinalizeRefusesBeforeLastSubsidiary(t *testing.T) {
+	accMap, cfg, recs := parseTestInputsWithCorrections(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	st := store.New(testutil.NewDB(t))
+
+	if _, err := runScaffold(ctx, accMap, cfg, testRates(), st, false); err != nil {
+		t.Fatalf("runScaffold: %v", err)
+	}
+	// Import ONLY Test US, leaving Test MX empty.
+	if _, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, "Test US", false); err != nil {
+		t.Fatalf("import Test US: %v", err)
+	}
+	_, err := runFinalize(ctx, accMap, cfg, st, false)
+	if err == nil {
+		t.Fatal("finalize before the last subsidiary succeeded; want a loud failure")
+	}
+	if !strings.Contains(err.Error(), "Test MX") {
+		t.Errorf("error %q does not name the not-yet-imported subsidiary Test MX", err)
+	}
+}
+
+// TestFinalizeRequiresCorrections proves finalize on a config with no corrections
+// fails loudly rather than silently doing nothing (an operator running finalize
+// expects work; an empty corrections list is a config mistake to surface).
+func TestFinalizeRequiresCorrections(t *testing.T) {
+	accMap, cfg, recs := parseTestInputs(t) // testConfig has NO corrections
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	st := store.New(testutil.NewDB(t))
+
+	if _, err := runScaffold(ctx, accMap, cfg, testRates(), st, false); err != nil {
+		t.Fatalf("runScaffold: %v", err)
+	}
+	for _, sub := range configuredSubsidiaryNames(cfg) {
+		if _, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, sub, false); err != nil {
+			t.Fatalf("import subsidiary %q: %v", sub, err)
+		}
+	}
+	if _, err := runFinalize(ctx, accMap, cfg, st, false); err == nil {
+		t.Fatal("finalize with no corrections succeeded; want a loud failure")
+	}
+}

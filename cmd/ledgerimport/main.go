@@ -71,6 +71,10 @@ func main() {
 		if err := importSubCmd(ctx, args); err != nil {
 			log.Fatalf("import-subsidiary: %v", err)
 		}
+	case "finalize":
+		if err := finalizeCmd(ctx, args); err != nil {
+			log.Fatalf("finalize: %v", err)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "ledgerimport: unknown subcommand %q\n\n", cmd)
 		usage()
@@ -83,7 +87,8 @@ func usage() {
 		"  accounts           emit a reviewable account-mapping CSV skeleton from the source export\n"+
 		"  build              convert the source export + mapping into a FRESH cuento SQLite db (all subsidiaries)\n"+
 		"  scaffold           create a fresh db with reference data only (subs, programs, funds, chart, rates)\n"+
-		"  import-subsidiary  additively import ONE subsidiary's transactions into a scaffolded db\n")
+		"  import-subsidiary  additively import ONE subsidiary's transactions into a scaffolded db\n"+
+		"  finalize           post cross-subsidiary corrections (run ONCE after the LAST import-subsidiary)\n")
 }
 
 // accountsCmd wires runAccounts to the real files. It reads the source CSV at
@@ -353,6 +358,77 @@ func importSubCmd(ctx context.Context, args []string) error {
 			log.Printf("  %s %-9s %d", t.Currency, t.Type, t.Total)
 		}
 	}
+
+	vs, err := ledger.Check(ctx, sqldb)
+	if err != nil {
+		return fmt.Errorf("ledger check: %w", err)
+	}
+	for _, v := range vs {
+		log.Printf("%s %s: %s", v.Severity, v.Rule, v.Detail)
+	}
+	if ledger.HasErrors(vs) {
+		return fmt.Errorf("produced db has integrity errors; see above")
+	}
+	return nil
+}
+
+// finalizeCmd posts the config's cross-subsidiary corrections into an already
+// scaffolded + subsidiary-imported db -- the FINALIZE step of the split-import
+// go-live (p27.0). It opens (never migrates) the existing db, rehydrates the id
+// maps FROM the db (the same rehydration import-subsidiary uses), and posts
+// cfg.Corrections through the store, then runs the whole-db integrity suite.
+//
+// It MUST be run ONCE, after the LAST import-subsidiary: corrections span
+// subsidiaries, so runFinalize refuses unless every configured subsidiary is
+// present, and there is no natural key to detect a double-run -- re-running
+// double-posts. Recovery is restore-from-backup (golive.md), so ALWAYS back up
+// first.
+func finalizeCmd(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("finalize", flag.ContinueOnError)
+	mapPath := fs.String("map", "", "path to the reviewed account-mapping CSV")
+	configPath := fs.String("config", "", "path to the global mapping config JSON")
+	outPath := fs.String("o", "", "existing scaffolded + subsidiary-imported SQLite db path")
+	anonymize := fs.Bool("anonymize", false, "hash correction DESCRIPTIONS only; entity names are NOT anonymized")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *mapPath == "" || *configPath == "" || *outPath == "" {
+		return fmt.Errorf("-map, -config and -o are all required")
+	}
+	accMap, err := readAccountMapFile(*mapPath)
+	if err != nil {
+		return err
+	}
+	cfg, err := readConfigFile(*configPath)
+	if err != nil {
+		return err
+	}
+
+	// Finalize REQUIRES an existing db (scaffolded + imported): refuse a missing file
+	// (never migrate here -- migration is the scaffold's job).
+	if _, err := os.Stat(*outPath); err != nil {
+		return fmt.Errorf("output db %s does not exist; run `ledgerimport scaffold` + `import-subsidiary` first", *outPath)
+	}
+	sqldb, err := db.Open(*outPath)
+	if err != nil {
+		return fmt.Errorf("open output db: %w", err)
+	}
+	defer func() { _ = sqldb.Close() }()
+
+	st := store.New(sqldb)
+	actorCtx := store.WithActor(ctx, store.Actor{ID: systemActorID})
+
+	res, err := runFinalize(actorCtx, accMap, cfg, st, *anonymize)
+	if err != nil {
+		return err
+	}
+	// Count the posted correction transactions (one synthetic tid per correction).
+	nTxns := 0
+	for _, txns := range res.tidTxns {
+		nTxns += len(txns)
+	}
+	log.Printf("finalized %s: posted %d correction transaction(s) from %d configured correction(s). "+
+		"Run finalize ONCE only -- it has no double-run guard (golive.md).", *outPath, nTxns, len(cfg.Corrections))
 
 	vs, err := ledger.Check(ctx, sqldb)
 	if err != nil {

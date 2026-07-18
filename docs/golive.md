@@ -60,10 +60,35 @@ ledgerimport import-subsidiary -source ... -map ... -config ... -subsidiary UPLA
 cuento check --strict cuento.db          # green -> keep; red -> cp cuento.db.bak cuento.db
 # ... run/prove UPLAM live ...
 ledgerimport import-subsidiary -source ... -map ... -config ... -subsidiary UPH -o cuento.db
+
+# FINALIZE: after the LAST subsidiary, post the config's cross-subsidiary
+# corrections (cfg.corrections). Back up first -- like import-subsidiary, there is
+# no rollback and NO double-run guard; recovery is restore-from-backup.
+cp cuento.db cuento.db.bak
+ledgerimport finalize -map ... -config ... -o cuento.db
+cuento check --strict cuento.db          # green -> keep; red -> cp cuento.db.bak cuento.db
 ```
 
-`make scaffold-db` and `make import-sub IMPORT_SUB=UPLAM` wrap this with the
-backup/restore safety net (stop the server first — it holds the db file open).
+The phased go-live is therefore **scaffold -> import-subsidiary (each) -> finalize**.
+`finalize` posts `cfg.corrections` (the manual, self-balancing consolidation-worksheet
+entries -- item 11 below) through the same store path the monolithic `build` uses at
+its tail: it opens the db, rehydrates the id maps from it (the same rehydration
+`import-subsidiary` uses), and posts each correction versioned + invariant-checked
+(rule 5/7; a residual is a LOUD failure, never plugged). Because a correction can
+reference accounts across MULTIPLE subsidiaries, finalize can only run once every
+subsidiary is present: it **refuses loudly** (naming the missing subsidiary) if any
+configured subsidiary has no transactions yet, so a phased go-live cannot silently
+drop the corrections.
+
+**Run finalize exactly ONCE, after the last `import-subsidiary`.** A correction has
+no natural key and there is no schema marker, so a second run DOUBLE-POSTS every
+correction; the recovery is restore-from-backup (there is no un-post). The monolithic
+`build` path runs the corrections automatically at its tail, so it needs no separate
+finalize; only the split path does.
+
+`make scaffold-db`, `make import-sub IMPORT_SUB=UPLAM`, and `make finalize-db` wrap
+this with the backup/restore safety net (stop the server first — it holds the db file
+open).
 
 Semantics:
 - **Scaffold is created once and only looked up afterward.** A per-subsidiary
@@ -79,6 +104,12 @@ Semantics:
   Clearing (D3) even though its two legs import under different subsidiaries.
 - **Consolidated reports show only the imported side(s)** until every subsidiary is
   imported — expected during the prove period, not a bug.
+- **Finalize is the required last step.** `finalize` posts the config's
+  cross-subsidiary corrections and MUST run once after the LAST `import-subsidiary`.
+  The monolithic `build` posts them automatically at its tail; the split path does
+  not, so skipping finalize silently ships a clean-but-incomplete ledger (the
+  balanced consolidation/cutoff entries missing). Finalize refuses if any configured
+  subsidiary is still un-imported.
 
 ## Current rehearsal result (p09.4, best-guess mapping, non-strict)
 

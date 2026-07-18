@@ -176,6 +176,66 @@ func runImportSubsidiary(
 	return res, nil
 }
 
+// runFinalize posts the config's cross-subsidiary corrections (cfg.Corrections,
+// D p26.72) into an already scaffolded + subsidiary-imported db -- the FINALIZE
+// half of the split-import go-live (p27.0). The monolithic runBuild posts these
+// on a fresh builder over the rehydrated id maps at its tail (see below); the
+// split path (scaffold -> import-subsidiary per sub) had no such tail, so a phased
+// go-live silently dropped every correction. This restores them as an explicit
+// last step, run ONCE after the final import-subsidiary.
+//
+// It creates nothing shared: it reloads the subsidiary/program/fund/account id maps
+// FROM the db (b.reloadState -- the SAME rehydration import-subsidiary uses, so a
+// fresh process resolves every correction key) and posts cfg.Corrections through
+// b.corrections -- via the store, versioned, invariant-checked (rule 5/7); a
+// residual is a LOUD failure, never plugged. Exponents come from the db too
+// (loadExponents reads st.Currencies), so no source is needed.
+//
+// Corrections reference accounts across MULTIPLE subsidiaries, so finalize refuses
+// unless every configured (child) subsidiary already has transactions -- a
+// correction touching a not-yet-imported subsidiary must fail loudly, telling the
+// operator to import that subsidiary first. There is no natural key on a correction
+// and no schema marker: finalize MUST be run once. Re-running double-posts every
+// correction; recovery is restore-from-backup (like import-subsidiary, golive.md).
+func runFinalize(
+	ctx context.Context,
+	accMap []AccountMap,
+	cfg Config,
+	st *store.Store,
+	anonymize bool,
+) (*BuildResult, error) {
+	if len(cfg.Corrections) == 0 {
+		return nil, fmt.Errorf("finalize: config has no corrections; nothing to post")
+	}
+	res := newResult()
+	b := &builder{st: st, cfg: cfg, res: res, anonymize: anonymize}
+	if err := b.reloadState(ctx, accMap); err != nil {
+		return nil, err
+	}
+	// Every configured (child) subsidiary must be imported: a correction can span
+	// subsidiaries, so finalize is only valid after the LAST import-subsidiary. Refuse
+	// loudly and name the missing subsidiary so the operator imports it first.
+	for _, subName := range configuredSubsidiaryNames(cfg) {
+		subID, ok := res.SubsidiaryIDs[subName]
+		if !ok {
+			return nil, fmt.Errorf("finalize: subsidiary %q not found; run scaffold first", subName)
+		}
+		n, err := st.SubsidiaryTxnCount(ctx, subID)
+		if err != nil {
+			return nil, err
+		}
+		if n == 0 {
+			return nil, fmt.Errorf("finalize: subsidiary %q has no transactions yet; "+
+				"import it (ledgerimport import-subsidiary) before finalize -- corrections "+
+				"reference accounts across subsidiaries and must run after the LAST import", subName)
+		}
+	}
+	if err := b.corrections(ctx); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
 // runBuild is the all-in-one build: scaffold a fresh db, then import every
 // configured subsidiary additively. It preserves the original one-shot behavior
 // (make fixture / dev-db) as a convenience wrapper over the split-import core.

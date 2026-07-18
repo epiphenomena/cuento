@@ -117,20 +117,17 @@ func seedSampleBudgetPlan(ctx context.Context, st *store.Store) (bool, error) {
 		}
 	}
 
-	// Resolve the pieces a budget-split needs from the live db.
-	subID, err := firstSubsidiary(ctx, st)
+	// Resolve the pieces a budget-split needs from the live db. The plan's accounts
+	// must be scoped to the PLAN's subsidiary (the store rejects an out-of-subsidiary
+	// budget-split account, ErrBudgetSplitAccountSub): a real import scopes R/E leaves
+	// to the OPERATING subsidiaries, not the root, so we pick a subsidiary that has
+	// BOTH a revenue and an expense leaf and resolve the accounts within it -- rather
+	// than the root subsidiary + any-scoped leaves, which fails on a real-import db.
+	subID, revAcct, expAcct, err := firstSubsidiaryWithREPair(ctx, st)
 	if err != nil {
 		return false, err
 	}
 	progID, err := firstProgram(ctx, st)
-	if err != nil {
-		return false, err
-	}
-	revAcct, err := firstLeafAccount(ctx, st, "revenue")
-	if err != nil {
-		return false, err
-	}
-	expAcct, err := firstLeafAccount(ctx, st, "expense")
 	if err != nil {
 		return false, err
 	}
@@ -184,17 +181,35 @@ type leafAccount struct {
 	currency string
 }
 
-// firstSubsidiary returns the id of the first subsidiary in the tree (the root),
-// erroring on an empty tree.
-func firstSubsidiary(ctx context.Context, st *store.Store) (int64, error) {
+// firstSubsidiaryWithREPair returns the first subsidiary (in tree order) that has
+// BOTH an active revenue leaf AND an active expense leaf mapped to it, along with
+// those two leaves (each carrying its default currency). The store scopes a budget-
+// split's account to the plan's subsidiary (ErrBudgetSplitAccountSub), so the plan's
+// subsidiary and its splits' accounts must agree: a real import maps R/E leaves to
+// the OPERATING subsidiaries (not the txn-less root), so picking the root + any leaf
+// fails. Resolving the subsidiary and its leaves together guarantees they match on
+// any db shape (the fixture's root holds everything; a real import's operating subs
+// hold the R/E leaves). Errors if no subsidiary has such a pair.
+func firstSubsidiaryWithREPair(ctx context.Context, st *store.Store) (int64, leafAccount, leafAccount, error) {
 	tree, err := st.SubTree(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("sub tree: %w", err)
+		return 0, leafAccount{}, leafAccount{}, fmt.Errorf("sub tree: %w", err)
 	}
 	if len(tree) == 0 {
-		return 0, errors.New("no subsidiaries in db")
+		return 0, leafAccount{}, leafAccount{}, errors.New("no subsidiaries in db")
 	}
-	return tree[0].ID, nil
+	for _, s := range tree {
+		rev, revErr := firstLeafAccountInSub(ctx, st, s.ID, "revenue")
+		if revErr != nil {
+			continue
+		}
+		exp, expErr := firstLeafAccountInSub(ctx, st, s.ID, "expense")
+		if expErr != nil {
+			continue
+		}
+		return s.ID, rev, exp, nil
+	}
+	return 0, leafAccount{}, leafAccount{}, errors.New("no subsidiary has both a revenue and an expense leaf account")
 }
 
 // firstProgram returns the id of the first active program, erroring if none exists
@@ -212,21 +227,29 @@ func firstProgram(ctx context.Context, st *store.Store) (int64, error) {
 	return 0, errors.New("no active program in db (a budget line needs one)")
 }
 
-// firstLeafAccount returns the first ACTIVE LEAF account of the given type (revenue
-// or expense -- the only types a budget line accepts). A leaf is a row that is no
-// other row's parent. Errors if none exists.
-func firstLeafAccount(ctx context.Context, st *store.Store, typ string) (leafAccount, error) {
-	tree, err := st.Tree(ctx, "en", nil)
+// firstLeafAccountInSub returns the first ACTIVE LEAF account of the given type
+// (revenue or expense -- the only types a budget line accepts) MAPPED TO subID. A
+// leaf is a row that is no other row's parent; the leaf/parent relation is computed
+// over the FULL tree (a parent may live outside subID), but the candidate is drawn
+// from the subsidiary-filtered tree so the returned account is guaranteed scoped to
+// subID (the store's budget-split subsidiary check, ErrBudgetSplitAccountSub).
+// Errors if none exists in that subsidiary.
+func firstLeafAccountInSub(ctx context.Context, st *store.Store, subID int64, typ string) (leafAccount, error) {
+	full, err := st.Tree(ctx, "en", nil)
 	if err != nil {
 		return leafAccount{}, fmt.Errorf("account tree: %w", err)
 	}
-	isParent := make(map[int64]bool, len(tree))
-	for _, r := range tree {
+	isParent := make(map[int64]bool, len(full))
+	for _, r := range full {
 		if r.ParentID.Valid {
 			isParent[r.ParentID.Int64] = true
 		}
 	}
-	for _, r := range tree {
+	inSub, err := st.Tree(ctx, "en", &subID)
+	if err != nil {
+		return leafAccount{}, fmt.Errorf("account tree (sub %d): %w", subID, err)
+	}
+	for _, r := range inSub {
 		if r.Type != typ || r.Active == 0 || isParent[r.ID] {
 			continue
 		}
@@ -236,5 +259,5 @@ func firstLeafAccount(ctx context.Context, st *store.Store, typ string) (leafAcc
 		}
 		return leafAccount{id: r.ID, currency: acct.DefaultCurrency}, nil
 	}
-	return leafAccount{}, fmt.Errorf("no active leaf %s account in db", typ)
+	return leafAccount{}, fmt.Errorf("no active leaf %s account in subsidiary %d", typ, subID)
 }

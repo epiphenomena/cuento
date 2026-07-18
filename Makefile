@@ -11,7 +11,7 @@ SQLC        ?= sqlc
 GOLANGCILINT?= golangci-lint
 GOFUMPT     ?= gofumpt
 
-.PHONY: all gen lint test check golive-check e2e fixture dev-db scaffold-db import-sub golden run release build clean tools
+.PHONY: all gen lint test check golive-check e2e fixture dev-db scaffold-db import-sub finalize-db golden run release build clean tools
 
 all: lint test check
 
@@ -142,6 +142,22 @@ import-sub:
 		$(BINARY) check -db $(IMPORT_DB) --strict && \
 		echo "import-sub $(IMPORT_SUB): GREEN (backup kept at $$bak)" || \
 		{ echo "import-sub $(IMPORT_SUB): FAILED — restore with: cp $$bak $(IMPORT_DB)"; exit 1; }
+
+## finalize-db — the LAST split-import step (p27.0): after every subsidiary is
+## imported, post the config's cross-subsidiary corrections (cfg.corrections) with the
+## same backup/restore safety net. Run ONCE only — corrections have no double-run guard
+## (a second run double-posts; recover by restoring the .bak). finalize refuses loudly
+## if a configured subsidiary has not been imported yet. Stop the server first.
+finalize-db:
+	@mkdir -p $(BINDIR)
+	$(GO) build -o $(LEDGERIMPORT) ./cmd/ledgerimport
+	$(GO) build -o $(BINARY) ./cmd/cuento
+	@bak="$(IMPORT_DB).bak.$$(date +%Y%m%d-%H%M%S)"; cp $(IMPORT_DB) "$$bak"; \
+		echo "finalize-db: backed up $(IMPORT_DB) -> $$bak"; \
+		$(LEDGERIMPORT) finalize -map $(FIXTURE_MAP) -config $(FIXTURE_CONFIG) -o $(IMPORT_DB) && \
+		$(BINARY) check -db $(IMPORT_DB) --strict && \
+		echo "finalize-db: GREEN (backup kept at $$bak) — run ONCE only" || \
+		{ echo "finalize-db: FAILED — restore with: cp $$bak $(IMPORT_DB)"; exit 1; }
 
 ## golden — regenerate report goldens (internal/reports/testdata/*.{txt,csv}) via the
 ## -update test flag; deterministic (params/currency/locale pinned in the tests). The
