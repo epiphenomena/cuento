@@ -168,6 +168,57 @@ type BudgetsVersion struct {
 	Notes       string
 }
 
+// BudgetPlan is the p27.2 split-derived budget container (a named plan scoped to
+// one subsidiary). Distinct from the to-be-retired Budget above.
+type BudgetPlan struct {
+	ID           int64
+	Name         string
+	SubsidiaryID int64
+	Notes        string
+}
+
+type BudgetPlansVersion struct {
+	ID           int64
+	EntityID     int64
+	ChangeID     int64
+	ValidFrom    string
+	Op           string
+	Name         string
+	SubsidiaryID int64
+	Notes        string
+}
+
+// BudgetSplit is one projected, dated budget-split (p27.2). Single-legged; the
+// balancing cash counter-leg is implicit and unnamed. ProgramID is REQUIRED on
+// R/E-categorized legs, FORBIDDEN on A/L legs (store-enforced).
+type BudgetSplit struct {
+	ID          int64
+	PlanID      int64
+	Description string
+	Date        string
+	AccountID   int64
+	FundID      sql.NullInt64
+	ProgramID   sql.NullInt64
+	Amount      int64
+	Currency    string
+}
+
+type BudgetSplitsVersion struct {
+	ID          int64
+	EntityID    int64
+	ChangeID    int64
+	ValidFrom   string
+	Op          string
+	PlanID      int64
+	Description string
+	Date        string
+	AccountID   int64
+	FundID      sql.NullInt64
+	ProgramID   sql.NullInt64
+	Amount      int64
+	Currency    string
+}
+
 type Change struct {
 	ID      int64
 	ActorID int64

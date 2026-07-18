@@ -225,6 +225,31 @@ WHERE v.id IS NULL OR v.op = 'delete'
    OR v.program_id IS NOT c.program_id OR v.amount IS NOT c.amount
    OR v.currency IS NOT c.currency OR v.schedule_id IS NOT c.schedule_id
 UNION ALL
+-- budget_plans (p27.2 single-id twin; mutable header, hard-deletable -- the
+-- standard single-id block only checks CURRENT live rows against their snapshot).
+SELECT 'budget_plans:' || CAST(c.id AS TEXT)
+FROM budget_plans c
+LEFT JOIN budget_plans_versions v
+  ON v.id = (SELECT id FROM budget_plans_versions x WHERE x.entity_id = c.id
+             ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
+WHERE v.id IS NULL OR v.op = 'delete'
+   OR v.name IS NOT c.name OR v.subsidiary_id IS NOT c.subsidiary_id
+   OR v.notes IS NOT c.notes
+UNION ALL
+-- budget_splits (p27.2 single-id twin; a split can be hard-deleted, so a missing
+-- live row for a 'delete' version is legitimate -- the standard single-id block
+-- only checks CURRENT live rows against their snapshot).
+SELECT 'budget_splits:' || CAST(c.id AS TEXT)
+FROM budget_splits c
+LEFT JOIN budget_splits_versions v
+  ON v.id = (SELECT id FROM budget_splits_versions x WHERE x.entity_id = c.id
+             ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
+WHERE v.id IS NULL OR v.op = 'delete'
+   OR v.plan_id IS NOT c.plan_id OR v.description IS NOT c.description
+   OR v.date IS NOT c.date OR v.account_id IS NOT c.account_id
+   OR v.fund_id IS NOT c.fund_id OR v.program_id IS NOT c.program_id
+   OR v.amount IS NOT c.amount OR v.currency IS NOT c.currency
+UNION ALL
 -- transactions: a soft-deleted txn's latest version IS op='delete' by design, so
 -- only compare the business columns and treat a missing version as the violation
 -- (a live deleted=1 row correctly has a 'delete' latest version -- NOT a Z3 miss).
@@ -339,6 +364,8 @@ FROM (
   UNION ALL SELECT 'budget_schedule_dates_versions', id, change_id FROM budget_schedule_dates_versions
   UNION ALL SELECT 'budgets_versions', id, change_id FROM budgets_versions
   UNION ALL SELECT 'budget_lines_versions', id, change_id FROM budget_lines_versions
+  UNION ALL SELECT 'budget_plans_versions', id, change_id FROM budget_plans_versions
+  UNION ALL SELECT 'budget_splits_versions', id, change_id FROM budget_splits_versions
   UNION ALL SELECT 'transactions_versions', id, change_id FROM transactions_versions
   UNION ALL SELECT 'splits_versions', id, change_id FROM splits_versions
   UNION ALL SELECT 'users_versions', id, change_id FROM users_versions

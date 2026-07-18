@@ -1,0 +1,258 @@
+package store
+
+import (
+	"errors"
+	"testing"
+
+	"cuento/internal/testutil"
+)
+
+// Budget-PLAN + budget-SPLIT operations (p27.2) -- the split-derived budget model.
+// These tests copy the versioned-entity discipline the fund/budget tests
+// established: each mutation is ONE change, live+version share it, AssertVersioned
+// proves the snapshot op, and each invariant has a rejecting negative test. The
+// pure cadence date math is tested in internal/budget; here the focus is
+// persistence, versioning, and validation (esp. the R/E-program-required /
+// A/L-program-forbidden rule).
+
+// splitSetup builds the common references a budget-split needs: a subsidiary, a
+// plan on it, an R/E (expense) account mapped to it, a revenue account, an
+// open_item receivable account, a program, and a fund scoped to the sub.
+type splitSetup struct {
+	sub, plan, expense, revenue, receivable, prog, fund int64
+}
+
+func mkSplitSetup(t *testing.T, s *Store) splitSetup {
+	t.Helper()
+	sub := newSub(t, s, rootID, "Sub")
+	plan, err := s.CreateBudgetPlan(mutCtx(), BudgetPlanInput{Name: "FY26", SubsidiaryID: sub})
+	if err != nil {
+		t.Fatalf("create plan: %v", err)
+	}
+	prog, err := s.CreateProgram(mutCtx(), CreateProgramInput{ParentID: rootProgramID, Name: "Ops"})
+	if err != nil {
+		t.Fatalf("create program: %v", err)
+	}
+	expense, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "expense", DefaultCurrency: "USD", Names: enName("Rent"), Subsidiaries: []int64{sub},
+	})
+	if err != nil {
+		t.Fatalf("create expense account: %v", err)
+	}
+	revenue, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "revenue", DefaultCurrency: "USD", Names: enName("Donations"), Subsidiaries: []int64{sub},
+	})
+	if err != nil {
+		t.Fatalf("create revenue account: %v", err)
+	}
+	receivable, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Due from"), Subsidiaries: []int64{sub}, OpenItem: true,
+	})
+	if err != nil {
+		t.Fatalf("create receivable account: %v", err)
+	}
+	fund, err := s.CreateFund(mutCtx(), CreateFundInput{
+		Name: "Grant", Restriction: "purpose", Subsidiaries: []int64{sub},
+	})
+	if err != nil {
+		t.Fatalf("create fund: %v", err)
+	}
+	return splitSetup{sub: sub, plan: plan, expense: expense, revenue: revenue, receivable: receivable, prog: prog, fund: fund}
+}
+
+func int64p(n int64) *int64 { return &n }
+
+func TestCreateBudgetPlanVersioned(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	sub := newSub(t, s, rootID, "Sub")
+	id, err := s.CreateBudgetPlan(mutCtx(), BudgetPlanInput{Name: "FY26", SubsidiaryID: sub, Notes: "n"})
+	if err != nil {
+		t.Fatalf("create plan: %v", err)
+	}
+	testutil.AssertVersioned(t, d, "budget_plans", id, "create")
+	if err := s.UpdateBudgetPlan(mutCtx(), id, BudgetPlanInput{Name: "FY26b", SubsidiaryID: sub}); err != nil {
+		t.Fatalf("update plan: %v", err)
+	}
+	testutil.AssertVersioned(t, d, "budget_plans", id, "update")
+	got, err := s.GetBudgetPlan(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("get plan: %v", err)
+	}
+	if got.Name != "FY26b" {
+		t.Errorf("plan name = %q, want FY26b", got.Name)
+	}
+}
+
+func TestCreateBudgetPlanBadSubsidiary(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	if _, err := s.CreateBudgetPlan(mutCtx(), BudgetPlanInput{Name: "X", SubsidiaryID: 9999}); !errors.Is(err, ErrBudgetSplitRefMissing) {
+		t.Fatalf("want ErrBudgetSplitRefMissing, got %v", err)
+	}
+}
+
+func TestCreateBudgetSplitRE(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	st := mkSplitSetup(t, s)
+	id, err := s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
+		Description: "Monthly rent", Date: "2026-03-15", AccountID: st.expense,
+		FundID: int64p(st.fund), ProgramID: int64p(st.prog), Amount: 120000, Currency: "USD",
+	})
+	if err != nil {
+		t.Fatalf("create R/E split: %v", err)
+	}
+	testutil.AssertVersioned(t, d, "budget_splits", id, "create")
+	got, err := s.GetBudgetSplit(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("get split: %v", err)
+	}
+	if !got.ProgramID.Valid || got.ProgramID.Int64 != st.prog {
+		t.Errorf("R/E split program = %v, want %d", got.ProgramID, st.prog)
+	}
+	if got.Amount != 120000 {
+		t.Errorf("amount = %d, want 120000", got.Amount)
+	}
+}
+
+// TestCreateBudgetSplitREProgramPrefill: an R/E split with no explicit program
+// prefills from the account's default_program (like the ledger).
+func TestCreateBudgetSplitREProgramPrefill(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	st := mkSplitSetup(t, s)
+	// Give the expense account a default program.
+	if err := s.UpdateAccount(mutCtx(), st.expense, UpdateAccountInput{DefaultProgramID: int64p(st.prog)}); err != nil {
+		t.Fatalf("set default program: %v", err)
+	}
+	id, err := s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
+		Date: "2026-03-15", AccountID: st.expense, Amount: 500, Currency: "USD",
+	})
+	if err != nil {
+		t.Fatalf("create split (prefill): %v", err)
+	}
+	got, _ := s.GetBudgetSplit(mutCtx(), id)
+	if !got.ProgramID.Valid || got.ProgramID.Int64 != st.prog {
+		t.Errorf("prefilled program = %v, want %d", got.ProgramID, st.prog)
+	}
+}
+
+// TestCreateBudgetSplitREProgramRequired: an R/E split with neither an explicit
+// program nor an account default is REJECTED (DECISIONS tension 3).
+func TestCreateBudgetSplitREProgramRequired(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	st := mkSplitSetup(t, s)
+	_, err := s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
+		Date: "2026-03-15", AccountID: st.revenue, Amount: 500, Currency: "USD",
+	})
+	if !errors.Is(err, ErrBudgetSplitProgramRequired) {
+		t.Fatalf("want ErrBudgetSplitProgramRequired, got %v", err)
+	}
+}
+
+// TestCreateBudgetSplitOpenItemAL: an open_item receivable split is allowed and
+// carries NO program.
+func TestCreateBudgetSplitOpenItemAL(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	st := mkSplitSetup(t, s)
+	id, err := s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
+		Description: "Acme Corp", Date: "2026-04-01", AccountID: st.receivable,
+		Amount: 8000, Currency: "USD",
+	})
+	if err != nil {
+		t.Fatalf("create open-item split: %v", err)
+	}
+	got, _ := s.GetBudgetSplit(mutCtx(), id)
+	if got.ProgramID.Valid {
+		t.Errorf("A/L split program = %v, want NULL", got.ProgramID)
+	}
+}
+
+// TestCreateBudgetSplitALProgramForbidden: an A/L split carrying a program is
+// REJECTED (mirrors the ledger's program-on-balance-sheet rule).
+func TestCreateBudgetSplitALProgramForbidden(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	st := mkSplitSetup(t, s)
+	_, err := s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
+		Date: "2026-04-01", AccountID: st.receivable, ProgramID: int64p(st.prog),
+		Amount: 8000, Currency: "USD",
+	})
+	if !errors.Is(err, ErrBudgetSplitProgramForbidden) {
+		t.Fatalf("want ErrBudgetSplitProgramForbidden, got %v", err)
+	}
+}
+
+// TestCreateBudgetSplitPlainBalanceSheet: an account that is neither R/E nor an
+// open_item A/L (a plain asset) is REJECTED.
+func TestCreateBudgetSplitPlainBalanceSheet(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	st := mkSplitSetup(t, s)
+	plain, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Checking"), Subsidiaries: []int64{st.sub},
+	})
+	if err != nil {
+		t.Fatalf("create plain asset: %v", err)
+	}
+	_, err = s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
+		Date: "2026-04-01", AccountID: plain, Amount: 100, Currency: "USD",
+	})
+	if !errors.Is(err, ErrBudgetSplitAccountType) {
+		t.Fatalf("want ErrBudgetSplitAccountType, got %v", err)
+	}
+}
+
+// TestCreateBudgetSplitAccountNotInSubsidiary: an account not mapped to the plan's
+// subsidiary is REJECTED (D18).
+func TestCreateBudgetSplitAccountNotInSubsidiary(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	st := mkSplitSetup(t, s)
+	other := newSub(t, s, rootID, "Other")
+	acct, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "expense", DefaultCurrency: "USD", Names: enName("Elsewhere"), Subsidiaries: []int64{other},
+	})
+	if err != nil {
+		t.Fatalf("create account in other sub: %v", err)
+	}
+	_, err = s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
+		Date: "2026-04-01", AccountID: acct, ProgramID: int64p(st.prog), Amount: 100, Currency: "USD",
+	})
+	if !errors.Is(err, ErrBudgetSplitAccountSub) {
+		t.Fatalf("want ErrBudgetSplitAccountSub, got %v", err)
+	}
+}
+
+func TestUpdateDeleteBudgetSplit(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	st := mkSplitSetup(t, s)
+	id, err := s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
+		Date: "2026-03-15", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 100, Currency: "USD",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if err := s.UpdateBudgetSplit(mutCtx(), id, BudgetSplitInput{
+		Date: "2026-03-16", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 200, Currency: "USD",
+	}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	testutil.AssertVersioned(t, d, "budget_splits", id, "update")
+	got, _ := s.GetBudgetSplit(mutCtx(), id)
+	if got.Amount != 200 || got.Date != "2026-03-16" {
+		t.Errorf("after update amount=%d date=%q, want 200/2026-03-16", got.Amount, got.Date)
+	}
+	if err := s.DeleteBudgetSplit(mutCtx(), id); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	testutil.AssertVersioned(t, d, "budget_splits", id, "delete")
+	splits, _ := s.BudgetSplits(mutCtx(), st.plan)
+	if len(splits) != 0 {
+		t.Errorf("after delete, plan has %d splits, want 0", len(splits))
+	}
+}
