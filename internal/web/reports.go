@@ -863,6 +863,7 @@ func (s *server) reportsIndex(w http.ResponseWriter, r *http.Request) {
 			// p28.12: each report card carries its one-line description (the same blurb
 			// the "All" landing shows), from reports.<id>.desc via reportDescKey.
 			Desc: i18n.T(lang, reportDescKey(rep.TitleKey)),
+			Icon: "report", // p28.14: document/report outline glyph, matching the All landing.
 		})
 	}
 

@@ -463,15 +463,20 @@ type hubCard struct {
 	// (p26.83, restoring the descriptions the old More hub carried). Every section card
 	// declares one; report cards derive theirs from the report's TitleKey.
 	DescKey string
+	// Icon names the outline glyph the shared "icon" component renders beside the card
+	// label (p28.14), or "" for none. Currently the Settings-type card is "gear"; report
+	// cards get "report" set at resolve time (reportCardsByGroup), not here.
+	Icon string
 }
 
 // hubCardItem is a resolved card for the template (localized, no Perm/keys leaked). Desc
 // is the localized one-line description rendered as muted secondary text under the label
-// (p26.83).
+// (p26.83). Icon is an outline-glyph name for the shared "icon" component, or "" (p28.14).
 type hubCardItem struct {
 	Label string
 	Href  string
 	Desc  string
+	Icon  string
 }
 
 // allSection is one titled group of cards on the "All" landing (p26.77): a localized
@@ -501,31 +506,32 @@ type allCardGroup struct {
 func allCardGroups() []allCardGroup {
 	return []allCardGroup{
 		{"nav.accounts", []hubCard{
-			{"nav.accounts", "/accounts", TxnRead, "all.desc.accounts"},
-			{"nav.funds", "/funds", TxnRead, "all.desc.funds"},
-			{"nav.programs", "/programs", TxnRead, "all.desc.programs"},
-			{"nav.reconciliations", "/reconciliations", TxnRead, "all.desc.reconciliations"},
+			{"nav.accounts", "/accounts", TxnRead, "all.desc.accounts", ""},
+			{"nav.funds", "/funds", TxnRead, "all.desc.funds", ""},
+			{"nav.programs", "/programs", TxnRead, "all.desc.programs", ""},
+			{"nav.reconciliations", "/reconciliations", TxnRead, "all.desc.reconciliations", ""},
 		}},
 		{"nav.budgetplans", []hubCard{
-			{"nav.budgetplans", "/budget-plans", TxnRead, "all.desc.budgetplans"},
+			{"nav.budgetplans", "/budget-plans", TxnRead, "all.desc.budgetplans", ""},
 		}},
 		{"nav.expenses", []hubCard{
-			{"nav.myexpenses", "/expenses", ExpenseSubmit, "all.desc.myexpenses"},
-			{"nav.expensereview", "/expenses/review", TxnWrite, "all.desc.expensereview"},
+			{"nav.myexpenses", "/expenses", ExpenseSubmit, "all.desc.myexpenses", ""},
+			{"nav.expensereview", "/expenses/review", TxnWrite, "all.desc.expensereview", ""},
 		}},
 		{"nav.import", []hubCard{
-			{"nav.import", "/import", TxnWrite, "all.desc.import"},
+			{"nav.import", "/import", TxnWrite, "all.desc.import", ""},
 		}},
 		{"all.section.personal", []hubCard{
-			{"nav.settings", "/settings", AnyUser, "all.desc.settings"},
+			// p28.14: the Settings card carries the "gear" outline glyph (settings-type card).
+			{"nav.settings", "/settings", AnyUser, "all.desc.settings", "gear"},
 		}},
 		{"nav.admin", []hubCard{
-			{"admin.users.title", "/admin/users", Admin, "all.desc.users"},
-			{"subsidiaries.title", "/admin/subsidiaries", Admin, "all.desc.subsidiaries"},
-			{"admin.currencies.title", "/admin/currencies", Admin, "all.desc.currencies"},
-			{"admin.rates.title", "/admin/rates", Admin, "all.desc.rates"},
-			{"org.title", "/admin/org", Admin, "all.desc.org"},
-			{"admin.ops.title", "/admin/ops", Admin, "all.desc.ops"},
+			{"admin.users.title", "/admin/users", Admin, "all.desc.users", ""},
+			{"subsidiaries.title", "/admin/subsidiaries", Admin, "all.desc.subsidiaries", ""},
+			{"admin.currencies.title", "/admin/currencies", Admin, "all.desc.currencies", ""},
+			{"admin.rates.title", "/admin/rates", Admin, "all.desc.rates", ""},
+			{"org.title", "/admin/org", Admin, "all.desc.org", ""},
+			{"admin.ops.title", "/admin/ops", Admin, "all.desc.ops", ""},
 		}},
 	}
 }
@@ -545,6 +551,7 @@ func (s *server) visibleAllCards(ctx context.Context, u *store.CurrentUser, card
 			Label: i18n.T(lang, c.LabelKey),
 			Href:  c.Href,
 			Desc:  i18n.T(lang, c.DescKey),
+			Icon:  c.Icon,
 		})
 	}
 	return out
@@ -584,6 +591,7 @@ func (s *server) reportCardsByGroup(ctx context.Context, u *store.CurrentUser) m
 			// -> reports.X.desc), so each report owns its blurb without touching the reports
 			// registry — one new i18n key per report in both catalogs.
 			Desc: i18n.T(lang, reportDescKey(rep.TitleKey)),
+			Icon: "report", // p28.14: report cards get the document/report outline glyph.
 		})
 	}
 	return byGroup
