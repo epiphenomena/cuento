@@ -67,11 +67,11 @@ test.describe('CSP console clean across the -dev UI', () => {
       '/funds',
       '/programs',
       '/reconciliations',
-      // Budget management (p19.3): the list + the schedule library. The schedule form
-      // loads an external ES module (budgetkind.js) — visiting exercises script-src,
-      // and the pages must carry no inline style/script under the strict CSP.
-      '/budgets',
-      '/schedules',
+      // Budget-plan management (p27.2/p27.3): the plan list. The plan detail loads
+      // external ES modules (budgetgrid/budgetcadence) — visiting exercises script-src,
+      // and the page must carry no inline style/script under the strict CSP. (The old
+      // schedule-based /budgets + /schedules pages were retired in p27.3.)
+      '/budget-plans',
       '/import',
       '/reports',
       // A concrete report DETAIL: report templates align columns/totals, a classic

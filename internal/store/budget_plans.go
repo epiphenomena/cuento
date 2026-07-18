@@ -131,6 +131,46 @@ func (s *Store) UpdateBudgetPlan(ctx context.Context, id int64, in BudgetPlanInp
 	return nil
 }
 
+// DeleteBudgetPlan HARD-deletes a plan and ALL its splits under ONE change (p27.3c).
+// It appends an op='delete' version FIRST for every split, then for the plan
+// (snapshot-before-delete, rule 14), then removes the splits and the plan inside the
+// same write funnel transaction -- so a failure rolls the WHOLE cascade back and the
+// audit trail is complete (a delete version exists for each removed row).
+func (s *Store) DeleteBudgetPlan(ctx context.Context, id int64) error {
+	_, err := s.write(ctx, "budget_plan.delete", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			if _, err := q.GetBudgetPlan(ctx, id); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return ErrBudgetPlanNotFound
+				}
+				return fmt.Errorf("load budget plan %d: %w", id, err)
+			}
+			splits, err := q.ListBudgetSplits(ctx, id)
+			if err != nil {
+				return fmt.Errorf("list budget splits: %w", err)
+			}
+			for _, sp := range splits {
+				if err := insertBudgetSplitVersion(ctx, q, changeID, "delete", sp.ID); err != nil {
+					return err
+				}
+				if err := q.DeleteBudgetSplit(ctx, sp.ID); err != nil {
+					return fmt.Errorf("delete budget split %d: %w", sp.ID, err)
+				}
+			}
+			if err := insertBudgetPlanVersion(ctx, q, changeID, "delete", id); err != nil {
+				return err
+			}
+			if err := q.DeleteBudgetPlan(ctx, id); err != nil {
+				return fmt.Errorf("delete budget plan %d: %w", id, err)
+			}
+			return nil
+		})
+	if err != nil {
+		return fmt.Errorf("delete budget plan %d: %w", id, err)
+	}
+	return nil
+}
+
 // GetBudgetPlan returns a plan's current live row (read; sqlc).
 func (s *Store) GetBudgetPlan(ctx context.Context, id int64) (sqlc.BudgetPlan, error) {
 	row, err := s.q.GetBudgetPlan(ctx, id)

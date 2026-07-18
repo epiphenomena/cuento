@@ -136,4 +136,23 @@ test('budget-plans: create plan, R/E + open-item splits, program rule, CSV impor
   await reload;
   // The imported row's description is prefilled somewhere in the grid.
   await expect(page.locator('input.bs-desc[value="Imported gift"]')).toBeVisible();
+
+  // ===== plan management: rename + notes, then delete (p27.3c) =====
+  // The "Manage plan" disclosure holds the rename/notes edit and the delete.
+  await page.locator('details.plan-manage > summary').click();
+  await page.locator('#plan-name').fill('Renamed Plan');
+  await page.locator('#plan-notes').fill('updated notes');
+  let renamed = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === planPath && r.request().method() === 'GET',
+  );
+  await page.locator('.plan-edit-form button[type="submit"]').click();
+  await renamed;
+  // The new name shows in the header.
+  await expect(page.locator('h1')).toHaveText('Renamed Plan');
+
+  // Delete removes the plan and redirects to the list; the renamed plan is gone.
+  await page.locator('details.plan-manage > summary').click();
+  await page.locator('#plan-delete-btn').click();
+  await page.waitForURL('**/budget-plans');
+  await expect(page.getByText('Renamed Plan')).toHaveCount(0);
 });

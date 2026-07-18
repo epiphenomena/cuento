@@ -379,8 +379,13 @@ func (s *server) routes() []Route {
 		{http.MethodGet, "/budget-plans/new", TxnWrite, http.HandlerFunc(s.budgetPlanNewForm)},
 		{http.MethodPost, "/budget-plans", TxnWrite, http.HandlerFunc(s.budgetPlanCreate)},
 		{http.MethodGet, "/budget-plans/{id}", TxnRead, http.HandlerFunc(s.budgetPlanDetail)},
+		{http.MethodPost, "/budget-plans/{id}", TxnWrite, http.HandlerFunc(s.budgetPlanUpdate)},
 		{http.MethodPost, "/budget-plans/{id}/splits", TxnWrite, http.HandlerFunc(s.budgetSplitsSave)},
 		{http.MethodPost, "/budget-plans/{id}/import", TxnWrite, http.HandlerFunc(s.budgetPlanImport)},
+		// The DELETE probe is registered LAST among the plan routes so the reachability
+		// matrix (which substitutes {id}->1 and POSTs) hits it AFTER the split/import
+		// probes -- deleting the seeded plan first would 404 the later probes.
+		{http.MethodPost, "/budget-plans/{id}/delete", TxnWrite, http.HandlerFunc(s.budgetPlanDelete)},
 		// p20.2 submitter workspace (Phase 20). ALL ExpenseSubmit -- the STANDALONE
 		// capability (p20.1, INDEPENDENT of txn_perm): a pure submitter passes these and
 		// is 403 on the ledger/reports (Txn*/ReportGroup). Ownership is enforced INSIDE

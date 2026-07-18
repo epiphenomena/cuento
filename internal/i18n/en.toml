@@ -2020,6 +2020,14 @@ other = "Budget plan"
 other = "Back to budget plans"
 [budget_plan.detail.subsidiary]
 other = "Subsidiary"
+[budget_plan.manage.summary]
+other = "Manage plan"
+[budget_plan.manage.save]
+other = "Save changes"
+[budget_plan.manage.delete]
+other = "Delete plan"
+[budget_plan.manage.delete_hint]
+other = "Deleting a plan removes it and all its projected splits. This cannot be undone."
 [budget_plan.detail.splits]
 other = "Projected splits"
 [budget_plan.detail.save]

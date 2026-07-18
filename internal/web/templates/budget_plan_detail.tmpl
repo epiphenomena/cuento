@@ -26,6 +26,24 @@
   <p class="error" role="alert" id="budget-plan-error">{{.ErrorMsg}}</p>
   {{end}}
 
+  {{/* p27.3c plan management: rename + notes edit (subsidiary is fixed, splits resolve
+       against it) and a delete. Both are plain POST forms (no inline script, rule 12).
+       The delete is a distinct form so a mis-click does not lose the plan silently. */}}
+  <details class="plan-manage">
+    <summary>{{t "budget_plan.manage.summary"}}</summary>
+    <form method="post" action="/budget-plans/{{.ID}}" class="plan-edit-form">
+      <label for="plan-name">{{t "budget_plan.form.name"}}</label>
+      <input type="text" id="plan-name" name="name" value="{{.Name}}" required>
+      <label for="plan-notes">{{t "budget_plan.form.notes"}}</label>
+      <textarea id="plan-notes" name="notes" rows="2">{{.Notes}}</textarea>
+      <button type="submit" class="btn btn-primary">{{t "budget_plan.manage.save"}}</button>
+    </form>
+    <form method="post" action="/budget-plans/{{.ID}}/delete" class="plan-delete-form">
+      <p class="hint">{{t "budget_plan.manage.delete_hint"}}</p>
+      <button type="submit" class="btn btn-danger" id="plan-delete-btn">{{t "budget_plan.manage.delete"}}</button>
+    </form>
+  </details>
+
   {{/* Cadence control: a client-side dated-row generator (budgetcadence.js). Enter a
        start date + interval + count, click Generate -> the grid clones the CURRENT last
        edited row across the generated dates. Pure entry sugar; no server round-trip and

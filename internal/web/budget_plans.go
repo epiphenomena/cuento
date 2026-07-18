@@ -162,6 +162,66 @@ func (s *server) renderBudgetPlanFormError(w http.ResponseWriter, r *http.Reques
 	s.render(w, r, http.StatusUnprocessableEntity, "budget_plan_form.tmpl", s.newShellPage(r, model))
 }
 
+// budgetPlanUpdate handles POST /budget-plans/{id} (TxnWrite): rename + notes edit
+// (p27.3c). The plan's SUBSIDIARY is FIXED (splits resolve against it), so only the
+// name and notes are editable; the existing subsidiary is carried through. A blank
+// name re-renders the detail at 422 with a page-level error.
+func (s *server) budgetPlanUpdate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := parseID(r.PathValue("id"))
+	plan, err := s.store.GetBudgetPlan(ctx, id)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	name := strings.TrimSpace(r.PostFormValue("name"))
+	notes := strings.TrimSpace(r.PostFormValue("notes"))
+	if name == "" {
+		s.renderBudgetPlanDetailError(w, r, plan, i18n.T(langOf(ctx), "error.budget_plan.name"))
+		return
+	}
+	if err := s.store.UpdateBudgetPlan(s.actorCtx(ctx), id, store.BudgetPlanInput{
+		Name: name, SubsidiaryID: plan.SubsidiaryID, Notes: notes,
+	}); err != nil {
+		s.serverError(w)
+		return
+	}
+	redirectAfterForm(w, r, "/budget-plans/"+strconv.FormatInt(id, 10))
+}
+
+// budgetPlanDelete handles POST /budget-plans/{id}/delete (TxnWrite): hard-delete the
+// plan and all its splits (versioned cascade, rule 14) and redirect to the list.
+func (s *server) budgetPlanDelete(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := parseID(r.PathValue("id"))
+	if err := s.store.DeleteBudgetPlan(s.actorCtx(ctx), id); err != nil {
+		if errors.Is(err, store.ErrBudgetPlanNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		s.serverError(w)
+		return
+	}
+	redirectAfterForm(w, r, "/budget-plans")
+}
+
+// renderBudgetPlanDetailError re-renders the plan detail at 422 with a pre-localized
+// page-level error (the same seam the CSV import uses).
+func (s *server) renderBudgetPlanDetailError(w http.ResponseWriter, r *http.Request, plan sqlc.BudgetPlan, msg string) {
+	model, ok := s.buildBudgetPlanDetailModel(w, r, plan)
+	if !ok {
+		return
+	}
+	model.ErrorMsg = msg
+	page := s.newShellPage(r, model)
+	page.Shell.Wide = true
+	s.render(w, r, http.StatusUnprocessableEntity, "budget_plan_detail.tmpl", page)
+}
+
 // ===========================================================================
 // PLAN DETAIL / SPLIT-ENTRY GRID
 // ===========================================================================
@@ -183,6 +243,7 @@ type budgetSplitRow struct {
 type budgetPlanDetailModel struct {
 	ID       int64
 	Name     string
+	Notes    string
 	SubName  string
 	SubID    int64
 	Splits   []budgetSplitRow
@@ -260,6 +321,7 @@ func (s *server) buildBudgetPlanDetailModel(w http.ResponseWriter, r *http.Reque
 	model := budgetPlanDetailModel{
 		ID:        plan.ID,
 		Name:      plan.Name,
+		Notes:     plan.Notes,
 		SubName:   subNames[plan.SubsidiaryID],
 		SubID:     plan.SubsidiaryID,
 		Accounts:  accts,

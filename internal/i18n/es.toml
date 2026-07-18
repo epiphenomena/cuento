@@ -2010,6 +2010,14 @@ other = "Plan de presupuesto"
 other = "Volver a planes de presupuesto"
 [budget_plan.detail.subsidiary]
 other = "Subsidiaria"
+[budget_plan.manage.summary]
+other = "Administrar plan"
+[budget_plan.manage.save]
+other = "Guardar cambios"
+[budget_plan.manage.delete]
+other = "Eliminar plan"
+[budget_plan.manage.delete_hint]
+other = "Eliminar un plan lo borra junto con todas sus partidas proyectadas. Esto no se puede deshacer."
 [budget_plan.detail.splits]
 other = "Partidas proyectadas"
 [budget_plan.detail.save]

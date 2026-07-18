@@ -62,6 +62,43 @@ func mkSplitSetup(t *testing.T, s *Store) splitSetup {
 
 func int64p(n int64) *int64 { return &n }
 
+// TestDeleteBudgetPlanCascade: deleting a plan HARD-deletes it and all its splits
+// under one change, appending a 'delete' version for the plan AND each split (rule 14
+// audit completeness), and a second delete on a gone plan is a clean ErrBudgetPlanNotFound.
+func TestDeleteBudgetPlanCascade(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	st := mkSplitSetup(t, s)
+
+	sp1, err := s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
+		Description: "Rent", Date: "2026-01-01", AccountID: st.expense,
+		ProgramID: int64p(st.prog), Amount: 100_000, Currency: "USD",
+	})
+	if err != nil {
+		t.Fatalf("create split: %v", err)
+	}
+
+	if err := s.DeleteBudgetPlan(mutCtx(), st.plan); err != nil {
+		t.Fatalf("delete plan: %v", err)
+	}
+	// The plan and its split are gone; both carry a 'delete' version (audit intact).
+	testutil.AssertVersioned(t, d, "budget_plans", st.plan, "delete")
+	testutil.AssertVersioned(t, d, "budget_splits", sp1, "delete")
+	if _, err := s.GetBudgetPlan(mutCtx(), st.plan); err == nil {
+		t.Errorf("plan still exists after delete")
+	}
+	if splits, err := s.BudgetSplits(mutCtx(), st.plan); err != nil {
+		t.Fatalf("list splits after delete: %v", err)
+	} else if len(splits) != 0 {
+		t.Errorf("plan has %d splits after delete, want 0", len(splits))
+	}
+
+	// A second delete on the gone plan is a clean typed error.
+	if err := s.DeleteBudgetPlan(mutCtx(), st.plan); !errors.Is(err, ErrBudgetPlanNotFound) {
+		t.Errorf("delete gone plan: err = %v, want ErrBudgetPlanNotFound", err)
+	}
+}
+
 func TestCreateBudgetPlanVersioned(t *testing.T) {
 	d := testutil.NewDB(t)
 	s := New(d)
