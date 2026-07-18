@@ -280,6 +280,96 @@ func TestAdminGrantsRoundTrip(t *testing.T) {
 	}
 }
 
+// TestAdminGrantsProgramScope (p27.4c): the admin grant form carries an OPTIONAL
+// program-subtree scope per group. Granting a program-dimensioned group ("financial")
+// with a chosen program scopes the grant; clearing the scope re-grants org-wide; and
+// a scope value on a non-program-dimensioned group ("funds") is IGNORED server-side
+// (that group has no program-dimensioned report -- the p27.4b empty-coverage trap).
+func TestAdminGrantsProgramScope(t *testing.T) {
+	h, st, sm, db := adminApp(t)
+	ctx := context.Background()
+	admin := mkUser(t, st, "boss", "none", true)
+	target := mkUser(t, st, "reader", "read", false)
+
+	// A tiny program tree so the scope has a real id to point at.
+	prog, err := st.CreateProgram(store.WithActor(ctx, store.Actor{ID: 1}), store.CreateProgramInput{ParentID: 1, Name: "Educacion", SortOrder: 1})
+	if err != nil {
+		t.Fatalf("create program: %v", err)
+	}
+
+	// Grant "financial" (a program-dimensioned group) scoped to the program.
+	scoped := url.Values{}
+	scoped.Set("grant_financial", "1")
+	scoped.Set("program_financial", itoa(prog))
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(target)+"/grants", scoped)
+	if rec.Code >= 400 {
+		t.Fatalf("scoped grant returned %d, body: %s", rec.Code, rec.Body.String())
+	}
+	gs, _ := st.ReportGrants(ctx, target)
+	if len(gs) != 1 || gs[0].Group != "financial" || gs[0].ProgramID == nil || *gs[0].ProgramID != prog {
+		t.Fatalf("grants after scoped grant = %+v, want [financial scoped to %d]", gs, prog)
+	}
+	testutil.AssertVersionedGrant(t, db, target, "financial", "create")
+
+	// Re-submit with the same box checked but NO program -> re-grant org-wide (scope change).
+	orgWide := url.Values{}
+	orgWide.Set("grant_financial", "1")
+	rec = asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(target)+"/grants", orgWide)
+	if rec.Code >= 400 {
+		t.Fatalf("org-wide re-grant returned %d, body: %s", rec.Code, rec.Body.String())
+	}
+	gs, _ = st.ReportGrants(ctx, target)
+	if len(gs) != 1 || gs[0].Group != "financial" || gs[0].ProgramID != nil {
+		t.Fatalf("grants after clearing scope = %+v, want [financial org-wide]", gs)
+	}
+
+	// A crafted program scope on "funds" (no program-dimensioned report) is IGNORED:
+	// the grant lands org-wide, never scoped to nothing.
+	craft := url.Values{}
+	craft.Set("grant_financial", "1")
+	craft.Set("grant_funds", "1")
+	craft.Set("program_funds", itoa(prog))
+	rec = asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(target)+"/grants", craft)
+	if rec.Code >= 400 {
+		t.Fatalf("funds grant returned %d, body: %s", rec.Code, rec.Body.String())
+	}
+	gs, _ = st.ReportGrants(ctx, target)
+	var foundFunds bool
+	for i := range gs {
+		if gs[i].Group == "funds" {
+			foundFunds = true
+			if gs[i].ProgramID != nil {
+				t.Errorf("funds grant scoped to %d, want org-wide (no program-dim report -> scope ignored)", *gs[i].ProgramID)
+			}
+		}
+	}
+	if !foundFunds {
+		t.Fatalf("funds grant missing after craft, grants = %+v", gs)
+	}
+
+	// The GET detail page offers a program picker for the program-dimensioned group and
+	// NOT for "funds" (empty-coverage). Re-scope financial so the current-scope shows.
+	rescope := url.Values{}
+	rescope.Set("grant_financial", "1")
+	rescope.Set("program_financial", itoa(prog))
+	rescope.Set("grant_funds", "1")
+	asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(target)+"/grants", rescope)
+	get := asUser(t, h, sm, admin, http.MethodGet, "/admin/users/"+itoa(target), nil)
+	if get.Code != http.StatusOK {
+		t.Fatalf("GET detail = %d", get.Code)
+	}
+	body := get.Body.String()
+	if !strings.Contains(body, `name="program_financial"`) {
+		t.Errorf("detail page missing program picker for financial (program-dimensioned)")
+	}
+	if strings.Contains(body, `name="program_funds"`) {
+		t.Errorf("detail page OFFERS a program picker for funds (has no program-dimensioned report)")
+	}
+	if !strings.Contains(body, "Educacion") {
+		t.Errorf("detail page does not show the current program scope name")
+	}
+}
+
 // TestAdminUserDetailSystemUserRedirects: the system user (id 1) is off-limits --
 // GET /admin/users/1 redirects to the list rather than 404ing or rendering.
 func TestAdminUserDetailSystemUserRedirects(t *testing.T) {

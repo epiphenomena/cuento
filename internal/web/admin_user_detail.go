@@ -21,11 +21,39 @@ import (
 // The system user is unreachable here (the store's AdminUserByID refuses id 1 ->
 // 404). Every string via {{t}} (rule 9); no inline script (rule 12).
 
-// grantCheckbox is one report-group row on the detail page: the group name and
-// whether the user currently holds it (drives the checkbox's checked state).
+// grantCheckbox is one report-group row on the detail page: the group name, whether
+// the user currently holds it (drives the checkbox's checked state), and -- for a
+// PROGRAM-DIMENSIONED group (one containing at least one program-dimensioned report,
+// p27.4c) -- an optional program-subtree scope. ScopeSelectable is true only for such
+// groups: a group with NO program-dimensioned report (e.g. "funds" after the p27.4b
+// demotions) is never offered a picker, because scoping it would grant effectively
+// nothing (the empty-coverage trap the p27.4b note flagged). ProgramID/ScopeName
+// carry the CURRENT scope of a held grant so the admin can see it ("org-wide" when nil).
 type grantCheckbox struct {
-	Name    string
-	Granted bool
+	Name            string
+	Granted         bool
+	ScopeSelectable bool
+	ProgramID       *int64 // current scope of a held grant (nil = org-wide)
+	ScopeName       string // program name for ProgramID (empty = org-wide)
+}
+
+// ScopeID returns the current scope's program id, or 0 when the grant is org-wide
+// (nil ProgramID). It exists so the template can compare a program option's id to the
+// held scope with a plain `eq` (a *int64 is not directly `eq`-comparable to an int64).
+func (g grantCheckbox) ScopeID() int64 {
+	if g.ProgramID == nil {
+		return 0
+	}
+	return *g.ProgramID
+}
+
+// programScopeOption is one selectable program in a grant's program-scope picker
+// (p27.4c): the program id and its display name (a stored proper noun, D5). The set
+// is the whole program tree in pre-order, mirroring the report page's program
+// selector (report.tmpl) -- a flat <select>, the sanctioned program-picker pattern.
+type programScopeOption struct {
+	ID   int64
+	Name string
 }
 
 // userDetailModel is the GET /admin/users/{id} model: the subject user, the
@@ -40,6 +68,9 @@ type userDetailModel struct {
 	TxnPerm     string
 	TxnPerms    []settingOption
 	Grants      []grantCheckbox
+	// Programs is the program-scope option set every program-dimensioned grant row
+	// shares (the app's program selector, reused). Empty when no programs exist.
+	Programs []programScopeOption
 	// CanSubmitExpenses drives the p20.2 admin toggle for the standalone expense-
 	// submit capability (p20.1). Admin-gated; a versioned change on save.
 	CanSubmitExpenses bool
@@ -92,22 +123,47 @@ func (s *server) buildUserDetail(r *http.Request, id int64) (userDetailModel, er
 	if err != nil {
 		return userDetailModel{}, err
 	}
+	heldScope := make(map[string]*int64, len(held)) // group -> current scope (nil = org-wide)
 	heldSet := make(map[string]bool, len(held))
 	for _, g := range held {
 		heldSet[g.Group] = true
+		heldScope[g.Group] = g.ProgramID
 	}
 	groups, err := s.store.ReportGroupNames(ctx)
 	if err != nil {
 		return userDetailModel{}, err
 	}
+	// Program options (the app's program selector, reused) + an id->name lookup so a
+	// held grant's current scope can show the program NAME, not a bare id.
+	progs, err := s.programStatementOptions(ctx)
+	if err != nil {
+		return userDetailModel{}, err
+	}
+	progName := make(map[int64]string, len(progs))
+	scopeOpts := make([]programScopeOption, 0, len(progs))
+	for _, p := range progs {
+		progName[p.ID] = p.Name
+		scopeOpts = append(scopeOpts, programScopeOption{ID: p.ID, Name: p.Name})
+	}
+	// Which groups may carry a program scope: only those containing a program-
+	// dimensioned report (p27.4c). Computed from the registry so it stays locked to
+	// TestProgramDimensionedSet.
+	pdGroups := s.reports.ProgramDimensionedGroups()
+
 	model := userDetailModel{
 		ID: u.ID, Username: u.Username, DisplayName: u.DisplayName,
 		IsAdmin: u.IsAdmin, Disabled: u.Disabled, TxnPerm: u.TxnPerm,
 		TxnPerms:          txnPermOptions(),
 		CanSubmitExpenses: u.CanSubmitExpenses,
+		Programs:          scopeOpts,
 	}
 	for _, g := range groups {
-		model.Grants = append(model.Grants, grantCheckbox{Name: g, Granted: heldSet[g]})
+		row := grantCheckbox{Name: g, Granted: heldSet[g], ScopeSelectable: pdGroups[g]}
+		if scope := heldScope[g]; scope != nil {
+			row.ProgramID = scope
+			row.ScopeName = progName[*scope]
+		}
+		model.Grants = append(model.Grants, row)
 	}
 	return model, nil
 }
@@ -179,20 +235,50 @@ func (s *server) userSetGrants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	heldSet := make(map[string]bool, len(held))
+	heldScope := make(map[string]*int64, len(held))
 	for _, g := range held {
 		heldSet[g.Group] = true
+		heldScope[g.Group] = g.ProgramID
 	}
-	// A group is desired iff its checkbox ("grant_<name>") is present.
+
+	// Which groups may carry a program scope (contain a program-dimensioned report,
+	// p27.4c) and the set of real program ids -- both bound server-side so a crafted
+	// "program_<group>" on a non-program-dim group (the empty-coverage trap) or a bogus
+	// id cannot create a scope-to-nothing grant. Mirrors "unknown groups ignored".
+	pdGroups := s.reports.ProgramDimensionedGroups()
+	progs, err := s.programStatementOptions(ctx)
+	if err != nil {
+		s.serverError(w)
+		return
+	}
+
+	// A group is desired iff its checkbox ("grant_<name>") is present; its desired scope
+	// is the "program_<name>" value, HONORED only for a program-dimensioned group naming a
+	// real program (else nil = org-wide).
 	wanted := make(map[string]bool, len(groups))
+	wantScope := make(map[string]*int64, len(groups))
 	for _, g := range groups {
 		wanted[g] = r.PostForm.Get("grant_"+g) != ""
+		if wanted[g] && pdGroups[g] {
+			if pid, ok := parseProgramScope(r.PostForm.Get("program_"+g), progs); ok {
+				wantScope[g] = pid
+			}
+		}
 	}
 
 	actorCtx := s.actorCtx(ctx)
 	for _, g := range groups {
 		switch {
 		case wanted[g] && !heldSet[g]:
-			if err := s.store.GrantReportGroup(actorCtx, id, g, nil); err != nil {
+			if err := s.store.GrantReportGroup(actorCtx, id, g, wantScope[g]); err != nil {
+				s.serverError(w)
+				return
+			}
+		case wanted[g] && heldSet[g] && !sameScope(heldScope[g], wantScope[g]):
+			// Still held, still wanted, but the scope changed -> re-grant (GrantReportGroup
+			// does the atomic revoke+grant, one change; a same-scope call is a no-op so the
+			// sameScope guard keeps a plain resave from spamming an audit row).
+			if err := s.store.GrantReportGroup(actorCtx, id, g, wantScope[g]); err != nil {
 				s.serverError(w)
 				return
 			}
@@ -204,6 +290,36 @@ func (s *server) userSetGrants(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	http.Redirect(w, r, userDetailURL(id), http.StatusSeeOther)
+}
+
+// parseProgramScope resolves a submitted "program_<group>" value to a program id,
+// returning (nil,true) for an empty/absent value (org-wide) and (id,true) for a value
+// naming a REAL program in progs. A non-empty value that is not a real program id
+// yields (nil,false) -- the caller then leaves the grant org-wide rather than scoping
+// to a bogus id (a crafted-input guard, mirroring programExists on the report page).
+func parseProgramScope(raw string, progs []programOption) (*int64, bool) {
+	if raw == "" {
+		return nil, true
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || !programExists(progs, id) {
+		return nil, false
+	}
+	return &id, true
+}
+
+// sameScope reports whether two optional program scopes are equal (both nil, or both
+// non-nil naming the same program) -- the no-op guard that keeps a resave with an
+// unchanged scope from re-granting (and appending a spurious version row).
+func sameScope(a, b *int64) bool {
+	switch {
+	case a == nil && b == nil:
+		return true
+	case a == nil || b == nil:
+		return false
+	default:
+		return *a == *b
+	}
 }
 
 // userSetCanSubmit handles POST /admin/users/{id}/can-submit (Admin): toggle the

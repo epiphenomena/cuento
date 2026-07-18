@@ -227,6 +227,14 @@ other = "Otorgue acceso de lectura a grupos de informes. Los administradores ya 
 other = "Aun no hay grupos de informes definidos."
 [admin.users.save_grants]
 other = "Guardar acceso a informes"
+[admin.users.grant_scope_label]
+other = "Alcance del programa"
+[admin.users.grant_scope_org_wide]
+other = "Toda la organizacion"
+[admin.users.grant_scope_current]
+other = "Alcance actual:"
+[admin.users.grant_scope_hint]
+other = "Limita esta concesion a un programa y sus subprogramas. Deja Toda la organizacion para acceso a nivel de toda la organizacion."
 [admin.users.form.title]
 other = "Nuevo usuario"
 [admin.users.form.username]

@@ -110,6 +110,23 @@ func (reg *Registry) GroupsInUse() []string {
 	return out
 }
 
+// ProgramDimensionedGroups returns the set of report groups that contain at least
+// one ProgramDimensioned report (p27.4c), keyed by group name. The admin grant UI
+// reads it to decide which grants may carry a program-subtree scope: scoping a grant
+// whose group has NO program-dimensioned report (e.g. "funds" after the p27.4b
+// demotions) would grant effectively nothing, so the picker is offered ONLY for
+// groups in this set. Because ProgramDimensioned is pinned by TestProgramDimensionedSet,
+// this set is stable and moves only when the audited report set does.
+func (reg *Registry) ProgramDimensionedGroups() map[string]bool {
+	out := make(map[string]bool)
+	for _, id := range reg.order {
+		if r := reg.byID[id]; r.ProgramDimensioned {
+			out[r.Group] = true
+		}
+	}
+	return out
+}
+
 // validID reports whether id is a well-formed report slug: non-empty and only
 // lowercase ascii letters, digits, '-' or '_' (so it is a safe URL path segment
 // and a stable registry key). A leading '_' is allowed so a clearly-marked
