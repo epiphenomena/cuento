@@ -139,6 +139,12 @@
        (rule 10: never input[type=date]; rule 12: external module, no inline script).
        Loaded shell-wide so it applies on every page with a date input. */}}
   <script type="module" src="{{asset "datefield.js"}}"></script>
+  {{/* p28.2 shell-wide combobox enhancer: the entry-grid editors init their own combos,
+       but the merge / report-filter / account-parent / import account pickers reach the
+       DOM via plain renders + htmx swaps with no owning module. This enhances every
+       select.combo-input shell-wide (idempotent; skips the manual payee combo) so those
+       pickers become the SAME fuzzy + hierarchy combobox (rule 12: external module). */}}
+  <script type="module" src="{{asset "combos.js"}}"></script>
 </head>
 {{/* data-* feed datefield.js: the per-user date format and the localized calendar
      labels (rule 9: the strings originate in the i18n catalog, rendered here). */ -}}

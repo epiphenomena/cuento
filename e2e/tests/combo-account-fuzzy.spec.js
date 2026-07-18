@@ -79,6 +79,69 @@ async function assertFuzzy(page, cell, sel, query, expectLabel, expectValue) {
   await expect(sel).toHaveValue(expectValue);
 }
 
+// createChildAsset makes a leaf asset under an existing asset parent, so the child's
+// hierarchy PATH is "Parent.Child" -- the label the p28.2 pickers fuzzy-rank on. Type
+// stays "asset" (default) so no htmx form re-swap races the parent select.
+async function createChildAsset(page, name, parentPath) {
+  await openNewAccount(page);
+  await page.locator('#af-name-en').fill(name);
+  await expect(async () => {
+    // The #af-parent option label is the parent's dotted PATH (p28.2); pick it by path.
+    await page.locator('#af-parent').selectOption({ label: parentPath });
+    await expect(page.locator('#af-parent')).not.toHaveValue('0');
+  }).toPass({ timeout: 5000 });
+  const rootSub = page.locator('input[name="sub_1"]');
+  if (!(await rootSub.isChecked())) await rootSub.check();
+  await saveAccount(page);
+  await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
+}
+
+// p28.2: the account pickers OUTSIDE the entry grids -- the merge source/destination
+// (#mg-src/#mg-dst) and the account-ledger report filter (#rp-account) -- must be the
+// SAME fuzzy + hierarchy combobox. Each option's label carries the dotted ancestor PATH
+// (data-path), so a query like "hier.leaf" (a segment of "Hier Parent.Hier Leaf") ranks
+// the child. This proves both the shell-wide combos.js enhancement (reachability) and the
+// hierarchy path on the label.
+test.describe('non-grid account pickers are fuzzy + hierarchy comboboxes (p28.2)', () => {
+  test('merge source and account-ledger filter fuzzy-rank the account path', async ({ page, server }) => {
+    await login(page, server);
+    // A parent + a child leaf, so the leaf's path is "Hier Parent.Hier Leaf".
+    await createAsset(page, 'Hier Parent');
+    await createChildAsset(page, 'Hier Leaf', 'Hier Parent');
+    // A sibling leaf so a query must actually RANK, not just be the only option.
+    await createAsset(page, 'Other Leaf');
+
+    // MERGE picker: open the merge form, fuzzy-query the child by a path subsequence.
+    await page.goto('/accounts');
+    await page.getByRole('button', { name: /merge accounts/i }).click();
+    await expect(page.locator('#mg-src')).toBeVisible();
+    // The overlay input sits over the native select inside a .combo wrapper.
+    const srcCell = page.locator('#mg-src').locator('xpath=ancestor::div[contains(@class,"combo")][1]');
+    const srcInput = srcCell.locator('.combo-text');
+    const srcList = srcCell.locator('.combo-list');
+    await srcInput.click();
+    await srcInput.fill('');
+    await srcInput.type('hipar.leaf'); // subsequence of "Hier Parent.Hier Leaf"
+    const wanted = srcList.locator('.combo-option', { hasText: 'Hier Parent.Hier Leaf' });
+    await expect(wanted).toBeVisible();
+    await expect(srcList).toBeVisible();
+    const leafVal = await page.locator('#mg-src option', { hasText: 'Hier Parent.Hier Leaf' }).first().getAttribute('value');
+    await wanted.first().click();
+    await expect(page.locator('#mg-src')).toHaveValue(/** @type {string} */ (leafVal));
+
+    // ACCOUNT-LEDGER report filter: same combobox, same path label.
+    await page.goto('/reports/account_ledger');
+    await expect(page.locator('#rp-account')).toBeVisible();
+    const rpCell = page.locator('#rp-account').locator('xpath=ancestor::div[contains(@class,"combo")][1]');
+    const rpInput = rpCell.locator('.combo-text');
+    const rpList = rpCell.locator('.combo-list');
+    await rpInput.click();
+    await rpInput.fill('');
+    await rpInput.type('hipar.leaf');
+    await expect(rpList.locator('.combo-option', { hasText: 'Hier Parent.Hier Leaf' })).toBeVisible();
+  });
+});
+
 test.describe('account combobox fuzzy matching (p26.44)', () => {
   test('account (header + body) and fund all filter/rank/pick a subsequence query', async ({ page, server }) => {
     await login(page, server);

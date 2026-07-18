@@ -26,10 +26,12 @@
 
   <div class="field">
     <label for="mg-src">{{t "merge.source"}}</label>
-    <select id="mg-src" name="src"
+    {{/* p28.2: shared fuzzy account combobox (combo-input) whose option label carries the
+         dotted hierarchy (data-path) so a query like "c.boa" ranks "Cash.BOA". */}}
+    <select id="mg-src" name="src" class="combo-input"
       {{- if eq .Errors.FirstInvalid "src"}} autofocus{{end}}>
       <option value="0">{{t "merge.select_placeholder"}}</option>
-      {{range .Leaves}}<option value="{{.ID}}"{{if eq .ID $.Src}} selected{{end}}>{{.Name}}</option>
+      {{range .Leaves}}<option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.Src}} selected{{end}}>{{.Path}}</option>
       {{end}}
     </select>
     {{with .Errors.ErrorKey "src"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
@@ -37,10 +39,10 @@
 
   <div class="field">
     <label for="mg-dst">{{t "merge.destination"}}</label>
-    <select id="mg-dst" name="dst"
+    <select id="mg-dst" name="dst" class="combo-input"
       {{- if eq .Errors.FirstInvalid "dst"}} autofocus{{end}}>
       <option value="0">{{t "merge.select_placeholder"}}</option>
-      {{range .Leaves}}<option value="{{.ID}}"{{if eq .ID $.Dst}} selected{{end}}>{{.Name}}</option>
+      {{range .Leaves}}<option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.Dst}} selected{{end}}>{{.Path}}</option>
       {{end}}
     </select>
     {{with .Errors.ErrorKey "dst"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}

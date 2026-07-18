@@ -44,10 +44,12 @@
       </div>
       <div class="field">
         <label for="import-account">{{t "import.account"}}</label>
-        <select id="import-account" name="account_id" required>
+        {{/* p28.2: fuzzy account combobox (combo-input) with the dotted hierarchy in
+             data-path so a query like "c.boa" ranks "Cash.BOA". */}}
+        <select id="import-account" name="account_id" class="combo-input" required>
           <option value="">{{t "import.choose"}}</option>
           {{- range .Accounts}}
-          <option value="{{.ID}}" data-subsidiaries="{{range .SubsidiaryIDs}}{{.}} {{end}}">{{.Name}}</option>
+          <option value="{{.ID}}" data-path="{{.Path}}" data-subsidiaries="{{range .SubsidiaryIDs}}{{.}} {{end}}">{{.Path}}</option>
           {{- end}}
         </select>
       </div>

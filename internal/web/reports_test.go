@@ -586,8 +586,12 @@ func TestAccountLedgerReportRenders(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("account ledger status = %d, want 200", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), `class="report-account-select"`) {
+	if !strings.Contains(rec.Body.String(), `id="rp-account"`) {
 		t.Errorf("account ledger page missing the account selector")
+	}
+	// p28.2: the account selector is now a fuzzy hierarchy combobox (combo-input).
+	if !strings.Contains(rec.Body.String(), `report-account-select combo-input`) {
+		t.Errorf("account selector is not a combo-input")
 	}
 
 	// The Cash account id (seeded by reportsApp) via the account tree.

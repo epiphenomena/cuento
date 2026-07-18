@@ -114,10 +114,12 @@
     {{if .ShowAccount}}
     <div class="report-field">
       <label for="rp-account">{{t "reports.params.account"}}</label>
-      <select id="rp-account" name="account" class="report-account-select">
+      {{/* p28.2: fuzzy account combobox (combo-input) with the dotted hierarchy in
+           data-path so "c.boa" ranks "Cash.BOA". */}}
+      <select id="rp-account" name="account" class="report-account-select combo-input">
         <option value="0"{{if eq .Account 0}} selected{{end}}>{{t "reports.account.choose"}}</option>
         {{- range .Accounts}}
-        <option value="{{.ID}}"{{if eq .ID $.Account}} selected{{end}}>{{.Name}}</option>
+        <option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.Account}} selected{{end}}>{{.Path}}</option>
         {{- end}}
       </select>
     </div>

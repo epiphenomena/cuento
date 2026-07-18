@@ -298,6 +298,12 @@ type subInfo struct {
 type acctOption struct {
 	ID   int64
 	Name string
+	// Path (p28.2) is the account's dotted ancestor chain (e.g. "Cash.BOA"); the
+	// shared account combobox fuzzy-ranks on it so "c.boa" lines up with Cash.BOA.
+	Path string
+	// Type is the account's type ("asset"/"expense"/…), used to render an <optgroup>
+	// per type in the native fallback select (presentation parity with the grid).
+	Type string
 }
 
 // accountLedgerOptions returns the LEAF accounts (name-resolved for lang, tree order)
@@ -316,12 +322,16 @@ func (s *server) accountLedgerOptions(ctx context.Context, lang string) ([]acctO
 			isParent[r.ParentID.Int64] = true
 		}
 	}
+	paths, err := s.store.AccountPaths(ctx, lang)
+	if err != nil {
+		return nil, err
+	}
 	var out []acctOption
 	for _, r := range tree {
 		if isParent[r.ID] {
 			continue // placeholder parent: not a split target
 		}
-		out = append(out, acctOption{ID: r.ID, Name: r.Name})
+		out = append(out, acctOption{ID: r.ID, Name: r.Name, Path: paths[r.ID], Type: r.Type})
 	}
 	return out, nil
 }

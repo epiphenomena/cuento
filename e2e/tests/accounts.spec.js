@@ -170,9 +170,12 @@ test.describe('chart of accounts', () => {
       await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
     }
 
+    // p28.2: the #af-parent option label is now the account's dotted HIERARCHY path
+    // (so the shared fuzzy combobox ranks "c.boa" -> "Cash.BOA"), so a non-root parent
+    // is selected by its full path (a root's path is just its name).
     await createAccount('Tree Root E2E', null);
     await createAccount('Tree Child E2E', 'Tree Root E2E');
-    await createAccount('Tree Leaf E2E', 'Tree Child E2E');
+    await createAccount('Tree Leaf E2E', 'Tree Root E2E.Tree Child E2E');
 
     await page.goto('/accounts');
     // p26.74: an injected "Assets" TYPE HEADER now sits at depth 0 above the asset

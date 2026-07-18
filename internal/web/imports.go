@@ -66,8 +66,11 @@ type importSubOption struct {
 // stamped so the picker can (client-side, later) filter by the chosen subsidiary;
 // the store re-validates on confirm regardless.
 type importAccountOption struct {
-	ID            int64
-	Name          string
+	ID   int64
+	Name string
+	// Path (p28.2) is the dotted ancestor chain; the target picker is a shared
+	// combobox that fuzzy-ranks on it, like every account picker.
+	Path          string
 	SubsidiaryIDs []int64
 }
 
@@ -259,7 +262,7 @@ func (s *server) buildImportUpload(r *http.Request) (importUploadModel, error) {
 			}
 			seen[o.ID] = true
 			model.Accounts = append(model.Accounts, importAccountOption{
-				ID: o.ID, Name: o.Name, SubsidiaryIDs: o.SubsidiaryIDs,
+				ID: o.ID, Name: o.Name, Path: o.Path, SubsidiaryIDs: o.SubsidiaryIDs,
 			})
 		}
 	}

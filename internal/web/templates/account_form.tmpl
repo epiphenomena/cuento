@@ -55,10 +55,12 @@
 
   <div class="field">
     <label for="af-parent">{{t "accounts.form.parent"}}</label>
-    <select id="af-parent" name="parent_id"
+    {{/* p28.2: fuzzy account combobox (combo-input); data-path carries the dotted
+         hierarchy so a query like "c.boa" ranks "Cash.BOA". */}}
+    <select id="af-parent" name="parent_id" class="combo-input"
       {{- if eq .Errors.FirstInvalid "parent_id"}} autofocus{{end}}>
       <option value="0">{{t "accounts.form.no_parent"}}</option>
-      {{range .Parents}}<option value="{{.ID}}"{{if eq .ID $.ParentID}} selected{{end}}>{{.Name}}</option>
+      {{range .Parents}}<option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.ParentID}} selected{{end}}>{{.Path}}</option>
       {{end}}
     </select>
     {{with .Errors.ErrorKey "parent_id"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}

@@ -36,6 +36,9 @@ type leafOption struct {
 	ID   int64
 	Name string
 	Type string
+	// Path (p28.2) is the account's dotted ancestor chain (e.g. "Cash.BOA"); the
+	// shared account combobox fuzzy-ranks on it so "c.boa" lines up with Cash.BOA.
+	Path string
 }
 
 // mergeForm is the merge form model. It carries the leaf-account option lists and
@@ -92,12 +95,16 @@ func (s *server) buildMergeForm(r *http.Request) (mergeForm, error) {
 			hasChild[row.ParentID.Int64] = true
 		}
 	}
+	paths, err := s.store.AccountPaths(ctx, langOf(ctx))
+	if err != nil {
+		return mergeForm{}, err
+	}
 	form := mergeForm{}
 	for _, row := range rows {
 		if row.Active == 0 || hasChild[row.ID] {
 			continue // only active leaves merge (src and dst are both leaves)
 		}
-		form.Leaves = append(form.Leaves, leafOption{ID: row.ID, Name: row.Name, Type: row.Type})
+		form.Leaves = append(form.Leaves, leafOption{ID: row.ID, Name: row.Name, Type: row.Type, Path: paths[row.ID]})
 	}
 	form.Src = parseID(r.FormValue("src"))
 	form.Dst = parseID(r.FormValue("dst"))

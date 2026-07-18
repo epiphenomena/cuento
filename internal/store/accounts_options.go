@@ -16,6 +16,55 @@ import (
 // the write path enforces (typeCompatible, the check990Type CSV membership) are
 // reused here so the offered options and the accepted writes can never disagree.
 
+// accountPathFunc builds the shared dotted-ancestor-path resolver from the FULL
+// (unfiltered) account tree (p28.2, build-once). The returned closure walks an id ->
+// parent -> ... to the root and joins the lang-resolved names with "." (root first);
+// a top-level account's path is just its name. Every account-picker option label
+// carries this path so the combobox's fuzzy ranking (combofilter.js) sees the same
+// hierarchy at every site. The type-group is layered on separately as an <optgroup>
+// (presentation only), never folded into this string.
+func accountPathFunc(full []TreeRow) func(int64) string {
+	parentOf := make(map[int64]sql.NullInt64, len(full))
+	nameOf := make(map[int64]string, len(full))
+	for _, r := range full {
+		parentOf[r.ID] = r.ParentID
+		nameOf[r.ID] = r.Name
+	}
+	return func(id int64) string {
+		var seg []string
+		for n, valid := id, true; valid; {
+			seg = append(seg, nameOf[n])
+			p := parentOf[n]
+			if !p.Valid || p.Int64 == n {
+				break
+			}
+			n = p.Int64
+		}
+		for i, j := 0, len(seg)-1; i < j; i, j = i+1, j-1 {
+			seg[i], seg[j] = seg[j], seg[i]
+		}
+		return strings.Join(seg, ".")
+	}
+}
+
+// AccountPaths returns id -> dotted-ancestor-path for every account in the chart,
+// name-resolved for lang (p28.2). The web layer uses it to stamp the SAME hierarchy
+// path onto the non-grid account pickers (merge, account-ledger report filter,
+// account parent, import) that previously showed a flat name, so the shared combobox
+// fuzzy-ranks them exactly like the entry-grid account selects. Read via Tree (rule 2).
+func (s *Store) AccountPaths(ctx context.Context, lang string) (map[int64]string, error) {
+	full, err := s.Tree(ctx, lang, nil)
+	if err != nil {
+		return nil, err
+	}
+	pathOf := accountPathFunc(full)
+	out := make(map[int64]string, len(full))
+	for _, r := range full {
+		out[r.ID] = pathOf(r.ID)
+	}
+	return out, nil
+}
+
 // Form990Option is a 990 line offered in the form's select: its code, a
 // human-facing label (part.line -- label, assembled by the caller if desired) and
 // the raw fields the template shows. Only lines valid for the account's type are
@@ -68,6 +117,9 @@ type ParentOption struct {
 	ID   int64
 	Name string
 	Type string
+	// Path (p28.2) is the account's dotted ancestor chain; the account-form parent
+	// picker is a shared combobox that fuzzy-ranks on it, like every account picker.
+	Path string
 }
 
 // ParentOptions returns the accounts eligible to be the parent of an account of
@@ -97,6 +149,31 @@ func (s *Store) ParentOptions(ctx context.Context, lang, accountType string, exc
 		}
 	}
 
+	// Path builder over the FULL tree (p28.2): every candidate parent's option label
+	// carries its dotted ancestor chain so the shared combobox fuzzy-ranks it. Built
+	// from these same (unfiltered) tree rows -- no extra query.
+	parentOf := make(map[int64]sql.NullInt64, len(rows))
+	nameOf := make(map[int64]string, len(rows))
+	for _, r := range rows {
+		parentOf[r.ID] = r.ParentID
+		nameOf[r.ID] = r.Name
+	}
+	pathOf := func(id int64) string {
+		var seg []string
+		for n, valid := id, true; valid; {
+			seg = append(seg, nameOf[n])
+			p := parentOf[n]
+			if !p.Valid || p.Int64 == n {
+				break
+			}
+			n = p.Int64
+		}
+		for i, j := 0, len(seg)-1; i < j; i, j = i+1, j-1 {
+			seg[i], seg[j] = seg[j], seg[i]
+		}
+		return strings.Join(seg, ".")
+	}
+
 	var out []ParentOption
 	for _, r := range rows {
 		if excluded[r.ID] {
@@ -105,7 +182,7 @@ func (s *Store) ParentOptions(ctx context.Context, lang, accountType string, exc
 		if !typeCompatible(r.Type, accountType) {
 			continue
 		}
-		out = append(out, ParentOption{ID: r.ID, Name: r.Name, Type: r.Type})
+		out = append(out, ParentOption{ID: r.ID, Name: r.Name, Type: r.Type, Path: pathOf(r.ID)})
 	}
 	return out, nil
 }
@@ -202,33 +279,20 @@ func (s *Store) AccountEditorOptionsWith(ctx context.Context, lang string, subID
 		return nil, err
 	}
 	hasChild := make(map[int64]bool, len(full))
-	parentOf := make(map[int64]sql.NullInt64, len(full))
 	nameOf := make(map[int64]string, len(full))
 	for _, r := range full {
 		if r.ParentID.Valid {
 			hasChild[r.ParentID.Int64] = true
 		}
-		parentOf[r.ID] = r.ParentID
 		nameOf[r.ID] = r.Name
 	}
-	// pathOf walks id -> parent -> ... to the root and joins the resolved names
-	// with "." (root first). A top-level account's path is just its name. All
-	// ancestors are in `full` (the unfiltered tree), so every segment resolves.
-	pathOf := func(id int64) string {
-		var seg []string
-		for n, valid := id, true; valid; {
-			seg = append(seg, nameOf[n])
-			p := parentOf[n]
-			if !p.Valid || p.Int64 == n {
-				break
-			}
-			n = p.Int64
-		}
-		for i, j := 0, len(seg)-1; i < j; i, j = i+1, j-1 {
-			seg[i], seg[j] = seg[j], seg[i]
-		}
-		return strings.Join(seg, ".")
-	}
+	// pathOf: the shared dotted-ancestor-path builder (build-once, p28.2). The
+	// combobox (combofilter.js) fuzzy-ranks on this path so a query like "c.boa"
+	// lines up with "Cash.BOA"; the type-group is presentation (an <optgroup>), NOT
+	// part of the fuzzy string. Every account-picker site (txn/expense/budget grids,
+	// merge, account-ledger report filter, account parent, import) uses THIS builder
+	// so their option labels carry the same hierarchy.
+	pathOf := accountPathFunc(full)
 
 	// Sub-filtered tree -> the candidate accounts in tree order.
 	inSub, err := s.Tree(ctx, lang, &subID)
