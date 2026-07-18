@@ -763,6 +763,8 @@ other = "Alcance"
 other = "Saldo"
 [funds.col.actions]
 other = "Acciones"
+[funds.view_statement]
+other = "Ver estado"
 [funds.statement.title]
 other = "Estado del fondo"
 [funds.statement.back]
@@ -1705,6 +1707,8 @@ other = "Introducir una nueva asignacion abajo"
 other = "Al elegir una asignacion guardada se usan sus columnas y opciones; los campos de abajo se ignoran."
 [import.col.actions]
 other = "Acciones"
+[import.col.payee]
+other = "Beneficiario"
 [import.queue.title]
 other = "Revisar importacion"
 [import.queue.target]

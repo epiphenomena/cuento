@@ -769,6 +769,8 @@ other = "Scope"
 other = "Balance"
 [funds.col.actions]
 other = "Actions"
+[funds.view_statement]
+other = "View statement"
 [funds.statement.title]
 other = "Fund statement"
 [funds.statement.back]
@@ -1703,6 +1705,8 @@ other = "Enter a new mapping below"
 other = "Choosing a saved mapping uses its columns and options; the fields below are ignored."
 [import.col.actions]
 other = "Actions"
+[import.col.payee]
+other = "Payee"
 [import.queue.title]
 other = "Review import"
 [import.queue.target]

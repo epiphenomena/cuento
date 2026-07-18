@@ -83,6 +83,78 @@ func Langs() []string {
 	return []string{"en", "es"}
 }
 
+var (
+	keysOnce sync.Once
+	keySet   map[string]struct{}
+)
+
+// keys builds the flattened message-ID set from the base (en) catalog exactly once.
+// Parity (TestCatalogParity) guarantees es carries the same IDs, so the en set is
+// the authoritative key universe. A parse failure is a build-time defect and panics
+// (like bundle()); Has never panics because it only reads the loaded set.
+func keys() map[string]struct{} {
+	keysOnce.Do(func() {
+		src, err := catalogFS.ReadFile(baseLang + ".toml")
+		if err != nil {
+			panic(fmt.Sprintf("i18n: read embedded %s catalog: %v", baseLang, err))
+		}
+		var raw map[string]any
+		if err := toml.Unmarshal(src, &raw); err != nil {
+			panic(fmt.Sprintf("i18n: unmarshal embedded %s catalog: %v", baseLang, err))
+		}
+		keySet = make(map[string]struct{})
+		flattenMessageIDs("", raw, keySet)
+	})
+	return keySet
+}
+
+// flattenMessageIDs walks a TOML tree into the dotted message IDs go-i18n derives:
+// nested tables join with '.', and a leaf table carrying plural forms (one/other)
+// is a single message, not several. This mirrors the parity test's own flattening
+// so Has checks the real key universe.
+func flattenMessageIDs(prefix string, m map[string]any, out map[string]struct{}) {
+	// A message table is a leaf: every value is a plural-form string (or a reserved
+	// field), never a further nested table.
+	if prefix != "" && isMessageTableAny(m) {
+		out[prefix] = struct{}{}
+		return
+	}
+	for k, v := range m {
+		id := k
+		if prefix != "" {
+			id = prefix + "." + k
+		}
+		if child, ok := v.(map[string]any); ok {
+			flattenMessageIDs(id, child, out)
+			continue
+		}
+		out[id] = struct{}{}
+	}
+}
+
+// isMessageTableAny reports whether every value in the table is a scalar (a plural
+// form or reserved field), i.e. the table is a go-i18n message, not a container of
+// further messages.
+func isMessageTableAny(m map[string]any) bool {
+	if len(m) == 0 {
+		return false
+	}
+	for _, v := range m {
+		if _, nested := v.(map[string]any); nested {
+			return false
+		}
+	}
+	return true
+}
+
+// Has reports whether key resolves to a real message in the catalog. It lets
+// callers (notably the template-key scan test) verify that a referenced key exists
+// without triggering the raw-key fallback that T/TN return for a missing key.
+func Has(key string) bool {
+	_, ok := keys()[key]
+	return ok
+}
+
 // T looks up key in lang (with en fallback), then applies fmt.Sprintf positional
 // interpolation with args over the returned message text (which carries %s/%d
 // verbs — go-i18n leaves non-{{}} text untouched). Fallback chain: unknown lang
