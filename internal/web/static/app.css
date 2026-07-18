@@ -670,9 +670,11 @@ input[aria-invalid="true"] {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.report-indent-1 td:first-child { padding-left: calc(var(--space-4) * 1.5); }
-.report-indent-2 td:first-child { padding-left: calc(var(--space-4) * 3); }
-.report-indent-3 td:first-child { padding-left: calc(var(--space-4) * 4.5); }
+/* p28.27: deeper per-level indent (~50% bigger step) so nesting reads clearly;
+   level 3 stays well within a normal-width statement's first column. */
+.report-indent-1 td:first-child { padding-left: calc(var(--space-4) * 2.25); }
+.report-indent-2 td:first-child { padding-left: calc(var(--space-4) * 4.5); }
+.report-indent-3 td:first-child { padding-left: calc(var(--space-4) * 6.75); }
 /* p28.24: accounting rules. A subtotal (Total Revenue/Total Expense =
    RowSubtotal) gets a single rule above the row; a grand total (Change in Net
    Assets = RowTotal) gets a single rule above AND a double underline below, the
