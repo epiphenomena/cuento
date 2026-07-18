@@ -2203,3 +2203,99 @@ other = "The cleared and outstanding items for a completed reconciliation."
 other = "Budgeted versus actual amounts with the variance for each line."
 [reports.cashflow_projection.desc]
 other = "Projected cash inflows and outflows from schedules and budgets."
+[nav.budgetplans]
+other = "Budget plans"
+[budget_plan.list.title]
+other = "Budget plans"
+[budget_plan.list.intro]
+other = "Cash-flow-first budget plans: projected, dated splits across accounts, funds, and programs."
+[budget_plan.list.new]
+other = "New budget plan"
+[budget_plan.list.col.name]
+other = "Name"
+[budget_plan.list.col.subsidiary]
+other = "Subsidiary"
+[budget_plan.list.empty]
+other = "No budget plans yet."
+[budget_plan.form.new_title]
+other = "New budget plan"
+[budget_plan.form.back]
+other = "Back to budget plans"
+[budget_plan.form.name]
+other = "Name"
+[budget_plan.form.subsidiary]
+other = "Subsidiary"
+[budget_plan.form.notes]
+other = "Notes"
+[budget_plan.detail.title]
+other = "Budget plan"
+[budget_plan.detail.back]
+other = "Back to budget plans"
+[budget_plan.detail.subsidiary]
+other = "Subsidiary"
+[budget_plan.detail.splits]
+other = "Projected splits"
+[budget_plan.detail.save]
+other = "Save splits"
+[budget_plan.split.col.description]
+other = "Description"
+[budget_plan.split.col.date]
+other = "Date"
+[budget_plan.split.col.account]
+other = "Account"
+[budget_plan.split.col.amount]
+other = "Amount"
+[budget_plan.split.account_none]
+other = "Select an account"
+[budget_plan.split.unrestricted]
+other = "Unrestricted"
+[budget_plan.split.program_none]
+other = "No program"
+[budget_plan.cadence.label]
+other = "Generate dated rows:"
+[budget_plan.cadence.start]
+other = "Start"
+[budget_plan.cadence.interval]
+other = "Every"
+[budget_plan.cadence.count]
+other = "Count"
+[budget_plan.cadence.generate]
+other = "Generate"
+[budget_plan.cadence.weekly]
+other = "Week"
+[budget_plan.cadence.biweekly]
+other = "Two weeks"
+[budget_plan.cadence.monthly]
+other = "Month"
+[budget_plan.import.title]
+other = "Import from CSV"
+[budget_plan.import.hint]
+other = "A flat CSV: description, date, account, fund, program (optional), amount. Rows are appended to this plan."
+[budget_plan.import.submit]
+other = "Import CSV"
+[error.budget_plan.name]
+other = "Enter a name and choose a subsidiary."
+[error.budget_plan.subsidiary]
+other = "Choose a valid subsidiary."
+[error.budget_plan.account]
+other = "Choose an offered account (a revenue/expense or open-item account in this plan's subsidiary)."
+[error.budget_plan.date]
+other = "Enter a valid date."
+[error.budget_plan.amount]
+other = "Enter a positive amount."
+[error.budget_plan.program_required]
+other = "A revenue/expense split needs a program."
+[error.budget_plan.program_forbidden]
+other = "A receivable/payable split must not carry a program."
+[error.budget_plan.program_scope]
+other = "That program is inactive or outside the fund's program scope."
+[error.budget_plan.fund]
+other = "That fund is inactive or outside this subsidiary."
+[error.budget_plan.csv_missing]
+other = "Choose a CSV file to import."
+[error.budget_plan.csv_malformed]
+other = "The CSV could not be read."
+[error.budget_plan.csv_columns]
+other = "A row needs at least: description, date, account, fund, amount."
+[error.budget_plan.csv_row]
+other = "Row %d: %s"

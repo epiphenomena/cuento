@@ -1,0 +1,34 @@
+{{/*
+  p27.2 budget-PLAN list (GET /budget-plans, Perm TxnRead) -- the NEW split-derived
+  budget model. Each plan is a name + subsidiary; the detail page hosts the split-entry
+  grid. A distinct URL namespace from the old /budgets (live until p27.3). .Page is a
+  budgetPlansPageModel. Subsidiary names are stored proper nouns; every other string via
+  {{t}} (rule 9).
+*/ -}}
+{{define "budget_plans.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "budget_plan.list.title"))}}
+  {{- with .Page}}
+  <h1>{{t "budget_plan.list.title"}}</h1>
+  <p class="hint">{{t "budget_plan.list.intro"}}</p>
+  <p><a class="btn btn-primary" href="/budget-plans/new" id="new-budget-plan">{{t "budget_plan.list.new"}}</a></p>
+  <table class="data-table" id="budget-plans-table">
+    <thead>
+      <tr>
+        <th>{{t "budget_plan.list.col.name"}}</th>
+        <th>{{t "budget_plan.list.col.subsidiary"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="budget-plan-row">
+        <td><a href="/budget-plans/{{.ID}}">{{.Name}}</a></td>
+        <td>{{.SubName}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="2">{{t "budget_plan.list.empty"}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

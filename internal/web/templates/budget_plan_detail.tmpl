@@ -1,0 +1,133 @@
+{{/*
+  p27.2 budget-PLAN editor / detail (GET /budget-plans/{id}, Perm TxnRead; the grid
+  saves via POST .../splits, TxnWrite). The plan header (name + subsidiary) and its
+  SPLITS as an AUTO-ROW GRID: a single bulk-submit form of [description, date, account,
+  fund, program, amount] rows saved as a REPLACE set (the whole set replaces the plan's
+  splits). The grid starts with one empty row; budgetgrid.js auto-appends a fresh
+  trailing row as the last is edited and drops the trailing empty on save. A CADENCE
+  control generates dated rows client-side (budgetcadence.js -> budget:cadence event ->
+  budgetgrid clones the current row across the dates). A flat-CSV import appends rows.
+
+  .Page is a budgetPlanDetailModel. Account/fund/program/subsidiary names are stored
+  proper nouns; every other string via {{t}} (rule 9); dates render/parse in the user's
+  format (rule 10, js-datefield, never input[type=date]); amounts via the money
+  formatter (rule 3/10); the grid/cadence are external ES modules (rule 12, no inline
+  script). A budget-split amount is a plain POSITIVE magnitude, stored as-entered (no
+  sign flip -- direction is a p27.3 report concern).
+*/ -}}
+{{define "budget_plan_detail.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "budget_plan.detail.title"))}}
+  {{- with .Page}}
+  <p><a class="btn btn-ghost" href="/budget-plans">{{t "budget_plan.detail.back"}}</a></p>
+  <h1>{{.Name}}</h1>
+  <p class="hint">{{t "budget_plan.detail.subsidiary"}}: {{.SubName}}</p>
+
+  {{if .ErrorMsg}}
+  <p class="error" role="alert" id="budget-plan-error">{{.ErrorMsg}}</p>
+  {{end}}
+
+  {{/* Cadence control: a client-side dated-row generator (budgetcadence.js). Enter a
+       start date + interval + count, click Generate -> the grid clones the CURRENT last
+       edited row across the generated dates. Pure entry sugar; no server round-trip and
+       NO stored schedule object. */}}
+  <div class="budget-cadence" data-cadence>
+    <span class="budget-cadence-label">{{t "budget_plan.cadence.label"}}</span>
+    <label for="cadence-start">{{t "budget_plan.cadence.start"}}</label>
+    <input type="text" id="cadence-start" class="cadence-start js-datefield" placeholder="{{t "budget.schedule.form.date_placeholder"}}">
+    <label for="cadence-interval">{{t "budget_plan.cadence.interval"}}</label>
+    <select id="cadence-interval" class="cadence-interval">
+      {{range .Intervals}}<option value="{{.Value}}">{{t .LabelKey}}</option>
+      {{end}}
+    </select>
+    <label for="cadence-count">{{t "budget_plan.cadence.count"}}</label>
+    <input type="number" id="cadence-count" class="cadence-count" min="1" max="60" value="12">
+    <button type="button" class="btn btn-ghost cadence-generate" id="cadence-generate">{{t "budget_plan.cadence.generate"}}</button>
+  </div>
+
+  <h2>{{t "budget_plan.detail.splits"}}</h2>
+  <form method="post" action="/budget-plans/{{.ID}}/splits" id="budget-grid-form"
+        data-sub="{{.SubID}}" data-account-missing-msg="{{t "error.budget_plan.account"}}">
+    <table class="budget-splits-table txn-grid txn-grid-2row">
+      <thead>
+        <tr>
+          <th colspan="4">{{t "budget_plan.split.col.description"}}</th>
+          <th colspan="3">{{t "budget_plan.split.col.date"}}</th>
+          <th colspan="5">{{t "budget_plan.split.col.account"}}</th>
+        </tr>
+      </thead>
+      {{$page := .}}
+      {{range $i, $sp := .Splits}}
+      <tbody class="budget-split-row bs-row" data-row="{{$i}}">
+        <tr class="bs-row-main">
+          <td class="txn-cell bs-desc-cell" colspan="4">
+            <div class="desc-field">
+              <input type="text" name="description_{{$i}}" id="bs-desc-{{$i}}" class="bs-desc js-descfield"
+                     value="{{$sp.Description}}" autocomplete="off"
+                     data-desc-container="bs-desc-list-{{$i}}" data-desc-mode="magnitude"
+                     placeholder="{{t "txn.description_hint"}}">
+              <div class="desc-suggest-box" id="bs-desc-list-{{$i}}" hidden></div>
+            </div>
+          </td>
+          <td class="txn-cell bs-date-cell" colspan="3">
+            <input type="text" name="date_{{$i}}" id="bs-date-{{$i}}" class="bs-date js-datefield"
+                   value="{{$sp.DateInput}}" placeholder="{{t "budget.schedule.form.date_placeholder"}}">
+          </td>
+          <td class="txn-cell bs-account-cell" colspan="5">
+            <select name="account_{{$i}}" id="bs-account-{{$i}}" class="bs-account combo-input">
+              <option value="0">{{t "budget_plan.split.account_none"}}</option>
+              {{range (expenseAccountsByType $page.Accounts)}}<optgroup label="{{t .LabelKey}}">
+              {{range .Options}}<option value="{{.ID}}" {{if .Unavailable}}data-unavailable="1" data-path="{{.Path}} {{t "txn.account.unavailable_suffix"}}"{{else}}data-path="{{.Path}}"{{end}}{{if eq .ID $sp.AccountID}} selected{{end}}>{{.Path}}{{if .Unavailable}} {{t "txn.account.unavailable_suffix"}}{{end}}</option>
+              {{end}}</optgroup>
+              {{end}}
+            </select>
+          </td>
+        </tr>
+        <tr class="bs-row-more">
+          <td class="txn-cell bs-fund-cell" colspan="4">
+            <select name="fund_{{$i}}" id="bs-fund-{{$i}}" class="bs-fund combo-input">
+              <option value="0">{{t "budget_plan.split.unrestricted"}}</option>
+              {{range $page.Funds}}<option value="{{.ID}}"{{if eq .ID $sp.FundID}} selected{{end}}>{{.Name}}</option>
+              {{end}}
+            </select>
+          </td>
+          <td class="txn-cell bs-program-cell" colspan="4">
+            <select name="program_{{$i}}" id="bs-program-{{$i}}" class="bs-program combo-input">
+              <option value="0">{{t "budget_plan.split.program_none"}}</option>
+              {{range $page.Programs}}<option value="{{.ID}}"{{if eq .ID $sp.ProgramID}} selected{{end}}>{{.Name}}</option>
+              {{end}}
+            </select>
+          </td>
+          <td class="txn-cell bs-amount-cell" colspan="2">
+            <input type="text" name="amount_{{$i}}" id="bs-amount-{{$i}}" class="bs-amount amount" value="{{$sp.AmountInput}}" inputmode="decimal" placeholder="{{t "budget_plan.split.col.amount"}}">
+          </td>
+          <td class="bs-row-error" colspan="1">{{if $sp.ErrorKey}}<span class="field-error" role="alert">{{t $sp.ErrorKey}}</span>{{end}}</td>
+          <td class="bs-delete-cell" colspan="1">
+            <button type="button" class="btn btn-ghost bs-delete" aria-label="{{t "common.delete_row"}}" title="{{t "common.delete_row"}}">&times;</button>
+          </td>
+        </tr>
+      </tbody>
+      {{end}}
+    </table>
+    <input type="hidden" name="rows" id="budget-rows-count" value="{{len .Splits}}">
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" id="budget-save-splits">{{t "budget_plan.detail.save"}}</button>
+    </div>
+  </form>
+
+  {{/* Flat-CSV import: [description, date, account, fund, optional program, amount] ->
+       APPENDS budget-splits. A bad row is an in-place hint (row number + reason) above,
+       not a 500. */}}
+  <h2>{{t "budget_plan.import.title"}}</h2>
+  <p class="hint">{{t "budget_plan.import.hint"}}</p>
+  <form method="post" action="/budget-plans/{{.ID}}/import" enctype="multipart/form-data" class="budget-import-form" id="budget-import-form">
+    <input type="file" name="csv" id="budget-import-file" accept=".csv,text/csv" required>
+    <button type="submit" class="btn btn-ghost" id="budget-import-submit">{{t "budget_plan.import.submit"}}</button>
+  </form>
+
+  {{/* Grid auto-append + cadence consumption (rule 12: external ES modules, no inline
+       script). budgetcadence.js dispatches budget:cadence; budgetgrid.js clones the row. */}}
+  <script type="module" src="{{asset "budgetcadence.js"}}"></script>
+  <script type="module" src="{{asset "budgetgrid.js"}}"></script>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

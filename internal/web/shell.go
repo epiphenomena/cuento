@@ -204,12 +204,13 @@ func subNavGroups() []subNavGroup {
 			// p23.9 the "More" hub area: every page under it shows the same lateral
 			// sub-nav (perm-filtered by navPermits). /admin is NOT a prefix here — it
 			// has its own group above (a sub-hub); the More bar links out to it.
-			Prefixes: []string{"/more", "/funds", "/programs", "/reconciliations", "/budgets", "/schedules", "/import", "/settings"},
+			Prefixes: []string{"/more", "/funds", "/programs", "/reconciliations", "/budgets", "/budget-plans", "/schedules", "/import", "/settings"},
 			Entries: []navEntry{
 				{"nav.funds", "/funds", TxnRead},
 				{"nav.programs", "/programs", TxnRead},
 				{"nav.reconciliations", "/reconciliations", TxnRead},
 				{"nav.budgets", "/budgets", TxnRead},
+				{"nav.budgetplans", "/budget-plans", TxnRead},
 				{"budget.schedules.title", "/schedules", TxnRead},
 				{"nav.import", "/import", TxnWrite},
 				{"nav.settings", "/settings", AnyUser},

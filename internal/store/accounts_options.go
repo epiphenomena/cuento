@@ -163,7 +163,11 @@ type AccountEditorOption struct {
 	Type           string
 	DefaultProgram *int64
 	DefaultClass   string // "" = none
-	SubsidiaryIDs  []int64
+	// OpenItem marks an A/R-A/P open-line account (p27.1). The budget-split editor
+	// (p27.2c) offers R/E leaves AND open_item asset/liability leaves, so it needs
+	// this flag to include/filter A/L options (the txn/expense editors ignore it).
+	OpenItem      bool
+	SubsidiaryIDs []int64
 	// Unavailable marks an option that would NOT normally be offered (it is inactive,
 	// a placeholder, or outside the editor's subsidiary) but was force-included because
 	// an existing split references it (p26.10). The web layer marks it visibly (an
@@ -250,6 +254,7 @@ func (s *Store) AccountEditorOptionsWith(ctx context.Context, lang string, subID
 			Name:          r.Name,
 			Path:          pathOf(r.ID),
 			Type:          r.Type,
+			OpenItem:      acct.OpenItem != 0,
 			SubsidiaryIDs: subs,
 		}
 		if acct.DefaultProgramID.Valid {
@@ -293,6 +298,7 @@ func (s *Store) AccountEditorOptionsWith(ctx context.Context, lang string, subID
 				Name:          nameOf[id],
 				Path:          pathOf(id),
 				Type:          acct.Type,
+				OpenItem:      acct.OpenItem != 0,
 				SubsidiaryIDs: subs,
 				Unavailable:   true,
 			}

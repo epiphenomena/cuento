@@ -2192,3 +2192,99 @@ other = "Las partidas conciliadas y pendientes de una conciliación completada."
 other = "Montos presupuestados frente a reales con la variación de cada línea."
 [reports.cashflow_projection.desc]
 other = "Entradas y salidas de efectivo proyectadas a partir de programaciones y presupuestos."
+[nav.budgetplans]
+other = "Planes de presupuesto"
+[budget_plan.list.title]
+other = "Planes de presupuesto"
+[budget_plan.list.intro]
+other = "Planes de presupuesto centrados en el flujo de caja: partidas proyectadas y fechadas por cuentas, fondos y programas."
+[budget_plan.list.new]
+other = "Nuevo plan de presupuesto"
+[budget_plan.list.col.name]
+other = "Nombre"
+[budget_plan.list.col.subsidiary]
+other = "Subsidiaria"
+[budget_plan.list.empty]
+other = "Aún no hay planes de presupuesto."
+[budget_plan.form.new_title]
+other = "Nuevo plan de presupuesto"
+[budget_plan.form.back]
+other = "Volver a planes de presupuesto"
+[budget_plan.form.name]
+other = "Nombre"
+[budget_plan.form.subsidiary]
+other = "Subsidiaria"
+[budget_plan.form.notes]
+other = "Notas"
+[budget_plan.detail.title]
+other = "Plan de presupuesto"
+[budget_plan.detail.back]
+other = "Volver a planes de presupuesto"
+[budget_plan.detail.subsidiary]
+other = "Subsidiaria"
+[budget_plan.detail.splits]
+other = "Partidas proyectadas"
+[budget_plan.detail.save]
+other = "Guardar partidas"
+[budget_plan.split.col.description]
+other = "Descripción"
+[budget_plan.split.col.date]
+other = "Fecha"
+[budget_plan.split.col.account]
+other = "Cuenta"
+[budget_plan.split.col.amount]
+other = "Monto"
+[budget_plan.split.account_none]
+other = "Seleccione una cuenta"
+[budget_plan.split.unrestricted]
+other = "Sin restricción"
+[budget_plan.split.program_none]
+other = "Sin programa"
+[budget_plan.cadence.label]
+other = "Generar filas fechadas:"
+[budget_plan.cadence.start]
+other = "Inicio"
+[budget_plan.cadence.interval]
+other = "Cada"
+[budget_plan.cadence.count]
+other = "Cantidad"
+[budget_plan.cadence.generate]
+other = "Generar"
+[budget_plan.cadence.weekly]
+other = "Semana"
+[budget_plan.cadence.biweekly]
+other = "Dos semanas"
+[budget_plan.cadence.monthly]
+other = "Mes"
+[budget_plan.import.title]
+other = "Importar desde CSV"
+[budget_plan.import.hint]
+other = "Un CSV plano: descripción, fecha, cuenta, fondo, programa (opcional), monto. Las filas se agregan a este plan."
+[budget_plan.import.submit]
+other = "Importar CSV"
+[error.budget_plan.name]
+other = "Ingrese un nombre y elija una subsidiaria."
+[error.budget_plan.subsidiary]
+other = "Elija una subsidiaria válida."
+[error.budget_plan.account]
+other = "Elija una cuenta ofrecida (de ingresos/gastos o de partida abierta en la subsidiaria de este plan)."
+[error.budget_plan.date]
+other = "Ingrese una fecha válida."
+[error.budget_plan.amount]
+other = "Ingrese un monto positivo."
+[error.budget_plan.program_required]
+other = "Una partida de ingresos/gastos necesita un programa."
+[error.budget_plan.program_forbidden]
+other = "Una partida por cobrar/por pagar no debe llevar programa."
+[error.budget_plan.program_scope]
+other = "Ese programa está inactivo o fuera del alcance del programa del fondo."
+[error.budget_plan.fund]
+other = "Ese fondo está inactivo o fuera de esta subsidiaria."
+[error.budget_plan.csv_missing]
+other = "Elija un archivo CSV para importar."
+[error.budget_plan.csv_malformed]
+other = "No se pudo leer el CSV."
+[error.budget_plan.csv_columns]
+other = "Una fila necesita al menos: descripción, fecha, cuenta, fondo, monto."
+[error.budget_plan.csv_row]
+other = "Fila %d: %s"

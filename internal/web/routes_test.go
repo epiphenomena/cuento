@@ -84,6 +84,16 @@ func newMatrixApp(t *testing.T) (http.Handler, []Route, *store.Store, *sql.DB, *
 		t.Fatalf("seed fund: %v", err)
 	}
 
+	// Seed one budget PLAN (id 1) so p27.2's /budget-plans/{id}, /budget-plans/{id}/
+	// splits, /budget-plans/{id}/import resolve to a real resource when the
+	// reachability check substitutes {id} -> 1. Its id is not asserted; the routes only
+	// need SOME plan to exist so an authorized persona reaches the handler.
+	if _, err := st.CreateBudgetPlan(seedCtx, store.BudgetPlanInput{
+		Name: "Seed Plan", SubsidiaryID: 1,
+	}); err != nil {
+		t.Fatalf("seed budget plan: %v", err)
+	}
+
 	// Seed one OPEN reconciliation (id 1) on the reconcilable seed account so p16.3's
 	// /reconciliations/{id}, /reconciliations/{id}/splits/{sid}/toggle,
 	// /reconciliations/{id}/finalize, /reconciliations/{id}/reopen resolve to a real

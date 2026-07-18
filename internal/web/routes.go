@@ -393,6 +393,16 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/budgets/{id}/lines", TxnWrite, http.HandlerFunc(s.lineCreate)},
 		{http.MethodPost, "/budgets/{id}/lines/{lid}", TxnWrite, http.HandlerFunc(s.lineUpdate)},
 		{http.MethodPost, "/budgets/{id}/lines/{lid}/delete", TxnWrite, http.HandlerFunc(s.lineDelete)},
+		// p27.2 split-derived budget PLANS (the NEW model; a DISTINCT URL namespace from
+		// the old /budgets, which stays live until p27.3). VIEW = TxnRead (feeds the p27.3
+		// reports), MUTATIONS = TxnWrite (mirrors /budgets). The plan detail page hosts the
+		// split-entry GRID (bulk save + cadence helper) and the flat-CSV import.
+		{http.MethodGet, "/budget-plans", TxnRead, http.HandlerFunc(s.budgetPlansPage)},
+		{http.MethodGet, "/budget-plans/new", TxnWrite, http.HandlerFunc(s.budgetPlanNewForm)},
+		{http.MethodPost, "/budget-plans", TxnWrite, http.HandlerFunc(s.budgetPlanCreate)},
+		{http.MethodGet, "/budget-plans/{id}", TxnRead, http.HandlerFunc(s.budgetPlanDetail)},
+		{http.MethodPost, "/budget-plans/{id}/splits", TxnWrite, http.HandlerFunc(s.budgetSplitsSave)},
+		{http.MethodPost, "/budget-plans/{id}/import", TxnWrite, http.HandlerFunc(s.budgetPlanImport)},
 		// p20.2 submitter workspace (Phase 20). ALL ExpenseSubmit -- the STANDALONE
 		// capability (p20.1, INDEPENDENT of txn_perm): a pure submitter passes these and
 		// is 403 on the ledger/reports (Txn*/ReportGroup). Ownership is enforced INSIDE

@@ -1,0 +1,43 @@
+{{/*
+  p27.2 budget-PLAN create form (GET /budget-plans/new, POST /budget-plans; Perm
+  TxnWrite). A plan is a name + subsidiary (+ notes). The subsidiary scopes the plan's
+  split accounts/funds, so it is chosen once here. A full-page form (not an htmx
+  partial); a failed POST re-renders it at 422 with a field error. .Page is a
+  budgetPlanFormModel. Errors are i18n KEYS via {{t}} (rule 9); no inline script (rule
+  12).
+*/ -}}
+{{define "budget_plan_form.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "budget_plan.form.new_title"))}}
+  {{- with .Page}}
+  <p><a class="btn btn-ghost" href="/budget-plans">{{t "budget_plan.form.back"}}</a></p>
+  <h1>{{t "budget_plan.form.new_title"}}</h1>
+  <form method="post" action="/budget-plans" class="budget-plan-form" id="budget-plan-form">
+    <div class="field">
+      <label for="bpf-name">{{t "budget_plan.form.name"}}</label>
+      <input id="bpf-name" name="name" type="text" value="{{.Name}}"
+        {{- if .Errors.ErrorKey "name"}} aria-invalid="true" aria-describedby="bpf-name-err"{{end}}
+        {{- if eq .Errors.FirstInvalid "name"}} autofocus{{end}}>
+      {{with .Errors.ErrorKey "name"}}<p id="bpf-name-err" class="field-error" role="alert">{{t .}}</p>{{end}}
+    </div>
+    <div class="field">
+      <label for="bpf-sub">{{t "budget_plan.form.subsidiary"}}</label>
+      <select id="bpf-sub" name="subsidiary_id"
+        {{- if eq .Errors.FirstInvalid "subsidiary_id"}} autofocus{{end}}>
+        {{$cur := .SubID}}
+        {{range .Subs}}<option value="{{.ID}}"{{if eq .ID $cur}} selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+      {{with .Errors.ErrorKey "subsidiary_id"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+    </div>
+    <div class="field">
+      <label for="bpf-notes">{{t "budget_plan.form.notes"}}</label>
+      <input id="bpf-notes" name="notes" type="text" value="{{.Notes}}">
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" id="budget-plan-create">{{t "common.save"}}</button>
+      <a class="btn btn-ghost" href="/budget-plans">{{t "common.cancel"}}</a>
+    </div>
+  </form>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}
