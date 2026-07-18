@@ -1371,7 +1371,16 @@ input[aria-invalid="true"] {
   text-decoration: none;
   color: var(--color-text);
 }
-.hub-card-link:hover { border-color: var(--color-primary); }
+/* p28.15 sparkle: a subtle gold left-accent slides in on card hover (a reversible
+   3px inset ring, no layout shift — the border already reserves the box), echoing the
+   gold active-nav identity. */
+.hub-card-link {
+  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+}
+.hub-card-link:hover {
+  border-color: var(--color-primary);
+  box-shadow: inset 3px 0 0 var(--color-accent), var(--shadow);
+}
 .hub-card-label {
   font-weight: 700;
   color: var(--color-primary);
@@ -1399,7 +1408,9 @@ input[aria-invalid="true"] {
   font-weight: 700;
   margin: 0;
   padding-bottom: var(--space-1);
-  border-bottom: var(--border);
+  /* p28.15 sparkle: a thin gold rule under each section header, echoing the gold
+     active-nav accent — the brand identity carried onto the card grids. */
+  border-bottom: 2px solid var(--color-accent);
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
