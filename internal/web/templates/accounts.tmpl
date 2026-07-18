@@ -105,7 +105,7 @@
       <tr class="acct-row{{if not .Active}} acct-inactive{{end}}" data-depth="{{.Depth}}">
         {{/* p25: the account name opens its register (the everyday drill-down); the
              dedicated Register button is gone. */}}
-        <td class="acct-name acct-depth-{{.Depth}}"><a href="/accounts/{{.ID}}/register">{{.Name}}</a>{{if not .Active}} <span class="badge">{{t "accounts.inactive"}}</span>{{end}}</td>
+        <td class="acct-name acct-depth-{{.Depth}}"><a href="/accounts/{{.ID}}/register">{{.Name}}</a>{{if .BadgeKey}} <span class="badge badge-open-item">{{t .BadgeKey}}</span>{{end}}{{if not .Active}} <span class="badge">{{t "accounts.inactive"}}</span>{{end}}</td>
         <td>{{t (printf "account.type.%s" .Type)}}</td>
         <td class="acct-balances">
           {{range .Balances}}<span class="bal">{{.}}</span> {{end}}

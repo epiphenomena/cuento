@@ -343,6 +343,73 @@ func TestAccountsCreateInvalidShowsFieldError(t *testing.T) {
 	}
 }
 
+// TestAccountsCreateWithFlags (p27.1b): creating an asset with current_cash +
+// open_item persists both flags, and the open_item asset shows the A/R badge on the
+// chart.
+func TestAccountsCreateWithFlags(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	book := mkUser(t, st, "book", "write", false)
+
+	form := url.Values{}
+	form.Set("type", "asset")
+	form.Set("currency", "USD")
+	form.Set("name_en", "Grants Receivable")
+	form.Set("sub_1", "1")
+	form.Set("current_cash", "on")
+	form.Set("open_item", "on")
+
+	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts", form)
+	if rec.Code >= 400 {
+		t.Fatalf("create with flags returned %d, body: %s", rec.Code, rec.Body.String())
+	}
+	id := accountIDByName(t, st, "Grants Receivable")
+	if id == 0 {
+		t.Fatalf("created account not found")
+	}
+	acct, err := st.GetAccount(context.Background(), id)
+	if err != nil {
+		t.Fatalf("GetAccount: %v", err)
+	}
+	if acct.CurrentCash != 1 || acct.OpenItem != 1 {
+		t.Errorf("stored flags = (cc=%d, oi=%d), want (1,1)", acct.CurrentCash, acct.OpenItem)
+	}
+	// The chart page shows the A/R badge for the open_item asset.
+	page := asUser(t, h, sm, book, http.MethodGet, "/accounts", nil)
+	if body := page.Body.String(); !strings.Contains(body, "A/R") {
+		t.Errorf("chart missing A/R badge for the open_item asset; body: %s", body)
+	}
+}
+
+// TestAccountsCreateWrongTypeFlagRejected (p27.1b): open_item on an EQUITY account
+// is rejected server-side (the store's ErrOpenItemBadType), mapped to a field error
+// at 422 -- proving the server enforces the type rule even if a client submits the
+// flag for an ineligible type.
+func TestAccountsCreateWrongTypeFlagRejected(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	book := mkUser(t, st, "book", "write", false)
+
+	form := url.Values{}
+	form.Set("type", "equity")
+	form.Set("currency", "USD")
+	form.Set("name_en", "Opening Balances")
+	form.Set("sub_1", "1")
+	form.Set("open_item", "on") // invalid on equity
+
+	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts", form)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("wrong-type flag status = %d, want 422; body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	// The localized open_item error string must be present.
+	if !strings.Contains(body, "Open-item") && !strings.Contains(body, "asset or liability") {
+		t.Errorf("422 body missing the open_item type error; body: %s", body)
+	}
+	// The rejected account was not created.
+	if accountIDByName(t, st, "Opening Balances") != 0 {
+		t.Errorf("rejected account was created anyway")
+	}
+}
+
 // TestAccountsEditErrorReRenderExcludesSelf: a failed EDIT submit (422 re-render)
 // must build the parent select with the account's OWN id excluded (self +
 // descendants) -- the re-render path must thread the edit id into the option

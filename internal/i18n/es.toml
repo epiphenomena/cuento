@@ -469,6 +469,10 @@ other = "Moneda predeterminada"
 other = "Conciliable"
 [accounts.form.intercompany]
 other = "Intercompania"
+[accounts.form.current_cash]
+other = "Cuenta de efectivo disponible"
+[accounts.form.open_item]
+other = "Partida abierta (C/C–C/P)"
 [accounts.form.functional_class]
 other = "Clase funcional predeterminada"
 [accounts.form.default_program]
@@ -572,6 +576,13 @@ other = "Patrimonio"
 other = "Ingreso"
 [account.type.expense]
 other = "Gasto"
+# p27.1b: insignias de partida abierta (C/C–C/P) en el catalogo. Un activo con
+# open_item se lee como C/C (por cobrar), un pasivo con open_item como C/P (por
+# pagar) -- la direccion deriva del tipo de cuenta (nota open_item en DECISIONS).
+[account.badge.ar]
+other = "C/C"
+[account.badge.ap]
+other = "C/P"
 # p26.74: etiquetas PLURALES de seccion (nivel de estado) para los encabezados de tipo
 # inyectados en el catalogo de cuentas + los <optgroup> del selector de cuentas. Distintas
 # de las etiquetas SINGULARES por cuenta account.type.* (la columna Tipo); coinciden con las
@@ -609,6 +620,10 @@ other = "Una subsidiaria aun la usa una cuenta hija y no puede quitarse."
 other = "Esa linea 990 no es valida para este tipo de cuenta."
 [error.account.functional_not_expense]
 other = "Una clase funcional aplica solo a cuentas de gasto."
+[error.account.current_cash_not_asset]
+other = "El efectivo disponible aplica solo a cuentas de activo."
+[error.account.open_item_bad_type]
+other = "La partida abierta (C/C–C/P) aplica solo a cuentas de activo o pasivo."
 [error.account.default_program_not_re]
 other = "Un programa predeterminado aplica solo a cuentas de ingreso y gasto."
 [error.account.default_program_missing]

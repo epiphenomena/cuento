@@ -474,6 +474,10 @@ other = "Default currency"
 other = "Reconcilable"
 [accounts.form.intercompany]
 other = "Intercompany"
+[accounts.form.current_cash]
+other = "Current cash account"
+[accounts.form.open_item]
+other = "Open-item (A/R–A/P)"
 [accounts.form.functional_class]
 other = "Default functional class"
 [accounts.form.default_program]
@@ -578,6 +582,14 @@ other = "Equity"
 other = "Revenue"
 [account.type.expense]
 other = "Expense"
+# p27.1b: open-item (A/R–A/P) chart badges. An open_item ASSET reads as A/R
+# (receivable), an open_item LIABILITY as A/P (payable) -- the direction derives
+# from the account type (DECISIONS open_item note). Rendered as a small tag next to
+# the account name so flagged accounts are identifiable in the tree.
+[account.badge.ar]
+other = "A/R"
+[account.badge.ap]
+other = "A/P"
 # p26.74: PLURAL statement-tier section labels for the injected type headers on the
 # chart of accounts + the account-selector <optgroup>s. Distinct from the SINGULAR
 # per-account account.type.* labels (the Type column); these match the report section
@@ -615,6 +627,10 @@ other = "A subsidiary is still used by a child account and cannot be removed."
 other = "That 990 line is not valid for this account type."
 [error.account.functional_not_expense]
 other = "A functional class applies only to expense accounts."
+[error.account.current_cash_not_asset]
+other = "Current cash applies only to asset accounts."
+[error.account.open_item_bad_type]
+other = "Open-item (A/R–A/P) applies only to asset or liability accounts."
 [error.account.default_program_not_re]
 other = "A default program applies only to revenue and expense accounts."
 [error.account.default_program_missing]

@@ -575,6 +575,7 @@ type TreeRow struct {
 	Type         string
 	Active       int64
 	Reconcilable bool
+	OpenItem     bool // p27.1: A/R-A/P open-line marker (for the chart badge)
 	SortOrder    int64
 	Name         string
 }
@@ -593,7 +594,7 @@ func (s *Store) Tree(ctx context.Context, lang string, subFilter *int64) ([]Tree
 		}
 		out := make([]TreeRow, len(rows))
 		for i, r := range rows {
-			out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, Reconcilable: r.Reconcilable != 0, SortOrder: r.SortOrder, Name: r.Name}
+			out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, Reconcilable: r.Reconcilable != 0, OpenItem: r.OpenItem != 0, SortOrder: r.SortOrder, Name: r.Name}
 		}
 		return out, nil
 	}
@@ -603,7 +604,7 @@ func (s *Store) Tree(ctx context.Context, lang string, subFilter *int64) ([]Tree
 	}
 	out := make([]TreeRow, len(rows))
 	for i, r := range rows {
-		out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, Reconcilable: r.Reconcilable != 0, SortOrder: r.SortOrder, Name: r.Name}
+		out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, Reconcilable: r.Reconcilable != 0, OpenItem: r.OpenItem != 0, SortOrder: r.SortOrder, Name: r.Name}
 	}
 	return out, nil
 }

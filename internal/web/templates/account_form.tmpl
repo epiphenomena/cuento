@@ -79,6 +79,37 @@
     <label><input type="checkbox" name="intercompany" value="on"{{if .Intercompany}} checked{{end}}> {{t "accounts.form.intercompany"}}</label>
   </div>
 
+  {{/*
+    p27.1 boolean type-flags. current_cash shows only for ASSET accounts; open_item
+    for ASSET or LIABILITY. The type-select re-fetch (above) refreshes these regions
+    on a type change, exactly like the functional-class / default-program regions.
+    The SERVER still enforces the rule (the store rejects a wrong-type flag); this
+    gating only hides an irrelevant control. A store rejection maps to a field error
+    here (autofocus on the offending checkbox).
+  */ -}}
+  {{if .IsAsset}}
+  <div class="field check">
+    <label><input type="checkbox" name="current_cash" value="on"{{if .CurrentCash}} checked{{end}}
+      {{- if eq .Errors.FirstInvalid "current_cash"}} autofocus{{end}}> {{t "accounts.form.current_cash"}}</label>
+    {{with .Errors.ErrorKey "current_cash"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+  {{end}}
+  {{if .IsAssetOrLiability}}
+  <div class="field check">
+    <label><input type="checkbox" name="open_item" value="on"{{if .OpenItem}} checked{{end}}
+      {{- if eq .Errors.FirstInvalid "open_item"}} autofocus{{end}}> {{t "accounts.form.open_item"}}</label>
+    {{with .Errors.ErrorKey "open_item"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+  {{end}}
+  {{/*
+    A wrong-type flag submission (a client sending current_cash/open_item for an
+    ineligible type -- the UI hides the control, so this is an out-of-band submit)
+    is rejected by the store; surface that error even when the gated control above
+    is hidden, so the 422 re-render is not silent.
+  */ -}}
+  {{if and (not .IsAsset) (.Errors.ErrorKey "current_cash")}}<p class="field-error" role="alert">{{t (.Errors.ErrorKey "current_cash")}}</p>{{end}}
+  {{if and (not .IsAssetOrLiability) (.Errors.ErrorKey "open_item")}}<p class="field-error" role="alert">{{t (.Errors.ErrorKey "open_item")}}</p>{{end}}
+
   {{if .IsExpense}}
   <div class="field">
     <label for="af-func">{{t "accounts.form.functional_class"}}</label>
