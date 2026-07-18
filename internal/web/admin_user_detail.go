@@ -94,7 +94,7 @@ func (s *server) buildUserDetail(r *http.Request, id int64) (userDetailModel, er
 	}
 	heldSet := make(map[string]bool, len(held))
 	for _, g := range held {
-		heldSet[g] = true
+		heldSet[g.Group] = true
 	}
 	groups, err := s.store.ReportGroupNames(ctx)
 	if err != nil {
@@ -180,7 +180,7 @@ func (s *server) userSetGrants(w http.ResponseWriter, r *http.Request) {
 	}
 	heldSet := make(map[string]bool, len(held))
 	for _, g := range held {
-		heldSet[g] = true
+		heldSet[g.Group] = true
 	}
 	// A group is desired iff its checkbox ("grant_<name>") is present.
 	wanted := make(map[string]bool, len(groups))
@@ -192,7 +192,7 @@ func (s *server) userSetGrants(w http.ResponseWriter, r *http.Request) {
 	for _, g := range groups {
 		switch {
 		case wanted[g] && !heldSet[g]:
-			if err := s.store.GrantReportGroup(actorCtx, id, g); err != nil {
+			if err := s.store.GrantReportGroup(actorCtx, id, g, nil); err != nil {
 				s.serverError(w)
 				return
 			}

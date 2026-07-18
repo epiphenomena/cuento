@@ -88,6 +88,19 @@ type Params struct {
 	// it, validated against the real program set.
 	Program int64
 
+	// ProgramScope is a GRANT-imposed program-subtree filter (p27.4): when the current
+	// user holds a program-SCOPED report grant for this report's group, the web layer
+	// resolves the granted program node's subtree (self + descendants, via
+	// ProgramSubtree) into this set, and a PROGRAM-DIMENSIONED report restricts its
+	// rows to splits whose program is in it. Empty/nil means NO grant filter (admin, or
+	// an unscoped grant, or a non-program report) -- the report runs org-wide as before.
+	// It is DISTINCT from Program (the user's own single-program SELECTION control): the
+	// user may pick any program, but the grant clamps what they may actually see, so the
+	// web layer intersects a user Program selection with this scope. Enforced in the
+	// toolkit's program-keyed aggregation (a data-level filter, so subtotals/totals
+	// reflect only the granted subtree), never by dropping rendered rows.
+	ProgramScope []int64
+
 	// Budget is the single budget a report-specific "which budget" control names
 	// (p19.4 actuals-vs-budget + cashflow projection): the budget whose lines drive the
 	// forecast/variance and the projected fund balances. Meaningful only when
@@ -98,6 +111,24 @@ type Params struct {
 	// it, validated against the real budget set. When a budget IS chosen the web layer
 	// also defaults From/To to the budget's own period (p19.4).
 	Budget int64
+}
+
+// InProgramScope reports whether program id is visible under the grant's
+// program-subtree filter (p27.4). An empty ProgramScope means NO filter (admin /
+// unscoped grant / non-program report), so every program is visible. Otherwise only
+// ids in the granted subtree are visible -- a data-level check the program-keyed
+// toolkit methods apply to each raw split's program before aggregation, so a sibling
+// subtree never contributes to a total.
+func (p Params) InProgramScope(id int64) bool {
+	if len(p.ProgramScope) == 0 {
+		return true
+	}
+	for _, v := range p.ProgramScope {
+		if v == id {
+			return true
+		}
+	}
+	return false
 }
 
 // DetailCurrency reports whether the per-currency detail toggle is on (Detail ==

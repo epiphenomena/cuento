@@ -140,10 +140,32 @@ func newMatrixApp(t *testing.T) (http.Handler, []Route, *store.Store, *sql.DB, *
 // nil user (no cookie); the rest are real users with distinct permission shapes.
 // grants mirrors the user's report-group grants so the expected outcome (decide)
 // and the enforced outcome (which reads the DB via ReportGrants) share one truth.
+// Each grant carries the group AND its optional program-subtree scope (p27.4):
+// programID nil == unscoped (org-wide). The one-scope-per-group model means at most
+// one personaGrant per group.
 type persona struct {
 	name   string
 	user   *store.CurrentUser
-	grants []string
+	grants []personaGrant
+}
+
+// personaGrant is one report-group grant a persona holds, with its optional
+// program-subtree scope (p27.4). ProgramID nil == unscoped.
+type personaGrant struct {
+	group     string
+	programID *int64
+}
+
+// grantScopeFor builds the grantScope decide() expects for a persona on a group,
+// mirroring grantChecker's real-DB closure (p27.4): Held iff the persona holds a
+// grant on the group, Unscoped iff that grant carries no program scope.
+func (p persona) grantScopeFor(group string) grantScope {
+	for _, g := range p.grants {
+		if g.group == group {
+			return grantScope{Held: true, Unscoped: g.programID == nil}
+		}
+	}
+	return grantScope{}
 }
 
 // buildPersonas creates the six matrix personas over st. They are driven by
@@ -241,12 +263,31 @@ func buildPersonas(t *testing.T, st *store.Store, db *sql.DB) []persona {
 		t.Fatalf("grant report group to reportsonly: %v", err)
 	}
 
+	// ProgramScoped persona (p27.4): a "camp director" granted the SAME "financial"
+	// group but PROGRAM-SCOPED to a subtree. This makes the matrix prove the p27.4
+	// reachability rule automatically: a purely program-scoped grant REACHES a
+	// program-dimensioned report in the group (income_statement / activities_by_
+	// restriction / -> 200, rows filtered downstream) but is FORBIDDEN a non-program
+	// report in the SAME group (balance_sheet / trial_balance / account_ledger -> 403,
+	// which cannot be program-filtered). "financial" is the essential MIXED group that
+	// makes the denial testable. The scope program is a real child of the seeded root
+	// (id 1); its subtree is resolved via ProgramSubtree at report time.
+	scopeProg, err := st.CreateProgram(ctx, store.CreateProgramInput{ParentID: 1, Name: "Camp"})
+	if err != nil {
+		t.Fatalf("seed scope program: %v", err)
+	}
+	progScoped := mk("progscoped", store.CreateUserInput{TxnPerm: "none"})
+	if err := st.GrantReportGroup(ctx, progScoped.ID, grantedReportGroup, &scopeProg); err != nil {
+		t.Fatalf("program-scoped grant to progscoped: %v", err)
+	}
+
 	return []persona{
 		{name: "anon"},
 		{name: "NoAccess", user: noAccess},
 		{name: "ReadOnly", user: readOnly},
 		{name: "Bookkeeper", user: bookkeeper},
-		{name: "ReportsOnly", user: reportsOnly, grants: []string{grantedReportGroup}},
+		{name: "ReportsOnly", user: reportsOnly, grants: []personaGrant{{group: grantedReportGroup}}},
+		{name: "ProgramScoped", user: progScoped, grants: []personaGrant{{group: grantedReportGroup, programID: &scopeProg}}},
 		// Submitter must precede Admin: TestRouteRegistryComplete asserts the LAST
 		// persona is Admin (the is-admin-reaches-everything reachability check).
 		{name: "Submitter", user: submitter},
@@ -324,25 +365,36 @@ func TestDecidePolicy(t *testing.T) {
 	readOnly := &store.CurrentUser{TxnPerm: "read"}
 	bookkeeper := &store.CurrentUser{TxnPerm: "write"}
 	reportsOnly := &store.CurrentUser{TxnPerm: "none"}
+	// progScoped holds a PROGRAM-SCOPED grant on grp (p27.4): reaches a
+	// program-dimensioned report in grp, forbidden a non-program report in grp.
+	progScoped := &store.CurrentUser{TxnPerm: "none"}
 	// A PURE expense submitter (p20.1): the standalone capability set, txn_perm=none,
 	// no grants. It must pass ExpenseSubmit yet fail every ledger/report perm -- the
 	// decoupling that keeps submission independent of book-editing.
 	submitter := &store.CurrentUser{TxnPerm: "none", CanSubmitExpenses: true}
 	admin := &store.CurrentUser{IsAdmin: true}
 
-	grantsOf := map[*store.CurrentUser][]string{reportsOnly: {"placeholder"}}
-	hasGrant := func(u *store.CurrentUser) func(string) bool {
-		return func(name string) bool {
-			for _, g := range grantsOf[u] {
-				if g == name {
-					return true
-				}
+	const grp = "placeholder"
+	// grantOf models each persona's grantScope on grp (p27.4): reportsOnly holds an
+	// UNSCOPED grant; progScoped holds a program-SCOPED one; the rest hold none.
+	grantOf := map[*store.CurrentUser]grantScope{
+		reportsOnly: {Held: true, Unscoped: true},
+		progScoped:  {Held: true, Unscoped: false},
+	}
+	grant := func(u *store.CurrentUser) func(string) grantScope {
+		return func(name string) grantScope {
+			if name == grp {
+				return grantOf[u]
 			}
-			return false
+			return grantScope{}
 		}
 	}
 
-	const grp = "placeholder"
+	// progDim is a program-dimensioned ReportGroup(grp) perm; plainGrp is a
+	// non-program one (p27.4). Both key on grp; the programDim bit is what a scoped
+	// grant needs to reach the route.
+	progDim := Perm{kind: permReportGroup, group: grp, programDim: true}
+	plainGrp := ReportGroup(grp)
 	cases := []struct {
 		perm Perm
 		user *store.CurrentUser
@@ -373,11 +425,24 @@ func TestDecidePolicy(t *testing.T) {
 		{TxnWrite, admin, outcomeAllow},
 
 		// ReportGroup: a grant for that group, or admin; else forbid; anon -> login.
-		{ReportGroup(grp), anon, outcomeRedirectLogin},
-		{ReportGroup(grp), noAccess, outcomeForbid},
-		{ReportGroup(grp), reportsOnly, outcomeAllow},
+		{plainGrp, anon, outcomeRedirectLogin},
+		{plainGrp, noAccess, outcomeForbid},
+		{plainGrp, reportsOnly, outcomeAllow},
 		{ReportGroup("other"), reportsOnly, outcomeForbid}, // granted a DIFFERENT group
-		{ReportGroup(grp), admin, outcomeAllow},            // is_admin implies everything
+		{plainGrp, admin, outcomeAllow},                    // is_admin implies everything
+
+		// p27.4 program-subtree scope: an UNSCOPED grant reaches BOTH a program-
+		// dimensioned and a non-program report in the group. A program-SCOPED grant
+		// reaches ONLY the program-dimensioned report (rows filtered downstream) and is
+		// FORBIDDEN the non-program report (which cannot be program-filtered). Admin
+		// still reaches everything.
+		{plainGrp, progScoped, outcomeForbid}, // scoped grant, non-program report -> denied
+		{progDim, progScoped, outcomeAllow},   // scoped grant, program report -> allowed (filtered)
+		{progDim, reportsOnly, outcomeAllow},  // unscoped grant reaches the program report too
+		{plainGrp, reportsOnly, outcomeAllow}, // ... and the non-program report
+		{progDim, noAccess, outcomeForbid},    // no grant -> forbidden regardless of programDim
+		{progDim, admin, outcomeAllow},        // admin bypasses the scope entirely
+		{progDim, anon, outcomeRedirectLogin},
 
 		// ExpenseSubmit (p20.1): can_submit_expenses OR admin; else forbid; anon -> login.
 		// INDEPENDENT of txn_perm -- the submitter (txn_perm=none) passes; a bookkeeper
@@ -392,7 +457,7 @@ func TestDecidePolicy(t *testing.T) {
 		// standalone (a submitter has NO ledger access).
 		{TxnRead, submitter, outcomeForbid},
 		{TxnWrite, submitter, outcomeForbid},
-		{ReportGroup(grp), submitter, outcomeForbid},
+		{plainGrp, submitter, outcomeForbid},
 
 		// Admin: is_admin only; else forbid; anon -> login.
 		{Admin, anon, outcomeRedirectLogin},
@@ -402,7 +467,7 @@ func TestDecidePolicy(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		got := decide(c.perm, c.user, hasGrant(c.user))
+		got := decide(c.perm, c.user, grant(c.user))
 		if got != c.want {
 			t.Errorf("decide(%v, %s) = %v, want %v", c.perm, personaLabel(c.user), got, c.want)
 		}
@@ -468,15 +533,9 @@ func TestPermissionMatrix(t *testing.T) {
 
 	for _, r := range registry {
 		for _, p := range personas {
-			hasGrant := func(name string) bool {
-				for _, g := range p.grants {
-					if g == name {
-						return true
-					}
-				}
-				return false
-			}
-			want := decide(r.Perm, p.user, hasGrant)
+			p := p
+			grant := func(name string) grantScope { return p.grantScopeFor(name) }
+			want := decide(r.Perm, p.user, grant)
 			rec := doAs(t, h, sm, p, r)
 
 			if !outcomeMatches(want, rec) {

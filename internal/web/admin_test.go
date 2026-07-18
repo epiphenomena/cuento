@@ -258,7 +258,7 @@ func TestAdminGrantsRoundTrip(t *testing.T) {
 	if rec.Code >= 400 {
 		t.Fatalf("grant returned %d, body: %s", rec.Code, rec.Body.String())
 	}
-	if gs, _ := st.ReportGrants(context.Background(), target); len(gs) != 1 || gs[0] != grp {
+	if gs, _ := st.ReportGrants(context.Background(), target); len(gs) != 1 || gs[0].Group != grp {
 		t.Fatalf("grants after grant = %v, want [%s]", gs, grp)
 	}
 	testutil.AssertVersionedGrant(t, db, target, grp, "create")

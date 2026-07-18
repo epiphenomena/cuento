@@ -49,10 +49,16 @@ const (
 
 // Perm is a route's required permission. It is a small value type (not an
 // interface) so the registry is a plain declarative table and the matrix can
-// switch on it exhaustively. Only ReportGroup uses the group field.
+// switch on it exhaustively. Only ReportGroup uses the group field; ReportGroup on
+// a PROGRAM-DIMENSIONED report additionally sets programDim, which decides whether a
+// PURELY program-scoped grant reaches the route (p27.4): a program-scoped grant
+// reaches a program-dimensioned report (its rows are then filtered to the granted
+// subtree) but NOT a non-program report (which cannot be filtered by program) --
+// the DATA-scoping vs route-reachability distinction (D10, budget-redesign DECISIONS).
 type Perm struct {
-	kind  permKind
-	group string
+	kind       permKind
+	group      string
+	programDim bool
 }
 
 // The simple permission classes. ReportGroup is a constructor because it carries
@@ -73,8 +79,23 @@ var (
 
 // ReportGroup returns the Perm requiring a read grant on the named report group
 // (D10). Report routes (p15) declare their group here; a user reaches the route
-// iff they hold that grant (or are admin).
+// iff they hold that grant (or are admin). The report route mount (routes()) uses
+// ReportGroupFor so a program-dimensioned report also carries the programDim bit;
+// this bare constructor (programDim=false) is retained for the reportsIndex grant
+// probe and TestDecidePolicy, where the group name alone is what a check keys on.
 func ReportGroup(group string) Perm { return Perm{kind: permReportGroup, group: group} }
+
+// ReportGroupFor returns the ReportGroup Perm for a concrete report, carrying its
+// program-dimensioned flag (p27.4). A program-dimensioned report is one whose rows
+// carry a program dimension (budget variance, program statement, fund activity,
+// activities-by-restriction, functional expenses, income statement, form 990,
+// cash-flow projection) -- a purely program-scoped grant reaches it (filtered to the
+// subtree) but not a non-program report. Marked EXPLICITLY on the Report (not
+// inferred from ParamsSpec.Program), because the program-dimensioned set is broader
+// than the reports that offer a program SELECTOR.
+func ReportGroupFor(rep reports.Report) Perm {
+	return Perm{kind: permReportGroup, group: rep.Group, programDim: rep.ProgramDimensioned}
+}
 
 // String renders a Perm for test failure messages.
 func (p Perm) String() string {
@@ -460,7 +481,7 @@ func (s *server) routes() []Route {
 	// automatically" requirement. p15.3–p15.11 add reports to reports.Default();
 	// the routes appear here with no change to this loop.
 	for _, rep := range s.reports.All() {
-		perm := ReportGroup(rep.Group)
+		perm := ReportGroupFor(rep)
 		routes = append(
 			routes,
 			Route{http.MethodGet, "/reports/" + rep.ID, perm, http.HandlerFunc(s.reportPage)},
@@ -530,12 +551,26 @@ func (o outcome) String() string {
 	}
 }
 
-// decide is the pure enforcement decision (rule 8's policy, D10). It takes the
-// route's Perm, the resolved user (nil == anonymous), and a hasGrant closure
+// grantScope is what the grant probe reports for a (user, report-group): whether the
+// user holds an UNSCOPED grant on the group and/or a program-SCOPED one (p27.4). The
+// two are not mutually exclusive as a type, but the one-scope-per-group model means a
+// held grant is exactly one of them; Held is the union (holds SOME grant on the group).
+type grantScope struct {
+	Held     bool // holds a grant on the group (scoped or unscoped)
+	Unscoped bool // the held grant is org-wide (program_id NULL)
+}
+
+// decide is the pure enforcement decision (rule 8's policy, D10, extended p27.4). It
+// takes the route's Perm, the resolved user (nil == anonymous), and a grant closure
 // (queried lazily ONLY for ReportGroup so the hot path never loads grants). It is
-// pure and total so TestDecidePolicy can prove every Perm x persona -- including
-// ReportGroup, whose HTTP coverage waits for p15's report routes.
-func decide(p Perm, u *store.CurrentUser, hasGrant func(group string) bool) outcome {
+// pure and total so TestDecidePolicy can prove every Perm x persona.
+//
+// ReportGroup policy (p27.4): an UNSCOPED grant allows any report in the group. A
+// program-SCOPED grant allows a PROGRAM-DIMENSIONED report (Perm.programDim -- rows
+// then filtered to the granted subtree, in resolveParams) but DENIES a non-program
+// report in the same group (it cannot be filtered by program, so a purely
+// program-scoped user has no basis to see it). No grant -> forbid.
+func decide(p Perm, u *store.CurrentUser, grant func(group string) grantScope) outcome {
 	// Public is open to everyone, anon included -- decided before any identity check.
 	if p.kind == permPublic {
 		return outcomeAllow
@@ -563,7 +598,14 @@ func decide(p Perm, u *store.CurrentUser, hasGrant func(group string) bool) outc
 			return outcomeAllow
 		}
 	case permReportGroup:
-		if hasGrant(p.group) {
+		gs := grant(p.group)
+		if !gs.Held {
+			break // no grant on the group -> forbid
+		}
+		if gs.Unscoped || p.programDim {
+			// Unscoped grant reaches everything in the group; a program-scoped grant
+			// reaches a program-dimensioned report (rows filtered downstream). A
+			// program-scoped grant on a NON-program report falls through to forbid.
 			return outcomeAllow
 		}
 	case permExpenseSubmit:
@@ -600,29 +642,31 @@ func (s *server) enforce(perm Perm, h http.Handler) http.Handler {
 	})
 }
 
-// grantChecker returns the hasGrant closure decide needs. For non-ReportGroup
-// perms (and anonymous/admin, already decided upstream) it never queries -- it
-// returns a closure that is simply never called. For a ReportGroup route with a
-// concrete user it loads the user's grants ONCE and checks membership in memory.
-// A grant-read error fails closed (no grant), so a transient DB fault denies
-// rather than leaks access.
-func (s *server) grantChecker(ctx context.Context, u *store.CurrentUser, perm Perm) func(string) bool {
+// grantChecker returns the grant closure decide needs (p27.4: a grantScope per
+// group, not a bare bool). For non-ReportGroup perms (and anonymous/admin, already
+// decided upstream) it never queries -- it returns a closure that is simply never
+// called. For a ReportGroup route with a concrete user it loads the user's grants
+// ONCE and reports each group's scope (unscoped vs program-scoped) in memory. A
+// grant-read error fails closed (no grant), so a transient DB fault denies rather
+// than leaks access. The one-scope-per-group model means at most one grant row per
+// group, so the closure returns that row's scope (or a zero grantScope = not held).
+func (s *server) grantChecker(ctx context.Context, u *store.CurrentUser, perm Perm) func(string) grantScope {
 	// An admin is allowed by decide's u.IsAdmin short-circuit BEFORE the grant closure
 	// is ever consulted (routes.go decide), so an admin ReportGroup request needs no
-	// grant query: return the always-false closure (never called; fails closed anyway).
+	// grant query: return the empty-scope closure (never called; fails closed anyway).
 	if perm.kind != permReportGroup || u == nil || u.IsAdmin {
-		return func(string) bool { return false }
+		return func(string) grantScope { return grantScope{} }
 	}
 	grants, err := s.store.ReportGrants(ctx, u.ID)
 	if err != nil {
-		return func(string) bool { return false }
+		return func(string) grantScope { return grantScope{} }
 	}
-	return func(group string) bool {
+	return func(group string) grantScope {
 		for _, g := range grants {
-			if g == group {
-				return true
+			if g.Group == group {
+				return grantScope{Held: true, Unscoped: g.ProgramID == nil}
 			}
 		}
-		return false
+		return grantScope{}
 	}
 }

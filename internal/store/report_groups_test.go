@@ -67,8 +67,8 @@ func TestReportGrantsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReportGrants(granted): %v", err)
 	}
-	if len(gs) != 1 || gs[0] != "reports_x" {
-		t.Fatalf("ReportGrants(granted) = %v, want [reports_x]", gs)
+	if len(gs) != 1 || gs[0].Group != "reports_x" || gs[0].ProgramID != nil {
+		t.Fatalf("ReportGrants(granted) = %v, want [reports_x unscoped]", gs)
 	}
 
 	none, err := s.ReportGrants(ctx, ungranted)

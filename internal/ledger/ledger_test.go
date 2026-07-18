@@ -351,6 +351,39 @@ func TestZ3TamperedGrant(t *testing.T) {
 	assertFlags(t, w.d, "Z3")
 }
 
+// TestZ3TamperedGrantScope covers the p27.4 program-subtree branch of the
+// user_report_grants Z3 membership check: a live grant whose latest version snapshot
+// carries a DIFFERENT program_id than the live row (a raw re-scope bypassing the
+// store) is a Z3 miss -- the `v.program_id IS NOT c.program_id` clause. Store-written
+// grants always snapshot the live program_id (so a clean db passes); this proves the
+// scope column is actually verified, not merely stored.
+func TestZ3TamperedGrantScope(t *testing.T) {
+	w := newWorld(t)
+	if err := w.s.SyncReportGroups(mutCtx(), []string{"reports_financial"}); err != nil {
+		t.Fatalf("SyncReportGroups: %v", err)
+	}
+	// A real program to reference (a child of the seeded root id 1) so the program_id FK
+	// is satisfied on the live row.
+	prog, err := w.s.CreateProgram(mutCtx(), store.CreateProgramInput{ParentID: 1, Name: "Scope"})
+	if err != nil {
+		t.Fatalf("CreateProgram: %v", err)
+	}
+	// A real (non-system) user to grant (the system user id 1 is store-refused).
+	uid, err := w.s.CreateUser(mutCtx(), store.CreateUserInput{Username: "dir", DisplayName: "Dir"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	// Grant UNSCOPED through the store (clean: live program_id NULL == latest snapshot).
+	if err := w.s.GrantReportGroup(mutCtx(), uid, "reports_financial", nil); err != nil {
+		t.Fatalf("GrantReportGroup: %v", err)
+	}
+	assertClean(t, w.d)
+	// Now RAW-mutate the live scope to the program WITHOUT a new version row: the latest
+	// snapshot still says NULL, so program_id diverges -> Z3 fires.
+	exec(t, w.d, `UPDATE user_report_grants SET program_id = ? WHERE user_id = ? AND group_name = 'reports_financial'`, prog, uid)
+	assertFlags(t, w.d, "Z3")
+}
+
 func TestZ3MissingVersion(t *testing.T) {
 	w := newWorld(t)
 	// A live row with NO version at all (insert bypassing the store): a programs row

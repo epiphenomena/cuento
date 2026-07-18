@@ -7,6 +7,7 @@ package sqlc
 
 import (
 	"context"
+	"database/sql"
 )
 
 const deleteReportGrant = `-- name: DeleteReportGrant :exec
@@ -25,6 +26,28 @@ type DeleteReportGrantParams struct {
 func (q *Queries) DeleteReportGrant(ctx context.Context, arg DeleteReportGrantParams) error {
 	_, err := q.db.ExecContext(ctx, deleteReportGrant, arg.UserID, arg.GroupName)
 	return err
+}
+
+const getReportGrantScope = `-- name: GetReportGrantScope :one
+SELECT program_id FROM user_report_grants
+WHERE user_id = ? AND group_name = ?
+`
+
+type GetReportGrantScopeParams struct {
+	UserID    int64
+	GroupName string
+}
+
+// The program-subtree scope of an existing (user, group) grant (p27.4): program_id
+// NULL = unscoped. Returns no rows when the grant does not exist. Grant management
+// reads this to decide whether a re-grant is a true no-op (same scope) or a scope
+// CHANGE (revoke+grant), since the composite key is (user, group) -- the scope is a
+// mutable attribute, not part of the key.
+func (q *Queries) GetReportGrantScope(ctx context.Context, arg GetReportGrantScopeParams) (sql.NullInt64, error) {
+	row := q.db.QueryRowContext(ctx, getReportGrantScope, arg.UserID, arg.GroupName)
+	var program_id sql.NullInt64
+	err := row.Scan(&program_id)
+	return program_id, err
 }
 
 const hasReportGrant = `-- name: HasReportGrant :one
@@ -48,27 +71,30 @@ func (q *Queries) HasReportGrant(ctx context.Context, arg HasReportGrantParams) 
 }
 
 const insertReportGrant = `-- name: InsertReportGrant :exec
-INSERT INTO user_report_grants (user_id, group_name)
-VALUES (?, ?)
+INSERT INTO user_report_grants (user_id, group_name, program_id)
+VALUES (?, ?, ?)
 `
 
 type InsertReportGrantParams struct {
 	UserID    int64
 	GroupName string
+	ProgramID sql.NullInt64
 }
 
-// Add one (user_id, group_name) grant. Callers guard with HasReportGrant first
-// (membership is a set; the PK forbids duplicates). The version append that
-// follows (op='create') snapshots this row under the acting admin's change.
+// Add one (user_id, group_name) grant with an optional program-subtree scope
+// (program_id NULL = unscoped). Callers guard with HasReportGrant first (membership
+// is a set keyed on user+group; the PK forbids duplicates -- a scope CHANGE is a
+// revoke+grant, not an update). The version append that follows (op='create')
+// snapshots this row (incl. program_id) under the acting admin's change.
 func (q *Queries) InsertReportGrant(ctx context.Context, arg InsertReportGrantParams) error {
-	_, err := q.db.ExecContext(ctx, insertReportGrant, arg.UserID, arg.GroupName)
+	_, err := q.db.ExecContext(ctx, insertReportGrant, arg.UserID, arg.GroupName, arg.ProgramID)
 	return err
 }
 
 const insertReportGrantVersion = `-- name: InsertReportGrantVersion :exec
 INSERT INTO user_report_grants_versions
-  (entity_id, change_id, valid_from, op, group_name)
-SELECT g.user_id, c.id, c.at, ?, g.group_name
+  (entity_id, change_id, valid_from, op, group_name, program_id)
+SELECT g.user_id, c.id, c.at, ?, g.group_name, g.program_id
 FROM user_report_grants g, changes c
 WHERE c.id = ? AND g.user_id = ? AND g.group_name = ?
 `
@@ -126,28 +152,35 @@ func (q *Queries) ListReportGroups(ctx context.Context) ([]ReportGroup, error) {
 }
 
 const reportGrantsForUser = `-- name: ReportGrantsForUser :many
-SELECT group_name
+SELECT group_name, program_id
 FROM user_report_grants
 WHERE user_id = ?
 ORDER BY group_name
 `
 
-// The report groups a user has been granted read access to (D10). Read by the
-// permission-enforcement middleware ONLY when a route's Perm is ReportGroup, so
-// it never taxes the anonymous / non-report hot path. ORDER BY for determinism.
-func (q *Queries) ReportGrantsForUser(ctx context.Context, userID int64) ([]string, error) {
+type ReportGrantsForUserRow struct {
+	GroupName string
+	ProgramID sql.NullInt64
+}
+
+// The report groups a user has been granted read access to, WITH each grant's
+// optional program-subtree scope (D10, p27.4). program_id NULL = unscoped
+// (org-wide). Read by the permission-enforcement middleware ONLY when a route's
+// Perm is ReportGroup, so it never taxes the anonymous / non-report hot path.
+// ORDER BY for determinism.
+func (q *Queries) ReportGrantsForUser(ctx context.Context, userID int64) ([]ReportGrantsForUserRow, error) {
 	rows, err := q.db.QueryContext(ctx, reportGrantsForUser, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ReportGrantsForUserRow
 	for rows.Next() {
-		var group_name string
-		if err := rows.Scan(&group_name); err != nil {
+		var i ReportGrantsForUserRow
+		if err := rows.Scan(&i.GroupName, &i.ProgramID); err != nil {
 			return nil, err
 		}
-		items = append(items, group_name)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

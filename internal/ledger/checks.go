@@ -147,15 +147,20 @@ WHERE v.id = (SELECT id FROM fund_subsidiaries_versions x
 UNION ALL
 -- user_report_grants (composite membership: user_id + group_name). Like
 -- account_subsidiaries / fund_subsidiaries this is a live, store-written, versioned
--- set with no 'update' op, so a live grant whose latest version is 'delete' or
--- missing is the violation (a tampered/orphaned grant otherwise slips past check).
+-- set. The membership KEY stays (user_id, group_name) -- a grant's program-subtree
+-- scope (program_id, p27.4) is a mutable ATTRIBUTE, not part of the key, so a scope
+-- change is a delete+create (no 'update' op) and the latest version's program_id must
+-- MATCH the live row (NULL-safe IS, like the budget_plans single-id block). A live
+-- grant whose latest version is 'delete'/missing OR whose snapshot program_id diverges
+-- is the violation (a tampered/orphaned/rescoped-without-version grant otherwise slips
+-- past check).
 SELECT 'user_report_grants:' || CAST(c.user_id AS TEXT) || '/' || c.group_name
 FROM user_report_grants c
 LEFT JOIN user_report_grants_versions v
   ON v.id = (SELECT id FROM user_report_grants_versions x
              WHERE x.entity_id = c.user_id AND x.group_name = c.group_name
              ORDER BY x.valid_from DESC, x.id DESC LIMIT 1)
-WHERE v.id IS NULL OR v.op = 'delete'
+WHERE v.id IS NULL OR v.op = 'delete' OR v.program_id IS NOT c.program_id
 UNION ALL
 -- user_report_grants: a grant whose latest version is 'create' but that has no live
 -- row is a dangling snapshot (deleted live without a delete version).

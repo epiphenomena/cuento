@@ -221,11 +221,66 @@ func (s *server) resolveParams(
 		}
 	}
 
+	// p27.4: a program-SCOPED report grant restricts a program-dimensioned report's
+	// rows to the granted program's subtree. Resolve the grant scope for THIS report's
+	// group and, when program-scoped, set Params.ProgramScope to the subtree ids; a
+	// user Program SELECTION is then clamped to that scope (an out-of-scope pick is
+	// dropped -> the subtree-comparative view, never a sibling subtree). Admins and
+	// unscoped grants leave ProgramScope empty (org-wide, unchanged). Non-program
+	// reports are never reached by a purely program-scoped grant (decide()), so this
+	// only bites where the report is program-dimensioned.
+	if rep.ProgramDimensioned && u != nil && !u.IsAdmin {
+		scopeIDs, err := s.grantProgramScope(ctx, u, rep.Group)
+		if err != nil {
+			return reports.Params{}, paramsForm{}, err
+		}
+		if len(scopeIDs) > 0 {
+			p.ProgramScope = scopeIDs
+			if p.Program != 0 && !containsID(scopeIDs, p.Program) {
+				p.Program = 0 // an out-of-scope selection falls back to the scoped comparative view
+			}
+		}
+	}
+
 	form, err := s.buildParamsForm(ctx, u, rep, p, subs)
 	if err != nil {
 		return reports.Params{}, paramsForm{}, err
 	}
 	return p, form, nil
+}
+
+// grantProgramScope returns the program-subtree ids the current user's report grant
+// for group restricts rows to (p27.4), or nil when the grant is UNSCOPED (org-wide)
+// or absent. It loads the user's grants, finds the one for this group, and -- if it
+// carries a program id -- resolves that program's subtree (self + descendants) via
+// the store. Admin callers never reach here (resolveParams gates on !IsAdmin). A
+// resolved-but-empty subtree cannot happen (ProgramSubtree always includes self).
+func (s *server) grantProgramScope(ctx context.Context, u *store.CurrentUser, group string) ([]int64, error) {
+	grants, err := s.store.ReportGrants(ctx, u.ID)
+	if err != nil {
+		return nil, err
+	}
+	for _, g := range grants {
+		if g.Group != group {
+			continue
+		}
+		if g.ProgramID == nil {
+			return nil, nil // unscoped grant -> no row filter
+		}
+		return s.store.ProgramSubtree(ctx, *g.ProgramID)
+	}
+	return nil, nil // no grant on this group (unreachable for an authorized run)
+}
+
+// containsID reports whether id is in ids (a small linear scan for the grant-scope
+// clamp; the subtree sets are small).
+func containsID(ids []int64, id int64) bool {
+	for _, v := range ids {
+		if v == id {
+			return true
+		}
+	}
+	return false
 }
 
 // subInfo is the web-owned reduction of a subsidiary row the report params form
@@ -796,7 +851,11 @@ func (s *server) reportsIndex(w http.ResponseWriter, r *http.Request) {
 	// deterministic and matches the grant UI's group order (reports.go / D10).
 	byGroup := make(map[string][]reportLink)
 	for _, rep := range s.reports.All() {
-		if decide(ReportGroup(rep.Group), u, checker) != outcomeAllow {
+		// ReportGroupFor carries the report's program-dimensioned bit (p27.4), so a
+		// purely program-scoped user's index lists the program-dimensioned reports
+		// (which they may reach, filtered) and HIDES the non-program ones (which they
+		// may not) -- exactly the enforce() outcome, no 403 traps in the listing.
+		if decide(ReportGroupFor(rep), u, checker) != outcomeAllow {
 			continue
 		}
 		byGroup[rep.Group] = append(byGroup[rep.Group], reportLink{

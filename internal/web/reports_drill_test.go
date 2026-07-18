@@ -19,6 +19,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -248,6 +249,90 @@ func TestDrillRouteBareHit(t *testing.T) {
 	rec := asUser(t, h, sm, user, http.MethodGet, "/reports/"+reports.TrialBalanceReportID+"/drill", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("bare drill hit status = %d, want 200", rec.Code)
+	}
+}
+
+// TestDrillProgramScopeClamp (p27.4): a program-SUBTREE-scoped report grant clamps the
+// drill route to the granted subtree, so a scoped user cannot hand-craft a
+// sibling-subtree program id to read splits the report body hides. A user granted the
+// "programs" group scoped to Educacion may drill an Educacion program cell (rows) but a
+// FoodPantry (SIBLING) drill returns an EMPTY list -- and an UNFILTERED drill (no
+// program param, which would match every program) is likewise clamped to empty.
+func TestDrillProgramScopeClamp(t *testing.T) {
+	fx := fixture.New(t)
+	if err := SyncReportGroups(context.Background(), fx.Store); err != nil {
+		t.Fatalf("sync report groups: %v", err)
+	}
+	app := NewApp(Config{Version: "test"}, fx.DB, fx.Store)
+	h, sm, ids := app.handler, app.sessions, fx.IDs
+
+	// A non-admin user granted "programs" SCOPED to Educacion (a leaf subtree).
+	uid := mkUser(t, fx.Store, "director", "none", false)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	edu := ids.Educacion
+	if err := fx.Store.GrantReportGroup(ctx, uid, "programs", &edu); err != nil {
+		t.Fatalf("grant scoped: %v", err)
+	}
+
+	drillPath := func(d reports.Drill) string {
+		return "/reports/" + reports.ProgramStatementReportID + "/drill?" + d.Encode()
+	}
+	countRows := func(rec *httptest.ResponseRecorder) int {
+		return strings.Count(rec.Body.String(), `class="drill-row"`)
+	}
+
+	base := reports.Drill{
+		Scope:      ids.Root,
+		AccountIDs: []int64{ids.FoodPurchases},
+		Currency:   "MXN",
+		Mode:       reports.DrillPeriod,
+		From:       "2025-01-01",
+		To:         "2026-06-30",
+	}
+
+	// In-scope: Educacion Program Supplies has MXN activity -> the scoped user drills it.
+	inScope := base
+	inScope.AccountIDs = []int64{ids.ProgramSupplies}
+	inScope.ProgramID = &edu
+	rec := asUser(t, h, sm, uid, http.MethodGet, drillPath(inScope), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("in-scope drill status = %d, want 200", rec.Code)
+	}
+	if countRows(rec) == 0 {
+		t.Errorf("in-scope Educacion drill returned no rows (should see the granted subtree)")
+	}
+
+	// Sibling: FoodPantry program is NOT in the Educacion subtree -> clamped to empty.
+	fp := ids.FoodPantry
+	sibling := base
+	sibling.ProgramID = &fp
+	rec = asUser(t, h, sm, uid, http.MethodGet, drillPath(sibling), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("sibling drill status = %d, want 200", rec.Code)
+	}
+	if n := countRows(rec); n != 0 {
+		t.Errorf("sibling FoodPantry drill returned %d rows, want 0 (no sibling-subtree leak)", n)
+	}
+
+	// Unfiltered (no program param): would match EVERY program -> clamped to empty for a
+	// scoped user (a nil program filter is dropped, not treated as org-wide).
+	unfiltered := base // FoodPurchases, no ProgramID
+	rec = asUser(t, h, sm, uid, http.MethodGet, drillPath(unfiltered), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("unfiltered drill status = %d, want 200", rec.Code)
+	}
+	if n := countRows(rec); n != 0 {
+		t.Errorf("unfiltered drill returned %d rows, want 0 (scoped user may not drill unfiltered)", n)
+	}
+
+	// Admin bypasses the clamp entirely: the same sibling drill returns rows.
+	adminID := mkUser(t, fx.Store, "boss", "none", true)
+	rec = asUser(t, h, sm, adminID, http.MethodGet, drillPath(sibling), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin sibling drill status = %d, want 200", rec.Code)
+	}
+	if countRows(rec) == 0 {
+		t.Errorf("admin FoodPantry drill returned no rows (admin bypasses the scope)")
 	}
 }
 

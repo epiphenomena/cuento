@@ -85,9 +85,15 @@ func (s *server) buildUsersPage(r *http.Request) (usersPageModel, error) {
 		if err != nil {
 			return usersPageModel{}, err
 		}
+		// The list row shows the granted GROUP names only (the per-group program scope
+		// surfaces on the user-detail page, p27.4).
+		names := make([]string, 0, len(grants))
+		for _, g := range grants {
+			names = append(names, g.Group)
+		}
 		model.Rows = append(model.Rows, adminUserRow{
 			ID: u.ID, Username: u.Username, DisplayName: u.DisplayName,
-			IsAdmin: u.IsAdmin, TxnPerm: u.TxnPerm, Disabled: u.Disabled, Grants: grants,
+			IsAdmin: u.IsAdmin, TxnPerm: u.TxnPerm, Disabled: u.Disabled, Grants: names,
 		})
 	}
 	return model, nil

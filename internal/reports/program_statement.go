@@ -59,6 +59,9 @@ func registerProgramStatement(reg *Registry) {
 		Group:      "programs",
 		ParamsSpec: ParamsSpec{Period: true, Program: true, CurrencyOptional: true},
 		Run:        runProgramStatement,
+		// p27.4: rows are keyed by program, so a program-scoped grant filters them to
+		// the granted subtree (resolveParams -> Params.ProgramScope, honored below).
+		ProgramDimensioned: true,
 	})
 }
 

@@ -50,11 +50,12 @@ const (
 // specific BUDGET (plan) selector.
 func registerCashflowProjection(reg *Registry) {
 	reg.Register(Report{
-		ID:         CashflowProjectionReportID,
-		TitleKey:   "reports.cashflow_projection.title",
-		Group:      "budget",
-		ParamsSpec: ParamsSpec{Period: true, Granularity: true, Budget: true},
-		Run:        runCashflowProjection,
+		ID:                 CashflowProjectionReportID,
+		TitleKey:           "reports.cashflow_projection.title",
+		Group:              "budget",
+		ParamsSpec:         ParamsSpec{Period: true, Granularity: true, Budget: true},
+		Run:                runCashflowProjection,
+		ProgramDimensioned: true, // p27.4: budget-splits carry a program (grant-subtree filterable).
 	})
 }
 
@@ -62,11 +63,12 @@ func registerCashflowProjection(reg *Registry) {
 // "budget" group. Same params as cashflow (both bucket by the granularity).
 func registerBudgetVariance(reg *Registry) {
 	reg.Register(Report{
-		ID:         BudgetVarianceReportID,
-		TitleKey:   "reports.budget_variance.title",
-		Group:      "budget",
-		ParamsSpec: ParamsSpec{Period: true, Granularity: true, Budget: true},
-		Run:        runBudgetVariance,
+		ID:                 BudgetVarianceReportID,
+		TitleKey:           "reports.budget_variance.title",
+		Group:              "budget",
+		ParamsSpec:         ParamsSpec{Period: true, Granularity: true, Budget: true},
+		Run:                runBudgetVariance,
+		ProgramDimensioned: true, // p27.4: variance rows are keyed by program (grant-subtree filterable).
 	})
 }
 

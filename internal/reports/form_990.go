@@ -59,11 +59,12 @@ const Form990ReportID = "form_990"
 // the period end internally (no separate as-of control).
 func registerForm990(reg *Registry) {
 	reg.Register(Report{
-		ID:         Form990ReportID,
-		TitleKey:   "reports.form_990.title",
-		Group:      "tax",
-		ParamsSpec: ParamsSpec{Period: true, Currency: true},
-		Run:        runForm990,
+		ID:                 Form990ReportID,
+		TitleKey:           "reports.form_990.title",
+		Group:              "tax",
+		ParamsSpec:         ParamsSpec{Period: true, Currency: true},
+		Run:                runForm990,
+		ProgramDimensioned: true, // p27.4: R/E activity carries a program (grant-subtree filterable).
 	})
 }
 

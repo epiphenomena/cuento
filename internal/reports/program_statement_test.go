@@ -365,6 +365,70 @@ func TestProgramStatementSingleSubtree(t *testing.T) {
 	}
 }
 
+// TestProgramStatementGrantProgramScope (p27.4): a program-SUBTREE-scoped report grant
+// restricts the report's rows to the granted subtree. Scoping to Educacion (a leaf, so
+// the subtree is just itself) must show Educacion's activity and MUST NOT leak the
+// sibling Food Pantry subtree -- crucially even in the ROLLED General (root) column,
+// which without the filter folds in every program. This proves the filter is applied to
+// the RAW split program BEFORE the ancestor rollup (a sibling never contributes to any
+// cell, incl. an ancestor's).
+func TestProgramStatementGrantProgramScope(t *testing.T) {
+	f := fixture.New(t)
+	ctx := context.Background()
+	rep := psReport(t)
+
+	// Baseline (UNSCOPED): the General column folds in Food Pantry's Food Purchases MXN
+	// (210,000 General-direct + 150,000 Food Pantry = 360,000) and General-direct-only
+	// Salaries -- confirming the sibling IS present without a scope (the goldens do not
+	// move; the scope is purely additive).
+	base := psParams(f)
+	baseT, err := rep.Run(ctx, reports.NewToolkit(f.Store, base), base)
+	if err != nil {
+		t.Fatalf("run unscoped: %v", err)
+	}
+	genBase := psColIndex(t, baseT, "General")
+	if got, _, ok := psCell(baseT, "Food Purchases", "MXN", genBase); !ok || got != 360_000 {
+		t.Fatalf("unscoped General Food Purchases MXN = %d/%v, want 360,000 (sibling present)", got, ok)
+	}
+
+	// Scope the grant to Educacion (a leaf subtree = {Educacion}). Food Pantry is a
+	// SIBLING and must vanish from every column.
+	p := psParams(f)
+	p.ProgramScope = []int64{f.IDs.Educacion}
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run scoped: %v", err)
+	}
+	gen := psColIndex(t, table, "General")
+
+	// The rolled General column now reflects ONLY Educacion's activity (the root folds in
+	// its in-scope descendants; Food Pantry is filtered out at the raw split).
+	//   - Food Purchases MXN: General-direct 210,000 is a General-program split, NOT in the
+	//     Educacion subtree, so it is filtered too -> the cell is absent/0 (Food Pantry's
+	//     150,000 certainly does not leak). Assert NO Food Pantry leak: General MXN Food
+	//     Purchases is either absent or, if present, does not include the 150,000/360,000.
+	if got, _, ok := psCell(table, "Food Purchases", "MXN", gen); ok && got != 0 {
+		t.Errorf("scoped General Food Purchases MXN = %d, want absent/0 (no General-direct or sibling leak)", got)
+	}
+	//   - Salaries is a General-direct (non-Educacion) expense: filtered out -> absent/0.
+	if got, _, ok := psCell(table, "Salaries", "USD", gen); ok && got != 0 {
+		t.Errorf("scoped General Salaries USD = %d, want absent/0 (out-of-subtree)", got)
+	}
+	//   - Educacion's OWN activity DOES appear in the (now Educacion-only) General column:
+	//     Program Supplies MXN 500,000, Government Grants MXN 10,000,000.
+	if got, _, ok := psCell(table, "Program Supplies", "MXN", gen); !ok || got != 500_000 {
+		t.Errorf("scoped General Program Supplies MXN = %d/%v, want 500,000 (Educacion in scope)", got, ok)
+	}
+	if got, _, ok := psCell(table, "Government Grants", "MXN", gen); !ok || got != 10_000_000 {
+		t.Errorf("scoped General Government Grants MXN = %d/%v, want 10,000,000 (Educacion in scope)", got, ok)
+	}
+	// General net == Educacion net (the root now equals the single in-scope subtree).
+	netKey := "reports.program_statement.net"
+	if got := psRowByLabel(t, table, netKey, "MXN", gen); got != 9_500_000 {
+		t.Errorf("scoped General net MXN = %d, want 9,500,000 (== Educacion, no sibling)", got)
+	}
+}
+
 // TestProgramStatementLeafDrillReconciles: a LEAF program's cell drills (single ProgramID)
 // to its splits, and the drilled native signed sum equals the cell's pre-display net-debit
 // figure. Educación × Program Supplies × MXN = 500,000 (displayed) → raw net-debit 500,000.

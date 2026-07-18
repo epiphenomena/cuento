@@ -445,6 +445,7 @@ type User struct {
 type UserReportGrant struct {
 	UserID    int64
 	GroupName string
+	ProgramID sql.NullInt64
 }
 
 type UserReportGrantsVersion struct {
@@ -454,6 +455,7 @@ type UserReportGrantsVersion struct {
 	ValidFrom string
 	Op        string
 	GroupName string
+	ProgramID sql.NullInt64
 }
 
 type UsersVersion struct {

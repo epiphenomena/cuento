@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"cuento/internal/db/sqlc"
@@ -35,16 +36,56 @@ func (s *Store) SyncReportGroups(ctx context.Context, names []string) error {
 	return nil
 }
 
-// ReportGrants returns the report-group names a user has been granted read access
-// to (D10). It is a read (rule 2 permits reads outside the funnel via sqlc), used
-// by the permission-enforcement middleware ONLY for routes whose Perm is
-// ReportGroup -- so the anonymous / non-report hot path never pays for it.
-func (s *Store) ReportGrants(ctx context.Context, userID int64) ([]string, error) {
-	names, err := s.q.ReportGrantsForUser(ctx, userID)
+// ReportGrant is one report-group grant a user holds (D10, p27.4): the group name
+// plus an OPTIONAL program-subtree scope. ProgramID nil == unscoped (org-wide, the
+// pre-p27.4 behavior); a non-nil ProgramID scopes the grant to that program node
+// AND all its descendants (hierarchical, resolved via ProgramSubtree at report
+// time) -- a program-dimensioned report then returns only that subtree's rows.
+type ReportGrant struct {
+	Group string
+	// ProgramID is the granted program-subtree ROOT (nil = unscoped). It is a
+	// pointer so nil is distinguishable from program id 0 (which is never a real
+	// program).
+	ProgramID *int64
+}
+
+// ReportGrants returns the report-group grants a user holds -- each a group name
+// plus its optional program-subtree scope (D10, p27.4). It is a read (rule 2
+// permits reads outside the funnel via sqlc), used by the permission-enforcement
+// middleware ONLY for routes whose Perm is ReportGroup (and by the report row-scope
+// resolver) -- so the anonymous / non-report hot path never pays for it.
+func (s *Store) ReportGrants(ctx context.Context, userID int64) ([]ReportGrant, error) {
+	rows, err := s.q.ReportGrantsForUser(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("store: report grants for user %d: %w", userID, err)
 	}
-	return names, nil
+	out := make([]ReportGrant, 0, len(rows))
+	for _, r := range rows {
+		g := ReportGrant{Group: r.GroupName}
+		if r.ProgramID.Valid {
+			id := r.ProgramID.Int64
+			g.ProgramID = &id
+		}
+		out = append(out, g)
+	}
+	return out, nil
+}
+
+// ProgramSubtree returns the ids of a program plus its transitive descendants (self
+// included, D24) -- the set a program-scoped report grant filters rows to (p27.4).
+// A read reusing the ProgramDescendants recursive CTE; the write-closure-only
+// ProgramSubtreeIDs (transactions.sql) is not reachable outside a write, so this is
+// the read-path analogue for the web layer's grant-scope resolution.
+func (s *Store) ProgramSubtree(ctx context.Context, id int64) ([]int64, error) {
+	rows, err := s.q.ProgramDescendants(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("store: program subtree of %d: %w", id, err)
+	}
+	ids := make([]int64, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.ID)
+	}
+	return ids, nil
 }
 
 // ReportGroupNames returns every code-declared report group, in declared sort
@@ -61,16 +102,29 @@ func (s *Store) ReportGroupNames(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
-// GrantReportGroup adds a read grant on group for user (p13.2), versioned as one
-// op='create' user_report_grants_versions row under a change NAMING the acting
-// admin (rule 5). user_report_grants_versions is a COMPOSITE-key twin (entity_id
-// = user_id, snapshot group_name), so this mirrors account-subsidiary membership:
-// guard with HasReportGrant (a re-grant is a no-op, no duplicate PK, no spurious
-// version row), insert live, then snapshot-from-live. The system user (id 1) is
-// refused (ErrSystemUser). A no-op re-grant still returns nil.
-func (s *Store) GrantReportGroup(ctx context.Context, userID int64, group string) error {
+// GrantReportGroup adds (or re-scopes) a read grant on group for user, with an
+// OPTIONAL program-subtree scope (programID nil = unscoped, org-wide -- the pre-p27.4
+// behavior). Versioned under a change NAMING the acting admin (rule 5).
+// user_report_grants_versions is a COMPOSITE-key twin (entity_id = user_id, snapshot
+// group_name + program_id); the live key is (user_id, group_name) with program_id a
+// mutable ATTRIBUTE, so:
+//   - no existing grant -> insert live, then snapshot-from-live (op='create').
+//   - existing grant, SAME scope -> no-op (no duplicate PK, no spurious version row).
+//   - existing grant, DIFFERENT scope -> a scope CHANGE, handled AS revoke+grant in
+//     ONE change (preserving the no-'update' membership convention): delete-version
+//     (snapshot the OLD scope) BEFORE the live delete, then insert the NEW scope and
+//     its create-version. Doing both legs in one write keeps the change atomic and the
+//     version trail complete (old scope captured, new scope snapshotted).
+//
+// The system user (id 1) is refused (ErrSystemUser). programID, when non-nil, is the
+// granted program-subtree root (self + descendants covered at report time).
+func (s *Store) GrantReportGroup(ctx context.Context, userID int64, group string, programID *int64) error {
 	if userID == systemUserID {
 		return ErrSystemUser
+	}
+	want := sql.NullInt64{}
+	if programID != nil {
+		want = sql.NullInt64{Int64: *programID, Valid: true}
 	}
 	_, err := s.write(ctx, "user.grant", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
@@ -79,12 +133,29 @@ func (s *Store) GrantReportGroup(ctx context.Context, userID int64, group string
 				return fmt.Errorf("check grant: %w", err)
 			}
 			if has > 0 {
-				return nil // already granted -- no-op, no version row
+				cur, err := q.GetReportGrantScope(ctx, sqlc.GetReportGrantScopeParams{UserID: userID, GroupName: group})
+				if err != nil {
+					return fmt.Errorf("get grant scope: %w", err)
+				}
+				if cur == want {
+					return nil // already granted with the same scope -- no-op, no version row
+				}
+				// Scope CHANGE: revoke the old scope (snapshot-from-live BEFORE the delete),
+				// then re-grant with the new scope below.
+				if err := q.InsertReportGrantVersion(ctx, sqlc.InsertReportGrantVersionParams{
+					Op: "delete", ID: changeID, UserID: userID, GroupName: group,
+				}); err != nil {
+					return fmt.Errorf("version grant rescope-remove: %w", err)
+				}
+				if err := q.DeleteReportGrant(ctx, sqlc.DeleteReportGrantParams{UserID: userID, GroupName: group}); err != nil {
+					return fmt.Errorf("delete grant (rescope): %w", err)
+				}
 			}
-			if err := q.InsertReportGrant(ctx, sqlc.InsertReportGrantParams{UserID: userID, GroupName: group}); err != nil {
+			if err := q.InsertReportGrant(ctx, sqlc.InsertReportGrantParams{UserID: userID, GroupName: group, ProgramID: want}); err != nil {
 				return fmt.Errorf("insert grant: %w", err)
 			}
-			// Live-write FIRST, then snapshot-from-live (add order).
+			// Live-write FIRST, then snapshot-from-live (add order); the snapshot reads
+			// program_id from the just-inserted live row.
 			if err := q.InsertReportGrantVersion(ctx, sqlc.InsertReportGrantVersionParams{
 				Op: "create", ID: changeID, UserID: userID, GroupName: group,
 			}); err != nil {

@@ -305,7 +305,7 @@ func (s *server) navPermits(ctx context.Context, u *store.CurrentUser, perm Perm
 	// For every other perm, an entry is visible exactly when the route would allow
 	// the request. grantChecker is never consulted here (non-ReportGroup perms
 	// don't query grants), so the closure is a harmless never-called stub.
-	return decide(perm, u, func(string) bool { return false }) == outcomeAllow
+	return decide(perm, u, func(string) grantScope { return grantScope{} }) == outcomeAllow
 }
 
 // registeredGetPaths returns the set of concrete GET route patterns in the

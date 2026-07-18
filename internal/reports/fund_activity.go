@@ -37,11 +37,12 @@ const FundActivityReportID = "fund_activity"
 // controls the single-fund statement window; the list view uses To as its as-of date.
 func registerFundActivity(reg *Registry) {
 	reg.Register(Report{
-		ID:         FundActivityReportID,
-		TitleKey:   "reports.fund_activity.title",
-		Group:      "funds",
-		ParamsSpec: ParamsSpec{Period: true, Fund: true},
-		Run:        runFundActivity,
+		ID:                 FundActivityReportID,
+		TitleKey:           "reports.fund_activity.title",
+		Group:              "funds",
+		ParamsSpec:         ParamsSpec{Period: true, Fund: true},
+		Run:                runFundActivity,
+		ProgramDimensioned: true, // p27.4: R/E activity carries a program (grant-subtree filterable).
 	})
 }
 

@@ -134,6 +134,25 @@ func (s *server) reportDrill(w http.ResponseWriter, r *http.Request) {
 			progFilters = append(progFilters, &id)
 		}
 	}
+	// p27.4: a program-SCOPED report grant clamps the drill to the granted subtree, the
+	// SAME data-scoping the report body applies (resolveParams -> Params.ProgramScope).
+	// The drill's program filter is URL-supplied (DecodeDrill), so without this a scoped
+	// user could hand-craft a sibling-subtree program id and read splits the report body
+	// hides. Intersect the requested program filters with the grant subtree: an
+	// out-of-scope id (or the unfiltered nil, which would match every program) is dropped;
+	// if NOTHING survives, the drill returns an empty list (no leak). Only a
+	// program-dimensioned report is reachable by a scoped grant (decide()), so this only
+	// bites there; admins/unscoped grants leave progFilters untouched.
+	if rep.ProgramDimensioned && u != nil && !u.IsAdmin {
+		scopeIDs, err := s.grantProgramScope(ctx, u, rep.Group)
+		if err != nil {
+			s.serverError(w)
+			return
+		}
+		if len(scopeIDs) > 0 {
+			progFilters = clampProgramFilters(progFilters, scopeIDs)
+		}
+	}
 	var rows []store.DrillRow
 	for _, fund := range fundFilters {
 		filter.FundID = fund
@@ -190,6 +209,26 @@ func (s *server) reportDrill(w http.ResponseWriter, r *http.Request) {
 		Rows:      rendered,
 	}
 	s.render(w, r, http.StatusOK, "report-drill.tmpl", s.newShellPage(r, model))
+}
+
+// clampProgramFilters intersects a drill's requested program filters with a grant's
+// program-subtree scope (p27.4). A nil filter (an unfiltered drill, which would match
+// EVERY program) is dropped -- a scoped user may never drill unfiltered; a concrete id
+// survives only if it is in the granted subtree. An empty result means NO program is in
+// scope for this drill, so the caller lists nothing (a sibling-subtree drill request
+// yields an empty page, never sibling splits).
+func clampProgramFilters(requested []*int64, scope []int64) []*int64 {
+	inScope := make(map[int64]bool, len(scope))
+	for _, id := range scope {
+		inScope[id] = true
+	}
+	out := make([]*int64, 0, len(requested))
+	for _, p := range requested {
+		if p != nil && inScope[*p] {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // renderDrillRows turns store.DrillRow splits into display-ready drillRow lines

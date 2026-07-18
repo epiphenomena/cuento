@@ -191,7 +191,7 @@ func TestAllLandingCards(t *testing.T) {
 	admin := makeUser(t, st, store.CreateUserInput{Username: "all_admin", IsAdmin: true})
 	// A viewer granted ONLY the "funds" report group: sees fund reports, NOT financial.
 	viewer := makeUser(t, st, store.CreateUserInput{Username: "all_viewer", TxnPerm: "read"})
-	if err := st.GrantReportGroup(ctx, viewer.ID, "funds"); err != nil {
+	if err := st.GrantReportGroup(ctx, viewer.ID, "funds", nil); err != nil {
 		t.Fatalf("grant funds group: %v", err)
 	}
 	// A pure submitter: ExpenseSubmit only, no ledger/report access.

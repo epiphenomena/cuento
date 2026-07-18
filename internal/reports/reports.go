@@ -54,6 +54,20 @@ type Report struct {
 	// reusable control the chart of accounts uses, p26.25). Reports that do not
 	// enumerate accounts as a hierarchy leave it false and render byte-identically.
 	Tree bool
+
+	// ProgramDimensioned marks a report whose rows carry a PROGRAM dimension (p27.4):
+	// budget variance, program statement, fund activity, activities by restriction,
+	// functional expenses, income statement, form 990, cash-flow projection. Such a
+	// report can be filtered to a granted program subtree, so a purely program-scoped
+	// report grant (user_report_grants.program_id, D10) reaches it (rows filtered to
+	// the subtree) -- whereas a NON-program report (balance sheet, trial balance,
+	// reconciliation statement, account ledger) cannot be program-filtered and so is
+	// NOT reachable by a purely program-scoped grant (it needs an unscoped grant). The
+	// web layer reads this to (a) gate reachability (routes.go ReportGroupFor) and (b)
+	// apply the subtree row-filter (resolveParams -> Params.ProgramScope). Marked
+	// EXPLICITLY here rather than inferred from ParamsSpec.Program, because the
+	// program-dimensioned set is broader than the reports offering a program selector.
+	ProgramDimensioned bool
 }
 
 // Groups returns the code-declared report-group set (D10): the permission buckets

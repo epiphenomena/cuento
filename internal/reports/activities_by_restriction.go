@@ -47,11 +47,12 @@ const ActivitiesByRestrictionReportID = "activities_by_restriction"
 // web params form renders the period + the always-present subsidiary scope selector.
 func registerActivitiesByRestriction(reg *Registry) {
 	reg.Register(Report{
-		ID:         ActivitiesByRestrictionReportID,
-		TitleKey:   "reports.activities_by_restriction.title",
-		Group:      "financial",
-		ParamsSpec: ParamsSpec{Period: true},
-		Run:        runActivitiesByRestriction,
+		ID:                 ActivitiesByRestrictionReportID,
+		TitleKey:           "reports.activities_by_restriction.title",
+		Group:              "financial",
+		ParamsSpec:         ParamsSpec{Period: true},
+		Run:                runActivitiesByRestriction,
+		ProgramDimensioned: true, // p27.4: R/E activity carries a program (grant-subtree filterable).
 	})
 }
 

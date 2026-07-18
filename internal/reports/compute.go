@@ -554,6 +554,12 @@ func (tk *Toolkit) ProgramActivity(ctx context.Context, s Scope, from, to string
 		if excl[r.AccountID] {
 			continue // intra-group R/E, excluded at consolidation (D19)
 		}
+		if !tk.Params.InProgramScope(r.ProgramID) {
+			// p27.4: a program-SCOPED report grant filters rows to the granted subtree.
+			// The check is on the RAW split program BEFORE the ancestor rollup, so a
+			// sibling subtree contributes nothing to any (incl. ancestor) cell -- no leak.
+			continue
+		}
 		// Add to the program and every ancestor (tree rollup).
 		for p := r.ProgramID; ; {
 			add(p, r.AccountID, r.Currency, r.Amount)
