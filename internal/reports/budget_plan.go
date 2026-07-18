@@ -280,8 +280,13 @@ func (tk *Toolkit) BudgetVariancePlan(ctx context.Context, s Scope, planID int64
 	actual := make(map[bk]int64)
 
 	// BUDGETED: sign each R/E split into net-debit space, bucket by its own date. The
-	// budget-split key carries no subsidiary (a plan is single-subsidiary); the actual
-	// side is keyed by the posting subsidiary, so we align on the plan's subsidiary.
+	// budget-split key carries no subsidiary, so we key budgeted rows by the PLAN's
+	// subsidiary; the actual side (BudgetKeyActivity) keys by each split's POSTING
+	// subsidiary. These align (budgeted + actual merge into one row) as long as the
+	// plan's activity posts IN the plan's subsidiary. A plan whose subsidiary has
+	// DESCENDANTS that post the same account's activity would land budgeted and actual
+	// in separate rows -- an accepted limitation (DECISIONS p27.3a): budget plans are
+	// authored at the subsidiary the activity posts to.
 	plan, err := tk.store.GetBudgetPlan(ctx, planID)
 	if err != nil {
 		return nil, fmt.Errorf("budget variance: load plan %d: %w", planID, err)
