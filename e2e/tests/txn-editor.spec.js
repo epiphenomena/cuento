@@ -489,13 +489,17 @@ test.describe('transaction editor', () => {
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
 
-    // Column-order guard: the delete cell is the LAST td of the split's second row
-    // (p26.32), right after the error cell.
-    const row0MoreCells = page.locator('.txn-row[data-row="0"] .txn-row-more > td');
-    await expect(row0MoreCells.last()).toHaveClass(/txn-delete-cell/);
+    // Column-order guard: p28 moved the error + delete to the END of ROW 1 (after amount).
+    // The delete cell is the LAST td of the split's FIRST row, right after the error cell.
+    const row0MainCells = page.locator('.txn-row[data-row="0"] .txn-row-main > td');
+    await expect(row0MainCells.last()).toHaveClass(/txn-delete-cell/);
     await expect(
       page.locator('.txn-row[data-row="0"] .txn-row-error + .txn-delete-cell'),
     ).toHaveCount(1);
+    // Row 2 now ends with the memo cell (error/delete gone); the memo spans to the edge.
+    await expect(
+      page.locator('.txn-row[data-row="0"] .txn-row-more > td').last(),
+    ).toHaveClass(/txn-memo-cell/);
 
     // Build three data rows with distinguishable memos (auto-append grows the trailing row).
     await page.locator('#txn-account-0').selectOption({ label: 'Del Savings' });

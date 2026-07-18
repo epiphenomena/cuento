@@ -66,19 +66,28 @@
        autocomplete/prefill is scoped to it EVEN when the sub picker is locked (a saved
        multi-line report drops #er-sub, so descfield.subOf() has no select to read). */}}
   <form method="post" action="/expenses/{{.ID}}/lines" id="expense-grid-form" data-sub="{{.SubID}}" data-user-program="{{.UserProgram}}" data-account-missing-msg="{{t "error.expense.account_not_offered"}}">
-    {{/* p26.32 two-row line layout: each line is its OWN <tbody class="el-row"> holding a
-         .el-row-main (description / account / amount, wider) and a .el-row-more (fund /
-         program / memo / error / delete, packed). Grouping by <tbody> bands both physical
-         rows for the per-line zebra (nth-of-type, self-maintaining) and keeps every id-keyed
-         selector working (they descend the tbody). Header colspans (5 / 4 / 3 = 12) match row
-         1's cells so the fixed-layout columns align. */}}
+    {{/* p26.32 / p28 two-row line layout: each line is its OWN <tbody class="el-row"> holding
+         a .el-row-main (description / account / amount / error / delete) and a .el-row-more
+         (fund / program / memo -- memo spans to the right edge). Grouping by <tbody> bands
+         both physical rows for the per-line zebra (nth-of-type, self-maintaining) and keeps
+         every id-keyed selector working (they descend the tbody). The grid is 14 fixed-layout
+         columns; the stacked header labels BOTH rows band-for-band (Fund under Description 5,
+         Program under Account 4, Memo under Amount 5). The trailing 2 columns (error + delete)
+         are pinned narrow by the <colgroup>. */}}
     <table class="expense-lines-table txn-grid txn-grid-2row">
+      {{/* p28: only DELETE is pinned narrow; the error column stays flexible so its message
+           is readable (see transaction_form.tmpl). */}}
+      <colgroup>
+        <col span="13">
+        <col class="txn-col-util">
+      </colgroup>
       <thead>
         <tr>
-          {{/* p26.23: description is the FIRST column (before Account). */}}
-          <th colspan="5">{{t "expense.line.col.description"}}</th>
-          <th colspan="4">{{t "expense.line.col.account"}}</th>
-          <th colspan="3">{{t "expense.line.col.amount"}}</th>
+          {{/* p26.23: description is the FIRST column (before Account). p28: each header is a
+               stacked two-line label -- line 1 the row-1 field, line 2 the row-2 field beneath. */}}
+          <th colspan="5"><span class="txn-hdr-main">{{t "expense.line.col.description"}}</span><span class="txn-hdr-sub">{{t "expense.line.col.fund"}}</span></th>
+          <th colspan="4"><span class="txn-hdr-main">{{t "expense.line.col.account"}}</span><span class="txn-hdr-sub">{{t "expense.line.col.program"}}</span></th>
+          <th colspan="5"><span class="txn-hdr-main">{{t "expense.line.col.amount"}}</span><span class="txn-hdr-sub">{{t "expense.line.col.memo"}}</span></th>
         </tr>
       </thead>
       {{$page := .}}
@@ -111,9 +120,20 @@
           <td class="txn-cell el-amount-cell" colspan="3">
             <input type="text" name="amount_{{$i}}" id="el-amount-{{$i}}" class="el-amount amount" value="{{$l.AmountInput}}" inputmode="decimal">
           </td>
+          {{/* p28: the per-line error cell + delete-x trail ROW 1 (after amount). type="button"
+               so it never submits the grid; expensegrid.js re-indexes the surviving rows on
+               click and resets the only/last row in place (never drops to zero). The two
+               columns are pinned narrow by the <colgroup> so delete is a tight utility cell. */}}
+          <td class="el-row-error" colspan="1">{{if $l.ErrorKey}}<span class="field-error" role="alert">{{t $l.ErrorKey}}</span>{{end}}</td>
+          <td class="el-delete-cell" colspan="1">
+            <button type="button" class="btn btn-ghost el-delete" aria-label="{{t "common.delete_row"}}" title="{{t "common.delete_row"}}">&times;</button>
+          </td>
         </tr>
         <tr class="el-row-more">
-          <td class="txn-cell el-fund-cell" colspan="3">
+          {{/* p28: row 2 aligns band-for-band under row 1 -- Fund (5) under Description,
+               Program (4) under Account, Memo (5) under Amount+error+delete (memo now extends
+               to the row's right edge). Sum = 5+4+5 = 14. */}}
+          <td class="txn-cell el-fund-cell" colspan="5">
             <select name="fund_{{$i}}" id="el-fund-{{$i}}" class="el-fund combo-input">
               <option value="0">{{t "expense.line.unrestricted"}}</option>
               {{range $page.Funds}}<option value="{{.ID}}"{{if eq .ID $l.FundID}} selected{{end}}>{{.Name}}</option>
@@ -127,16 +147,8 @@
               {{end}}
             </select>
           </td>
-          <td class="txn-cell el-memo-cell" colspan="3">
-            <input type="text" name="memo_{{$i}}" id="el-memo-{{$i}}" class="el-memo" value="{{$l.Memo}}">
-          </td>
-          <td class="el-row-error" colspan="1">{{if $l.ErrorKey}}<span class="field-error" role="alert">{{t $l.ErrorKey}}</span>{{end}}</td>
-          {{/* p26.4/p26.11: a per-row delete control, the LAST cell (after the error
-               column). type="button" so it never submits the grid; expensegrid.js re-indexes
-               the surviving rows (contiguous _i) on click, and deleting the only/last row
-               resets it in place (the grid never drops to zero). */}}
-          <td class="el-delete-cell" colspan="1">
-            <button type="button" class="btn btn-ghost el-delete" aria-label="{{t "common.delete_row"}}" title="{{t "common.delete_row"}}">&times;</button>
+          <td class="txn-cell el-memo-cell" colspan="5">
+            <input type="text" name="memo_{{$i}}" id="el-memo-{{$i}}" class="el-memo" value="{{$l.Memo}}" autocomplete="off">
           </td>
         </tr>
       </tbody>

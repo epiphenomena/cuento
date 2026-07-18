@@ -2048,6 +2048,10 @@ other = "Date"
 other = "Account"
 [budget_plan.split.col.amount]
 other = "Amount"
+[budget_plan.split.col.fund]
+other = "Fund"
+[budget_plan.split.col.program]
+other = "Program"
 [budget_plan.split.account_none]
 other = "Select an account"
 [budget_plan.split.unrestricted]

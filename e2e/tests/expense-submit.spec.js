@@ -309,11 +309,12 @@ test('expenses: subsidiary auto-set, account/fund/program combos, amount blur, d
   await page.locator('#el-memo-2').fill('row-two-memo');
   await expect(page.locator('#el-account-3')).toBeVisible();
 
-  // (p26.11/p26.23/p26.32) COLUMN ORDER: description is the FIRST column (before account),
-  // and the delete-× cell is still the LAST cell in the row, AFTER the error column.
-  // p26.32 two-row layout: each line is a <tbody class="el-row"> with .el-row-main
-  // (description / account / amount) and .el-row-more (fund / program / memo / error /
-  // delete). The thead labels only row 1's three wide columns (colspan 5 / 4 / 3).
+  // (p26.11/p26.23/p26.32/p28) COLUMN ORDER: description is the FIRST column (before account),
+  // and p28 moved the error + delete to the END of ROW 1 (after amount) -- the delete-× is
+  // the LAST cell of the FIRST row, right after the error column. Each line is a <tbody
+  // class="el-row"> with .el-row-main (description / account / amount / error / delete) and
+  // .el-row-more (fund / program / memo -- memo spans to the edge). The thead now carries
+  // three STACKED two-line labels (row-1 field over row-2 field).
   const headerCells = page.locator('#expense-grid-form thead th');
   await expect(headerCells).toHaveCount(3);
   await expect(headerCells.first()).toHaveText(/description/i);
@@ -323,15 +324,19 @@ test('expenses: subsidiary auto-set, account/fund/program combos, amount blur, d
   await expect(
     page.locator('.el-row[data-row="0"] .el-row-main > td').first(),
   ).toHaveClass(/el-desc-cell/);
-  // In the line's second row the error cell precedes the delete cell (the delete is last).
-  const row0MoreCells = page.locator('.el-row[data-row="0"] .el-row-more > td');
-  await expect(row0MoreCells.last()).toHaveClass(/el-delete-cell/);
+  // In the line's FIRST row the error cell precedes the delete cell (the delete is last).
+  const row0MainCells = page.locator('.el-row[data-row="0"] .el-row-main > td');
+  await expect(row0MainCells.last()).toHaveClass(/el-delete-cell/);
   await expect(page.locator('.el-row[data-row="0"] .el-row-error'))
     .not.toHaveClass(/el-delete-cell/);
   // The delete cell comes right after the error cell in DOM order.
   await expect(
     page.locator('.el-row[data-row="0"] .el-row-error + .el-delete-cell'),
   ).toHaveCount(1);
+  // Row 2 now ends with the memo cell (error/delete gone); the memo spans to the edge.
+  await expect(
+    page.locator('.el-row[data-row="0"] .el-row-more > td').last(),
+  ).toHaveClass(/el-memo-cell/);
 
   // (d) DELETE A MIDDLE ROW: delete row 1 (memo "row-one-memo"). The survivors re-index to
   // contiguous 0..n-1, so row-two-memo shifts up to index 1 and the memo text follows.

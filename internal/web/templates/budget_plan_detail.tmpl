@@ -65,12 +65,25 @@
   <h2>{{t "budget_plan.detail.splits"}}</h2>
   <form method="post" action="/budget-plans/{{.ID}}/splits" id="budget-grid-form"
         data-sub="{{.SubID}}" data-account-missing-msg="{{t "error.budget_plan.account"}}">
+    {{/* p28 two-row split layout: each split is its OWN <tbody class="bs-row"> holding a
+         .bs-row-main (description / date / account / error / delete) and a .bs-row-more (fund /
+         program / amount -- the budget grid has no memo, so AMOUNT is the trailing field and
+         extends to the row's right edge). 14 fixed-layout columns; the stacked header labels
+         BOTH rows band-for-band (Fund under Description 4, Program under Date 3, Amount under
+         Account 5). The trailing 2 columns (error + delete) are pinned narrow by the
+         <colgroup>. */}}
     <table class="budget-splits-table txn-grid txn-grid-2row">
+      {{/* p28: only DELETE is pinned narrow; the error column stays flexible so its message
+           is readable (see transaction_form.tmpl). */}}
+      <colgroup>
+        <col span="13">
+        <col class="txn-col-util">
+      </colgroup>
       <thead>
         <tr>
-          <th colspan="4">{{t "budget_plan.split.col.description"}}</th>
-          <th colspan="3">{{t "budget_plan.split.col.date"}}</th>
-          <th colspan="5">{{t "budget_plan.split.col.account"}}</th>
+          <th colspan="4"><span class="txn-hdr-main">{{t "budget_plan.split.col.description"}}</span><span class="txn-hdr-sub">{{t "budget_plan.split.col.fund"}}</span></th>
+          <th colspan="3"><span class="txn-hdr-main">{{t "budget_plan.split.col.date"}}</span><span class="txn-hdr-sub">{{t "budget_plan.split.col.program"}}</span></th>
+          <th colspan="5"><span class="txn-hdr-main">{{t "budget_plan.split.col.account"}}</span><span class="txn-hdr-sub">{{t "budget_plan.split.col.amount"}}</span></th>
         </tr>
       </thead>
       {{$page := .}}
@@ -99,8 +112,20 @@
               {{end}}
             </select>
           </td>
+          {{/* p28: the per-split error cell + delete-x trail ROW 1 (after account). type="button"
+               so it never submits the grid; budgetgrid.js re-indexes the surviving rows on
+               click and resets the only/last row in place. The two columns are pinned narrow by
+               the <colgroup> so delete is a tight utility cell. */}}
+          <td class="bs-row-error" colspan="1">{{if $sp.ErrorKey}}<span class="field-error" role="alert">{{t $sp.ErrorKey}}</span>{{end}}</td>
+          <td class="bs-delete-cell" colspan="1">
+            <button type="button" class="btn btn-ghost bs-delete" aria-label="{{t "common.delete_row"}}" title="{{t "common.delete_row"}}">&times;</button>
+          </td>
         </tr>
         <tr class="bs-row-more">
+          {{/* p28: row 2 aligns band-for-band under row 1 -- Fund (4) under Description, Program
+               (3) under Date, Amount (5) under Account+error+delete. The budget grid has no
+               memo, so AMOUNT is the trailing field and extends to the row's right edge.
+               Sum = 4+3+5 = 14. */}}
           <td class="txn-cell bs-fund-cell" colspan="4">
             <select name="fund_{{$i}}" id="bs-fund-{{$i}}" class="bs-fund combo-input">
               <option value="0">{{t "budget_plan.split.unrestricted"}}</option>
@@ -108,19 +133,15 @@
               {{end}}
             </select>
           </td>
-          <td class="txn-cell bs-program-cell" colspan="4">
+          <td class="txn-cell bs-program-cell" colspan="3">
             <select name="program_{{$i}}" id="bs-program-{{$i}}" class="bs-program combo-input">
               <option value="0">{{t "budget_plan.split.program_none"}}</option>
               {{range $page.Programs}}<option value="{{.ID}}"{{if eq .ID $sp.ProgramID}} selected{{end}}>{{.Name}}</option>
               {{end}}
             </select>
           </td>
-          <td class="txn-cell bs-amount-cell" colspan="2">
+          <td class="txn-cell bs-amount-cell" colspan="5">
             <input type="text" name="amount_{{$i}}" id="bs-amount-{{$i}}" class="bs-amount amount" value="{{$sp.AmountInput}}" inputmode="decimal" placeholder="{{t "budget_plan.split.col.amount"}}">
-          </td>
-          <td class="bs-row-error" colspan="1">{{if $sp.ErrorKey}}<span class="field-error" role="alert">{{t $sp.ErrorKey}}</span>{{end}}</td>
-          <td class="bs-delete-cell" colspan="1">
-            <button type="button" class="btn btn-ghost bs-delete" aria-label="{{t "common.delete_row"}}" title="{{t "common.delete_row"}}">&times;</button>
           </td>
         </tr>
       </tbody>

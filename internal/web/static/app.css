@@ -906,7 +906,11 @@ input[aria-invalid="true"] {
   font-weight: normal;
   color: var(--color-muted);
 }
-.txn-grid-2row thead th.txn-hdr-util { border-bottom: 2px solid var(--color-primary); }
+/* p28: the trailing error + delete columns are pinned narrow via a <colgroup> so the
+   delete cell is just wide enough for the x button (a tight utility cell), not a full
+   grid band. Under table-layout:fixed the <col> width wins, so the 12 content columns
+   stay flexible and only these two are clamped. */
+.txn-grid-2row col.txn-col-util { width: 2.25rem; }
 .txn-grid td.txn-cell {
   padding: 0;
   border: var(--border);
@@ -956,24 +960,28 @@ input[aria-invalid="true"] {
 .txn-delete-col,
 .txn-grid:not(.txn-grid-2row) .txn-delete-cell { width: 2.5rem; text-align: center; }
 
-/* p26.32 two-row split layout + per-split zebra. Each split is one <tbody class="txn-row">
-   holding a .txn-row-main (description / account / amount, wider) and a .txn-row-more
-   (fund / program / class / memo / error / delete, packed). The header colspans (5 / 4 / 3)
-   and the row cells' colspans divide the 12 implicit fixed-layout columns, so row 1's three
-   fields are wider than row 2's six. The per-split zebra bands BOTH physical rows together
-   by alternating the whole tbody -- nth-of-type is self-maintaining across add/delete/
-   reindex, and grouping by tbody means no data-split-index attribute is needed. */
-/* p26.38: the expense line grid uses <tbody class="el-row"> (not .txn-row) but the SAME
-   .txn-grid-2row table + .txn-cell cells, so the per-split zebra must band .el-row too;
-   its trailing status/delete cells are .el-row-error / .el-delete-cell. Both grids share
-   these selectors so a split's two physical <tr> band together on the even tbodies. */
+/* p26.32 / p28 two-row split layout + per-split zebra. Each split is one <tbody
+   class="txn-row"> holding a .txn-row-main (description / account / amount / error / delete)
+   and a .txn-row-more (fund / program·class / memo -- the memo now spans to the right edge).
+   The header colspans (5 / 4 / 5) and the row cells' colspans divide the 14 fixed-layout
+   columns; the trailing 2 are pinned narrow by the <colgroup> (error + delete). The
+   per-split zebra bands BOTH physical rows together by alternating the whole tbody --
+   nth-of-type is self-maintaining across add/delete/reindex, and grouping by tbody means no
+   data-split-index attribute is needed. */
+/* p26.38 / p28: the expense grid (<tbody class="el-row">) and budget grid (<tbody
+   class="bs-row">) reuse the SAME .txn-grid-2row table + .txn-cell cells, so the per-split
+   zebra must band them too; their trailing status/delete cells are .el-row-error /
+   .el-delete-cell and .bs-row-error / .bs-delete-cell. All three grids share these selectors
+   so a split's two physical <tr> band together on the even tbodies. */
 .txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-cell,
-.txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-util-cell,
 .txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-row-error,
 .txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-delete-cell,
 .txn-grid-2row tbody.el-row:nth-of-type(even) td.txn-cell,
 .txn-grid-2row tbody.el-row:nth-of-type(even) td.el-row-error,
-.txn-grid-2row tbody.el-row:nth-of-type(even) td.el-delete-cell {
+.txn-grid-2row tbody.el-row:nth-of-type(even) td.el-delete-cell,
+.txn-grid-2row tbody.bs-row:nth-of-type(even) td.txn-cell,
+.txn-grid-2row tbody.bs-row:nth-of-type(even) td.bs-row-error,
+.txn-grid-2row tbody.bs-row:nth-of-type(even) td.bs-delete-cell {
   background: var(--color-surface-alt);
 }
 .txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-cell input,
@@ -981,14 +989,14 @@ input[aria-invalid="true"] {
 .txn-grid-2row tbody.txn-row:nth-of-type(even) td.txn-cell .combo > .combo-text,
 .txn-grid-2row tbody.el-row:nth-of-type(even) td.txn-cell input,
 .txn-grid-2row tbody.el-row:nth-of-type(even) td.txn-cell select,
-.txn-grid-2row tbody.el-row:nth-of-type(even) td.txn-cell .combo > .combo-text {
+.txn-grid-2row tbody.el-row:nth-of-type(even) td.txn-cell .combo > .combo-text,
+.txn-grid-2row tbody.bs-row:nth-of-type(even) td.txn-cell input,
+.txn-grid-2row tbody.bs-row:nth-of-type(even) td.txn-cell select,
+.txn-grid-2row tbody.bs-row:nth-of-type(even) td.txn-cell .combo > .combo-text {
   background: var(--color-surface-alt);
 }
-/* A soft top rule opens each split so the two-row group reads as one unit. */
-.txn-grid-2row tbody.txn-row + tbody.txn-row,
-.txn-grid-2row tbody.el-row + tbody.el-row { border-top: 2px solid var(--color-primary); }
-/* Row 2's packed cells sit slightly indented visually via the left description column being
-   the widest; nothing else to do -- the colspans carry the proportions. */
+/* p28: the per-split zebra (above) already demarcates each two-row split, so the inter-split
+   top border was dropped -- the alternating band is the only separator. */
 
 /* p26.4 expense line grid: the same .txn-cell spreadsheet layout (the grid table already
    carries .txn-grid), so the account combo overlay is contained by its cell -- fixing the
@@ -1006,19 +1014,25 @@ input[aria-invalid="true"] {
    txn-cell, so it re-declares the ruled border + centering here. Shared by BOTH grids (the
    expense grid's .el-delete and the txn grid's .txn-delete). */
 .txn-grid td.el-delete-cell,
+.txn-grid td.bs-delete-cell,
 .txn-grid td.txn-delete-cell {
   text-align: center;
   border: var(--border);
   vertical-align: middle;
+  /* p28: a tight utility cell -- just the x button. No stretch beyond its content. */
+  padding: 0;
+  width: 2.25rem;
 }
 .el-delete,
+.bs-delete,
 .txn-delete {
   padding: var(--space-1) var(--space-2);
   line-height: 1;
   font-size: 1.1rem;
-  color: var(--color-muted, inherit);
+  color: var(--color-text-muted, inherit);
 }
 .el-delete:hover,
+.bs-delete:hover,
 .txn-delete:hover { color: var(--color-danger, inherit); }
 
 /* Row states. A server-flagged row and a client-detected out-of-subsidiary row
@@ -1034,16 +1048,18 @@ input[aria-invalid="true"] {
 .txn-row.sub-conflict td.txn-cell select,
 .txn-row.sub-conflict td.txn-cell .combo > .combo-text { background: var(--color-danger-bg); }
 .txn-row-error .field-error,
-.el-row-error .field-error { padding: 0; display: inline-block; }
+.el-row-error .field-error,
+.bs-row-error .field-error { padding: 0; display: inline-block; }
 /* p26.11: the trailing error cell is a STATUS/message strip, not an editable field. An
    empty error cell (borderless input in a bordered cell is the editable look) otherwise
    reads as a fillable input. Give it the page background (not the input --color-surface)
    and message padding so it is visibly a non-input cell. Applies to both grids' error
    columns (.txn-row-error on the txn grid, .el-row-error on the expense grid). */
 .txn-grid td.txn-row-error,
-.txn-grid td.el-row-error {
+.txn-grid td.el-row-error,
+.txn-grid td.bs-row-error {
   background: var(--color-bg);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-1) var(--space-2);
   color: var(--color-danger);
   font-size: 0.85rem;
   border: var(--border);
@@ -1182,13 +1198,17 @@ input[aria-invalid="true"] {
   min-height: 2.25rem;
 }
 .txn-fund-chips { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
+/* p28: a chip is NEUTRAL by default (a running total is not a problem) -- muted theme
+   surface + text, NOT the red error token. Only a genuine imbalance flips to danger. */
 .txn-total-chip, .txn-fund-chip {
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
 }
-/* A live imbalance is the alarm state; a balanced total shows nothing (empty chip). */
+/* A live imbalance is the alarm state; it flips the chip to danger so it stays distinct. */
 .txn-total-chip.imbalanced, .txn-fund-chip.imbalanced {
   background: var(--color-danger-bg);
   color: var(--color-danger);
@@ -1200,7 +1220,23 @@ input[aria-invalid="true"] {
    longer explanation than the short per-split memos. */
 .txn-notes-field { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-4); }
 .txn-notes-field > label { font-weight: 600; font-size: 0.85rem; color: var(--color-text-muted); }
-.txn-notes { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; }
+/* p28: a proper notes area -- fitted to the theme input tokens (border/radius/surface/
+   padding), a taller ~5-line min-height, and a readable ~60ch max width so it reads as a
+   notes box, not a stray full-bleed textarea. */
+.txn-notes {
+  width: 100%;
+  max-width: 60ch;
+  min-height: 7.5rem;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: var(--border);
+  border-radius: var(--radius);
+}
+.txn-notes:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -1px; }
 
 .txn-submit { display: flex; gap: var(--space-3); margin-top: var(--space-4); }
 

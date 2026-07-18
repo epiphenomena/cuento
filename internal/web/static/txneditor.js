@@ -81,7 +81,9 @@ function initEditor(form) {
     const unrestrictedLabel = form.dataset.chipUnrestricted || 'Unrestricted';
     const overall = form.querySelector('#txn-total-overall');
     if (overall) {
-      overall.textContent = total === 0 ? '' : fmtChip(totalLabel, total);
+      // p28: always show the running Total as a NEUTRAL chip (a balanced total is not an
+      // error). It flips to the danger `imbalanced` state only when it is genuinely nonzero.
+      overall.textContent = fmtChip(totalLabel, total);
       overall.classList.toggle('imbalanced', total !== 0);
     }
     const chips = form.querySelector('#txn-fund-chips');

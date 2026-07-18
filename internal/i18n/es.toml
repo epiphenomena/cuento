@@ -2038,6 +2038,10 @@ other = "Fecha"
 other = "Cuenta"
 [budget_plan.split.col.amount]
 other = "Monto"
+[budget_plan.split.col.fund]
+other = "Fondo"
+[budget_plan.split.col.program]
+other = "Programa"
 [budget_plan.split.account_none]
 other = "Seleccione una cuenta"
 [budget_plan.split.unrestricted]
