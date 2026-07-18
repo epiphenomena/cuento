@@ -56,8 +56,7 @@
     {{if .ShowAsOf}}
     <div class="report-field">
       <label for="rp-asof">{{t "reports.params.asof"}}</label>
-      <input type="text" id="rp-asof" name="asof" value="{{.AsOf}}"
-             inputmode="numeric" autocomplete="off">
+      {{template "datefield" (datefield "rp-asof" "asof" .AsOf "" "" "" false)}}
     </div>
     {{end}}
 
