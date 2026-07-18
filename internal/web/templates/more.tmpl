@@ -10,9 +10,11 @@
   This is the reusable card-grid landing — the "cards linking to destinations" pattern.
 */ -}}
 
-{{define "all-cards" -}}
-{{- /* Dot is a hubPageModel. */ -}}
-{{range .Sections}}
+{{- /* p28.12: ONE reusable card-section partial (dot is an allSection). The "All"
+     landing and the /reports index both render their card grids through this, so the
+     two pages match exactly (same .hub-section / .hub-cards / .hub-card classes). Each
+     page owns its own heading + empty-state; only the section body lives here. */ -}}
+{{define "card-section" -}}
 <section class="hub-section">
   <h2 class="hub-section-title">{{.Label}}</h2>
   <ul class="hub-cards">
@@ -26,6 +28,12 @@
     {{end}}
   </ul>
 </section>
+{{- end}}
+
+{{define "all-cards" -}}
+{{- /* Dot is a hubPageModel. */ -}}
+{{range .Sections}}
+{{template "card-section" .}}
 {{else}}
 <p class="hub-empty">{{t "all.empty"}}</p>
 {{end}}

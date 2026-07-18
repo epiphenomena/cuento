@@ -1,27 +1,22 @@
 {{/*
   p15.12 reports index (GET /reports, AnyUser). Lists the reports the CURRENT user may
-  access, grouped by report group (financial / funds / programs / tax), each a plain
-  link to its concrete /reports/{id} page. The handler has ALREADY filtered the groups
-  and reports by grant (reusing the route enforcement path), so this template only
-  renders what it is handed -- a group section appears only when it has >=1 permitted
-  report; an empty model (no grants, non-admin) shows the empty-state message, not an
-  error. Every label via {{t}} (rule 9); report titles are pre-localized in the handler;
-  no inline script (rule 12). .Page is a reportsIndexModel.
+  access, grouped by report group (financial / funds / programs / tax / …). p28.12: each
+  group renders as a GRID OF CARDS WITH DESCRIPTIONS — the SAME "card-section" partial
+  (and .hub-* CSS classes) the "All" landing uses — instead of a flat <ul> link list, so
+  the two pages look identical. The handler has ALREADY filtered the groups and reports
+  by grant (reusing the route enforcement path, program-dimension aware), so this template
+  only renders what it is handed: a section appears only when it has >=1 permitted report;
+  an empty model (no grants, non-admin) shows the empty-state message, not an error. Every
+  label via {{t}} (rule 9); report titles/descriptions are pre-localized in the handler;
+  no inline script (rule 12). .Page is a reportsIndexModel (its Sections are allSections).
 */ -}}
 {{define "reports_index.tmpl" -}}
 {{template "shell-open" (shellTitle . (t "reports.index.title"))}}
   <h1>{{t "reports.index.title"}}</h1>
   {{- with .Page}}
-  {{- if .Groups}}
-  {{- range .Groups}}
-  <section class="reports-group">
-    <h2>{{.Label}}</h2>
-    <ul class="reports-list">
-      {{- range .Reports}}
-      <li><a href="{{.Href}}">{{.Title}}</a></li>
-      {{- end}}
-    </ul>
-  </section>
+  {{- if .Sections}}
+  {{- range .Sections}}
+  {{template "card-section" .}}
   {{- end}}
   {{- else}}
   <p class="reports-empty">{{t "reports.index.empty"}}</p>

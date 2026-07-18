@@ -816,23 +816,12 @@ func renderCell(c reports.Cell, reportID, lang string, opts money.FormatOpts, df
 // ---- index (p15.12) -------------------------------------------------------
 
 // reportsIndexModel is the /reports index template model: the report groups the
-// current user may access, each a section of report links. Empty (no permitted
+// current user may access, each a section of report CARDS (p28.12). It carries the
+// SAME allSection/hubCardItem shape the "All" landing uses, so both pages render
+// through the shared "card-section" partial (identical card grid). Empty (no permitted
 // group) renders the empty-state message, not an error.
 type reportsIndexModel struct {
-	Groups []reportGroupSection
-}
-
-// reportGroupSection is one report-group section of the index: a localized group
-// label and the reports in that group the user may reach (each a link + title).
-type reportGroupSection struct {
-	Label   string
-	Reports []reportLink
-}
-
-// reportLink is one report on the index: its /reports/{id} href and localized title.
-type reportLink struct {
-	Href  string
-	Title string
+	Sections []allSection
 }
 
 // reportsIndex handles GET /reports (AnyUser): it lists the reports the CURRENT user
@@ -859,7 +848,7 @@ func (s *server) reportsIndex(w http.ResponseWriter, r *http.Request) {
 	// Bucket the permitted reports by group, preserving reports.Groups() order for the
 	// sections and All() order within each group (both stable), so the index is
 	// deterministic and matches the grant UI's group order (reports.go / D10).
-	byGroup := make(map[string][]reportLink)
+	byGroup := make(map[string][]hubCardItem)
 	for _, rep := range s.reports.All() {
 		// ReportGroupFor carries the report's program-dimensioned bit (p27.4), so a
 		// purely program-scoped user's index lists the program-dimensioned reports
@@ -868,21 +857,24 @@ func (s *server) reportsIndex(w http.ResponseWriter, r *http.Request) {
 		if decide(ReportGroupFor(rep), u, checker) != outcomeAllow {
 			continue
 		}
-		byGroup[rep.Group] = append(byGroup[rep.Group], reportLink{
+		byGroup[rep.Group] = append(byGroup[rep.Group], hubCardItem{
+			Label: i18n.T(lang, rep.TitleKey),
 			Href:  "/reports/" + rep.ID,
-			Title: i18n.T(lang, rep.TitleKey),
+			// p28.12: each report card carries its one-line description (the same blurb
+			// the "All" landing shows), from reports.<id>.desc via reportDescKey.
+			Desc: i18n.T(lang, reportDescKey(rep.TitleKey)),
 		})
 	}
 
 	var model reportsIndexModel
 	for _, g := range reports.Groups() {
-		links := byGroup[g]
-		if len(links) == 0 {
+		cards := byGroup[g]
+		if len(cards) == 0 {
 			continue // a section renders only when it has >=1 permitted report
 		}
-		model.Groups = append(model.Groups, reportGroupSection{
-			Label:   i18n.T(lang, "reports.group."+g),
-			Reports: links,
+		model.Sections = append(model.Sections, allSection{
+			Label: i18n.T(lang, "reports.group."+g),
+			Cards: cards,
 		})
 	}
 
