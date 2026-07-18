@@ -116,10 +116,12 @@ function endOfMonth(d) { return fromJS(new Date(d.y, d.m, 0)); }
 // field's current value (or today when empty/unparsed):
 //   [ ] -> previous / next month     - + -> previous / next day     h -> end of month
 //   t   -> today
+// '=' is an alias for '+' (owner: "make '=' same as '+'") — the unshifted key on the
+// same physical cap, so a forward-day shift needs no Shift press.
 // It returns the new string, or null when the key is not a shortcut OR must stay
-// LITERAL: '-'/'+' are separators while a partial date is being typed (non-empty and
-// not yet parseable), so they only shift a day once the field holds a complete date
-// (or is empty). Mirrors the p23.3 server forms so shortcuts and typing agree.
+// LITERAL: '-'/'+'/'=' are separators while a partial date is being typed (non-empty
+// and not yet parseable), so they only shift a day once the field holds a complete
+// date (or is empty). Mirrors the p23.3 server forms so shortcuts and typing agree.
 function applyShortcut(key, value, fmt, now) {
   const cur = parseDate(value, fmt, now);
   const base = cur || todayOf(now);
@@ -133,10 +135,12 @@ function applyShortcut(key, value, fmt, now) {
     case 'h':
       return formatDate(endOfMonth(base), fmt);
     case '-':
-    case '+': {
+    case '+':
+    case '=': {
       const v = (value || '').trim();
       if (v !== '' && cur === null) return null; // mid-typing -> literal separator
-      return formatDate(shiftDay(base, key === '+' ? 1 : -1), fmt);
+      const forward = key === '+' || key === '='; // '=' aliases '+' (same physical cap)
+      return formatDate(shiftDay(base, forward ? 1 : -1), fmt);
     }
     default:
       return null;

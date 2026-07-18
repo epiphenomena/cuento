@@ -105,6 +105,19 @@ test('applyShortcut: - / + stay LITERAL while a partial date is being typed', ()
   assert.equal(applyShortcut(']', '2026-06', 'ISO', NOW), '2026-08-13');
 });
 
+test('applyShortcut: "=" is an alias for "+" (shift a day forward)', () => {
+  // The owner asked "make '=' same as '+'": '=' shifts a day FORWARD, identically
+  // to '+', including the mid-typing-literal guard. Assert byte-for-byte parity.
+  for (const value of ['2026-06-15', '', '06/15/2026']) {
+    const fmt = value.includes('/') ? 'US' : 'ISO';
+    assert.equal(applyShortcut('=', value, fmt, NOW), applyShortcut('+', value, fmt, NOW));
+  }
+  assert.equal(applyShortcut('=', '2026-06-15', 'ISO', NOW), '2026-06-16');
+  // Mid-typing a partial date -> '=' stays a literal (null), exactly like '+'.
+  assert.equal(applyShortcut('=', '2026-06', 'ISO', NOW), null);
+  assert.equal(applyShortcut('=', '26-6', 'ISO', NOW), null);
+});
+
 test('applyShortcut: non-shortcut keys return null', () => {
   assert.equal(applyShortcut('a', '2026-06-15', 'ISO', NOW), null);
   assert.equal(applyShortcut('5', '2026-06-15', 'ISO', NOW), null);
