@@ -1409,25 +1409,25 @@ other = "Unrestricted"
 other = "— choose a budget —"
 [reports.budget.unrestricted]
 other = "Unrestricted"
-[reports.actuals_vs_budget.title]
-other = "Actuals vs budget"
-[reports.actuals_vs_budget.col.bucket]
+[reports.budget_variance.title]
+other = "Budget variance"
+[reports.budget_variance.col.bucket]
 other = "Period"
-[reports.actuals_vs_budget.col.account]
+[reports.budget_variance.col.account]
 other = "Account"
-[reports.actuals_vs_budget.col.fund]
+[reports.budget_variance.col.fund]
 other = "Fund"
-[reports.actuals_vs_budget.col.program]
+[reports.budget_variance.col.program]
 other = "Program"
-[reports.actuals_vs_budget.col.currency]
+[reports.budget_variance.col.currency]
 other = "Currency"
-[reports.actuals_vs_budget.col.budgeted]
+[reports.budget_variance.col.budgeted]
 other = "Budgeted"
-[reports.actuals_vs_budget.col.actual]
+[reports.budget_variance.col.actual]
 other = "Actual"
-[reports.actuals_vs_budget.col.variance]
+[reports.budget_variance.col.variance]
 other = "Variance"
-[reports.actuals_vs_budget.total]
+[reports.budget_variance.total]
 other = "Total"
 [reports.cashflow_projection.title]
 other = "Cashflow projection"
@@ -2199,10 +2199,10 @@ other = "Revenue and expense by program — the basis for Form 990 Part III."
 other = "The full 990 package: revenue, functional expenses, and net assets."
 [reports.reconciliation_statement.desc]
 other = "The cleared and outstanding items for a completed reconciliation."
-[reports.actuals_vs_budget.desc]
-other = "Budgeted versus actual amounts with the variance for each line."
+[reports.budget_variance.desc]
+other = "Projected budget versus actual amounts with the variance for each account, fund, and program."
 [reports.cashflow_projection.desc]
-other = "Projected cash inflows and outflows from schedules and budgets."
+other = "Projected cash inflows and outflows per fund from a budget plan's splits."
 [nav.budgetplans]
 other = "Budget plans"
 [budget_plan.list.title]

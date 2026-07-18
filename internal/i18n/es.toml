@@ -1410,25 +1410,25 @@ other = "Sin restricción"
 other = "— elija un presupuesto —"
 [reports.budget.unrestricted]
 other = "Sin restricción"
-[reports.actuals_vs_budget.title]
-other = "Reales vs presupuesto"
-[reports.actuals_vs_budget.col.bucket]
+[reports.budget_variance.title]
+other = "Variación presupuestaria"
+[reports.budget_variance.col.bucket]
 other = "Período"
-[reports.actuals_vs_budget.col.account]
+[reports.budget_variance.col.account]
 other = "Cuenta"
-[reports.actuals_vs_budget.col.fund]
+[reports.budget_variance.col.fund]
 other = "Fondo"
-[reports.actuals_vs_budget.col.program]
+[reports.budget_variance.col.program]
 other = "Programa"
-[reports.actuals_vs_budget.col.currency]
+[reports.budget_variance.col.currency]
 other = "Moneda"
-[reports.actuals_vs_budget.col.budgeted]
+[reports.budget_variance.col.budgeted]
 other = "Presupuestado"
-[reports.actuals_vs_budget.col.actual]
+[reports.budget_variance.col.actual]
 other = "Real"
-[reports.actuals_vs_budget.col.variance]
+[reports.budget_variance.col.variance]
 other = "Variación"
-[reports.actuals_vs_budget.total]
+[reports.budget_variance.total]
 other = "Total"
 [reports.cashflow_projection.title]
 other = "Proyección de flujo de caja"
@@ -2188,10 +2188,10 @@ other = "Ingresos y gastos por programa — la base de la Parte III del Formular
 other = "El paquete completo del 990: ingresos, gastos funcionales y activos netos."
 [reports.reconciliation_statement.desc]
 other = "Las partidas conciliadas y pendientes de una conciliación completada."
-[reports.actuals_vs_budget.desc]
-other = "Montos presupuestados frente a reales con la variación de cada línea."
+[reports.budget_variance.desc]
+other = "Montos presupuestados frente a reales con la variación por cuenta, fondo y programa."
 [reports.cashflow_projection.desc]
-other = "Entradas y salidas de efectivo proyectadas a partir de programaciones y presupuestos."
+other = "Entradas y salidas de efectivo proyectadas por fondo a partir de los renglones de un plan presupuestario."
 [nav.budgetplans]
 other = "Planes de presupuesto"
 [budget_plan.list.title]

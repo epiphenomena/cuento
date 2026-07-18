@@ -191,31 +191,32 @@ func (s *server) resolveParams(
 		}
 	}
 	if rep.ParamsSpec.Budget {
-		// The report-specific BUDGET param (p19.4): parse ?budget= and validate against the
-		// real budget set (an arbitrary id is dropped -> no budget, empty table). When a
-		// budget IS chosen and the user has NOT overridden the period, default From/To to the
-		// budget's own period (the natural window for its forecast/variance). Only fetched
-		// for a report whose spec declares it.
-		budgets, err := s.budgetReportOptions(ctx)
+		// The report-specific BUDGET param (p27.3): parse ?budget= as a budget-PLAN id
+		// and validate against the real plan set (an arbitrary id is dropped -> no plan,
+		// empty table). When a plan IS chosen and the user has NOT overridden the period,
+		// default From/To to the SPAN of the plan's split dates (a plan has no stored
+		// period -- p27.3 DECISIONS -- so the data drives the natural window). Only
+		// fetched for a report whose spec declares it.
+		plans, err := s.budgetReportOptions(ctx)
 		if err != nil {
 			return reports.Params{}, paramsForm{}, err
 		}
 		if v := first(q, "budget"); v != "" {
-			if id := parseID(v); id != 0 && budgetExists(budgets, id) {
+			if id := parseID(v); id != 0 && budgetExists(plans, id) {
 				p.Budget = id
 			}
 		}
 		if p.Budget != 0 && rep.ParamsSpec.Period {
-			bg, err := s.store.GetBudget(ctx, p.Budget)
+			from, to, err := s.planDateSpan(ctx, p.Budget)
 			if err != nil {
 				return reports.Params{}, paramsForm{}, err
 			}
 			// Only when the user did not supply from/to (else respect the override).
-			if first(q, "from") == "" {
-				p.From = bg.PeriodStart
+			if first(q, "from") == "" && from != "" {
+				p.From = from
 			}
-			if first(q, "to") == "" {
-				p.To = bg.PeriodEnd
+			if first(q, "to") == "" && to != "" {
+				p.To = to
 			}
 		}
 	}
@@ -389,41 +390,61 @@ func reconExists(recons []reconOption, id int64) bool {
 	return false
 }
 
-// budgetOption is one selectable budget in the budget reports' BUDGET selector
-// (p19.4): a budget with a display label (its name + period). Picking one drives the
-// actuals-vs-budget / cashflow-projection report. The report-specific analogue of
-// reconOption.
+// budgetOption is one selectable budget PLAN in the budget reports' BUDGET selector
+// (p27.3): a plan with a display label (its name). Picking one drives the cashflow-
+// projection / budget-variance report. The report-specific analogue of reconOption.
 type budgetOption struct {
 	ID    int64
 	Label string
 }
 
-// budgetReportOptions returns every budget (id-ordered) with a display label (name +
-// period bounds), for the budget reports' budget selector.
+// budgetReportOptions returns every budget PLAN (id-ordered) with a display label
+// (name), for the budget reports' plan selector.
 func (s *server) budgetReportOptions(ctx context.Context) ([]budgetOption, error) {
-	bs, err := s.store.ListBudgets(ctx)
+	ps, err := s.store.ListBudgetPlans(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]budgetOption, 0, len(bs))
-	for _, b := range bs {
-		out = append(out, budgetOption{
-			ID:    b.ID,
-			Label: b.Name + " (" + b.PeriodStart + " – " + b.PeriodEnd + ")",
-		})
+	out := make([]budgetOption, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, budgetOption{ID: p.ID, Label: p.Name})
 	}
 	return out, nil
 }
 
-// budgetExists reports whether id is one of the offered budgets (a query budget override
-// must name a real budget, else no budget is selected -> empty table).
-func budgetExists(budgets []budgetOption, id int64) bool {
-	for _, b := range budgets {
-		if b.ID == id {
+// budgetExists reports whether id is one of the offered plans (a query budget override
+// must name a real plan, else no plan is selected -> empty table).
+func budgetExists(plans []budgetOption, id int64) bool {
+	for _, p := range plans {
+		if p.ID == id {
 			return true
 		}
 	}
 	return false
+}
+
+// planDateSpan returns the min and max split dates of a budget plan (its natural
+// report window, since a plan carries no stored period -- p27.3). Empty strings when
+// the plan has no splits. BudgetSplits is date-ordered, so the first and last rows
+// bound the span.
+func (s *server) planDateSpan(ctx context.Context, planID int64) (from, to string, err error) {
+	splits, err := s.store.BudgetSplits(ctx, planID)
+	if err != nil {
+		return "", "", err
+	}
+	if len(splits) == 0 {
+		return "", "", nil
+	}
+	from, to = splits[0].Date, splits[0].Date
+	for _, sp := range splits {
+		if sp.Date < from {
+			from = sp.Date
+		}
+		if sp.Date > to {
+			to = sp.Date
+		}
+	}
+	return from, to, nil
 }
 
 // resolveDate parses a query date value per the user's date format (ISO always

@@ -88,6 +88,24 @@ type Expected struct {
 	// budget's id, the period the reports run over, and the (schedule-resolved)
 	// line ids so a report test can drive the budget without re-deriving them.
 	SampleBudget SampleBudgetExpected
+
+	// SampleBudgetPlan is the p27.2 sample budget-PLAN seam (the NEW split-derived
+	// model), populated ONLY after (*Fixture).ExtendSampleBudgetPlan(t) is called;
+	// the zero value (Plan 0) means the seam has not been applied. It captures the
+	// plan id + the natural report window (the span of its split dates) so the p27.3
+	// cash-flow / variance report tests can drive the plan without re-deriving them.
+	SampleBudgetPlan SampleBudgetPlanExpected
+}
+
+// SampleBudgetPlanExpected holds the p27.2 sample budget-PLAN seam's expectations:
+// the plan id and the period the p27.3 budget reports run over (the span of the
+// plan's split dates). Amounts are SYNTHETIC (rule 11) and asserted off the emitted
+// report cells / reviewed goldens rather than pinned here.
+type SampleBudgetPlanExpected struct {
+	Plan   int64
+	From   string // earliest split date (the reports' default window start)
+	To     string // latest split date (the reports' default window end)
+	Splits int    // number of budget-splits the seam created
 }
 
 // SampleBudgetExpected holds the p26.80 sample-budget seam's expectations: the

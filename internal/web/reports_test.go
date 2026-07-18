@@ -456,12 +456,12 @@ func TestReportsIndexGrantFiltersGroups(t *testing.T) {
 
 	// Reports in the OTHER groups (funds/programs/tax/reconciliation/budget) must NOT
 	// appear: fund_activity (funds), program_statement (programs), functional_expenses +
-	// form_990 (tax), reconciliation_statement (reconciliation), actuals_vs_budget +
-	// cashflow_projection (budget).
+	// form_990 (tax), reconciliation_statement (reconciliation), cashflow_projection +
+	// budget_variance (budget).
 	for _, id := range []string{
 		"fund_activity", "program_statement", "functional_expenses", "form_990",
 		reports.ReconciliationStatementReportID,
-		reports.ActualsVsBudgetReportID, reports.CashflowProjectionReportID,
+		reports.CashflowProjectionReportID, reports.BudgetVarianceReportID,
 	} {
 		if strings.Contains(body, reportHref(id)) {
 			t.Errorf("financial-only index wrongly lists non-financial report %q", id)
@@ -519,11 +519,11 @@ func TestReportsIndexBudgetGrant(t *testing.T) {
 	}
 	body := rec.Body.String()
 
-	if !strings.Contains(body, reportHref(reports.ActualsVsBudgetReportID)) {
-		t.Errorf("budget-only index missing actuals_vs_budget link")
-	}
 	if !strings.Contains(body, reportHref(reports.CashflowProjectionReportID)) {
 		t.Errorf("budget-only index missing cashflow_projection link")
+	}
+	if !strings.Contains(body, reportHref(reports.BudgetVarianceReportID)) {
+		t.Errorf("budget-only index missing budget_variance link")
 	}
 	if !strings.Contains(body, i18n.T("en", "reports.group.budget")) {
 		t.Errorf("budget-only index missing the budget group label")

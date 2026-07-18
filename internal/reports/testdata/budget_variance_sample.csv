@@ -1,0 +1,13 @@
+Period,Account,Fund,Program,Currency,Budgeted,Actual,Variance
+2026-01-01,Contributions,Unrestricted,General,USD,-4000.00,0.00,4000.00
+2026-01-01,Program Service Fees,Unrestricted,Educacion,USD,0.00,-1200.00,-1200.00
+2026-01-01,Occupancy,Building Fund,Educacion,USD,900.00,0.00,-900.00
+2026-02-01,Salaries,Unrestricted,General,USD,1800.00,8500.00,6700.00
+2026-03-01,Program Service Fees,Unrestricted,Educacion,USD,-1200.00,0.00,1200.00
+2026-03-01,Food Purchases,Unrestricted,Food Pantry,MXN,0.00,1500.00,1500.00
+2026-04-01,Contributions,Unrestricted,General,USD,-3500.00,0.00,3500.00
+2026-04-01,Occupancy,Building Fund,Educacion,USD,900.00,0.00,-900.00
+2026-05-01,Salaries,Unrestricted,General,USD,1850.00,0.00,-1850.00
+2026-05-01,Occupancy,Unrestricted,General,USD,0.00,1550.00,1550.00
+Total,,,,MXN,0.00,1500.00,1500.00
+Total,,,,USD,-3250.00,8850.00,12100.00

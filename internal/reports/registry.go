@@ -40,8 +40,8 @@ func Default() *Registry {
 	registerProgramStatement(reg)
 	registerForm990(reg)
 	registerReconciliationStatement(reg)
-	registerActualsVsBudget(reg)
 	registerCashflowProjection(reg)
+	registerBudgetVariance(reg)
 	registerCapitalCampaign(reg)
 	return reg
 }

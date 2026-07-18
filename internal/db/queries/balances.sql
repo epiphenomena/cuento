@@ -87,6 +87,32 @@ WHERE t.deleted = 0
 GROUP BY COALESCE(sp.fund_id, 0), t.currency
 ORDER BY fund_id, t.currency;
 
+-- name: CurrentCashFundBalancesAsOf :many
+-- Per (fund, currency): the fund's cumulative CASH-AVAILABLE balance to asof in
+-- scope, restricted to accounts flagged current_cash (p27.1) -- the cash-flow
+-- projection's PER-FUND opening base (DECISIONS "Budget redesign", p27.3). Mirrors
+-- FundBalancesAsOf exactly but filters a.current_cash = 1 instead of a.type =
+-- 'asset': spendable cash is a strict subset of the fund's asset position (it
+-- excludes receivables and capitalized non-cash assets -- cf. p26.94), which is
+-- what "opening cash available" means. INCLUDES the unrestricted group (NULL
+-- fund_id -> fund id 0 via COALESCE, D20). Params: scopeSub, asof.
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT COALESCE(sp.fund_id, 0) AS fund_id, t.currency,
+       CAST(SUM(sp.amount) AS INTEGER) AS balance
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+JOIN accounts a ON a.id = sp.account_id
+WHERE t.deleted = 0
+  AND a.current_cash = 1
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY COALESCE(sp.fund_id, 0), t.currency
+ORDER BY fund_id, t.currency;
+
 -- name: FunctionalActivity :many
 -- Per (expense account, functional_class, currency): signed activity over the
 -- period in scope. Only expense splits carry a class (D21), so the NOT NULL filter

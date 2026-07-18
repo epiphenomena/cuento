@@ -123,6 +123,28 @@ func (s *Store) FundBalancesAsOf(ctx context.Context, asof string, scopeSub int6
 	return out, nil
 }
 
+// CurrentCashFundBalancesAsOf returns, per (fund, currency), the fund's cumulative
+// CASH-AVAILABLE balance to asof in scopeSub's descendant closure -- the sum over
+// accounts flagged current_cash (p27.1), INCLUDING the unrestricted group (fund id
+// 0, D20). It is the cash-flow projection's PER-FUND opening base (p27.3): unlike
+// FundBalancesAsOf (the whole asset-side position, which includes receivables and
+// capitalized non-cash assets), this is strictly the spendable cash the org can
+// project forward.
+func (s *Store) CurrentCashFundBalancesAsOf(ctx context.Context, asof string, scopeSub int64) ([]FundCurrencyAmount, error) {
+	rows, err := s.q.CurrentCashFundBalancesAsOf(ctx, sqlc.CurrentCashFundBalancesAsOfParams{
+		ID:   scopeSub,
+		Date: asof,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store: current-cash fund balances as of %s (scope %d): %w", asof, scopeSub, err)
+	}
+	out := make([]FundCurrencyAmount, len(rows))
+	for i, r := range rows {
+		out[i] = FundCurrencyAmount{FundID: r.FundID, Currency: r.Currency, Amount: r.Balance}
+	}
+	return out, nil
+}
+
 // FunctionalActivity returns, per (expense account, functional class, currency),
 // the signed activity over from <= date <= to in scopeSub's descendant closure.
 // Only expense splits carry a class (D21), so the result contains exactly the
