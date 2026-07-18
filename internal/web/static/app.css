@@ -663,7 +663,13 @@ input[aria-invalid="true"] {
   border-bottom: var(--border);
   text-align: left;
 }
-.report-table th.amount, .report-table td.amount { text-align: right; font-variant-numeric: tabular-nums; }
+/* p28.25: money cells never wrap -- a 6-figure negative like "-123,456.78" must
+   keep its sign and digits on one line (the minus was wrapping to its own row). */
+.report-table th.amount, .report-table td.amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .report-indent-1 td:first-child { padding-left: calc(var(--space-4) * 1.5); }
 .report-indent-2 td:first-child { padding-left: calc(var(--space-4) * 3); }
 .report-indent-3 td:first-child { padding-left: calc(var(--space-4) * 4.5); }
