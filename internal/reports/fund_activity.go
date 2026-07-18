@@ -37,12 +37,19 @@ const FundActivityReportID = "fund_activity"
 // controls the single-fund statement window; the list view uses To as its as-of date.
 func registerFundActivity(reg *Registry) {
 	reg.Register(Report{
-		ID:                 FundActivityReportID,
-		TitleKey:           "reports.fund_activity.title",
-		Group:              "funds",
-		ParamsSpec:         ParamsSpec{Period: true, Fund: true},
-		Run:                runFundActivity,
-		ProgramDimensioned: true, // p27.4: R/E activity carries a program (grant-subtree filterable).
+		ID:         FundActivityReportID,
+		TitleKey:   "reports.fund_activity.title",
+		Group:      "funds",
+		ParamsSpec: ParamsSpec{Period: true, Fund: true},
+		Run:        runFundActivity,
+		// p27.4b: NOT ProgramDimensioned. This report is entirely balance-centric -- the
+		// fund roster's as-of asset balances and the single-fund Opening/Received/Applied/
+		// Closing statement (FundBalancesAsOf / FundPeriodStatement). NONE of that content
+		// carries a program (D24: only R/E SPLITS do; a fund's asset position does not), so
+		// there is nothing to filter to a program subtree -- suppression would leave an
+		// empty report. A purely program-scoped grant does NOT reach it (needs an unscoped
+		// "funds" grant). The "funds" group has no program-dimensioned report (noted for the
+		// 27.4c picker: a program-scoped grant to "funds" reaches nothing).
 	})
 }
 

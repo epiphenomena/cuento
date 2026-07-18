@@ -50,12 +50,18 @@ const (
 // specific BUDGET (plan) selector.
 func registerCashflowProjection(reg *Registry) {
 	reg.Register(Report{
-		ID:                 CashflowProjectionReportID,
-		TitleKey:           "reports.cashflow_projection.title",
-		Group:              "budget",
-		ParamsSpec:         ParamsSpec{Period: true, Granularity: true, Budget: true},
-		Run:                runCashflowProjection,
-		ProgramDimensioned: true, // p27.4: budget-splits carry a program (grant-subtree filterable).
+		ID:         CashflowProjectionReportID,
+		TitleKey:   "reports.cashflow_projection.title",
+		Group:      "budget",
+		ParamsSpec: ParamsSpec{Period: true, Granularity: true, Budget: true},
+		Run:        runCashflowProjection,
+		// p27.4b: NOT ProgramDimensioned. The projection's opening/running/end balances come
+		// from CurrentCashFundBalancesAsOf -- per-FUND spendable cash, which carries NO
+		// program dimension (cash isn't program-tagged). Only the flow deltas carry a
+		// program; filtering flows but not the opening would ship org-wide opening balances
+		// (the leak). Stripping the opening would gut the projection. So a purely
+		// program-scoped grant does NOT reach it (needs an unscoped "budget" grant); the
+		// program-carrying budget_variance keeps the "budget" group's scoped reach.
 	})
 }
 

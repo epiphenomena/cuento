@@ -205,3 +205,89 @@ func cashflowRow(t reports.Table, fundLabel, ccy string) (reports.Row, bool) {
 	}
 	return reports.Row{}, false
 }
+
+// TestBudgetVarianceGrantProgramScope (p27.4b): a program-scoped report grant filters the
+// budget-variance report's rows -- BOTH the projected (budget-split) side and the ACTUAL
+// side -- to the granted program SUBTREE, so a SIBLING subtree never surfaces, including in
+// the rolled per-currency TOTAL row. The sample plan (ExtendSampleBudgetPlan) carries both
+// General-program and Educacion-program splits; scoping to Educacion drops every General
+// row.
+func TestBudgetVarianceGrantProgramScope(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendSampleBudgetPlan(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	sp := f.Expected.SampleBudgetPlan
+	rep := budgetReport(t, reports.BudgetVarianceReportID)
+	base := reports.Params{
+		Scope: f.IDs.Root, Budget: sp.Plan, From: sp.From, To: sp.To,
+		Granularity: reports.GranMonth, Lang: "en",
+	}
+	baseT, err := rep.Run(ctx, reports.NewToolkit(f.Store, base), base)
+	if err != nil {
+		t.Fatalf("run unscoped: %v", err)
+	}
+	// Baseline: General-program rows ARE present (the sibling is there without a scope).
+	if !bvHasProgramRow(baseT, "General") {
+		t.Fatalf("unscoped budget variance missing a General-program row (sibling present)")
+	}
+	baseUSDTotal, ok := bvTotalFor(baseT, "USD")
+	if !ok {
+		t.Fatalf("unscoped: no USD total row")
+	}
+
+	// Scope to Educacion (leaf subtree = {Educacion}): every General-program row vanishes.
+	p := base
+	p.ProgramScope = []int64{f.IDs.Educacion}
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run scoped: %v", err)
+	}
+	// No DATA row may carry the General program (the sibling); at least one Educacion row
+	// must survive (both the projected and actual sides are filtered, so a row exists).
+	for _, r := range table.Rows {
+		if r.Kind == reports.RowData && len(r.Cells) >= 4 && r.Cells[3].Text == "General" {
+			t.Errorf("scoped budget variance leaks a General-program row: %+v", r.Cells)
+		}
+	}
+	if !bvHasProgramRow(table, "Educacion") {
+		t.Errorf("scoped budget variance dropped Educacion (in-subtree) rows")
+	}
+	// The rolled USD TOTAL reflects only Educacion's budgeted+actual -- it must move off the
+	// org-wide figure (a General leak would keep it identical). Both sides were filtered, so
+	// the budgeted and actual totals both shrink.
+	scopedUSDTotal, ok := bvTotalFor(table, "USD")
+	if !ok {
+		t.Fatalf("scoped: no USD total row")
+	}
+	if scopedUSDTotal.budgeted == baseUSDTotal.budgeted {
+		t.Errorf("scoped USD budgeted total %d == org-wide %d; a General row leaked into the rollup",
+			scopedUSDTotal.budgeted, baseUSDTotal.budgeted)
+	}
+}
+
+// bvHasProgramRow reports whether any DATA row of a budget-variance table carries the given
+// program name in the program column (index 3).
+func bvHasProgramRow(t reports.Table, program string) bool {
+	for _, r := range t.Rows {
+		if r.Kind == reports.RowData && len(r.Cells) >= 4 && r.Cells[3].Text == program {
+			return true
+		}
+	}
+	return false
+}
+
+// bvTotals holds a budget-variance TOTAL row's budgeted + actual figures (a currency).
+type bvTotals struct{ budgeted, actual int64 }
+
+// bvTotalFor returns the budgeted/actual figures of the per-currency TOTAL row (the label
+// row whose currency cell, index 4, equals ccy). Columns: [bucket, account, fund, program,
+// currency, budgeted, actual, variance].
+func bvTotalFor(t reports.Table, ccy string) (bvTotals, bool) {
+	for _, r := range t.Rows {
+		if r.Kind == reports.RowTotal && len(r.Cells) >= 7 && r.Cells[4].Text == ccy {
+			return bvTotals{budgeted: r.Cells[5].Minor, actual: r.Cells[6].Minor}, true
+		}
+	}
+	return bvTotals{}, false
+}

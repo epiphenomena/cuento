@@ -134,6 +134,34 @@ WHERE t.deleted = 0
 GROUP BY sp.account_id, sp.functional_class, t.currency
 ORDER BY sp.account_id, sp.functional_class, t.currency;
 
+-- name: FunctionalActivityByProgram :many
+-- Per (expense account, functional_class, program, currency): signed activity over
+-- the period in scope. Like FunctionalActivity but ALSO groups by program_id -- the
+-- p27.4 SCOPED variant: a program-scoped report grant filters the functional-expense
+-- matrix to the granted program subtree BEFORE rolling classes up, so a sibling
+-- subtree's expense never contributes to a functional line. Expense splits carry BOTH
+-- a class (D21) and a program (D24), so the NOT NULL filters restrict to exactly the
+-- expense activity, keyed additionally by program. This query is used ONLY on the
+-- scoped path (ProgramScope set); the unscoped path keeps FunctionalActivity untouched
+-- (so the goldens do not move). Params: scopeSub, from, to.
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT sp.account_id, sp.functional_class, sp.program_id, t.currency,
+       CAST(SUM(sp.amount) AS INTEGER) AS activity
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+WHERE t.deleted = 0
+  AND sp.functional_class IS NOT NULL
+  AND sp.program_id IS NOT NULL
+  AND t.date >= ?
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY sp.account_id, sp.functional_class, sp.program_id, t.currency
+ORDER BY sp.account_id, sp.functional_class, sp.program_id, t.currency;
+
 -- name: ProgramActivity :many
 -- Per (program, account, currency): signed activity over the period in scope. Only
 -- revenue/expense splits carry a program (D24), so the NOT NULL filter restricts to

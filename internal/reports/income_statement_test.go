@@ -437,3 +437,72 @@ func TestIncomeStatementDrill(t *testing.T) {
 		}
 	}
 }
+
+// TestIncomeStatementGrantProgramScope (p27.4b): a program-scoped report grant filters
+// the income statement's R/E rows to the granted program SUBTREE, so a SIBLING subtree's
+// activity vanishes from every row -- including the rolled Total-expenses/Total-revenue
+// SUBTOTAL rows (the leak a rendered-row filter would miss). Scoped to Educacion (a leaf
+// subtree = {Educacion}): only Educacion's Government Grants / Program Service Fees
+// (revenue) and Program Supplies (expense) survive; every General-direct account
+// (Salaries, Occupancy, Insurance, Bank Fees, Event Costs, Contributions, Event Income)
+// and Food Pantry's Food Purchases is dropped. USD target (the fixture default) keeps the
+// USD figures exact; the assertions are the presence/absence of accounts + a strict
+// drop in the expense subtotal, so they are rate-tolerant.
+func TestIncomeStatementGrantProgramScope(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := context.Background()
+	rep := incomeStatementReport(t)
+
+	base := isGoldenParams(f)
+	base.Granularity = reports.GranNone // single Total column; native-currency-independent presence
+	baseT, err := rep.Run(ctx, reports.NewToolkit(f.Store, base), base)
+	if err != nil {
+		t.Fatalf("run unscoped: %v", err)
+	}
+	// Baseline: the org-wide expense subtotal folds in every expense account.
+	baseExp, ok := isTotalFor(baseT, "reports.income_statement.total.expenses")
+	if !ok {
+		t.Fatalf("unscoped: no total-expenses row")
+	}
+	if _, ok := isRowFor(baseT, "Salaries"); !ok {
+		t.Fatalf("unscoped income statement missing Salaries (sibling present)")
+	}
+
+	// Scope the grant to Educacion: Food Pantry + every General-direct account are OUT.
+	p := base
+	p.ProgramScope = []int64{f.IDs.Educacion}
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run scoped: %v", err)
+	}
+
+	// Sibling / General-direct accounts vanish from the table entirely (no data row).
+	for _, name := range []string{
+		"Salaries", "Occupancy", "Insurance", "Bank Fees", "Event Costs",
+		"Contributions", "Event Income", "Food Purchases",
+	} {
+		if _, ok := isRowFor(table, name); ok {
+			t.Errorf("scoped income statement leaks out-of-subtree account %q", name)
+		}
+	}
+	// Educacion's OWN accounts survive.
+	for _, name := range []string{"Government Grants", "Program Service Fees", "Program Supplies"} {
+		if _, ok := isRowFor(table, name); !ok {
+			t.Errorf("scoped income statement dropped in-subtree account %q", name)
+		}
+	}
+	// The rolled Total-expenses SUBTOTAL now reflects ONLY Educacion's expenses (Program
+	// Supplies) -- strictly less than the org-wide figure. This is the ROLLED-column
+	// no-leak assertion (a General-direct or Food Pantry leak would keep it at/above base).
+	scopedExp, ok := isTotalFor(table, "reports.income_statement.total.expenses")
+	if !ok {
+		t.Fatalf("scoped: no total-expenses row")
+	}
+	if scopedExp >= baseExp {
+		t.Errorf("scoped total-expenses %d >= org-wide %d; a sibling subtree leaked into the rollup", scopedExp, baseExp)
+	}
+	if scopedExp <= 0 {
+		t.Errorf("scoped total-expenses %d; Educacion's Program Supplies should remain", scopedExp)
+	}
+}

@@ -564,3 +564,73 @@ func TestForm990Empty(t *testing.T) {
 		t.Errorf("empty run Unmapped buckets = %d, want 4", got)
 	}
 }
+
+// TestForm990GrantProgramScope (p27.4b): a program-scoped report grant filters the 990
+// package's PROGRAM-DIMENSIONED parts (III program services, VIII revenue, IX functional
+// expenses -- all R/E, all filtered by the toolkit) to the granted subtree, and SUPPRESSES
+// Part X (the balance sheet -- assets/liabilities/net-assets carry NO program, D24, so it
+// cannot be program-filtered; computing it would ship org-wide balances). Scoped to
+// Educacion (leaf subtree = {Educacion}): the General-direct Salaries line (IX.7) and
+// Contributions line (VIII.1f) vanish, the Part IX grand total shrinks, and Part X is gone.
+func TestForm990GrantProgramScope(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := context.Background()
+	rep := form990Report(t)
+
+	base := f990GoldenParams(f)
+	baseT, err := rep.Run(ctx, reports.NewToolkit(f.Store, base), base)
+	if err != nil {
+		t.Fatalf("run unscoped: %v", err)
+	}
+	// Baseline: Part X present, Salaries line present (sibling present).
+	if _, ok := f990RowFor(baseT, "reports.form_990.part.x"); !ok {
+		t.Fatalf("unscoped 990 missing Part X header")
+	}
+	if _, ok := f990RowFor(baseT, "7 — Other salaries and wages"); !ok {
+		t.Fatalf("unscoped 990 missing Part IX Salaries line (sibling present)")
+	}
+	baseIX, ok := f990RowFor(baseT, "reports.form_990.ix.total")
+	if !ok {
+		t.Fatalf("unscoped: no Part IX total")
+	}
+
+	p := base
+	p.ProgramScope = []int64{f.IDs.Educacion}
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run scoped: %v", err)
+	}
+
+	// Part X (balance sheet, no program dimension) is SUPPRESSED entirely under a scope.
+	if _, ok := f990RowFor(table, "reports.form_990.part.x"); ok {
+		t.Errorf("scoped 990 still renders Part X (balance sheet has no program dimension; must be suppressed)")
+	}
+	// Parts III/VIII/IX remain (they ARE program-filterable).
+	for _, key := range []string{
+		"reports.form_990.part.iii", "reports.form_990.part.viii", "reports.form_990.part.ix",
+	} {
+		if _, ok := f990RowFor(table, key); !ok {
+			t.Errorf("scoped 990 dropped program-dimensioned section header %q", key)
+		}
+	}
+	// General-direct lines vanish: Salaries (IX.7) and All-other-contributions (VIII.1f).
+	if _, ok := f990RowFor(table, "7 — Other salaries and wages"); ok {
+		t.Errorf("scoped 990 leaks General-direct Salaries line (IX.7)")
+	}
+	if _, ok := f990RowFor(table, "1f — All other contributions and gifts"); ok {
+		t.Errorf("scoped 990 leaks General-direct Contributions line (VIII.1f)")
+	}
+	// The rolled Part IX grand total reflects only Educacion's expenses -- strictly less.
+	scopedIX, ok := f990RowFor(table, "reports.form_990.ix.total")
+	if !ok {
+		t.Fatalf("scoped: no Part IX total")
+	}
+	if scopedIX[2].Minor >= baseIX[2].Minor {
+		t.Errorf("scoped Part IX total %d >= org-wide %d; a sibling subtree leaked into the rollup",
+			scopedIX[2].Minor, baseIX[2].Minor)
+	}
+	if scopedIX[2].Minor <= 0 {
+		t.Errorf("scoped Part IX total %d; Educacion's Program Supplies should remain", scopedIX[2].Minor)
+	}
+}

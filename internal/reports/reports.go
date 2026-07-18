@@ -55,14 +55,20 @@ type Report struct {
 	// enumerate accounts as a hierarchy leave it false and render byte-identically.
 	Tree bool
 
-	// ProgramDimensioned marks a report whose rows carry a PROGRAM dimension (p27.4):
-	// budget variance, program statement, fund activity, activities by restriction,
-	// functional expenses, income statement, form 990, cash-flow projection. Such a
-	// report can be filtered to a granted program subtree, so a purely program-scoped
-	// report grant (user_report_grants.program_id, D10) reaches it (rows filtered to
-	// the subtree) -- whereas a NON-program report (balance sheet, trial balance,
-	// reconciliation statement, account ledger) cannot be program-filtered and so is
-	// NOT reachable by a purely program-scoped grant (it needs an unscoped grant). The
+	// ProgramDimensioned marks a report whose rows carry a PROGRAM dimension AND whose
+	// content is coherently filterable to a program subtree (p27.4). The set (p27.4b
+	// audit): program_statement, income_statement, functional_expenses, form_990,
+	// budget_variance. Such a report can be filtered to a granted program subtree, so a
+	// purely program-scoped report grant (user_report_grants.program_id, D10) reaches it
+	// (rows filtered to the subtree). Three reports p27.4a provisionally marked were
+	// DEMOTED in p27.4b because their content is balance/restriction-centric with no (or
+	// no coherently filterable) program dimension: fund_activity (asset balances, no
+	// program), activities_by_restriction (WITH/WITHOUT is a fund property), and
+	// cashflow_projection (per-fund opening cash carries no program -- filtering flows but
+	// not opening would leak org-wide balances). Those, like a NON-program report (balance
+	// sheet, trial balance, reconciliation statement, account ledger), cannot be
+	// program-filtered and so are NOT reachable by a purely program-scoped grant (they need
+	// an unscoped grant). The
 	// web layer reads this to (a) gate reachability (routes.go ReportGroupFor) and (b)
 	// apply the subtree row-filter (resolveParams -> Params.ProgramScope). Marked
 	// EXPLICITLY here rather than inferred from ParamsSpec.Program, because the

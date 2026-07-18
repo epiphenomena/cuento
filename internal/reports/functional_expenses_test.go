@@ -567,3 +567,75 @@ func TestFunctionalExpensesTiesIncomeStatement(t *testing.T) {
 		t.Errorf("990 Part IX total (%d) != income-statement total expenses (%d)", nineTotal, isExpenses)
 	}
 }
+
+// TestFunctionalExpensesGrantProgramScope (p27.4b): a program-scoped report grant filters
+// the functional-expense matrix to the granted program SUBTREE BEFORE the class rollup, so
+// a SIBLING subtree's expense never contributes to any line -- including the rolled
+// grand-total row. Scoped to Educacion (leaf subtree = {Educacion}): only Educacion's
+// Program Supplies (program class) survives; Salaries (program, General-direct), Food
+// Purchases (program, General-direct + Food Pantry), and every management/fundraising
+// account (Occupancy/Insurance/Bank Fees/Event Costs, all General-direct) vanish.
+func TestFunctionalExpensesGrantProgramScope(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := context.Background()
+	rep := functionalExpensesReport(t)
+
+	base := feGoldenParams(f)
+	baseT, err := rep.Run(ctx, reports.NewToolkit(f.Store, base), base)
+	if err != nil {
+		t.Fatalf("run unscoped: %v", err)
+	}
+	baseGrand, ok := feRowFor(baseT, "reports.functional_expenses.total")
+	if !ok {
+		t.Fatalf("unscoped: no grand-total row")
+	}
+	baseTotal := baseGrand[len(baseGrand)-1].Minor
+	if _, ok := feRowFor(baseT, "Salaries"); !ok {
+		t.Fatalf("unscoped functional expenses missing Salaries (sibling present)")
+	}
+
+	p := base
+	p.ProgramScope = []int64{f.IDs.Educacion}
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run scoped: %v", err)
+	}
+
+	// Out-of-subtree expense accounts vanish from the account rows entirely.
+	for _, name := range []string{
+		"Salaries", "Food Purchases", "Occupancy", "Insurance", "Bank Fees", "Event Costs",
+	} {
+		if _, ok := feRowFor(table, name); ok {
+			t.Errorf("scoped functional expenses leaks out-of-subtree account %q", name)
+		}
+	}
+	// Educacion's Program Supplies (the only in-subtree expense) survives.
+	if _, ok := feRowFor(table, "Program Supplies"); !ok {
+		t.Errorf("scoped functional expenses dropped in-subtree Program Supplies")
+	}
+
+	// The rolled GRAND TOTAL now reflects ONLY Educacion's expenses -- strictly less than
+	// the org-wide figure. A General-direct or Food Pantry leak into the rollup would keep
+	// it at/above base. Also assert the management/fundraising class columns are ZERO
+	// (Educacion has only a program-class expense) -- a sibling management leak would
+	// resurface Occupancy/Insurance in the mgmt column of the grand total.
+	scopedGrand, ok := feRowFor(table, "reports.functional_expenses.total")
+	if !ok {
+		t.Fatalf("scoped: no grand-total row")
+	}
+	scopedTotal := scopedGrand[len(scopedGrand)-1].Minor
+	if scopedTotal >= baseTotal {
+		t.Errorf("scoped grand total %d >= org-wide %d; a sibling subtree leaked into the rollup", scopedTotal, baseTotal)
+	}
+	if scopedTotal <= 0 {
+		t.Errorf("scoped grand total %d; Educacion's Program Supplies should remain", scopedTotal)
+	}
+	// cols: [line, program, management, fundraising, total]. Educacion is program-only.
+	if mgmt := scopedGrand[2].Minor; mgmt != 0 {
+		t.Errorf("scoped grand-total management column = %d, want 0 (no sibling management leak)", mgmt)
+	}
+	if fund := scopedGrand[3].Minor; fund != 0 {
+		t.Errorf("scoped grand-total fundraising column = %d, want 0 (no sibling fundraising leak)", fund)
+	}
+}

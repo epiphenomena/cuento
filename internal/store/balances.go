@@ -171,6 +171,46 @@ func (s *Store) FunctionalActivity(ctx context.Context, from, to string, scopeSu
 	return out, nil
 }
 
+// FunctionalCellProgram is one (expense account, functional class, program,
+// currency) activity cell -- FunctionalCell plus the program dimension (D24). Used
+// only on the p27.4 program-scoped functional-expenses path.
+type FunctionalCellProgram struct {
+	AccountID       int64
+	FunctionalClass string
+	ProgramID       int64
+	Currency        string
+	Amount          int64
+}
+
+// FunctionalActivityByProgram is the p27.4 SCOPED variant of FunctionalActivity: it
+// additionally keys each (expense account, class, currency) cell by program_id, so a
+// program-scoped report grant can filter the functional-expense matrix to the granted
+// subtree BEFORE rolling classes up. Only expense splits carry BOTH a class (D21) and
+// a program (D24). The unscoped path keeps FunctionalActivity (no program column), so
+// the goldens do not move.
+func (s *Store) FunctionalActivityByProgram(ctx context.Context, from, to string, scopeSub int64) ([]FunctionalCellProgram, error) {
+	rows, err := s.q.FunctionalActivityByProgram(ctx, sqlc.FunctionalActivityByProgramParams{
+		ID:     scopeSub,
+		Date:   from,
+		Date_2: to,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store: functional activity by program %s..%s (scope %d): %w", from, to, scopeSub, err)
+	}
+	out := make([]FunctionalCellProgram, len(rows))
+	for i, r := range rows {
+		// functional_class and program_id are NOT NULL-filtered in SQL, so Valid holds.
+		out[i] = FunctionalCellProgram{
+			AccountID:       r.AccountID,
+			FunctionalClass: r.FunctionalClass.String,
+			ProgramID:       r.ProgramID.Int64,
+			Currency:        r.Currency,
+			Amount:          r.Activity,
+		}
+	}
+	return out, nil
+}
+
 // ProgramActivity returns, per (program, account, currency), the signed activity
 // over from <= date <= to in scopeSub's descendant closure. Only revenue/expense
 // splits carry a program (D24). Rows are raw per (program, account) -- the tree

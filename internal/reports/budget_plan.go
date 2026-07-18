@@ -292,6 +292,12 @@ func (tk *Toolkit) BudgetVariancePlan(ctx context.Context, s Scope, planID int64
 		return nil, fmt.Errorf("budget variance: load plan %d: %w", planID, err)
 	}
 	for _, sp := range splits {
+		// p27.4: a program-scoped grant filters BUDGETED rows to the granted subtree
+		// (empty ProgramScope => no filter, unscoped/admin unchanged). A budget-split's
+		// program is on its key; an out-of-subtree split contributes to no cell.
+		if !tk.Params.InProgramScope(sp.key.Program) {
+			continue
+		}
 		sign := netDebitSign(sp.acctType)
 		if sign == 0 {
 			continue // A/L open-item leg: no actuals counterpart
@@ -311,6 +317,12 @@ func (tk *Toolkit) BudgetVariancePlan(ctx context.Context, s Scope, planID int64
 		return nil, fmt.Errorf("budget variance: actuals: %w", err)
 	}
 	for _, c := range cells {
+		// p27.4: filter ACTUAL rows to the granted subtree too, so a scoped variance
+		// report never surfaces a sibling subtree's actuals (BudgetKeyActivity is raw
+		// per-program R/E activity). Empty ProgramScope => no filter.
+		if !tk.Params.InProgramScope(c.ProgramID) {
+			continue
+		}
 		b, err := bucketKey(c.Date, g)
 		if err != nil {
 			return nil, err

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"cuento/internal/money"
+	"cuento/internal/store"
 )
 
 // AccountID / FundID / ProgramID / SubsidiaryID are report-layer id aliases so the
@@ -142,18 +143,70 @@ func (tk *Toolkit) BalancesAsOf(ctx context.Context, s Scope, d string, o Conver
 	return out, nil
 }
 
+// periodActivityRows returns the raw per-(account, currency) signed activity over
+// [from,to] in the scope -- the source rows Activity aggregates. It is the ONE place
+// the p27.4 program-subtree grant filter is applied to the account-activity path:
+//
+//   - UNSCOPED (Params.ProgramScope empty -- admin, an unscoped grant, or a non-program
+//     report): reads store.PeriodActivity verbatim, so the unscoped path is BYTE-for-byte
+//     unchanged (the goldens do not move).
+//   - SCOPED (a program-scoped grant on a program-dimensioned report): reads the
+//     program-keyed store.ProgramActivity instead, DROPS every raw split whose program is
+//     outside the granted subtree (InProgramScope), then collapses back to (account,
+//     currency). Because ProgramActivity carries ONLY R/E splits (D24) -- and every
+//     program-dimensioned account-activity report (income statement, 990 revenue) shows
+//     ONLY R/E accounts -- the scoped sum equals the unscoped sum minus the sibling
+//     subtrees. This is gated on ProgramScope, which resolveParams sets ONLY for a
+//     program-dimensioned report, so a non-R/E caller (NetIncome/balance sheet) never
+//     takes this path.
+//
+// It preserves AccountID through the collapse, so the D19 IC-exclusion is unaffected: the
+// CALLER (Activity) still drops excl[AccountID] rows over this output exactly as it does
+// over the unscoped store.PeriodActivity rows -- the helper does not (re)apply excl itself.
+func (tk *Toolkit) periodActivityRows(ctx context.Context, from, to string, sub int64) ([]store.AccountCurrencyAmount, error) {
+	if len(tk.Params.ProgramScope) == 0 {
+		return tk.store.PeriodActivity(ctx, from, to, sub)
+	}
+	rows, err := tk.store.ProgramActivity(ctx, from, to, sub)
+	if err != nil {
+		return nil, err
+	}
+	// Collapse the in-scope program rows to (account, currency), summing across the
+	// granted subtree's programs; a sibling subtree's split is dropped BEFORE the sum,
+	// so it contributes to no cell (including a rolled account total downstream).
+	type key struct {
+		acct int64
+		ccy  string
+	}
+	sum := make(map[key]int64, len(rows))
+	for _, r := range rows {
+		if !tk.Params.InProgramScope(r.ProgramID) {
+			continue
+		}
+		sum[key{r.AccountID, r.Currency}] += r.Amount
+	}
+	out := make([]store.AccountCurrencyAmount, 0, len(sum))
+	for k, amt := range sum {
+		out = append(out, store.AccountCurrencyAmount{AccountID: k.acct, Currency: k.ccy, Amount: amt})
+	}
+	return out, nil
+}
+
 // Activity returns, per account, the per-currency signed activity over [from,to] in
 // the scope's descendant closure. RateNone yields native amounts; RateTxnDate
 // converts month-by-month at each month's rate and rounds the per-account total
 // HALF-EVEN once (D12 "at final aggregates"); RateClosing converts the whole-period
 // total at the on-or-before as-of rate.
+//
+// p27.4: the raw rows come from periodActivityRows, which applies the program-subtree
+// grant filter on the SCOPED path (empty ProgramScope => store.PeriodActivity verbatim).
 func (tk *Toolkit) Activity(ctx context.Context, s Scope, from, to string, o ConvertOpts) (map[AccountID][]CurAmt, error) {
 	excl, err := tk.consolidatedICExclusions(ctx, s.Sub)
 	if err != nil {
 		return nil, err
 	}
 	if o.Mode != RateTxnDate {
-		rows, err := tk.store.PeriodActivity(ctx, from, to, s.Sub)
+		rows, err := tk.periodActivityRows(ctx, from, to, s.Sub)
 		if err != nil {
 			return nil, err
 		}
@@ -186,7 +239,7 @@ func (tk *Toolkit) Activity(ctx context.Context, s Scope, from, to string, o Con
 	unrounded := make(map[AccountID]float64)
 	present := make(map[AccountID]bool)
 	err = tk.ByPeriod(from, to, GranMonth, func(pFrom, pTo string) error {
-		rows, err := tk.store.PeriodActivity(ctx, pFrom, pTo, s.Sub)
+		rows, err := tk.periodActivityRows(ctx, pFrom, pTo, s.Sub)
 		if err != nil {
 			return err
 		}
@@ -430,6 +483,49 @@ func (tk *Toolkit) FundPeriodStatement(ctx context.Context, s Scope, f FundID, f
 // D12) — an expense FLOW is measured at the rate in force when it occurred, so the
 // functional-expense total (a period expense flow, NOT a year-end balance) matches the
 // income statement's total expenses exactly rather than the closing-rate figure.
+// functionalActivityRows returns the raw per-(expense account, class, currency)
+// signed activity over [from,to] in the scope -- the source rows FunctionalMatrix
+// aggregates. Like periodActivityRows, it is the ONE place the p27.4 program-subtree
+// grant filter is applied to the functional-expense path:
+//
+//   - UNSCOPED (Params.ProgramScope empty): reads store.FunctionalActivity verbatim, so
+//     the unscoped path is BYTE-for-byte unchanged (the goldens do not move).
+//   - SCOPED: reads the program-keyed store.FunctionalActivityByProgram instead, DROPS
+//     every raw expense split whose program is outside the granted subtree, then collapses
+//     back to (account, class, currency). Every expense split carries BOTH a class (D21)
+//     and a program (D24), so no in-scope expense activity is lost.
+//
+// Like periodActivityRows, it preserves AccountID, so the CALLER (FunctionalMatrix)'s D19
+// IC-exclusion loop drops IC accounts over this output; the helper does not (re)apply excl.
+func (tk *Toolkit) functionalActivityRows(ctx context.Context, from, to string, sub int64) ([]store.FunctionalCell, error) {
+	if len(tk.Params.ProgramScope) == 0 {
+		return tk.store.FunctionalActivity(ctx, from, to, sub)
+	}
+	rows, err := tk.store.FunctionalActivityByProgram(ctx, from, to, sub)
+	if err != nil {
+		return nil, err
+	}
+	type key struct {
+		acct  int64
+		class string
+		ccy   string
+	}
+	sum := make(map[key]int64, len(rows))
+	for _, r := range rows {
+		if !tk.Params.InProgramScope(r.ProgramID) {
+			continue
+		}
+		sum[key{r.AccountID, r.FunctionalClass, r.Currency}] += r.Amount
+	}
+	out := make([]store.FunctionalCell, 0, len(sum))
+	for k, amt := range sum {
+		out = append(out, store.FunctionalCell{
+			AccountID: k.acct, FunctionalClass: k.class, Currency: k.ccy, Amount: amt,
+		})
+	}
+	return out, nil
+}
+
 func (tk *Toolkit) FunctionalMatrix(ctx context.Context, s Scope, from, to string, o ConvertOpts) (map[AccountID]map[Class][]CurAmt, error) {
 	excl, err := tk.consolidatedICExclusions(ctx, s.Sub)
 	if err != nil {
@@ -444,7 +540,7 @@ func (tk *Toolkit) FunctionalMatrix(ctx context.Context, s Scope, from, to strin
 		// rate for every split in the month — so each expense flow lands at its own rate.
 		unrounded := make(map[AccountID]map[Class]float64)
 		err := tk.ByPeriod(from, to, GranMonth, func(pFrom, pTo string) error {
-			rows, err := tk.store.FunctionalActivity(ctx, pFrom, pTo, s.Sub)
+			rows, err := tk.functionalActivityRows(ctx, pFrom, pTo, s.Sub)
 			if err != nil {
 				return err
 			}
@@ -481,7 +577,7 @@ func (tk *Toolkit) FunctionalMatrix(ctx context.Context, s Scope, from, to strin
 		return out, nil
 	}
 
-	rows, err := tk.store.FunctionalActivity(ctx, from, to, s.Sub)
+	rows, err := tk.functionalActivityRows(ctx, from, to, s.Sub)
 	if err != nil {
 		return nil, err
 	}

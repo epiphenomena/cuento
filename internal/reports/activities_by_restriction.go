@@ -47,12 +47,20 @@ const ActivitiesByRestrictionReportID = "activities_by_restriction"
 // web params form renders the period + the always-present subsidiary scope selector.
 func registerActivitiesByRestriction(reg *Registry) {
 	reg.Register(Report{
-		ID:                 ActivitiesByRestrictionReportID,
-		TitleKey:           "reports.activities_by_restriction.title",
-		Group:              "financial",
-		ParamsSpec:         ParamsSpec{Period: true},
-		Run:                runActivitiesByRestriction,
-		ProgramDimensioned: true, // p27.4: R/E activity carries a program (grant-subtree filterable).
+		ID:         ActivitiesByRestrictionReportID,
+		TitleKey:   "reports.activities_by_restriction.title",
+		Group:      "financial",
+		ParamsSpec: ParamsSpec{Period: true},
+		Run:        runActivitiesByRestriction,
+		// p27.4b: NOT ProgramDimensioned. Its whole subject is the WITH/WITHOUT-restriction
+		// split, which is a FUND property (Restriction), not a program one. The With column
+		// and the "released from restrictions" line derive from restricted funds' period
+		// statements (FundPeriodStatement) and fold in program-less non-expense capital
+		// applications -- no program dimension. Program-filtering only the revenue/expense
+		// totals while the fund-derived restriction figures stayed org-wide would produce an
+		// incoherent report whose change-in-net-assets no longer reconciles AND still leaks
+		// org-wide rows. So a purely program-scoped grant does NOT reach it; income_statement
+		// keeps the "financial" group's program-scoped reach.
 	})
 }
 

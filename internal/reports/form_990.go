@@ -84,8 +84,18 @@ func runForm990(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 	if err := b.partIX(ctx); err != nil {
 		return Table{}, err
 	}
-	if err := b.partX(ctx); err != nil {
-		return Table{}, err
+	// p27.4: Parts III/VIII/IX are R/E activity (program-dimensioned) and are filtered to
+	// the granted subtree by the toolkit (ProgramActivity / Activity / FunctionalMatrix).
+	// Part X is the BALANCE SHEET (assets/liabilities/net-assets) -- NO split carries a
+	// program (D24), so it CANNOT be program-filtered. Under a program-scoped grant we do
+	// not COMPUTE it at all (rather than compute org-wide balances and hide the rows): the
+	// "non-program content isn't shown to a purely program-scoped user" rule. Empty
+	// ProgramScope (admin / unscoped grant) renders Part X unchanged, so the goldens do
+	// not move.
+	if len(p.ProgramScope) == 0 {
+		if err := b.partX(ctx); err != nil {
+			return Table{}, err
+		}
 	}
 	return b.table(), nil
 }

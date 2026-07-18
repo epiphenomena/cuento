@@ -98,6 +98,37 @@ func TestRegisterDuplicatePanics(t *testing.T) {
 	reg.Register(okReport("dup"))
 }
 
+// TestProgramDimensionedSet pins the EXACT set of program-dimensioned reports (p27.4b
+// audit). A report is ProgramDimensioned iff its content is coherently filterable to a
+// granted program subtree; the marker gates BOTH reachability (a program-scoped grant
+// reaches it) AND the row-filter (Params.ProgramScope). Re-marking a report whose content
+// is balance/restriction-centric (fund_activity, activities_by_restriction,
+// cashflow_projection) would make it reachable-but-unfiltered under a scoped grant -- an
+// org-wide row LEAK. Locking the set here catches such a regression at build time, before
+// the 27.4c picker / 27.4d demo mint a scoped grant.
+func TestProgramDimensionedSet(t *testing.T) {
+	want := map[string]bool{
+		ProgramStatementReportID:   true, // programs group
+		IncomeStatementReportID:    true, // financial group
+		FunctionalExpensesReportID: true, // tax group
+		Form990ReportID:            true, // tax group (Parts III/VIII/IX filtered; X suppressed)
+		BudgetVarianceReportID:     true, // budget group
+	}
+	for _, rep := range Default().All() {
+		got := rep.ProgramDimensioned
+		if got != want[rep.ID] {
+			if got {
+				t.Errorf("report %q is ProgramDimensioned but NOT in the p27.4b audit set "+
+					"(a scoped grant would reach it; if it is program-filterable, add it here + "+
+					"wire the row-filter + a no-sibling-leak test; else this is a LEAK)", rep.ID)
+			} else {
+				t.Errorf("report %q is in the p27.4b program-dimensioned set but NOT marked "+
+					"ProgramDimensioned (a program-scoped grant can no longer reach it)", rep.ID)
+			}
+		}
+	}
+}
+
 func ids(rs []Report) []string {
 	out := make([]string, len(rs))
 	for i, r := range rs {
