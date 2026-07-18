@@ -182,10 +182,17 @@ button, input, select, textarea { font: inherit; color: inherit; }
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-4);
-  padding: var(--space-2) var(--space-6);
+  /* p28.28: tighter top/bottom padding (was space-2); keep the space-6 horizontal
+     gutter so the bar aligns with the header/main edges. */
+  padding: var(--space-1) var(--space-6);
   background: var(--color-surface-alt);
   border-bottom: var(--border);
 }
+/* p28.28: the subnav links carry their own space-2 left padding (for the hover
+   pill), which pushed the FIRST link's TEXT space-2 to the right of the page
+   content gutter. Pull the whole links row left by that padding so the label text
+   lines up flush under the <main> content edge (which sits at the space-6 gutter). */
+.app-subnav-links { margin-left: calc(-1 * var(--space-2)); }
 /* p23.10 page controls in the section bar: filters + action buttons, pushed to the
    right of the sub-nav links. Compact so the whole bar stays one row where it fits. */
 .app-subnav-controls {
