@@ -82,13 +82,6 @@ type Expected struct {
 	// restricted campaign fund's hand-derived per-currency campaign figures.
 	Campaign CampaignExpected
 
-	// SampleBudget is the p26.80 sample-budget seam, populated ONLY after
-	// (*Fixture).ExtendSampleBudget(t) is called; the zero value (Budget 0) means
-	// the seam has not been applied and no budget exists. It captures the sample
-	// budget's id, the period the reports run over, and the (schedule-resolved)
-	// line ids so a report test can drive the budget without re-deriving them.
-	SampleBudget SampleBudgetExpected
-
 	// SampleBudgetPlan is the p27.2 sample budget-PLAN seam (the NEW split-derived
 	// model), populated ONLY after (*Fixture).ExtendSampleBudgetPlan(t) is called;
 	// the zero value (Plan 0) means the seam has not been applied. It captures the
@@ -106,17 +99,6 @@ type SampleBudgetPlanExpected struct {
 	From   string // earliest split date (the reports' default window start)
 	To     string // latest split date (the reports' default window end)
 	Splits int    // number of budget-splits the seam created
-}
-
-// SampleBudgetExpected holds the p26.80 sample-budget seam's expectations: the
-// budget id and the period the budget-group reports run over. Amounts are SYNTHETIC
-// (rule 11) and asserted off the emitted report cells / reviewed goldens rather than
-// pinned here, mirroring how budget_reports_test.go verifies its inline budgets.
-type SampleBudgetExpected struct {
-	Budget int64
-	From   string // period start (the reports' default window)
-	To     string // period end
-	Lines  int    // number of budget lines the seam created
 }
 
 // CampaignExpected holds the p26.51 capital-campaign seam's expectations: the ids

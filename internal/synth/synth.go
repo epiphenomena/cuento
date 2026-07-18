@@ -129,19 +129,12 @@ type IDs struct {
 	Construction int64 // fixed-asset leaf under Fixed Assets
 	ConstrLoan   int64 // liability: a construction loan that financed a purchase
 
-	// --- Sample-budget seam (ExtendSampleBudget, opt-in) -----------------------
-	// Zero until ExtendSampleBudget is called. A SAMPLE operating budget (a budget +
-	// several budget lines across a few programs/accounts/funds/subsidiaries, on the
-	// seeded common schedules, with SYNTHETIC amounts) so the budget-group reports
-	// (actuals_vs_budget / cashflow_projection) have a budget to exercise.
-	SampleBudget int64 // the sample budget
-
 	// --- Sample budget-PLAN seam (ExtendSampleBudgetPlan, opt-in) --------------
 	// Zero until ExtendSampleBudgetPlan is called. A SAMPLE budget PLAN (the p27.2
 	// split-derived model: a plan + several PROJECTED, dated budget-splits across
 	// >=2 programs, incl. R/E legs AND an open_item A/R leg, on varied dates) so the
-	// p27.3 cash-flow / variance reports have something to show. Distinct from the
-	// old schedule-based SampleBudget above (the two models coexist until p27.3).
+	// p27.3 cash-flow / variance reports have something to show. (The old schedule-
+	// based sample budget was retired in p27.3.)
 	SampleBudgetPlan int64 // the sample budget plan
 }
 

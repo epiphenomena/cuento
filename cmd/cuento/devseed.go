@@ -14,25 +14,26 @@ import (
 
 // devseed is a LOCAL-ONLY developer helper: it seeds SYNTHETIC sample data into an
 // existing db so the dev server (:3390) can exercise features that need data the
-// real import does not produce. Today it seeds a SAMPLE BUDGET (a budget + several
-// budget lines) so the budget-group reports (actuals_vs_budget / cashflow_projection)
-// have something to render; more `devseed <thing>` subcommands can follow.
+// real import does not produce. Today it seeds a SAMPLE BUDGET PLAN (a plan + several
+// projected budget-splits, the p27.2 split-derived model) so the budget-group reports
+// (cashflow_projection / budget_variance) have something to render; more
+// `devseed <thing>` subcommands can follow.
 //
 // It is built on the STORE (the write funnel + invariants, rule 2) -- NOT raw SQL --
 // so it stays aligned with schema changes automatically. All amounts are SYNTHETIC
 // round figures (rule 11): no real value is embedded. It resolves the accounts /
-// programs / subsidiary / schedules it needs DYNAMICALLY from whatever the db already
+// programs / subsidiary / funds it needs DYNAMICALLY from whatever the db already
 // contains (no hardcoded real names), so it works against any db -- the dev.db, a
-// scaffold, or a fresh migrate. It is idempotent per db (skips if the sample budget
+// scaffold, or a fresh migrate. It is idempotent per db (skips if the sample plan
 // already exists), so `make dev-db` reruns and standalone reruns never pile up
 // duplicates.
 //
 // It is a dev tool, so it is NOT wired into any deployed path; `usage()` lists it but
 // production never runs it.
 
-// devseedBudgetName is the name devseed gives its sample budget. The idempotency
+// devseedBudgetName is the name devseed gives its sample budget plan. The idempotency
 // guard keys on it, so a rerun is a no-op.
-const devseedBudgetName = "Sample Operating Budget"
+const devseedBudgetName = "Sample Cash-Flow Plan"
 
 // devseedCmd implements `cuento devseed <thing> [-db PATH]`. Currently the only
 // thing is `budget`.
@@ -53,12 +54,12 @@ func devseedCmd(args []string) error {
 
 func devseedUsage() {
 	fmt.Fprintf(stdout, "usage: cuento devseed <target> [-db PATH]\n\ntargets:\n"+
-		"  budget    seed a SYNTHETIC sample budget + lines (for the budget reports)\n")
+		"  budget    seed a SYNTHETIC sample budget plan + splits (for the budget reports)\n")
 }
 
-// devseedBudgetCmd migrates the db (so the seeded schedules exist), opens the store,
-// and seeds the sample budget. It migrates FIRST so the single command is
-// self-sufficient against a db built before the schedule-seed migration landed.
+// devseedBudgetCmd migrates the db, opens the store, and seeds the sample budget plan.
+// It migrates FIRST so the single command is self-sufficient against a db built before
+// the budget-plan migrations landed.
 func devseedBudgetCmd(args []string) error {
 	fs := flag.NewFlagSet("devseed budget", flag.ContinueOnError)
 	dbPath := fs.String("db", defaultDBPath, "path to the SQLite database file")
@@ -73,8 +74,6 @@ func devseedBudgetCmd(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Migrate first: the sample budget resolves schedules seeded by the schedule
-	// migrations, which a db built before them lacks until migrated.
 	if err := db.Migrate(ctx, *dbPath); err != nil {
 		return fmt.Errorf("devseed budget: migrate: %w", err)
 	}
@@ -86,7 +85,7 @@ func devseedBudgetCmd(args []string) error {
 	defer closeFn()
 
 	ctx = store.WithActor(ctx, systemActor)
-	created, err := seedSampleBudget(ctx, st)
+	created, err := seedSampleBudgetPlan(ctx, st)
 	if err != nil {
 		return fmt.Errorf("devseed budget: %w", err)
 	}
@@ -98,25 +97,27 @@ func devseedBudgetCmd(args []string) error {
 	return nil
 }
 
-// seedSampleBudget creates a synthetic sample budget with several lines against
-// whatever accounts/programs/funds/subsidiaries the db already has. It returns
-// created=false (and writes nothing) when the sample budget already exists. Every
-// reference is resolved DYNAMICALLY -- no real names are hardcoded (rule 11) -- and a
-// db missing the minimum shape (a subsidiary, a program, a revenue leaf, an expense
-// leaf, a seeded schedule) is a clear error rather than a partial seed.
-func seedSampleBudget(ctx context.Context, st *store.Store) (bool, error) {
-	// Idempotency: skip if the sample budget already exists.
-	budgets, err := st.ListBudgets(ctx)
+// seedSampleBudgetPlan creates a synthetic sample budget PLAN (the p27.2 split-derived
+// model) with several projected splits against whatever accounts/programs/funds the db
+// already has. It returns created=false (and writes nothing) when the sample plan
+// already exists. Every reference is resolved DYNAMICALLY -- no real names are
+// hardcoded (rule 11) -- and a db missing the minimum shape (a subsidiary, a program,
+// a revenue leaf, an expense leaf) is a clear error rather than a partial seed. Each
+// split carries an explicit date (no schedule object): the cadence is materialized at
+// entry, not stored.
+func seedSampleBudgetPlan(ctx context.Context, st *store.Store) (bool, error) {
+	// Idempotency: skip if the sample plan already exists.
+	plans, err := st.ListBudgetPlans(ctx)
 	if err != nil {
-		return false, fmt.Errorf("list budgets: %w", err)
+		return false, fmt.Errorf("list budget plans: %w", err)
 	}
-	for _, b := range budgets {
-		if b.Name == devseedBudgetName {
+	for _, p := range plans {
+		if p.Name == devseedBudgetName {
 			return false, nil
 		}
 	}
 
-	// Resolve the pieces a budget line needs from the live db.
+	// Resolve the pieces a budget-split needs from the live db.
 	subID, err := firstSubsidiary(ctx, st)
 	if err != nil {
 		return false, err
@@ -133,64 +134,45 @@ func seedSampleBudget(ctx context.Context, st *store.Store) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	// A restricted fund is optional (a db may have none); nil = unrestricted line.
-	var fundPtr *int64
-	if fundID, ok, err := firstFund(ctx, st); err != nil {
-		return false, err
-	} else if ok {
-		fundPtr = &fundID
-	}
 
-	// The seeded common schedules (p26.28 + p26.79), resolved by name. A monthly and
-	// a biweekly cadence give the two lines distinct occurrence patterns; both are
-	// present after the migrations run.
-	monthlySched, err := scheduleByName(ctx, st, "Monthly (1st)")
-	if err != nil {
-		return false, err
-	}
-	biweeklySched, err := scheduleByName(ctx, st, "Biweekly")
-	if err != nil {
-		return false, err
-	}
-
-	budgetID, err := st.CreateBudget(ctx, store.BudgetInput{
-		Name:        devseedBudgetName,
-		PeriodStart: "2026-01-01",
-		PeriodEnd:   "2026-12-31",
-		Notes:       "Synthetic sample operating budget (cuento devseed).",
+	planID, err := st.CreateBudgetPlan(ctx, store.BudgetPlanInput{
+		Name:         devseedBudgetName,
+		SubsidiaryID: subID,
+		Notes:        "Synthetic sample cash-flow plan (cuento devseed).",
 	})
 	if err != nil {
-		return false, fmt.Errorf("create budget: %w", err)
+		return false, fmt.Errorf("create budget plan: %w", err)
 	}
 
-	// Two lines: a revenue line (monthly) and an expense line (biweekly). Amounts are
-	// SYNTHETIC round figures. Each line's currency is its account's default currency,
-	// so it always exists in `currencies`.
-	type line struct {
+	// Several projected splits: revenue inflows and expense outflows on varied dates
+	// (materialized cadence). Amounts are SYNTHETIC round figures; each split's
+	// currency is its account's default currency, so it always exists in `currencies`.
+	type split struct {
 		account int64
-		fund    *int64
+		date    string
 		amount  int64
-		sched   int64
+		ccy     string
 	}
-	lines := []line{
-		{revAcct.id, fundPtr, 500_000, monthlySched},
-		{expAcct.id, fundPtr, 180_000, biweeklySched},
+	splits := []split{
+		{revAcct.id, "2026-01-15", 500_000, revAcct.currency},
+		{revAcct.id, "2026-04-15", 500_000, revAcct.currency},
+		{expAcct.id, "2026-02-01", 180_000, expAcct.currency},
+		{expAcct.id, "2026-03-01", 180_000, expAcct.currency},
+		{expAcct.id, "2026-05-01", 180_000, expAcct.currency},
 	}
-	for _, ln := range lines {
-		ccy := revAcct.currency
-		if ln.account == expAcct.id {
-			ccy = expAcct.currency
-		}
-		if _, err := st.CreateBudgetLine(ctx, budgetID, store.BudgetLineInput{
-			SubsidiaryID: subID,
-			AccountID:    ln.account,
-			FundID:       ln.fund,
-			ProgramID:    progID,
-			Amount:       ln.amount,
-			Currency:     ccy,
-			ScheduleID:   ln.sched,
+	// Splits are UNRESTRICTED (nil fund): a resolved fund's program-subtree scope may
+	// not include the resolved program, and this seed favors working against any db over
+	// exercising fund restriction (the demo's ExtendSampleBudgetPlan covers restricted).
+	for _, sp := range splits {
+		if _, err := st.CreateBudgetSplit(ctx, planID, store.BudgetSplitInput{
+			Description: "Sample projection",
+			Date:        sp.date,
+			AccountID:   sp.account,
+			ProgramID:   &progID,
+			Amount:      sp.amount,
+			Currency:    sp.ccy,
 		}); err != nil {
-			return false, fmt.Errorf("create budget line (account %d): %w", ln.account, err)
+			return false, fmt.Errorf("create budget split (account %d): %w", sp.account, err)
 		}
 	}
 	return true, nil
@@ -230,21 +212,6 @@ func firstProgram(ctx context.Context, st *store.Store) (int64, error) {
 	return 0, errors.New("no active program in db (a budget line needs one)")
 }
 
-// firstFund returns the id of the first active fund, if any (ok=false when the db has
-// no fund -- the line is then unrestricted).
-func firstFund(ctx context.Context, st *store.Store) (int64, bool, error) {
-	funds, err := st.ListFunds(ctx)
-	if err != nil {
-		return 0, false, fmt.Errorf("list funds: %w", err)
-	}
-	for _, fnd := range funds {
-		if fnd.Active != 0 {
-			return fnd.ID, true, nil
-		}
-	}
-	return 0, false, nil
-}
-
 // firstLeafAccount returns the first ACTIVE LEAF account of the given type (revenue
 // or expense -- the only types a budget line accepts). A leaf is a row that is no
 // other row's parent. Errors if none exists.
@@ -270,19 +237,4 @@ func firstLeafAccount(ctx context.Context, st *store.Store, typ string) (leafAcc
 		return leafAccount{id: r.ID, currency: acct.DefaultCurrency}, nil
 	}
 	return leafAccount{}, fmt.Errorf("no active leaf %s account in db", typ)
-}
-
-// scheduleByName resolves a seeded schedule by name, erroring if absent (the
-// migrations seed it, so absence means the db was not migrated).
-func scheduleByName(ctx context.Context, st *store.Store, name string) (int64, error) {
-	rows, err := st.ListSchedules(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("list schedules: %w", err)
-	}
-	for _, r := range rows {
-		if r.Name == name {
-			return r.ID, nil
-		}
-	}
-	return 0, fmt.Errorf("seeded schedule %q not found (db not migrated?)", name)
 }

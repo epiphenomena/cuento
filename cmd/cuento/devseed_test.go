@@ -10,50 +10,50 @@ import (
 	"cuento/internal/testutil/fixture"
 )
 
-// TestSeedSampleBudget proves the devseed budget builder resolves accounts /
-// programs / fund / subsidiary / schedules dynamically from an existing db (the
-// canonical fixture) and creates a budget + lines through the store write funnel
+// TestSeedSampleBudgetPlan proves the devseed budget builder resolves accounts /
+// programs / fund / subsidiary dynamically from an existing db (the canonical
+// fixture) and creates a budget PLAN + splits through the store write funnel
 // (versioned), leaving the ledger clean, and is idempotent on a second run.
-func TestSeedSampleBudget(t *testing.T) {
+func TestSeedSampleBudgetPlan(t *testing.T) {
 	f := fixture.New(t)
 	ctx := store.WithActor(context.Background(), systemActor)
 
-	created, err := seedSampleBudget(ctx, f.Store)
+	created, err := seedSampleBudgetPlan(ctx, f.Store)
 	if err != nil {
-		t.Fatalf("seedSampleBudget: %v", err)
+		t.Fatalf("seedSampleBudgetPlan: %v", err)
 	}
 	if !created {
 		t.Fatalf("first seed reported not-created")
 	}
 
-	// The budget exists with its lines and is versioned (write funnel, rule 5).
-	budgets, err := f.Store.ListBudgets(ctx)
+	// The plan exists with its splits and is versioned (write funnel, rule 5).
+	plans, err := f.Store.ListBudgetPlans(ctx)
 	if err != nil {
-		t.Fatalf("list budgets: %v", err)
+		t.Fatalf("list budget plans: %v", err)
 	}
-	var budgetID int64
-	for _, b := range budgets {
-		if b.Name == devseedBudgetName {
-			budgetID = b.ID
+	var planID int64
+	for _, p := range plans {
+		if p.Name == devseedBudgetName {
+			planID = p.ID
 		}
 	}
-	if budgetID == 0 {
-		t.Fatalf("sample budget %q not created", devseedBudgetName)
+	if planID == 0 {
+		t.Fatalf("sample budget plan %q not created", devseedBudgetName)
 	}
-	testutil.AssertVersioned(t, f.DB, "budgets", budgetID, "create")
+	testutil.AssertVersioned(t, f.DB, "budget_plans", planID, "create")
 
-	lines, err := f.Store.BudgetLines(ctx, budgetID)
+	splits, err := f.Store.BudgetSplits(ctx, planID)
 	if err != nil {
-		t.Fatalf("budget lines: %v", err)
+		t.Fatalf("budget splits: %v", err)
 	}
-	if len(lines) == 0 {
-		t.Fatalf("sample budget has no lines")
+	if len(splits) == 0 {
+		t.Fatalf("sample budget plan has no splits")
 	}
-	for _, ln := range lines {
-		testutil.AssertVersioned(t, f.DB, "budget_lines", ln.ID, "create")
+	for _, sp := range splits {
+		testutil.AssertVersioned(t, f.DB, "budget_splits", sp.ID, "create")
 	}
 
-	// Ledger stays clean (a budget is not a transaction); only the baseline Z19.
+	// Ledger stays clean (a budget plan is not a transaction); only the baseline Z19.
 	vs, err := ledger.Check(ctx, f.DB)
 	if err != nil {
 		t.Fatalf("ledger.Check: %v", err)
@@ -64,25 +64,25 @@ func TestSeedSampleBudget(t *testing.T) {
 		}
 	}
 
-	// Idempotent: a second run is a no-op (created=false, no duplicate budget).
-	created2, err := seedSampleBudget(ctx, f.Store)
+	// Idempotent: a second run is a no-op (created=false, no duplicate plan).
+	created2, err := seedSampleBudgetPlan(ctx, f.Store)
 	if err != nil {
-		t.Fatalf("second seedSampleBudget: %v", err)
+		t.Fatalf("second seedSampleBudgetPlan: %v", err)
 	}
 	if created2 {
-		t.Errorf("second seed created a duplicate budget")
+		t.Errorf("second seed created a duplicate plan")
 	}
-	budgets2, err := f.Store.ListBudgets(ctx)
+	plans2, err := f.Store.ListBudgetPlans(ctx)
 	if err != nil {
-		t.Fatalf("list budgets after rerun: %v", err)
+		t.Fatalf("list budget plans after rerun: %v", err)
 	}
 	n := 0
-	for _, b := range budgets2 {
-		if b.Name == devseedBudgetName {
+	for _, p := range plans2 {
+		if p.Name == devseedBudgetName {
 			n++
 		}
 	}
 	if n != 1 {
-		t.Errorf("found %d sample budgets after rerun, want 1", n)
+		t.Errorf("found %d sample plans after rerun, want 1", n)
 	}
 }

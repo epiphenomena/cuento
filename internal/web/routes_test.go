@@ -121,31 +121,15 @@ func newMatrixApp(t *testing.T) (http.Handler, []Route, *store.Store, *sql.DB, *
 		t.Fatalf("seed import row: %v", err)
 	}
 
-	// Seed one schedule (id 1), one budget (id 1), and one budget line (id 1) so
-	// p19.3's /schedules/{id}/edit, /budgets/{id}, /budgets/{id}/edit, and
-	// /budgets/{id}/lines/{lid}/edit resolve to a real resource when the reachability
-	// check substitutes {id}/{lid} -> 1. The line needs an R/E account (a budget is of
-	// R/E flows), so a revenue leaf is seeded for it; the route only needs the row to
-	// exist so an authorized persona reaches the handler (non-404).
-	dom1 := 1
-	if _, err := st.CreateSchedule(seedCtx, store.ScheduleInput{Name: "Seed sched", Kind: "monthly", DayOfMonth: &dom1}); err != nil {
-		t.Fatalf("seed schedule: %v", err)
-	}
-	seedBudget, err := st.CreateBudget(seedCtx, store.BudgetInput{Name: "Seed budget", PeriodStart: "2025-01-01", PeriodEnd: "2025-12-31"})
-	if err != nil {
-		t.Fatalf("seed budget: %v", err)
-	}
-	rev, err := st.CreateAccount(seedCtx, store.CreateAccountInput{
+	// Seed one revenue leaf account ("Seed Revenue") for the expense-report line
+	// reachability seed below (an expense line needs an R/E account). The old
+	// schedule/budget/budget-line seeds were removed in p27.3 (the routes are gone);
+	// the budget PLAN (id 1) seeded above covers the /budget-plans reachability.
+	if _, err := st.CreateAccount(seedCtx, store.CreateAccountInput{
 		Type: "revenue", DefaultCurrency: "USD",
 		Names: map[string]string{"en": "Seed Revenue"}, Subsidiaries: []int64{1},
-	})
-	if err != nil {
-		t.Fatalf("seed revenue account: %v", err)
-	}
-	if _, err := st.CreateBudgetLine(seedCtx, seedBudget, store.BudgetLineInput{
-		SubsidiaryID: 1, AccountID: rev, ProgramID: 1, Amount: 10000, Currency: "USD", ScheduleID: 1,
 	}); err != nil {
-		t.Fatalf("seed budget line: %v", err)
+		t.Fatalf("seed revenue account: %v", err)
 	}
 
 	app := NewApp(Config{Version: "test"}, db, st)

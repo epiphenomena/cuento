@@ -317,7 +317,7 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 		s.serverError(w)
 		return expenseDetailModel{}, false
 	}
-	fundNames, err := s.fundNameMap(ctx)
+	fundNames, err := fundNameMap(ctx, s.store)
 	if err != nil {
 		s.serverError(w)
 		return expenseDetailModel{}, false

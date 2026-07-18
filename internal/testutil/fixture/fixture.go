@@ -19,7 +19,7 @@
 // synth.IDs, so every existing `fixture.IDs` / `f.IDs.*` reference is unchanged and
 // `make golden` stays byte-identical -- the proof the extraction is faithful.
 //
-// The seams ExtendRates/ExtendReconciliation/ExtendCapitalCampaign/ExtendSampleBudget
+// The seams ExtendRates/ExtendReconciliation/ExtendCapitalCampaign/ExtendSampleBudgetPlan
 // are OPT-IN: New does NOT call them, so the default fixture stays native-currency
 // with no recon/campaign/budget and every existing golden/tally is untouched.
 package fixture

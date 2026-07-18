@@ -36,8 +36,6 @@ other = "Fondos"
 other = "Programas"
 [nav.reconciliations]
 other = "Conciliaciones"
-[nav.budgets]
-other = "Presupuestos"
 [nav.import]
 other = "Importar"
 [nav.reports]
@@ -1728,216 +1726,8 @@ other = "Bloqueado a la subsidiaria del lote."
 # =====================================================================
 
 # Lista de presupuestos (/budgets).
-[budget.list.title]
-other = "Presupuestos"
-[budget.list.intro]
-other = "Planifica los flujos de ingresos y gastos esperados y comparalos con lo real."
-[budget.list.new]
-other = "Nuevo presupuesto"
-[budget.list.open]
-other = "Abrir"
-[budget.list.empty]
-other = "Aun no hay presupuestos."
-[budget.list.col.name]
-other = "Nombre"
-[budget.list.col.period]
-other = "Periodo"
-[budget.list.col.actions]
-other = "Acciones"
-
-# Formulario crear/editar presupuesto.
-[budget.form.new_title]
-other = "Nuevo presupuesto"
-[budget.form.edit_title]
-other = "Editar presupuesto"
-[budget.form.name]
-other = "Nombre"
-[budget.form.period_start]
-other = "Inicio del periodo"
-[budget.form.period_end]
-other = "Fin del periodo"
-[budget.form.notes]
-other = "Notas"
-
-# Detalle del presupuesto (/budgets/{id}).
-[budget.detail.title]
-other = "Presupuesto"
-[budget.detail.back]
-other = "Volver a presupuestos"
-[budget.detail.period]
-other = "Periodo"
-[budget.detail.lines]
-other = "Lineas del presupuesto"
-[budget.detail.new_line]
-other = "Agregar linea"
-[budget.detail.no_lines]
-other = "Aun no hay lineas."
-
-# Columnas de lineas + formulario.
-[budget.line.col.subsidiary]
-other = "Subsidiaria"
-[budget.line.col.account]
-other = "Cuenta"
-[budget.line.col.fund]
-other = "Fondo"
-[budget.line.col.program]
-other = "Programa"
-[budget.line.col.amount]
-other = "Monto"
-[budget.line.col.schedule]
-other = "Calendario"
-[budget.line.col.actions]
-other = "Acciones"
-[budget.line.unrestricted]
-other = "Sin restricción"
-[budget.line.form.new_title]
-other = "Nueva linea"
-[budget.line.form.edit_title]
-other = "Editar linea"
-[budget.line.form.subsidiary]
-other = "Subsidiaria"
-[budget.line.form.account]
-other = "Cuenta"
-[budget.line.form.account_none]
-other = "Selecciona una cuenta…"
-[budget.line.form.account_hint]
-other = "Solo se pueden presupuestar cuentas de ingresos y gastos."
-[budget.line.form.fund]
-other = "Fondo"
-[budget.line.form.program]
-other = "Programa"
-[budget.line.form.amount]
-other = "Monto por ocurrencia"
-[budget.line.form.amount_hint]
-other = "Una magnitud positiva; la direccion depende del tipo de cuenta."
-[budget.line.form.currency]
-other = "Moneda"
-[budget.line.form.schedule]
-other = "Calendario"
-[budget.line.form.schedule_none]
-other = "Selecciona un calendario…"
-[budget.line.form.schedule_hint]
-other = "Elige un calendario con nombre de la biblioteca."
-
-# Biblioteca de calendarios (/budgets/schedules).
-[budget.schedules.title]
-other = "Calendarios"
-[budget.schedules.intro]
-other = "Recurrencias con nombre y reutilizables que generan las fechas de ocurrencia de una linea."
-[budget.schedules.new]
-other = "Nuevo calendario"
-[budget.schedules.empty]
-other = "Aun no hay calendarios."
-[budget.schedules.back_to_budgets]
-other = "Volver a presupuestos"
-[budget.schedules.col.name]
-other = "Nombre"
-[budget.schedules.col.kind]
-other = "Tipo"
-[budget.schedules.col.summary]
-other = "Resumen"
-[budget.schedules.col.actions]
-other = "Acciones"
-
-# Formulario crear/editar calendario.
-[budget.schedule.form.new_title]
-other = "Nuevo calendario"
-[budget.schedule.form.edit_title]
-other = "Editar calendario"
-[budget.schedule.form.name]
-other = "Nombre"
-[budget.schedule.form.kind]
-other = "Tipo"
-[budget.schedule.form.day_of_month]
-other = "Dia del mes"
-[budget.schedule.form.dom_none]
-other = "Ninguno"
-[budget.schedule.form.monthly_hint]
-other = "Elige un dia del mes O un dia ordinal (p. ej. 2do lunes)."
-[budget.schedule.form.ordinal]
-other = "Ordinal"
-[budget.schedule.form.ordinal_none]
-other = "Ninguno"
-[budget.schedule.form.weekday]
-other = "Dia de la semana"
-[budget.schedule.form.anchor_date]
-other = "Fecha ancla"
-[budget.schedule.form.anchor_hint]
-other = "La recurrencia se mide desde esta fecha."
-[budget.schedule.form.custom_dates]
-other = "Fechas"
-[budget.schedule.form.custom_hint]
-other = "Una fecha por linea."
 [budget.schedule.form.date_placeholder]
 other = "AAAA-MM-DD"
-[budget.schedule.form.weekend_adjust]
-other = "Politica de fin de semana"
-[budget.schedule.form.weekend_hint]
-other = "Solo aplica a los tipos por dia del mes que pueden caer en fin de semana."
-[budget.schedule.form.notes]
-other = "Notas"
-
-# Fragmentos del resumen (columna de la lista).
-[budget.summary.day]
-other = "dia"
-[budget.summary.anchor]
-other = "ancla"
-[budget.dom.last]
-other = "Ultimo dia"
-
-# Tipos de calendario (sub-claves hoja; sin padre budget.kind).
-[budget.kind.onetime]
-other = "Una vez"
-[budget.kind.annual]
-other = "Anual"
-[budget.kind.monthly]
-other = "Mensual"
-[budget.kind.semimonthly]
-other = "Quincenal (dos dias)"
-[budget.kind.biweekly]
-other = "Cada dos semanas"
-[budget.kind.weekly]
-other = "Semanal"
-[budget.kind.custom]
-other = "Lista personalizada"
-
-# Politicas de fin de semana (sub-claves hoja).
-[budget.weekend.actual]
-other = "Mantener la fecha real"
-[budget.weekend.prev_business_day]
-other = "Dia habil anterior"
-[budget.weekend.next_business_day]
-other = "Dia habil siguiente"
-
-# Etiquetas ordinales (sub-claves hoja 1..4 y last).
-[budget.ordinal.1]
-other = "1er"
-[budget.ordinal.2]
-other = "2do"
-[budget.ordinal.3]
-other = "3er"
-[budget.ordinal.4]
-other = "4to"
-[budget.ordinal.last]
-other = "Ultimo"
-
-# Dias de la semana (sub-claves hoja 0=domingo..6=sabado).
-[budget.weekday.0]
-other = "Domingo"
-[budget.weekday.1]
-other = "Lunes"
-[budget.weekday.2]
-other = "Martes"
-[budget.weekday.3]
-other = "Miercoles"
-[budget.weekday.4]
-other = "Jueves"
-[budget.weekday.5]
-other = "Viernes"
-[budget.weekday.6]
-other = "Sabado"
-
-# Claves de error de validacion (regla 9).
 [error.budget.account_not_re]
 other = "Elige una cuenta de ingresos o gastos."
 [error.budget.amount]
@@ -2140,10 +1930,8 @@ other = "Fondos restringidos y no restringidos por donantes."
 other = "La dimensión de programa para ingresos y gastos."
 [all.desc.reconciliations]
 other = "Concilia cuentas con los estados de cuenta."
-[all.desc.budgets]
-other = "Presupuestos y programaciones recurrentes."
-[all.desc.schedules]
-other = "Programaciones recurrentes y con fechas que impulsan presupuestos y proyecciones."
+[all.desc.budgetplans]
+other = "Planes presupuestarios proyectados para los reportes de flujo de caja y variación."
 [all.desc.myexpenses]
 other = "Envía y da seguimiento a tus propios reportes de gastos."
 [all.desc.expensereview]

@@ -93,7 +93,6 @@
     {{if eq .Shell.SubNavControls "programs"}}{{template "programs-controls" .Page}}{{end}}
     {{if eq .Shell.SubNavControls "subsidiaries"}}{{template "subsidiaries-controls" .Page}}{{end}}
     {{if eq .Shell.SubNavControls "register"}}{{template "register-controls" .Page}}{{end}}
-    {{if eq .Shell.SubNavControls "budgets"}}{{template "budgets-controls" .Page}}{{end}}
     {{/* p26.76: a report's filter form in the second-level nav bar (the .Page is a
          reportPageModel; the shared partial takes its .Params paramsForm). */}}
     {{if eq .Shell.SubNavControls "report"}}{{template "report-filters" .Page.Params}}{{end}}

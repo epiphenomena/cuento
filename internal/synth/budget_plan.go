@@ -23,8 +23,8 @@ const SampleBudgetPlanSplits = 8
 // OPT-IN: Build does not call it; the demo generator and the fixture seam call it. It
 // sets ids.SampleBudgetPlan to the created plan id.
 //
-// This is the NEW split-derived model, DISTINCT from ExtendSampleBudget's old
-// schedule-based sample (the two coexist until p27.3 retires the old one). Each
+// This is the split-derived model (the old schedule-based sample was retired in
+// p27.3). Each
 // split carries an explicit date (no schedule object); R/E legs name a program
 // (required; prefilled where an account default exists), the open_item A/R leg
 // carries NONE (forbidden on A/L). Currency is the resolved account's default so a

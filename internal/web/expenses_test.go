@@ -255,11 +255,11 @@ func TestExpenseAccessBoundary(t *testing.T) {
 	h, st, sm := accountsApp(t)
 	sub := mkSubmitter(t, st, "sub_boundary")
 
-	// The ledger, budgets, import, and admin are hard 403 for a pure submitter (perm
-	// gate). A concrete REPORT route is 403 too (an ungranted user). The /reports INDEX
-	// is AnyUser by design (it filters its contents by grant), so it is checked
+	// The ledger, budget plans, import, and admin are hard 403 for a pure submitter
+	// (perm gate). A concrete REPORT route is 403 too (an ungranted user). The /reports
+	// INDEX is AnyUser by design (it filters its contents by grant), so it is checked
 	// separately below -- it must show NO report links for a submitter.
-	for _, path := range []string{"/accounts", "/funds", "/programs", "/budgets", "/import", "/admin", "/admin/users", "/reports/trial_balance"} {
+	for _, path := range []string{"/accounts", "/funds", "/programs", "/budget-plans", "/import", "/admin", "/admin/users", "/reports/trial_balance"} {
 		rec := asUser(t, h, sm, sub, http.MethodGet, path, nil)
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("submitter GET %s: status=%d, want 403 (access boundary)", path, rec.Code)

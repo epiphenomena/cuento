@@ -269,11 +269,12 @@ func TestAllCardsHaveDescription(t *testing.T) {
 			}
 		}
 	}
-	// Guard the guard: an admin must resolve the full grid (16 section cards + 13 report
-	// cards). If the card model ever changes, this pins that the loop actually exercised
-	// every card rather than silently iterating an empty set.
-	if cardCount < 29 {
-		t.Errorf("admin resolved only %d cards; expected the full grid (>=29)", cardCount)
+	// Guard the guard: an admin must resolve the full grid (15 section cards + 13 report
+	// cards; p27.3 merged the old budgets+schedules cards into one budget-plans card).
+	// If the card model ever changes, this pins that the loop actually exercised every
+	// card rather than silently iterating an empty set.
+	if cardCount < 28 {
+		t.Errorf("admin resolved only %d cards; expected the full grid (>=28)", cardCount)
 	}
 }
 
@@ -412,12 +413,12 @@ func TestSubNavRendersPerSection(t *testing.T) {
 		t.Errorf("/reports should render no section bar")
 	}
 
-	// /schedules belongs to the Budgets section: the bar shows Budgets + Schedules,
-	// with Schedules current (a distinct top-level path, same section).
-	rec = asUser(t, h, sm, admin.ID, http.MethodGet, "/schedules", nil)
+	// /budget-plans belongs to the "More" section (p27.3 retired the old /budgets +
+	// /schedules): the bar shows sibling entries (e.g. Funds) with Budget plans current.
+	rec = asUser(t, h, sm, admin.ID, http.MethodGet, "/budget-plans", nil)
 	body = rec.Body.String()
-	if !strings.Contains(body, `href="/budgets"`) || !strings.Contains(body, `href="/schedules" aria-current="page"`) {
-		t.Errorf("/schedules section bar wrong (want Budgets + current Schedules):\n%s", body)
+	if !strings.Contains(body, `href="/funds"`) || !strings.Contains(body, `href="/budget-plans" aria-current="page"`) {
+		t.Errorf("/budget-plans section bar wrong (want Funds sibling + current Budget plans):\n%s", body)
 	}
 }
 

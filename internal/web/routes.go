@@ -367,36 +367,14 @@ func (s *server) routes() []Route {
 		{http.MethodGet, "/import/rows/{id}/edit", TxnWrite, http.HandlerFunc(s.importRowEditForm)},
 		{http.MethodPost, "/import/rows/{id}/post", TxnWrite, http.HandlerFunc(s.importRowPost)},
 		{http.MethodPost, "/import/rows/{id}/discard", TxnWrite, http.HandlerFunc(s.importRowDiscard)},
-		// p19.3 budget management. Budgets are PLANNING/BOOKKEEPING data (like funds,
-		// p12.5), so the VIEW routes (list + detail + the schedule LIBRARY) are TxnRead
-		// -- they feed the p19.4 reports -- and every create/edit/delete MUTATION is
-		// TxnWrite (manage = TxnWrite; subsidiaries/users stay Admin). Documented in
-		// DECISIONS p19.3. The literal ".../schedules", ".../new", ".../edit", ".../lines"
-		// segments are more specific than the ".../{id}" wildcards, so the Go 1.22+ mux
-		// routes them precisely (the schedule library sits at top-level /schedules and
-		// the lines UNDER /budgets/{id}/lines/... to avoid a top-level /budgets/lines
-		// clash). The nav.budgets entry (shell.go) lights up now that GET /budgets is
-		// registered. The permission-matrix test picks these up automatically (rule 8).
-		{http.MethodGet, "/budgets", TxnRead, http.HandlerFunc(s.budgetsPage)},
-		{http.MethodGet, "/budgets/new", TxnWrite, http.HandlerFunc(s.budgetNewForm)},
-		{http.MethodGet, "/schedules", TxnRead, http.HandlerFunc(s.schedulesPage)},
-		{http.MethodGet, "/schedules/new", TxnWrite, http.HandlerFunc(s.scheduleNewForm)},
-		{http.MethodGet, "/schedules/{id}/edit", TxnWrite, http.HandlerFunc(s.scheduleEditForm)},
-		{http.MethodPost, "/schedules", TxnWrite, http.HandlerFunc(s.scheduleCreate)},
-		{http.MethodPost, "/schedules/{id}", TxnWrite, http.HandlerFunc(s.scheduleUpdate)},
-		{http.MethodGet, "/budgets/{id}", TxnRead, http.HandlerFunc(s.budgetDetail)},
-		{http.MethodGet, "/budgets/{id}/edit", TxnWrite, http.HandlerFunc(s.budgetEditForm)},
-		{http.MethodPost, "/budgets", TxnWrite, http.HandlerFunc(s.budgetCreate)},
-		{http.MethodPost, "/budgets/{id}", TxnWrite, http.HandlerFunc(s.budgetUpdate)},
-		{http.MethodGet, "/budgets/{id}/lines/new", TxnWrite, http.HandlerFunc(s.lineNewForm)},
-		{http.MethodGet, "/budgets/{id}/lines/{lid}/edit", TxnWrite, http.HandlerFunc(s.lineEditForm)},
-		{http.MethodPost, "/budgets/{id}/lines", TxnWrite, http.HandlerFunc(s.lineCreate)},
-		{http.MethodPost, "/budgets/{id}/lines/{lid}", TxnWrite, http.HandlerFunc(s.lineUpdate)},
-		{http.MethodPost, "/budgets/{id}/lines/{lid}/delete", TxnWrite, http.HandlerFunc(s.lineDelete)},
-		// p27.2 split-derived budget PLANS (the NEW model; a DISTINCT URL namespace from
-		// the old /budgets, which stays live until p27.3). VIEW = TxnRead (feeds the p27.3
-		// reports), MUTATIONS = TxnWrite (mirrors /budgets). The plan detail page hosts the
-		// split-entry GRID (bulk save + cadence helper) and the flat-CSV import.
+		// p27.2 split-derived budget PLANS (the split-derived budget model; DECISIONS
+		// "Budget redesign"). Budgets are PLANNING/BOOKKEEPING data (like funds, p12.5),
+		// so the VIEW routes are TxnRead -- they feed the p27.3 reports -- and every
+		// create/edit/delete MUTATION is TxnWrite (manage = TxnWrite). The old schedule-
+		// based /budgets + /schedules routes were RETIRED in p27.3 (the schedule model is
+		// gone). The plan detail page hosts the split-entry GRID (bulk save + cadence
+		// helper) and the flat-CSV import. The permission-matrix test picks these up
+		// automatically (rule 8).
 		{http.MethodGet, "/budget-plans", TxnRead, http.HandlerFunc(s.budgetPlansPage)},
 		{http.MethodGet, "/budget-plans/new", TxnWrite, http.HandlerFunc(s.budgetPlanNewForm)},
 		{http.MethodPost, "/budget-plans", TxnWrite, http.HandlerFunc(s.budgetPlanCreate)},

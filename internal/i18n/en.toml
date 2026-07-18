@@ -43,8 +43,6 @@ other = "Funds"
 other = "Programs"
 [nav.reconciliations]
 other = "Reconciliations"
-[nav.budgets]
-other = "Budgets"
 [nav.import]
 other = "Import"
 [nav.reports]
@@ -1729,217 +1727,8 @@ other = "Locked to the batch's subsidiary."
 # =====================================================================
 
 # Budget list (/budgets).
-[budget.list.title]
-other = "Budgets"
-[budget.list.intro]
-other = "Plan expected revenue and expense flows, then compare to actuals."
-[budget.list.new]
-other = "New budget"
-[budget.list.open]
-other = "Open"
-[budget.list.empty]
-other = "No budgets yet."
-[budget.list.col.name]
-other = "Name"
-[budget.list.col.period]
-other = "Period"
-[budget.list.col.actions]
-other = "Actions"
-
-# Budget create/edit form.
-[budget.form.new_title]
-other = "New budget"
-[budget.form.edit_title]
-other = "Edit budget"
-[budget.form.name]
-other = "Name"
-[budget.form.period_start]
-other = "Period start"
-[budget.form.period_end]
-other = "Period end"
-[budget.form.notes]
-other = "Notes"
-
-# Budget detail (/budgets/{id}).
-[budget.detail.title]
-other = "Budget"
-[budget.detail.back]
-other = "Back to budgets"
-[budget.detail.period]
-other = "Period"
-[budget.detail.lines]
-other = "Budget lines"
-[budget.detail.new_line]
-other = "Add line"
-[budget.detail.no_lines]
-other = "No lines yet."
-
-# Budget line list columns + form.
-[budget.line.col.subsidiary]
-other = "Subsidiary"
-[budget.line.col.account]
-other = "Account"
-[budget.line.col.fund]
-other = "Fund"
-[budget.line.col.program]
-other = "Program"
-[budget.line.col.amount]
-other = "Amount"
-[budget.line.col.schedule]
-other = "Schedule"
-[budget.line.col.actions]
-other = "Actions"
-[budget.line.unrestricted]
-other = "Unrestricted"
-[budget.line.form.new_title]
-other = "New line"
-[budget.line.form.edit_title]
-other = "Edit line"
-[budget.line.form.subsidiary]
-other = "Subsidiary"
-[budget.line.form.account]
-other = "Account"
-[budget.line.form.account_none]
-other = "Select an account…"
-[budget.line.form.account_hint]
-other = "Only revenue and expense accounts can be budgeted."
-[budget.line.form.fund]
-other = "Fund"
-[budget.line.form.program]
-other = "Program"
-[budget.line.form.amount]
-other = "Amount per occurrence"
-[budget.line.form.amount_hint]
-other = "A positive magnitude; the direction comes from the account type."
-[budget.line.form.currency]
-other = "Currency"
-[budget.line.form.schedule]
-other = "Schedule"
-[budget.line.form.schedule_none]
-other = "Select a schedule…"
-[budget.line.form.schedule_hint]
-other = "Pick a named schedule from the library."
-
-# Schedule library (/budgets/schedules).
-[budget.schedules.title]
-other = "Schedules"
-[budget.schedules.intro]
-other = "Named, reusable recurrences that generate a budget line's occurrence dates."
-[budget.schedules.new]
-other = "New schedule"
-[budget.schedules.empty]
-other = "No schedules yet."
-[budget.schedules.back_to_budgets]
-other = "Back to budgets"
-[budget.schedules.col.name]
-other = "Name"
-[budget.schedules.col.kind]
-other = "Kind"
-[budget.schedules.col.summary]
-other = "Summary"
-[budget.schedules.col.actions]
-other = "Actions"
-
-# Schedule create/edit form.
-[budget.schedule.form.new_title]
-other = "New schedule"
-[budget.schedule.form.edit_title]
-other = "Edit schedule"
-[budget.schedule.form.name]
-other = "Name"
-[budget.schedule.form.kind]
-other = "Kind"
-[budget.schedule.form.day_of_month]
-other = "Day of month"
-[budget.schedule.form.dom_none]
-other = "None"
-[budget.schedule.form.monthly_hint]
-other = "Choose a day of month OR an ordinal weekday (e.g. 2nd Monday)."
-[budget.schedule.form.ordinal]
-other = "Ordinal"
-[budget.schedule.form.ordinal_none]
-other = "None"
-[budget.schedule.form.weekday]
-other = "Weekday"
-[budget.schedule.form.anchor_date]
-other = "Anchor date"
-[budget.schedule.form.anchor_hint]
-other = "The recurrence is measured from this date."
-[budget.schedule.form.custom_dates]
-other = "Dates"
-[budget.schedule.form.custom_hint]
-other = "One date per line."
 [budget.schedule.form.date_placeholder]
 other = "YYYY-MM-DD"
-[budget.schedule.form.weekend_adjust]
-other = "Weekend policy"
-[budget.schedule.form.weekend_hint]
-other = "Applies only to day-of-month kinds that can land on a weekend."
-[budget.schedule.form.notes]
-other = "Notes"
-
-# Schedule summary fragments (list column).
-[budget.summary.day]
-other = "day"
-[budget.summary.anchor]
-other = "anchor"
-[budget.dom.last]
-other = "Last day"
-
-# Schedule kinds (leaf-only sub-keys; no bare budget.kind parent).
-[budget.kind.onetime]
-other = "One-time"
-[budget.kind.annual]
-other = "Annual"
-[budget.kind.monthly]
-other = "Monthly"
-[budget.kind.semimonthly]
-other = "Semi-monthly"
-[budget.kind.biweekly]
-other = "Biweekly"
-[budget.kind.weekly]
-other = "Weekly"
-[budget.kind.custom]
-other = "Custom list"
-
-# Weekend policies (leaf-only sub-keys).
-[budget.weekend.actual]
-other = "Keep the actual date"
-[budget.weekend.prev_business_day]
-other = "Previous business day"
-[budget.weekend.next_business_day]
-other = "Next business day"
-
-# Ordinal labels (leaf-only sub-keys 1..4 and last).
-[budget.ordinal.1]
-other = "1st"
-[budget.ordinal.2]
-other = "2nd"
-[budget.ordinal.3]
-other = "3rd"
-[budget.ordinal.4]
-other = "4th"
-[budget.ordinal.last]
-other = "Last"
-
-# Weekday labels (leaf-only sub-keys 0=Sunday..6=Saturday).
-[budget.weekday.0]
-other = "Sunday"
-[budget.weekday.1]
-other = "Monday"
-[budget.weekday.2]
-other = "Tuesday"
-[budget.weekday.3]
-other = "Wednesday"
-[budget.weekday.4]
-other = "Thursday"
-[budget.weekday.5]
-other = "Friday"
-[budget.weekday.6]
-other = "Saturday"
-
-# Budget validation error keys (rule 9: Go returns keys; handlers map typed
-# store errors to these).
 [error.budget.account_not_re]
 other = "Choose a revenue or expense account."
 [error.budget.amount]
@@ -2150,10 +1939,8 @@ other = "Donor-restricted and unrestricted funds."
 other = "The program dimension for revenue and expense."
 [all.desc.reconciliations]
 other = "Reconcile accounts against statements."
-[all.desc.budgets]
-other = "Budgets and recurring schedules."
-[all.desc.schedules]
-other = "Recurring and dated schedules that drive budgets and projections."
+[all.desc.budgetplans]
+other = "Projected budget plans for the cash-flow and variance reports."
 [all.desc.myexpenses]
 other = "Submit and track your own expense reports."
 [all.desc.expensereview]

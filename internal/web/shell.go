@@ -204,14 +204,12 @@ func subNavGroups() []subNavGroup {
 			// p23.9 the "More" hub area: every page under it shows the same lateral
 			// sub-nav (perm-filtered by navPermits). /admin is NOT a prefix here — it
 			// has its own group above (a sub-hub); the More bar links out to it.
-			Prefixes: []string{"/more", "/funds", "/programs", "/reconciliations", "/budgets", "/budget-plans", "/schedules", "/import", "/settings"},
+			Prefixes: []string{"/more", "/funds", "/programs", "/reconciliations", "/budget-plans", "/import", "/settings"},
 			Entries: []navEntry{
 				{"nav.funds", "/funds", TxnRead},
 				{"nav.programs", "/programs", TxnRead},
 				{"nav.reconciliations", "/reconciliations", TxnRead},
-				{"nav.budgets", "/budgets", TxnRead},
 				{"nav.budgetplans", "/budget-plans", TxnRead},
-				{"budget.schedules.title", "/schedules", TxnRead},
 				{"nav.import", "/import", TxnWrite},
 				{"nav.settings", "/settings", AnyUser},
 				{"nav.admin", "/admin", Admin},
@@ -509,9 +507,8 @@ func allCardGroups() []allCardGroup {
 			{"nav.programs", "/programs", TxnRead, "all.desc.programs"},
 			{"nav.reconciliations", "/reconciliations", TxnRead, "all.desc.reconciliations"},
 		}},
-		{"nav.budgets", []hubCard{
-			{"nav.budgets", "/budgets", TxnRead, "all.desc.budgets"},
-			{"budget.schedules.title", "/schedules", TxnRead, "all.desc.schedules"},
+		{"nav.budgetplans", []hubCard{
+			{"nav.budgetplans", "/budget-plans", TxnRead, "all.desc.budgetplans"},
 		}},
 		{"nav.expenses", []hubCard{
 			{"nav.myexpenses", "/expenses", ExpenseSubmit, "all.desc.myexpenses"},

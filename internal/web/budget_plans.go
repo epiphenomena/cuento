@@ -8,12 +8,28 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"cuento/internal/db/sqlc"
 	"cuento/internal/i18n"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
+
+// parseUserDate parses a display-format date (the user's date_format) to canonical
+// ISO "YYYY-MM-DD" via money.ParseDate (rule 10). ok=false on a blank/malformed
+// value so the caller leaves the field empty (the store then rejects it).
+func parseUserDate(s string, df money.DateFormat, now time.Time) (string, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", false
+	}
+	t, err := money.ParseDate(s, df, now)
+	if err != nil {
+		return "", false
+	}
+	return t.Format("2006-01-02"), true
+}
 
 // p27.2 budget-PLAN management (/budget-plans) -- the NEW split-derived budget model
 // (DECISIONS "Budget redesign"). A plan is a name + subsidiary; its SPLITS are
