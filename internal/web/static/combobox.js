@@ -228,7 +228,14 @@ function enhance(select, opts) {
         // Enter: jump to the next field. Tab: skip (native Tab already advances -- and the
         // pick's input.value write means the deferred blur reconcile keeps the committed
         // label, so Tab no longer reverts the highlight to the old selection).
-        if (focusNext && onAdvanceCb) onAdvanceCb(select);
+        if (focusNext) {
+          // p28.5: the entry grids pass onAdvance (skip-hidden next-cell). Any other site
+          // (the txn HEADER main-account, the expense/budget grids, a plain merge/report
+          // picker) has none -> fall back to focusing the next tabbable after the select,
+          // mirroring what native Tab would do, so Enter advances everywhere Tab does.
+          if (onAdvanceCb) onAdvanceCb(select);
+          else focusNextTabbable(select);
+        }
       }
     } else if (evt.key === 'Escape') {
       if (!list.hidden) { evt.preventDefault(); close(); syncInputToSelection(); }
@@ -287,6 +294,34 @@ function enhance(select, opts) {
   if (freeText && input.value === '' && opts && opts.initialText) {
     input.value = opts.initialText;
   }
+}
+
+// focusNextTabbable (p28.5) moves focus to the next tab-order element AFTER `from`,
+// mirroring what native Tab would do -- used as the generic Enter-advance when a combo has
+// no site-specific onAdvance (the txn header main-account, the expense/budget grids, a
+// plain merge/report picker). It walks the document's tabbable elements in DOM order and
+// focuses the first one positioned after `from`, skipping tabIndex<0, disabled, and
+// display/visibility-hidden nodes (the combo overlay input is tabIndex=-1, so it is skipped
+// -- Enter lands on the SAME cell native Tab from the select would). No-op if none follows.
+function focusNextTabbable(from) {
+  const doc = from && from.ownerDocument;
+  if (!doc || typeof doc.querySelectorAll !== 'function') return;
+  const sel = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]';
+  const all = [...doc.querySelectorAll(sel)].filter((el) => {
+    if (el === from) return true; // keep the anchor so we can find its position
+    if (el.tabIndex < 0) return false;
+    if (el.disabled) return false;
+    const view = doc.defaultView;
+    if (view && typeof view.getComputedStyle === 'function') {
+      const cs = view.getComputedStyle(el);
+      if (cs.visibility === 'hidden' || cs.display === 'none') return false;
+    }
+    return true;
+  });
+  const idx = all.indexOf(from);
+  if (idx < 0 || idx + 1 >= all.length) return;
+  const next = all[idx + 1];
+  if (next && typeof next.focus === 'function') next.focus();
 }
 
 // initCombos enhances every not-yet-enhanced combo select under `root` (idempotent).

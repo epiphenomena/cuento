@@ -187,6 +187,54 @@ test.describe('Enter and Tab select-and-advance (p28.3)', () => {
     await expect(page.locator('#txn-amount-1')).toBeFocused();
   });
 
+  // p28.5: the header main-account combo (#txn-main-account, no row index) advances an
+  // Enter-pick to the first BODY cell (row 0 description) -- so the header account is no
+  // longer a dead end for Enter (Tab already advanced it natively). Proves Enter-advance
+  // covers the header combo, not just the per-row body combos.
+  test('header main-account combo: Enter commits + advances to the first body cell', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'HdrAdv Checking');
+
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await page.locator('#txn-main-account').focus();
+    await page.keyboard.type('hdrchk'); // subsequence of "HdrAdv Checking"
+    const list = page.locator('#txn-main-header .combo-list');
+    await expect(list).toBeVisible();
+    await expect(list.locator('.combo-option', { hasText: 'HdrAdv Checking' })).toBeVisible();
+    const val = await page.locator('#txn-main-account option', { hasText: 'HdrAdv Checking' }).first().getAttribute('value');
+    await page.keyboard.press('Enter');
+    // (a) committed:
+    await expect(page.locator('#txn-main-account')).toHaveValue(/** @type {string} */ (val));
+    // (b) advanced past the tabIndex=-1 main-amount to the first body cell (description):
+    await expect(page.locator('#txn-desc-0')).toBeFocused();
+  });
+
+  // p28.5: a non-grid picker (the merge source combo) has NO onAdvance, so Enter uses the
+  // GENERIC "focus the next tabbable" fallback -- landing on the merge DESTINATION combo's
+  // tab stop (its native select). This exercises the fallback branch the expense/budget
+  // grid combos also rely on (they, too, enhance without a grid onAdvance).
+  test('non-grid combo: Enter commits + advances via the generic next-tabbable fallback', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'MrgAdv One');
+    await createAsset(page, 'MrgAdv Two');
+
+    await page.goto('/accounts');
+    await page.getByRole('button', { name: /merge accounts/i }).click();
+    await expect(page.locator('#mg-src')).toBeVisible();
+    await page.locator('#mg-src').focus();
+    await page.keyboard.type('mrgone'); // subsequence of "MrgAdv One"
+    const list = page.locator('#mg-src').locator('xpath=ancestor::div[contains(@class,"combo")][1]').locator('.combo-list');
+    await expect(list).toBeVisible();
+    await expect(list.locator('.combo-option', { hasText: 'MrgAdv One' })).toBeVisible();
+    const val = await page.locator('#mg-src option', { hasText: 'MrgAdv One' }).first().getAttribute('value');
+    await page.keyboard.press('Enter');
+    // (a) committed the source pick:
+    await expect(page.locator('#mg-src')).toHaveValue(/** @type {string} */ (val));
+    // (b) advanced to the destination select (the next tab stop after the source combo):
+    await expect(page.locator('#mg-dst')).toBeFocused();
+  });
+
   test('description field: Enter commits the suggestion + advances to the account cell', async ({ page, server }) => {
     await login(page, server);
     await createAsset(page, 'DescAdv Checking');

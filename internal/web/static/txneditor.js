@@ -443,6 +443,15 @@ function initEditor(form) {
   // visible cell just leaves focus on the picked select (no wrap).
   function advanceComboFocus(select) {
     if (!select || !select.id) return;
+    // The HEADER main-account combo (#txn-main-account) has no row index; an Enter-pick
+    // there advances to the first BODY row's first cell (its description), mirroring the
+    // top-to-bottom entry flow (header account -> body rows). Without this the header combo
+    // would keep the onAdvance no-op (its id doesn't match the per-row pattern below).
+    if (select.id === 'txn-main-account') {
+      const first = cellInput(0, 0);
+      if (first && typeof first.focus === 'function') first.focus();
+      return;
+    }
     const m = /^txn-([a-z]+)-(\d+)$/.exec(select.id);
     if (!m) return;
     const rowIndex = Number(m[2]);
