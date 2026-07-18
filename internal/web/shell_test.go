@@ -278,6 +278,73 @@ func TestAllCardsHaveDescription(t *testing.T) {
 	}
 }
 
+// TestAllLandingFoldsReportGroups (p28.13): the budget report group folds INTO the
+// budget section (nav.budgetplans) and the reconciliation report group folds INTO the
+// ledger/accounts section (nav.accounts), rather than trailing as their own report
+// sections. The other accounting report groups (financial/funds/programs/tax) stay as
+// distinct trailing report sections. Verified per-section by label + card hrefs on the
+// resolved model (an admin reaches every section and report).
+func TestAllLandingFoldsReportGroups(t *testing.T) {
+	app := newTestApp(t, Config{})
+	s := app.srv
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	if err := SyncReportGroups(ctx, s.store); err != nil {
+		t.Fatalf("sync report groups: %v", err)
+	}
+	admin := makeUser(t, s.store, store.CreateUserInput{Username: "fold_admin", IsAdmin: true})
+
+	sections := s.allSections(ctx, admin)
+
+	// hrefs of the cards in the section whose Label equals the localized key.
+	cardsIn := func(labelKey string) []string {
+		label := i18n.T("en", labelKey)
+		for _, sec := range sections {
+			if sec.Label == label {
+				var hrefs []string
+				for _, c := range sec.Cards {
+					hrefs = append(hrefs, c.Href)
+				}
+				return hrefs
+			}
+		}
+		return nil
+	}
+	contains := func(hrefs []string, want string) bool {
+		for _, h := range hrefs {
+			if h == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Budget report cards fold into the budget-plans section (after the "make a budget"
+	// card), NOT into a standalone reports.group.budget section.
+	budget := cardsIn("nav.budgetplans")
+	if !contains(budget, "/budget-plans") || !contains(budget, "/reports/budget_variance") {
+		t.Errorf("budget section missing folded budget report cards: %v", budget)
+	}
+	if cardsIn("reports.group.budget") != nil {
+		t.Errorf("budget report group should be folded, not a trailing section")
+	}
+
+	// Reconciliation report cards fold into the accounts section.
+	accounts := cardsIn("nav.accounts")
+	if !contains(accounts, "/accounts") || !contains(accounts, "/reports/reconciliation_statement") {
+		t.Errorf("accounts section missing folded reconciliation report cards: %v", accounts)
+	}
+	if cardsIn("reports.group.reconciliation") != nil {
+		t.Errorf("reconciliation report group should be folded, not a trailing section")
+	}
+
+	// The other accounting report groups stay as distinct trailing sections.
+	for _, g := range []string{"financial", "funds", "programs", "tax"} {
+		if cardsIn("reports.group."+g) == nil {
+			t.Errorf("report group %q missing its trailing section (should NOT be folded)", g)
+		}
+	}
+}
+
 // TestHomeRendersAllGrid (p26.78): GET / (home) now serves the SAME "All" card grid as
 // /more — the card grid is the landing, not the chart of accounts. It renders the full
 // shell (landmarks) with the grouped cards, and the "All" top-nav entry is marked

@@ -561,13 +561,14 @@ func reportDescKey(titleKey string) string {
 	return titleKey
 }
 
-// reportSections builds one allSection per report GROUP the user can reach, each
-// listing the reports in that group the user is granted (p26.77). It reuses the EXACT
-// enforcement path reportsIndex uses (decide + a once-loaded grantChecker), so a report
-// card appears iff the user could open /reports/{id} — a ReportGroup navPermits ("any
-// grant or admin") would wrongly show reports from groups the user lacks. Groups are in
-// reports.Groups() order, reports in All() order, matching the /reports index.
-func (s *server) reportSections(ctx context.Context, u *store.CurrentUser) []allSection {
+// reportCardsByGroup resolves, per report GROUP, the report cards the user can reach
+// (p28.13, extracted from the old reportSections). It reuses the EXACT enforcement path
+// reportsIndex uses (decide + a once-loaded grantChecker), so a report card appears iff
+// the user could open /reports/{id} — a ReportGroup navPermits ("any grant or admin")
+// would wrongly show reports from groups the user lacks. Reports are appended in All()
+// order within each group. Callers either fold a group's cards into a functional home
+// section (foldedReportGroups) or emit it as its own trailing report section.
+func (s *server) reportCardsByGroup(ctx context.Context, u *store.CurrentUser) map[string][]hubCardItem {
 	lang := langOf(ctx)
 	checker := s.grantChecker(ctx, u, ReportGroup(""))
 	byGroup := make(map[string][]hubCardItem)
@@ -585,18 +586,31 @@ func (s *server) reportSections(ctx context.Context, u *store.CurrentUser) []all
 			Desc: i18n.T(lang, reportDescKey(rep.TitleKey)),
 		})
 	}
-	var out []allSection
-	for _, g := range reports.Groups() {
-		cards := byGroup[g]
-		if len(cards) == 0 {
-			continue
-		}
-		out = append(out, allSection{
-			Label: i18n.T(lang, "reports.group."+g),
-			Cards: cards,
-		})
+	return byGroup
+}
+
+// foldedReportGroups maps a report GROUP onto the functional home-section it folds INTO
+// on the "All" landing (p28.13), rather than trailing as its own report section. It is
+// an EXPLICIT, ordered table (not reflection): the budget report group's cards go into
+// the budget section (nav.budgetplans, right after "make a budget"); the reconciliation
+// group's cards go into the ledger/accounts section (nav.accounts, near the
+// reconciliations card). TargetLabelKey MUST equal the LabelKey of an allCardGroups()
+// section — the fold appends to that group's cards (both target groups end with the
+// referenced card, so an append lands "right after" it). Every OTHER report group
+// (financial, funds, programs, tax) stays a distinct trailing report section — the owner
+// asked to keep the accounting reports grouped. Folded report cards still flow through
+// the same grant check (reportCardsByGroup), so a user without the grant never sees them.
+func foldedReportGroups() []struct {
+	Group          string
+	TargetLabelKey string
+} {
+	return []struct {
+		Group          string
+		TargetLabelKey string
+	}{
+		{"budget", "nav.budgetplans"},
+		{"reconciliation", "nav.accounts"},
 	}
-	return out
 }
 
 // hubPageModel is the model for the "All" card-grid landing (p26.77): its title/intro
@@ -607,23 +621,61 @@ type hubPageModel struct {
 	Sections []allSection
 }
 
-// allSections assembles the full ordered section list for the current user: the fixed
-// nav-structure groups (allCardGroups, filtered to reachable cards) followed by the
-// per-group report sections (reportSections). An empty section is dropped so a user
-// with no grant for a group never sees an empty header.
+// allSections assembles the full ordered section list for the current user (p28.13):
+// the fixed nav-structure groups (allCardGroups, filtered to reachable cards) — with
+// the FOLDED report groups (budget, reconciliation) appended into their matching
+// functional section — followed by a distinct trailing section per REMAINING report
+// group (financial, funds, programs, tax), the accounting reports the owner asked to
+// keep grouped. An empty section is dropped AFTER folding, so a user with only a budget
+// report grant (but no /budget-plans access) still sees the budget section carrying just
+// the report cards, while a section with no reachable card at all is never shown.
 func (s *server) allSections(ctx context.Context, u *store.CurrentUser) []allSection {
 	lang := langOf(ctx)
+	reportCards := s.reportCardsByGroup(ctx, u)
+
+	// Which report group folds into which fixed section, keyed by the section's LabelKey.
+	foldInto := make(map[string]string) // fixed-section LabelKey -> report group
+	for _, f := range foldedReportGroups() {
+		foldInto[f.TargetLabelKey] = f.Group
+	}
+
 	var out []allSection
 	for _, g := range allCardGroups() {
 		cards := s.visibleAllCards(ctx, u, g.Cards)
+		// Fold this group's report cards (if any) in right after its section cards.
+		if group, ok := foldInto[g.LabelKey]; ok {
+			cards = append(cards, reportCards[group]...)
+		}
 		if len(cards) == 0 {
-			continue
+			continue // no reachable card (section nor folded report) -> no empty header
 		}
 		out = append(out, allSection{Label: i18n.T(lang, g.LabelKey), Cards: cards})
 	}
-	// Reports last: a distinct block per report group the user is granted.
-	out = append(out, s.reportSections(ctx, u)...)
+
+	// Trailing report sections: one per report group NOT folded above, in Groups() order.
+	for _, grp := range reports.Groups() {
+		if reportGroupTarget(grp) != "" {
+			continue // folded into a functional section above
+		}
+		cards := reportCards[grp]
+		if len(cards) == 0 {
+			continue
+		}
+		out = append(out, allSection{Label: i18n.T(lang, "reports.group."+grp), Cards: cards})
+	}
 	return out
+}
+
+// reportGroupTarget returns the fixed-section LabelKey a report group folds into, or ""
+// when the group is not folded (p28.13). It lets allSections skip a report group from
+// the trailing block iff it was folded, using the single foldedReportGroups() table.
+func reportGroupTarget(group string) string {
+	for _, f := range foldedReportGroups() {
+		if f.Group == group {
+			return f.TargetLabelKey
+		}
+	}
+	return ""
 }
 
 // moreHub handles GET /more (AnyUser, p26.77): the "All" landing — a grid of perm-gated
