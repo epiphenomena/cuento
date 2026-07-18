@@ -1039,7 +1039,7 @@ other = "This transaction has a split cleared in a finalized reconciliation. Reo
 # p15.3+ land the real reports). Group NAMES (financial/funds/programs/tax) are raw
 # reference values shown verbatim in the admin grant UI, not catalog entries.
 [reports.params.scope]
-other = "Subsidiary scope"
+other = "Subsidiary"
 [reports.params.asof]
 other = "As of"
 [reports.params.from]

@@ -661,6 +661,10 @@ input[aria-invalid="true"] {
 }
 .app-subnav-controls .report-params label { font-size: 0.85rem; margin-bottom: 0; }
 .app-subnav-controls .report-params select { max-width: 11rem; }
+/* p28.29: the subsidiary-scope select shows a full subsidiary name (e.g.
+   "UrbanPromise Comunidad ...") which the generic 11rem cap truncated. Give this
+   one control a wider cap without blowing out the other filters. */
+.app-subnav-controls .report-params select.report-scope-select { max-width: 18rem; }
 .app-subnav-controls .report-params .js-datefield { width: 8rem; }
 .app-subnav-controls .report-params .report-run { padding: var(--space-1) var(--space-3); }
 .report-export { margin: var(--space-3) 0; }

@@ -1034,7 +1034,7 @@ other = "Esta transacción tiene una partida conciliada en una conciliación fin
 # mostrados tal cual en la interfaz de concesión de administración, no entradas del
 # catálogo.
 [reports.params.scope]
-other = "Alcance de subsidiaria"
+other = "Subsidiaria"
 [reports.params.asof]
 other = "A la fecha"
 [reports.params.from]
