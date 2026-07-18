@@ -18,8 +18,12 @@ var tmplKeyRefs = regexp.MustCompile(`\{\{-?\s*tn?\s+"([^"]+)"`)
 
 // tmplComment matches an html/template comment block {{/* ... */}}. Comments are
 // stripped before scanning so a documentation example like `{{t "key"}}` in a
-// header comment is not mistaken for a live key reference.
-var tmplComment = regexp.MustCompile(`(?s)\{\{-?/\*.*?\*/-?\}\}`)
+// header comment is not mistaken for a live key reference. The `\s*` on both sides
+// of the trim markers is load-bearing: templates close comments as `*/ -}}` (space
+// before the trim dash) as well as `*/}}`, and without it a lazy `.*?` would fail to
+// close at a spaced comment and BLEED forward to the next spaceless close, silently
+// swallowing (and hiding from the scan) any real {{t}} refs in between.
+var tmplComment = regexp.MustCompile(`(?s)\{\{-?\s*/\*.*?\*/\s*-?\}\}`)
 
 // TestTemplateKeysResolve scans every embedded template for literal {{t "..."}} /
 // {{tn "..."}} references and asserts each key exists in the catalog (i18n.Has).
