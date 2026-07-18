@@ -7,8 +7,25 @@ const assert = require('node:assert/strict');
 
 let fundImbalances;
 let chipLabel;
+let overallImbalance;
 test.before(async () => {
-  ({ fundImbalances, chipLabel } = await import('./txnfund.js'));
+  ({ fundImbalances, chipLabel, overallImbalance } = await import('./txnfund.js'));
+});
+
+// p28.4: with the main-split design the header/main split auto-balances the body, so a
+// genuinely-balanced transaction (overall) is ALWAYS zero when the main split is present --
+// the Total chip must render neutral, not red. overallImbalance folds the main split in.
+test('overallImbalance: main present -> always 0 (the header split balances the body)', () => {
+  // A nonzero body sum still nets to 0 overall because the header takes the residual.
+  assert.equal(overallImbalance(4000, true), 0);
+  assert.equal(overallImbalance(-4000, true), 0);
+  assert.equal(overallImbalance(0, true), 0);
+});
+
+test('overallImbalance: flat grid (no main split) -> the body sum stands', () => {
+  assert.equal(overallImbalance(4000, false), 4000);
+  assert.equal(overallImbalance(0, false), 0);
+  assert.equal(overallImbalance(-250, false), -250);
 });
 
 test('fundImbalances: balanced overall and per fund -> empty', () => {

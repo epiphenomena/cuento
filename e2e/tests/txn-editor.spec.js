@@ -641,6 +641,37 @@ test.describe('transaction editor', () => {
     }
   });
 
+  // p28.4: with the main-split design the header/main split auto-balances the BODY, so a
+  // genuinely-balanced transaction (overall, including the main split) is always zero -- its
+  // Total chip must render NEUTRAL (no `.imbalanced` danger class), even though the body
+  // splits alone are nonzero. Regression for "a balanced entry still shows a red total".
+  test('a balanced main-split transaction shows a neutral (non-red) Total', async ({
+    page,
+    server,
+  }) => {
+    await login(page, server);
+    await createAsset(page, 'Bal Checking');
+    await createAsset(page, 'Bal Savings');
+
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+
+    const overall = page.locator('#txn-total-overall');
+    // Header (balancing) account + a single body leg: Savings +40. The header takes the
+    // residual -40, so the OVERALL transaction is balanced (0) even though the body sum is 40.
+    await page.locator('#txn-main-account').selectOption({ label: 'Bal Checking' });
+    await page.locator('#txn-account-0').selectOption({ label: 'Bal Savings' });
+    await page.locator('#txn-amount-0').fill('40.00');
+
+    // The header main split's amount previews the -40 residual (proves the body IS balanced
+    // by the main split).
+    await expect(page.locator('#txn-main-amount')).toHaveValue(/40/);
+    // The Total chip is NEUTRAL: it does NOT carry the danger `.imbalanced` class, and it
+    // reads the balanced overall (0.00), NOT the raw body sum (40.00).
+    await expect(overall).not.toHaveClass(/\bimbalanced\b/);
+    await expect(overall).toContainText(/^Total:\s*0/);
+  });
+
   // p26.37: opening a NEW transaction prefills the header (balancing) account -- from a
   // register it is THAT register's account; from the top nav it is the user's LAST-USED
   // header account (the position-0 account of their most recent transaction).

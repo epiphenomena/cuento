@@ -16,7 +16,7 @@
 // Guarded so importing under Node is side-effect free (no `document`).
 
 import { parseAmountMinor, drcrToSigned, formatSignedMinor } from './txnamount.js';
-import { fundImbalances, chipLabel } from './txnfund.js';
+import { fundImbalances, chipLabel, overallImbalance } from './txnfund.js';
 import { nextCell, invalidRowsForSubsidiary } from './txngrid.js';
 import { isRowEmpty } from './rowstate.js';
 import { initCombos, stripCombo, resyncCombos } from './combobox.js';
@@ -79,12 +79,24 @@ function initEditor(form) {
     // names read from the fund options (rule 9). Amount formatting stays client-side.
     const totalLabel = form.dataset.chipTotal || 'Total';
     const unrestrictedLabel = form.dataset.chipUnrestricted || 'Unrestricted';
+
+    // p28.4: `total` is the BODY sum only. With the main-split design (MainPresent) the
+    // header/main split auto-balances the body: its amount is the residual -(body sum), so
+    // the OVERALL transaction (body + main) is ALWAYS zero and a genuinely-balanced entry
+    // must render the Total chip NEUTRAL, not red. Compute the overall imbalance INCLUDING
+    // the main split's balancing amount, and drive both the chip text and the red state off
+    // THAT. In the flat fallback grid (no main header: import / expense-review / multi-fund)
+    // there is no balancing split, so overall == the body sum and a nonzero total is red.
+    const mainPresent = !!form.querySelector('#txn-main-header');
+    const overall_ = overallImbalance(total, mainPresent); // 0 whenever MainPresent
+
     const overall = form.querySelector('#txn-total-overall');
     if (overall) {
-      // p28: always show the running Total as a NEUTRAL chip (a balanced total is not an
-      // error). It flips to the danger `imbalanced` state only when it is genuinely nonzero.
-      overall.textContent = fmtChip(totalLabel, total);
-      overall.classList.toggle('imbalanced', total !== 0);
+      // Always show the running Total as a NEUTRAL chip (a balanced total is not an error);
+      // it flips to the danger `imbalanced` state only when the OVERALL transaction (body +
+      // main balancing split) is genuinely nonzero.
+      overall.textContent = fmtChip(totalLabel, overall_);
+      overall.classList.toggle('imbalanced', overall_ !== 0);
     }
     const chips = form.querySelector('#txn-fund-chips');
     if (chips) {
