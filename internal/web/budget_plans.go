@@ -600,7 +600,7 @@ func (s *server) budgetPlanImport(w http.ResponseWriter, r *http.Request) {
 		s.renderBudgetImportError(w, r, plan, "error.budget_plan.csv_missing")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	df := dateFormatFor(u)
 	numFmt := numberFormatFor(u)

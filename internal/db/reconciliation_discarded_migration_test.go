@@ -33,7 +33,7 @@ func TestMigrate23PreservesReconciliationsOnRebuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer sqldb.Close()
+	defer func() { _ = sqldb.Close() }()
 
 	prov, err := goose.NewProvider(goose.DialectSQLite3, sqldb, sub)
 	if err != nil {
@@ -62,16 +62,16 @@ func TestMigrate23PreservesReconciliationsOnRebuild(t *testing.T) {
 		t.Fatalf("cleared split FK broken: reconciliation_id=%d err=%v, want 7", rid, err)
 	}
 	var fk int
-	sqldb.QueryRow(`PRAGMA foreign_keys`).Scan(&fk)
+	_ = sqldb.QueryRow(`PRAGMA foreign_keys`).Scan(&fk)
 	if fk != 1 {
 		t.Errorf("foreign_keys=%d after migrate, want 1", fk)
 	}
 	rows, _ := sqldb.Query(`PRAGMA foreign_key_check`)
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	if rows.Next() {
 		t.Errorf("foreign_key_check reported a violation after the rebuild")
 	}
-	rows.Close()
+	_ = rows.Close()
 	if _, err := sqldb.Exec(`UPDATE reconciliations SET status='discarded' WHERE id=7`); err != nil {
 		t.Errorf("'discarded' not accepted after migrate: %v", err)
 	}

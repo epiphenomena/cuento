@@ -111,7 +111,7 @@ func ExtendReconciliation(ctx context.Context, s *store.Store, ids *IDs) (cleare
 	}
 
 	if err := s.Finalize(ctx, reconID); err != nil {
-		return 0, fmt.Errorf("Finalize reconciliation: %w", err)
+		return 0, fmt.Errorf("finalize reconciliation: %w", err)
 	}
 	return len(toClear), nil
 }

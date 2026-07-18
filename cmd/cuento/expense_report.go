@@ -82,6 +82,6 @@ func expenseReportRejectCmd(ctx context.Context, args []string) error {
 	if err := st.RejectExpenseReport(store.WithActor(ctx, systemActor), id, *reason); err != nil {
 		return fmt.Errorf("expense-report reject %d: %w", id, err)
 	}
-	fmt.Fprintf(stdout, "expense report %d rejected\n", id)
+	_, _ = fmt.Fprintf(stdout, "expense report %d rejected\n", id)
 	return nil
 }

@@ -1086,8 +1086,8 @@ func TestDiscardReconciliation(t *testing.T) {
 	}
 	// Audit intact: the discarded recon row and its versions still exist.
 	var reconRows, versionRows int
-	e.d.QueryRow(`SELECT COUNT(*) FROM reconciliations WHERE id = ?`, recon).Scan(&reconRows)
-	e.d.QueryRow(`SELECT COUNT(*) FROM reconciliations_versions WHERE entity_id = ?`, recon).Scan(&versionRows)
+	_ = e.d.QueryRow(`SELECT COUNT(*) FROM reconciliations WHERE id = ?`, recon).Scan(&reconRows)
+	_ = e.d.QueryRow(`SELECT COUNT(*) FROM reconciliations_versions WHERE entity_id = ?`, recon).Scan(&versionRows)
 	if reconRows != 1 {
 		t.Errorf("reconciliation rows after discard = %d, want 1 (soft status, not deleted)", reconRows)
 	}

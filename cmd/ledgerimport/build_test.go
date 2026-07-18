@@ -531,7 +531,8 @@ func TestForeignSplitStoresNativeAndConvertsForReport(t *testing.T) {
 	// The tid 12 MXN campus-revenue split stores 4000.00 MXN native (400000 minor,
 	// a credit -> negative net-debit), NOT the USD 200 (which db/cr held).
 	var mxnNative int64
-	if err := sqldb.QueryRow(`
+	if err := sqldb.QueryRow(
+		`
 		SELECT s.amount FROM splits s JOIN transactions t ON t.id = s.transaction_id
 		WHERE s.account_id = ? AND t.currency = 'MXN' AND s.amount < 0
 		  AND t.id IN (SELECT transaction_id FROM splits WHERE description = 'mx campus gift')`,
@@ -547,7 +548,8 @@ func TestForeignSplitStoresNativeAndConvertsForReport(t *testing.T) {
 	// USD 200 campus expense as RtW -- proving the report-basis conversion is correct.
 	campusID := *res.CampusFundID
 	var tid13RtW int
-	if err := sqldb.QueryRow(`
+	if err := sqldb.QueryRow(
+		`
 		SELECT COUNT(*) FROM splits s JOIN transactions t ON t.id = s.transaction_id
 		WHERE s.account_id = ? AND s.fund_id = ? AND s.amount = 20000
 		  AND t.id IN (SELECT transaction_id FROM splits WHERE description = 'us campus paid by mx gift')`,
@@ -563,7 +565,8 @@ func TestForeignSplitStoresNativeAndConvertsForReport(t *testing.T) {
 	// receipt) posted, and the store enforces per-transaction zero-sum on write, so
 	// its very existence proves balance. Assert its two MXN splits net to zero.
 	var mxnTxnSum sql.NullInt64
-	if err := sqldb.QueryRow(`
+	if err := sqldb.QueryRow(
+		`
 		SELECT SUM(s.amount) FROM splits s JOIN transactions t ON t.id = s.transaction_id
 		WHERE t.currency = 'MXN'
 		  AND t.id IN (SELECT transaction_id FROM splits WHERE description = 'grant in')`,
@@ -746,7 +749,8 @@ func TestCampusFundAssignedByKat(t *testing.T) {
 	// per-currency pool this expense would have OVERFLOWED. The tid 13 Campus Costs
 	// split carries the campus fund (not NULL), and its Checking offset is retagged RtW.
 	var tid13Campus int
-	if err := sqldb.QueryRow(`
+	if err := sqldb.QueryRow(
+		`
 		SELECT COUNT(*) FROM splits s JOIN transactions t ON t.id = s.transaction_id
 		WHERE s.account_id = ? AND s.fund_id = ? AND s.amount = 20000
 		  AND t.id IN (SELECT transaction_id FROM splits WHERE description = 'us campus paid by mx gift')`,
@@ -772,7 +776,8 @@ func TestCampusFundAssignedByKat(t *testing.T) {
 	// (c) tid 10: campus expense 80 exceeds the remaining pool (40) -> OVERFLOW to
 	// unrestricted. Its Campus Costs split carries NO fund but still the Campus program.
 	var overflow int
-	if err := sqldb.QueryRow(`
+	if err := sqldb.QueryRow(
+		`
 		SELECT COUNT(*) FROM splits s JOIN transactions t ON t.id = s.transaction_id
 		WHERE s.account_id = ? AND s.fund_id IS NULL AND s.program_id = ?`,
 		res.AccountIDs["Campus Costs"], res.ProgramIDs["Campus"],
@@ -820,7 +825,8 @@ func TestCampusFundAssignedByKat(t *testing.T) {
 	}
 	// The fund's net-debit sum over asset splits (the Z18 quantity) must be >= 0.
 	var fundAsset sql.NullInt64
-	if err := sqldb.QueryRow(`
+	if err := sqldb.QueryRow(
+		`
 		SELECT SUM(s.amount) FROM splits s JOIN accounts a ON a.id = s.account_id
 		WHERE s.fund_id = ? AND a.type = 'asset'`, campusID,
 	).Scan(&fundAsset); err != nil {
@@ -1650,7 +1656,8 @@ func TestCorrectionPostsBalancedAdjustment(t *testing.T) {
 	// both carrying the GRANT1 fund (so the store's per-fund zero-sum held). The
 	// grant-revenue leg carries the Education program.
 	rows, err := sqldb.Query(
-		`SELECT account_id, amount, fund_id, program_id FROM splits WHERE transaction_id = ? ORDER BY position`, txnID)
+		`SELECT account_id, amount, fund_id, program_id FROM splits WHERE transaction_id = ? ORDER BY position`, txnID,
+	)
 	if err != nil {
 		t.Fatalf("load correction splits: %v", err)
 	}
@@ -1782,7 +1789,8 @@ func TestCorrectionResolvesCampusFundByName(t *testing.T) {
 		t.Fatalf("correction produced %d transactions, want 1", len(txns))
 	}
 	rows, err := sqldb.Query(
-		`SELECT account_id, amount, fund_id FROM splits WHERE transaction_id = ? ORDER BY position`, txns[0])
+		`SELECT account_id, amount, fund_id FROM splits WHERE transaction_id = ? ORDER BY position`, txns[0],
+	)
 	if err != nil {
 		t.Fatalf("load splits: %v", err)
 	}

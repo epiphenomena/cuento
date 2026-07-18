@@ -150,7 +150,7 @@ func userAddCmd(ctx context.Context, args []string) error {
 	if err := userAdd(ctx, st, pa.username, pa.display, pa.admin, password); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "created user %q\n", pa.username)
+	_, _ = fmt.Fprintf(stdout, "created user %q\n", pa.username)
 	return nil
 }
 
@@ -188,7 +188,7 @@ func userPasswdCmd(ctx context.Context, args []string) error {
 	if err := userPasswd(ctx, st, username, password); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "password updated for %q\n", username)
+	_, _ = fmt.Fprintf(stdout, "password updated for %q\n", username)
 	return nil
 }
 
@@ -221,7 +221,7 @@ func userDisableCmd(ctx context.Context, args []string) error {
 	if err := userDisable(ctx, st, username); err != nil {
 		return err
 	}
-	fmt.Fprintf(stdout, "disabled user %q\n", username)
+	_, _ = fmt.Fprintf(stdout, "disabled user %q\n", username)
 	return nil
 }
 

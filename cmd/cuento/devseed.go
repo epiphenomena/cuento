@@ -53,7 +53,7 @@ func devseedCmd(args []string) error {
 }
 
 func devseedUsage() {
-	fmt.Fprintf(stdout, "usage: cuento devseed <target> [-db PATH]\n\ntargets:\n"+
+	_, _ = fmt.Fprintf(stdout, "usage: cuento devseed <target> [-db PATH]\n\ntargets:\n"+
 		"  budget    seed a SYNTHETIC sample budget plan + splits (for the budget reports)\n")
 }
 
@@ -90,10 +90,10 @@ func devseedBudgetCmd(args []string) error {
 		return fmt.Errorf("devseed budget: %w", err)
 	}
 	if !created {
-		fmt.Fprintf(stdout, "devseed budget: %q already exists in %s (no-op)\n", devseedBudgetName, *dbPath)
+		_, _ = fmt.Fprintf(stdout, "devseed budget: %q already exists in %s (no-op)\n", devseedBudgetName, *dbPath)
 		return nil
 	}
-	fmt.Fprintf(stdout, "devseed budget: created %q in %s\n", devseedBudgetName, *dbPath)
+	_, _ = fmt.Fprintf(stdout, "devseed budget: created %q in %s\n", devseedBudgetName, *dbPath)
 	return nil
 }
 

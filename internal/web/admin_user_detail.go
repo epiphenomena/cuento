@@ -143,7 +143,7 @@ func (s *server) buildUserDetail(r *http.Request, id int64) (userDetailModel, er
 	scopeOpts := make([]programScopeOption, 0, len(progs))
 	for _, p := range progs {
 		progName[p.ID] = p.Name
-		scopeOpts = append(scopeOpts, programScopeOption{ID: p.ID, Name: p.Name})
+		scopeOpts = append(scopeOpts, programScopeOption(p))
 	}
 	// Which groups may carry a program scope: only those containing a program-
 	// dimensioned report (p27.4c). Computed from the registry so it stays locked to

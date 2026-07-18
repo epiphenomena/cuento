@@ -67,15 +67,15 @@ func demoCmd(args []string) error {
 		return err
 	}
 
-	fmt.Fprintf(stdout, "wrote demo database to %s\n\ndemo logins (all synthetic; safe to host publicly):\n", *out)
+	_, _ = fmt.Fprintf(stdout, "wrote demo database to %s\n\ndemo logins (all synthetic; safe to host publicly):\n", *out)
 	for _, u := range synth.DemoUsers() {
-		fmt.Fprintf(stdout, "  %-10s %-18s %s\n", u.Username, u.Password, u.Role)
+		_, _ = fmt.Fprintf(stdout, "  %-10s %-18s %s\n", u.Username, u.Password, u.Role)
 	}
 	return nil
 }
 
 func demoUsage() {
-	fmt.Fprintf(stdout, "usage: cuento demo -o <path> [-force]\n\n"+
+	_, _ = fmt.Fprintf(stdout, "usage: cuento demo -o <path> [-force]\n\n"+
 		"Generate a fresh, fully-populated, 100%% SYNTHETIC demo database.\n")
 }
 
