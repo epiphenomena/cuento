@@ -43,8 +43,8 @@
   </p>
   {{end}}
 
-  {{if .ErrorKey}}
-  <p class="error" role="alert" id="expense-error">{{.ErrorKey}}</p>
+  {{if .ErrorMsg}}
+  <p class="error" role="alert" id="expense-error">{{.ErrorMsg}}</p>
   {{end}}
 
   {{if .Rejected}}

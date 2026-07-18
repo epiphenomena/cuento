@@ -256,10 +256,10 @@ type expenseDetailModel struct {
 	// fresh rows). Server-rendered existing lines keep their stored program.
 	UserProgram int64
 
-	// ErrorKey is a pre-localized page-level error (the zero-line submit case), "" =
-	// none. It is already run through {{t}} in the handler so the template renders it
-	// verbatim (like admin_user_detail's page-level error).
-	ErrorKey string
+	// ErrorMsg is a pre-localized page-level error (the zero-line submit case), "" =
+	// none. Unlike a *.ErrorKey field it holds already-localized text (run through
+	// {{t}} in the handler), so the template renders it verbatim.
+	ErrorMsg string
 }
 
 // expenseDetail handles GET /expenses/{id} (ExpenseSubmit): the report editor. It
@@ -655,7 +655,7 @@ func (s *server) renderExpenseGridError(w http.ResponseWriter, r *http.Request, 
 	if badRow >= 0 && badRow < len(rows) {
 		rows[badRow].ErrorKey = key
 	} else {
-		model.ErrorKey = i18n.T(lang, key)
+		model.ErrorMsg = i18n.T(lang, key)
 	}
 	// Substitute the echoed rows for the persisted ones + a trailing empty starter row.
 	model.Lines = append(rows, expenseLineRow{})
@@ -722,9 +722,9 @@ func (s *server) renderReportError(w http.ResponseWriter, r *http.Request, rep s
 	if !ok {
 		return
 	}
-	// A page-level error above the grid: reuse the detail template, with the error key
-	// stamped (already localized) so it renders verbatim.
-	model.ErrorKey = i18n.T(langOf(r.Context()), key)
+	// A page-level error above the grid: reuse the detail template, with the error
+	// message stamped (already localized) so it renders verbatim.
+	model.ErrorMsg = i18n.T(langOf(r.Context()), key)
 	s.render(w, r, http.StatusUnprocessableEntity, "expense_detail.tmpl", s.newShellPage(r, model))
 }
 
