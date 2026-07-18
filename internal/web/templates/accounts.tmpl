@@ -49,6 +49,9 @@
   </label>
   {{/* No-JS fallback: without htmx the change-trigger can't fire, so keep a submit. */}}
   <noscript><button type="submit" class="btn">{{t "accounts.filter.apply"}}</button></noscript>
+  {{/* p28.30: non-disruptive "updating…" cue while a filter GET is in flight (same
+       mechanism as the report filters: form gets .htmx-request, this span fades in). */}}
+  <span class="htmx-indicator subnav-updating" aria-hidden="true">{{t "common.updating"}}</span>
 </form>
 <div class="subnav-actions">
   {{/* p26.7: New opens a dedicated full page (GET /accounts/new) -- a plain link, so

@@ -173,6 +173,13 @@
     {{/* No-JS fallback: without htmx the change-trigger can't fire, so keep a submit
          (parsed as DOM only when JS is OFF). With JS the form auto-applies on change. */}}
     <noscript><button type="submit" class="btn btn-primary report-run">{{t "reports.params.run"}}</button></noscript>
+    {{/* p28.30: a subtle non-disruptive "updating…" cue. htmx adds .htmx-request to
+         this <form> for the duration of the filter GET; the .htmx-indicator span is
+         hidden by default (htmx's own indicator styles are disabled via htmx-config,
+         so the app.css rules own this) and fades in only while the request is in
+         flight. It sits in the subnav, never touches #report-results, so the results
+         don't reflow. CSP-safe: no inline style/script. */}}
+    <span class="htmx-indicator report-updating" aria-hidden="true">{{t "common.updating"}}</span>
   </fieldset>
 </form>
 {{- end}}

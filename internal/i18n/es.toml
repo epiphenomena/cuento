@@ -17,6 +17,8 @@ other = "Guardar"
 other = "Cancelar"
 [common.skip_to_content]
 other = "Ir al contenido"
+[common.updating]
+other = "Actualizando…"
 
 # Shell autenticado (p10.2): las secciones de navegacion de nivel superior
 # (Apendice F). Cada entrada se muestra solo para personas permitidas Y solo

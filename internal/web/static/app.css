@@ -667,6 +667,17 @@ input[aria-invalid="true"] {
 .app-subnav-controls .report-params select.report-scope-select { max-width: 18rem; }
 .app-subnav-controls .report-params .js-datefield { width: 8rem; }
 .app-subnav-controls .report-params .report-run { padding: var(--space-1) var(--space-3); }
+/* p28.30: non-disruptive "updating…" cue on a filter change. htmx's own indicator
+   styles are disabled (includeIndicatorStyles:false, strict CSP), so app.css owns
+   the .htmx-indicator rule: hidden by default, faded in only while the request is
+   in flight. htmx sets .htmx-request on the element that issued the GET -- here the
+   .report-params form -- so the descendant indicator shows for that window without
+   touching or reflowing #report-results. */
+.htmx-indicator { opacity: 0; transition: opacity 0.15s ease-in; }
+.report-params.htmx-request .htmx-indicator,
+.subnav-filters.htmx-request .htmx-indicator { opacity: 1; }
+.report-updating,
+.subnav-updating { font-size: 0.85rem; color: var(--color-text-muted); align-self: center; }
 .report-export { margin: var(--space-3) 0; }
 .report-table { width: 100%; border-collapse: collapse; margin-top: var(--space-4); }
 .report-table th, .report-table td {

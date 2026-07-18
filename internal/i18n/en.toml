@@ -24,6 +24,8 @@ other = "Save"
 other = "Cancel"
 [common.skip_to_content]
 other = "Skip to content"
+[common.updating]
+other = "Updating…"
 
 # Authenticated shell (p10.2): the top-level navigation sections (Appendix F).
 # Each entry renders only for permitted personas AND only once its route exists;
