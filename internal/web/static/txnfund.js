@@ -29,3 +29,16 @@ export function fundImbalances(rows) {
   }
   return { total, perFund };
 }
+
+// chipLabel resolves a per-fund imbalance chip's LABEL from a fund key. `key` is
+// the fund id string ("" = unrestricted, per fundImbalances). `names` maps fund id
+// -> fund NAME (proper nouns, stored data — NOT a catalog key, AGENTS rule 9), and
+// `unrestrictedLabel` is the localized "Unrestricted" string. The unrestricted
+// bucket ("") uses the label; a known id uses its name; an unknown id falls back to
+// the raw id (defensive — the chip stays visible rather than blank). Pure (no DOM),
+// so it is node-tested; the caller supplies names read from the fund <select>
+// options and the label from the catalog.
+export function chipLabel(key, names, unrestrictedLabel) {
+  if (key === '') return unrestrictedLabel;
+  return (names && names[key]) || key;
+}

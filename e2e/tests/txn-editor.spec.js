@@ -594,6 +594,49 @@ test.describe('transaction editor', () => {
     await expect(page).toHaveURL(new RegExp(`${registerURL}$`));
   });
 
+  // p26.109: the live per-fund imbalance chips must render the fund NAME (proper noun,
+  // read from the fund <select> options) and the localized "Total" / "Unrestricted"
+  // labels -- NOT a hardcoded English literal or a raw fund database id. This guards
+  // the rule-9 leak the audit found (chips showed 'total'/'unrestricted' + the id).
+  test('the per-fund imbalance chips show fund NAMES and localized labels, not ids', async ({
+    page,
+    server,
+  }) => {
+    await login(page, server);
+    // Two named funds so >=2 fund groups are in play (per-fund chips appear only then).
+    await createFund(page, 'Alpha Grant');
+    await createFund(page, 'Beta Grant');
+    await createAsset(page, 'Chip Checking');
+    await createAsset(page, 'Chip Savings');
+
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+
+    // Row 0: fund = Alpha Grant, amount +100. Row 1: fund = Beta Grant, amount -60.
+    // Overall = +40 (Total chip). Each fund group is nonzero -> a per-fund chip each.
+    await page.locator('#txn-account-0').selectOption({ label: 'Chip Savings' });
+    await page.locator('#txn-fund-0').selectOption({ label: 'Alpha Grant' });
+    await page.locator('#txn-amount-0').fill('100.00');
+    await expect(page.locator('#txn-account-1')).toBeVisible();
+    await page.locator('#txn-account-1').selectOption({ label: 'Chip Checking' });
+    await page.locator('#txn-fund-1').selectOption({ label: 'Beta Grant' });
+    await page.locator('#txn-amount-1').fill('-60.00');
+
+    // The overall chip uses the localized "Total" label (not the old hardcoded 'total').
+    await expect(page.locator('#txn-total-overall')).toContainText(/^Total:/);
+
+    // The per-fund chips render the fund NAMES, never the raw fund id.
+    const chips = page.locator('#txn-fund-chips .txn-fund-chip');
+    await expect(chips).toHaveCount(2);
+    const chipText = (await chips.allTextContents()).join(' | ');
+    expect(chipText).toContain('Alpha Grant:');
+    expect(chipText).toContain('Beta Grant:');
+    // No chip is labelled with a bare numeric id (e.g. "5: ...").
+    for (const t of await chips.allTextContents()) {
+      expect(t).not.toMatch(/^\d+:/);
+    }
+  });
+
   // p26.37: opening a NEW transaction prefills the header (balancing) account -- from a
   // register it is THAT register's account; from the top nav it is the user's LAST-USED
   // header account (the position-0 account of their most recent transaction).

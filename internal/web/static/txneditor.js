@@ -16,7 +16,7 @@
 // Guarded so importing under Node is side-effect free (no `document`).
 
 import { parseAmountMinor, drcrToSigned, formatSignedMinor } from './txnamount.js';
-import { fundImbalances } from './txnfund.js';
+import { fundImbalances, chipLabel } from './txnfund.js';
 import { nextCell, invalidRowsForSubsidiary } from './txngrid.js';
 import { isRowEmpty } from './rowstate.js';
 import { initCombos, stripCombo, resyncCombos } from './combobox.js';
@@ -52,6 +52,22 @@ function initEditor(form) {
     return a ? parseAmountMinor(a.value, exp) : null;
   }
 
+  // fundNames builds the fund id -> NAME lookup from ANY row's fund <select> options
+  // (all rows share the same option set). The names are proper nouns the server
+  // already rendered into the options (stored data, rule 9 -- not a catalog key), so
+  // the per-fund chip resolves to the fund NAME rather than its database id. The
+  // value="0" (unrestricted) option is skipped; its localized label is stamped
+  // separately on the form (data-chip-unrestricted).
+  function fundNames() {
+    const names = {};
+    const sel = form.querySelector('.txn-fund');
+    if (!sel) return names;
+    for (const o of sel.options) {
+      if (o.value && o.value !== '0') names[o.value] = (o.textContent || '').trim();
+    }
+    return names;
+  }
+
   function recompute() {
     const rows = [...form.querySelectorAll('.txn-row')].map((row) => {
       const i = row.dataset.row;
@@ -59,18 +75,23 @@ function initEditor(form) {
       return { fund: fundSel ? fundSel.value.replace(/^0$/, '') : '', amount: rowAmount(i) };
     });
     const { total, perFund } = fundImbalances(rows);
+    // Chip labels come from the i18n catalog (server-stamped on the form) + the fund
+    // names read from the fund options (rule 9). Amount formatting stays client-side.
+    const totalLabel = form.dataset.chipTotal || 'Total';
+    const unrestrictedLabel = form.dataset.chipUnrestricted || 'Unrestricted';
     const overall = form.querySelector('#txn-total-overall');
     if (overall) {
-      overall.textContent = total === 0 ? '' : fmtChip('total', total);
+      overall.textContent = total === 0 ? '' : fmtChip(totalLabel, total);
       overall.classList.toggle('imbalanced', total !== 0);
     }
     const chips = form.querySelector('#txn-fund-chips');
     if (chips) {
       chips.textContent = '';
+      const names = fundNames();
       Object.keys(perFund).forEach((k) => {
         const span = document.createElement('span');
         span.className = 'txn-fund-chip imbalanced';
-        span.textContent = fmtChip(k || 'unrestricted', perFund[k]);
+        span.textContent = fmtChip(chipLabel(k, names, unrestrictedLabel), perFund[k]);
         chips.appendChild(span);
       });
     }

@@ -6,8 +6,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 let fundImbalances;
+let chipLabel;
 test.before(async () => {
-  ({ fundImbalances } = await import('./txnfund.js'));
+  ({ fundImbalances, chipLabel } = await import('./txnfund.js'));
 });
 
 test('fundImbalances: balanced overall and per fund -> empty', () => {
@@ -74,4 +75,22 @@ test('fundImbalances: fewer than 2 funds -> no per-fund chips even if a group no
   const r = fundImbalances(rows);
   assert.equal(r.total, 100);
   assert.deepEqual(r.perFund, {}); // one fund only -> suppressed
+});
+
+test('chipLabel: unrestricted key "" resolves to the localized label, not the id', () => {
+  const names = { 7: 'Building Fund' };
+  assert.equal(chipLabel('', names, 'Unrestricted'), 'Unrestricted');
+  assert.equal(chipLabel('', names, 'Sin restricción'), 'Sin restricción');
+});
+
+test('chipLabel: a known fund id resolves to its NAME, never the raw id', () => {
+  const names = { 7: 'Building Fund', 12: 'Scholarship' };
+  assert.equal(chipLabel('7', names, 'Unrestricted'), 'Building Fund');
+  assert.equal(chipLabel('12', names, 'Unrestricted'), 'Scholarship');
+});
+
+test('chipLabel: an unknown id falls back to the raw id (chip stays visible, not blank)', () => {
+  assert.equal(chipLabel('99', { 7: 'Building Fund' }, 'Unrestricted'), '99');
+  assert.equal(chipLabel('5', {}, 'Unrestricted'), '5');
+  assert.equal(chipLabel('5', null, 'Unrestricted'), '5');
 });
