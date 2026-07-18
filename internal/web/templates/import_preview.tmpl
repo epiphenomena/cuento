@@ -165,6 +165,10 @@
 </section>
 {{- end}}
 
+{{/* LEGACY, TESTS-ONLY (p26.64): the old index-based preview fragment. The live
+     upload UI renders import-map-preview (above); this define is reached only via
+     importPreview's hasLegacyColumnFields branch, which the handler serves only for
+     the older typed *_col form the import tests still exercise. Not on any user path. */ -}}
 {{define "import-preview" -}}
 <section class="import-preview">
   <h2>{{t "import.preview.title"}}</h2>

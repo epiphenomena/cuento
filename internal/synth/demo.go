@@ -158,18 +158,24 @@ func buildDemoUsers(ctx context.Context, s *store.Store, d *DemoIDs) error {
 }
 
 // passwordFor returns the demo password for a username (kept next to createDemoUser so
-// the seeded hash and the documented plaintext cannot drift).
-func passwordFor(username string) string {
+// the seeded hash and the documented plaintext cannot drift). An unknown username is a
+// programmer error (a typo in a createDemoUser call) and returns an error rather than
+// silently hashing "" into an unusable, undocumented login.
+func passwordFor(username string) (string, error) {
 	for _, u := range DemoUsers() {
 		if u.Username == username {
-			return u.Password
+			return u.Password, nil
 		}
 	}
-	return ""
+	return "", fmt.Errorf("no demo password for unknown username %q", username)
 }
 
 func createDemoUser(ctx context.Context, s *store.Store, username, display string, admin bool, txnPerm string) (int64, error) {
-	hash, err := auth.Hash(passwordFor(username))
+	password, err := passwordFor(username)
+	if err != nil {
+		return 0, err
+	}
+	hash, err := auth.Hash(password)
 	if err != nil {
 		return 0, fmt.Errorf("hash demo password for %q: %w", username, err)
 	}
