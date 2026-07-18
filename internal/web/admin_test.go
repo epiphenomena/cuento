@@ -368,6 +368,12 @@ func TestAdminGrantsProgramScope(t *testing.T) {
 	if !strings.Contains(body, "Educacion") {
 		t.Errorf("detail page does not show the current program scope name")
 	}
+	// The current-scope hint renders ONLY for a HELD grant: financial is held+program-dim
+	// (one hint); tax/programs/budget are program-dim but UNHELD, so they show a picker
+	// with NO "Current scope:" line. So the hint marker appears exactly once.
+	if n := strings.Count(body, "grant-scope-current"); n != 1 {
+		t.Errorf("current-scope hint count = %d, want 1 (only the held financial grant shows a scope)", n)
+	}
 }
 
 // TestAdminUserDetailSystemUserRedirects: the system user (id 1) is off-limits --

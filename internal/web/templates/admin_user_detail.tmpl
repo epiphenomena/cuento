@@ -77,10 +77,12 @@
             <option value="{{.ID}}"{{if eq .ID $grant.ScopeID}} selected{{end}}>{{.Name}}</option>
             {{- end}}
           </select>
+          {{- if $grant.Granted}}
           <p class="hint grant-scope-current">
             {{t "admin.users.grant_scope_current"}}
             {{- if $grant.ScopeName}} {{$grant.ScopeName}}{{else}} {{t "admin.users.grant_scope_org_wide"}}{{end}}
           </p>
+          {{- end}}
           <p class="hint">{{t "admin.users.grant_scope_hint"}}</p>
         </div>
         {{- end}}
