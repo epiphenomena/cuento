@@ -476,9 +476,13 @@ other = "Conciliable"
 [accounts.form.intercompany]
 other = "Intercompania"
 [accounts.form.current_cash]
-other = "Cuenta de efectivo disponible"
+other = "Efectivo disponible"
+[accounts.form.current_cash_help]
+other = "Cuenta como efectivo disponible en las proyecciones de flujo de caja."
 [accounts.form.open_item]
-other = "Partida abierta (C/C–C/P)"
+other = "Por cobrar / Por pagar"
+[accounts.form.open_item_help]
+other = "Rastrea saldos abiertos individuales por nombre (la descripcion/nombre de cada linea) hasta su liquidacion — C/C en un activo, C/P en un pasivo."
 [accounts.form.functional_class]
 other = "Clase funcional predeterminada"
 [accounts.form.default_program]
@@ -629,7 +633,7 @@ other = "Una clase funcional aplica solo a cuentas de gasto."
 [error.account.current_cash_not_asset]
 other = "El efectivo disponible aplica solo a cuentas de activo."
 [error.account.open_item_bad_type]
-other = "La partida abierta (C/C–C/P) aplica solo a cuentas de activo o pasivo."
+other = "Por cobrar / Por pagar aplica solo a cuentas de activo o pasivo."
 [error.account.default_program_not_re]
 other = "Un programa predeterminado aplica solo a cuentas de ingreso y gasto."
 [error.account.default_program_missing]

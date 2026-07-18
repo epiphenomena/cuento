@@ -401,7 +401,7 @@ func TestAccountsCreateWrongTypeFlagRejected(t *testing.T) {
 	}
 	body := rec.Body.String()
 	// The localized open_item error string must be present.
-	if !strings.Contains(body, "Open-item") && !strings.Contains(body, "asset or liability") {
+	if !strings.Contains(body, "Receivable / Payable") && !strings.Contains(body, "asset or liability") {
 		t.Errorf("422 body missing the open_item type error; body: %s", body)
 	}
 	// The rejected account was not created.

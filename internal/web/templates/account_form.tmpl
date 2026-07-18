@@ -93,6 +93,7 @@
   <div class="field check">
     <label><input type="checkbox" name="current_cash" value="on"{{if .CurrentCash}} checked{{end}}
       {{- if eq .Errors.FirstInvalid "current_cash"}} autofocus{{end}}> {{t "accounts.form.current_cash"}}</label>
+    <p class="hint">{{t "accounts.form.current_cash_help"}}</p>
     {{with .Errors.ErrorKey "current_cash"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
   </div>
   {{end}}
@@ -100,6 +101,7 @@
   <div class="field check">
     <label><input type="checkbox" name="open_item" value="on"{{if .OpenItem}} checked{{end}}
       {{- if eq .Errors.FirstInvalid "open_item"}} autofocus{{end}}> {{t "accounts.form.open_item"}}</label>
+    <p class="hint">{{t "accounts.form.open_item_help"}}</p>
     {{with .Errors.ErrorKey "open_item"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
   </div>
   {{end}}
