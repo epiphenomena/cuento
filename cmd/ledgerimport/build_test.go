@@ -1423,6 +1423,47 @@ func TestSplitDescriptionFromSourceRow(t *testing.T) {
 	assertAcctDescription(t, sqldb, res, "FX Clearing", "")
 }
 
+// TestSplitDonorNameBecomesDescription pins the p28.33 mapping: on a REVENUE or
+// EXPENSE leg a nonempty source `donor` (really a name column) becomes the split
+// description and the terse `desc` moves to the memo; a balance-sheet leg carrying the
+// SAME donor keeps its plain desc and a blank memo (the payee name describes the
+// income/expense, not the bank movement). tid 3 exercises both: Grant Revenue and
+// Cash MX both carry donor "GRANT1" with desc "grant in".
+func TestSplitDonorNameBecomesDescription(t *testing.T) {
+	sqldb, _, res := buildInto(t, false)
+
+	// The revenue leg: donor name -> description, original desc -> memo.
+	revID := res.AccountIDs["Grant Revenue"]
+	var desc, memo string
+	if err := sqldb.QueryRow(
+		`SELECT description, memo FROM splits WHERE account_id = ?`, revID,
+	).Scan(&desc, &memo); err != nil {
+		t.Fatalf("read Grant Revenue split: %v", err)
+	}
+	if desc != "GRANT1" {
+		t.Errorf("revenue split description = %q, want the donor name %q", desc, "GRANT1")
+	}
+	if memo != "grant in" {
+		t.Errorf("revenue split memo = %q, want the original desc %q", memo, "grant in")
+	}
+
+	// The tid-3 Cash MX (ASSET) leg carries the SAME donor but is balance-sheet: plain
+	// desc, empty memo -- unchanged by the donor rule.
+	cashID := res.AccountIDs["Cash MX"]
+	var n int
+	if err := sqldb.QueryRow(
+		`SELECT COUNT(*) FROM splits WHERE account_id = ? AND description = 'grant in' AND memo = ''`, cashID,
+	).Scan(&n); err != nil {
+		t.Fatalf("count Cash MX tid-3 leg: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("Cash MX tid-3 leg: %d splits with desc 'grant in' and empty memo, want 1", n)
+	}
+	if acctHasDescription(t, sqldb, res, "Cash MX", "GRANT1") {
+		t.Errorf("Cash MX (asset) took the donor name as description; donor->desc must be revenue/expense only")
+	}
+}
+
 // ---- small raw-read helpers (reads outside the store are fine via sqlc/raw) --
 
 func mustSub(t *testing.T, st *store.Store, id int64) sqlc.Subsidiary {

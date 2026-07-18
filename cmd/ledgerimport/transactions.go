@@ -397,16 +397,27 @@ func (b *builder) resolveSplit(tid string, idx int, r Record) (pending, error) {
 		}
 	}
 
-	// The export has a `desc` column but NO memo column, so desc feeds ONLY the
-	// per-split description; memo is left BLANK (p26.22). A split's description is the
-	// description of the ledger row that produced it. Synthesized counter-legs (FX
-	// Clearing / Opening Balances) have no source row, so they carry an empty description.
-	descVal := r.Desc
-	if b.anonymize {
-		descVal = hashText(r.Desc)
+	// The export has a `desc` column but NO memo column (p26.22). p28.33: the `donor`
+	// column is really a NAME column -- the donor, vendor, or employee on the line --
+	// and, on a REVENUE or EXPENSE split (the economic legs: donations, payroll, vendor
+	// payments), a nonempty donor is the human-meaningful label. So there it becomes the
+	// split DESCRIPTION and the original terse `desc` code moves to the MEMO (preserved,
+	// not lost). Restricted to R/E legs deliberately: the same donor may also tag the
+	// CASH/asset counter-leg, which should keep its plain desc, not the payee name (the
+	// name describes the income/expense, not the bank movement). A blank donor, a
+	// balance-sheet leg, or a synthesized counter-leg (FX Clearing / Opening Balances)
+	// keeps the old desc-as-description, blank-memo behavior. The donor still
+	// independently keys the fund mapping (resolveSplit above); reusing its text here
+	// does not touch that.
+	descVal, memoVal := r.Desc, ""
+	if isRE && r.Donor != "" {
+		descVal, memoVal = r.Donor, r.Desc
 	}
-	s.Memo = ""
+	if b.anonymize {
+		descVal, memoVal = hashText(descVal), hashText(memoVal)
+	}
 	s.Description = descVal
+	s.Memo = memoVal
 
 	return pending{
 		currency:       r.Currency,
