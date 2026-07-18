@@ -64,13 +64,11 @@
     {{if .ShowPeriod}}
     <div class="report-field">
       <label for="rp-from">{{t "reports.params.from"}}</label>
-      <input type="text" id="rp-from" name="from" class="js-datefield" value="{{.From}}"
-             inputmode="numeric" autocomplete="off">
+      {{template "datefield" (datefield "rp-from" "from" .From "" "" "" false)}}
     </div>
     <div class="report-field">
       <label for="rp-to">{{t "reports.params.to"}}</label>
-      <input type="text" id="rp-to" name="to" class="js-datefield" value="{{.To}}"
-             inputmode="numeric" autocomplete="off">
+      {{template "datefield" (datefield "rp-to" "to" .To "" "" "" false)}}
     </div>
     {{end}}
 

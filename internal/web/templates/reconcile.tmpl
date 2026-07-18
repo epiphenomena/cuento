@@ -129,9 +129,7 @@
       <legend>{{t "recon.edit.legend"}}</legend>
       <div class="report-field">
         <label for="recon-edit-date">{{t "recon.start.statement_date"}}</label>
-        <input type="text" id="recon-edit-date" name="statement_date" class="js-datefield"
-               value="{{.EditForm.StatementDay}}" placeholder="{{t "recon.start.date_hint"}}"
-               {{if eq .EditForm.Errors.FirstInvalid "statement_date"}}autofocus{{end}}>
+        {{template "datefield" (datefield "recon-edit-date" "statement_date" .EditForm.StatementDay (t "recon.start.date_hint") "" "" (eq .EditForm.Errors.FirstInvalid "statement_date"))}}
         {{if .EditForm.Errors.ErrorKey "statement_date"}}<span class="field-error" role="alert">{{t (.EditForm.Errors.ErrorKey "statement_date")}}</span>{{end}}
       </div>
       <div class="report-field">

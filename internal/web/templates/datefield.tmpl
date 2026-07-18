@@ -1,0 +1,16 @@
+{{/*
+  p28.18 ONE reusable date-input component. Dot is a dateFieldModel (built by the
+  `datefield` template func, render.go). Every date text input on every page renders
+  through THIS partial so the markup — canonical `input.js-datefield` that the global
+  enhancer (static/datefield.js) wires with parse/format, GnuCash shortcuts, and the
+  calendar popover — is defined once, not recreated per site (owner directive).
+
+  Canonical, always emitted: type="text", the `js-datefield` hook class (plus any
+  caller Class), and autocomplete="off" (rule 10/12 — never input[type=date]; the
+  server, money.ParseDate, is the parse authority). Optional attributes are OMITTED
+  when their field is empty (name/value/placeholder/data-date-format), so a site that
+  wrote none by hand reproduces exactly. Autofocus is a caller-computed error flag.
+*/ -}}
+{{- define "datefield" -}}
+<input type="text" id="{{.ID}}"{{if .Name}} name="{{.Name}}"{{end}} class="js-datefield{{if .Class}} {{.Class}}{{end}}"{{if .Value}} value="{{.Value}}"{{end}}{{if .Placeholder}} placeholder="{{.Placeholder}}"{{end}}{{if .Format}} data-date-format="{{.Format}}"{{end}} autocomplete="off"{{if .Autofocus}} autofocus{{end}}>
+{{- end -}}

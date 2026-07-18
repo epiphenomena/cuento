@@ -51,7 +51,7 @@
   <div class="budget-cadence" data-cadence>
     <span class="budget-cadence-label">{{t "budget_plan.cadence.label"}}</span>
     <label for="cadence-start">{{t "budget_plan.cadence.start"}}</label>
-    <input type="text" id="cadence-start" class="cadence-start js-datefield" placeholder="{{t "budget.schedule.form.date_placeholder"}}">
+    {{template "datefield" (datefield "cadence-start" "" "" (t "budget.schedule.form.date_placeholder") "cadence-start" "" false)}}
     <label for="cadence-interval">{{t "budget_plan.cadence.interval"}}</label>
     <select id="cadence-interval" class="cadence-interval">
       {{range .Intervals}}<option value="{{.Value}}">{{t .LabelKey}}</option>
@@ -100,8 +100,7 @@
             </div>
           </td>
           <td class="txn-cell bs-date-cell" colspan="3">
-            <input type="text" name="date_{{$i}}" id="bs-date-{{$i}}" class="bs-date js-datefield"
-                   value="{{$sp.DateInput}}" placeholder="{{t "budget.schedule.form.date_placeholder"}}">
+            {{template "datefield" (datefield (printf "bs-date-%d" $i) (printf "date_%d" $i) $sp.DateInput (t "budget.schedule.form.date_placeholder") "bs-date" "" false)}}
           </td>
           <td class="txn-cell bs-account-cell" colspan="5">
             <select name="account_{{$i}}" id="bs-account-{{$i}}" class="bs-account combo-input">

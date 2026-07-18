@@ -227,9 +227,7 @@
     </div>
     <div class="txn-field">
       <label for="txn-date">{{t "txn.date"}}</label>
-      <input type="text" name="date" id="txn-date" class="txn-date js-datefield" value="{{.Date}}"
-             placeholder="{{t "txn.date_hint"}}"
-             {{if eq $.Page.FirstErrorRow -2}}autofocus{{end}}>
+      {{template "datefield" (datefield "txn-date" "date" .Date (t "txn.date_hint") "txn-date" "" (eq $.Page.FirstErrorRow -2))}}
     </div>
     {{/* p26.36: the main-split DESCRIPTION field sits immediately after the date (date ->
          description -> memo), so it reads left-to-right in transaction-header order and its

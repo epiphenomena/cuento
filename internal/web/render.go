@@ -33,6 +33,7 @@ func mustParseTemplates() *template.Template {
 		"tn":                       func(key string, _ int, _ ...any) string { return key },
 		"asset":                    func(name string) string { return name },
 		"shellTitle":               shellTitle,
+		"datefield":                dateField, // p28.18 the ONE reusable date-input partial's model constructor
 		"strs":                     strs,
 		"regRowCtx":                makeRegRowCtx,              // p12.1 register: pair a row with the page-level column gates
 		"regColspan":               regColspan,                 // p12.1 register: full-width colspan for empty/sentinel cells
@@ -74,6 +75,7 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name
 		"tn":         func(key string, count int, args ...any) string { return i18n.TN(lang, key, count, args...) },
 		"asset":      s.assetURL, // hashed URL in prod, unhashed in -dev (p10.1)
 		"shellTitle": shellTitle, // pairs a shellPage with a localized head title
+		"datefield":  dateField,  // p28.18 the ONE reusable date-input partial's model constructor
 		"strs":       strs,       // literal []string for ranging over static enums
 	})
 

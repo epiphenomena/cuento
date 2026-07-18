@@ -42,9 +42,9 @@
       hx-get="/accounts/{{.AccountID}}/register" hx-trigger="change"
       hx-target="#register-results" hx-swap="outerHTML" hx-sync="this:replace">
   <label for="reg-from">{{t "register.filter.from"}}</label>
-  <input type="text" id="reg-from" name="from" class="js-datefield" value="{{.FilterFrom}}" placeholder="{{t "register.filter.date_hint"}}">
+  {{template "datefield" (datefield "reg-from" "from" .FilterFrom (t "register.filter.date_hint") "" "" false)}}
   <label for="reg-to">{{t "register.filter.to"}}</label>
-  <input type="text" id="reg-to" name="to" class="js-datefield" value="{{.FilterTo}}" placeholder="{{t "register.filter.date_hint"}}">
+  {{template "datefield" (datefield "reg-to" "to" .FilterTo (t "register.filter.date_hint") "" "" false)}}
   <label for="reg-text">{{t "register.filter.text"}}</label>
   <input type="text" id="reg-text" name="text" value="{{.FilterText}}">
   <label for="reg-fund">{{t "register.filter.fund"}}</label>
