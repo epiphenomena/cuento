@@ -110,8 +110,14 @@ func BuildDemo(ctx context.Context, s *store.Store) (DemoIDs, error) {
 		return d, err
 	}
 
-	// Sample budget (no splits; order-independent).
+	// Sample budget (old schedule-based model; no splits; order-independent).
 	if err := ExtendSampleBudget(ctx, s, &d.IDs); err != nil {
+		return d, err
+	}
+
+	// Sample budget PLAN (new p27.2 split-derived model; order-independent). Coexists
+	// with the old SampleBudget until p27.3 retires the schedule model.
+	if err := ExtendSampleBudgetPlan(ctx, s, &d.IDs); err != nil {
 		return d, err
 	}
 

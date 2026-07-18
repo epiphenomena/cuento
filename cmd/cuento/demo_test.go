@@ -106,9 +106,16 @@ func TestDemoGeneratorAntiDrift(t *testing.T) {
 	atLeast("finalized reconciliations", count(`SELECT count(*) FROM reconciliations WHERE status = 'finalized'`), 1)
 	atLeast("open reconciliations", count(`SELECT count(*) FROM reconciliations WHERE status = 'open'`), 1)
 
-	// A budget with lines.
+	// A budget with lines (old schedule-based model, live until p27.3).
 	atLeast("budgets", count(`SELECT count(*) FROM budgets`), 1)
 	atLeast("budget lines", count(`SELECT count(*) FROM budget_lines`), 1)
+
+	// A budget PLAN with splits (new p27.2 split-derived model): >=1 plan, several
+	// splits across >=2 programs, incl. at least one open_item A/L leg (program NULL).
+	atLeast("budget plans", count(`SELECT count(*) FROM budget_plans`), 1)
+	atLeast("budget splits", count(`SELECT count(*) FROM budget_splits`), 5)
+	atLeast("budget-split programs", count(`SELECT count(DISTINCT program_id) FROM budget_splits WHERE program_id IS NOT NULL`), 2)
+	atLeast("open-item budget splits (no program)", count(`SELECT count(*) FROM budget_splits WHERE program_id IS NULL`), 1)
 
 	// A bank-import mapping profile (+ a staged batch with rows).
 	atLeast("mapping profiles", count(`SELECT count(*) FROM mapping_profiles`), 1)
