@@ -36,11 +36,12 @@ var catalogFS embed.FS
 var (
 	bundleOnce sync.Once
 	shared     *goi18n.Bundle
-	// localizers caches one Localizer per language, each configured with the
-	// [lang, en] fallback chain so an unknown lang or a locally-missing key
-	// resolves against English before we surface the raw key.
+	// localizers holds one pre-built Localizer per known language (Langs()), each
+	// configured with the [lang, en] fallback chain so a locally-missing key
+	// resolves against English before we surface the raw key. It is populated
+	// eagerly inside bundle()'s sync.Once and never mutated afterward, so reads in
+	// localizer() need no lock (an unknown lang falls back to the base localizer).
 	localizers map[string]*goi18n.Localizer
-	localizeMu sync.Mutex
 )
 
 // bundle loads the embedded catalogs into a go-i18n Bundle exactly once, with the
@@ -58,24 +59,27 @@ func bundle() *goi18n.Bundle {
 			}
 		}
 		shared = b
+		// Pre-build every known language's Localizer up front so the hot path
+		// (localizer/localize/T) is a lock-free map read. The [lang, baseLang]
+		// chain resolves a locally-missing key against English.
 		localizers = make(map[string]*goi18n.Localizer, len(Langs()))
+		for _, lang := range Langs() {
+			localizers[lang] = goi18n.NewLocalizer(b, lang, baseLang)
+		}
 	})
 	return shared
 }
 
-// localizer returns the cached Localizer for lang, building it on first use with
-// the [lang, baseLang] fallback chain. Unknown languages get a [lang, en]
-// localizer too; go-i18n simply finds no lang messages and falls through to en.
+// localizer returns the pre-built Localizer for lang with NO locking (localizers is
+// populated once in bundle() and never mutated). An unknown language — not among
+// Langs() — falls back to the base (en) localizer, which is the same English text
+// an on-demand [lang, en] localizer would have produced.
 func localizer(lang string) *goi18n.Localizer {
-	b := bundle()
-	localizeMu.Lock()
-	defer localizeMu.Unlock()
+	bundle() // ensure localizers is populated
 	if lc, ok := localizers[lang]; ok {
 		return lc
 	}
-	lc := goi18n.NewLocalizer(b, lang, baseLang)
-	localizers[lang] = lc
-	return lc
+	return localizers[baseLang]
 }
 
 // Langs returns the available languages in a stable order (base language first).
