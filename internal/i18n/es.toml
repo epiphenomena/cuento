@@ -449,6 +449,11 @@ other = "Cuenta"
 other = "Tipo"
 [accounts.col.notes]
 other = "Notas"
+# p28.9: el buscador efimero (no recordado) del catalogo de cuentas.
+[accounts.search.label]
+other = "Buscar"
+[accounts.search.placeholder]
+other = "Filtrar por nombre o ruta…"
 [accounts.col.balances]
 other = "Saldo"
 [accounts.col.actions]

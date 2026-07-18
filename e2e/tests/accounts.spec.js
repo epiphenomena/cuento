@@ -322,15 +322,20 @@ test.describe('chart of accounts', () => {
     await expect(row.locator('.badge-current-cash')).toBeVisible();
 
     // Switching the new-account type to EQUITY hides BOTH flag controls (server-gated
-    // via the htmx type re-fetch).
+    // via the htmx type re-fetch). Await the re-fetch response so the swap has settled
+    // before asserting (the type select fires an hx-get to /accounts/new).
     await page.goto('/accounts/new');
+    const toEquity = page.waitForResponse((r) => r.url().includes('/accounts/new') && r.request().method() === 'GET');
     await page.locator('#af-type').selectOption('equity');
+    await toEquity;
     await expect(page.locator('#af-type')).toHaveValue('equity');
     await expect(page.locator('input[name="current_cash"]')).toHaveCount(0);
     await expect(page.locator('input[name="open_item"]')).toHaveCount(0);
 
     // Switching to LIABILITY shows open_item (payable) but NOT current_cash.
+    const toLiability = page.waitForResponse((r) => r.url().includes('/accounts/new') && r.request().method() === 'GET');
     await page.locator('#af-type').selectOption('liability');
+    await toLiability;
     await expect(page.locator('#af-type')).toHaveValue('liability');
     await expect(page.locator('input[name="open_item"]')).toBeVisible();
     await expect(page.locator('input[name="current_cash"]')).toHaveCount(0);
@@ -386,5 +391,49 @@ test.describe('chart of accounts', () => {
     await expect(page.locator('tr.acct-row', { hasText: 'TF Asset E2E' })).toBeVisible();
     await expect(page.locator('tr.acct-row', { hasText: 'TF Liab E2E' })).toBeVisible();
     await expect(page.locator('tr.acct-type-header', { hasText: 'Liabilities' })).toBeVisible();
+  });
+
+  // p28.9: the EPHEMERAL fuzzy search filters the chart rows client-side; unlike the
+  // sub/active/type filters it is NOT remembered -- leaving and returning does NOT
+  // restore the typed query, and the full tree is back.
+  test('the chart search filters rows and is NOT remembered across navigation', async ({ page, server }) => {
+    await login(page, server);
+
+    // Two distinctly-named accounts so the search is observable.
+    async function create(name) {
+      await page.goto('/accounts/new');
+      await page.locator('#af-name-en').fill(name);
+      const rootSub = page.locator('input[name="sub_1"]');
+      if (!(await rootSub.isChecked())) await rootSub.check();
+      await page.getByRole('button', { name: /^save$/i }).click();
+      await page.waitForURL(/\/accounts$/);
+    }
+    await create('Searchable Widget E2E');
+    await create('Hidden Gadget E2E');
+
+    await page.goto('/accounts');
+    const widget = page.locator('tr.acct-row', { hasText: 'Searchable Widget E2E' });
+    const gadget = page.locator('tr.acct-row', { hasText: 'Hidden Gadget E2E' });
+    await expect(widget).toBeVisible();
+    await expect(gadget).toBeVisible();
+
+    // Type a query matching only the widget; the gadget row hides (CSS display:none).
+    await page.locator('#acct-search').fill('widget');
+    await expect(widget).toBeVisible();
+    await expect(gadget).toBeHidden();
+
+    // Clearing the box restores every row (treetable's state governs again).
+    await page.locator('#acct-search').fill('');
+    await expect(gadget).toBeVisible();
+
+    // Re-filter, then navigate AWAY and BACK: the search must NOT be restored -- the
+    // box is empty and all rows show (proving it is ephemeral, no session key).
+    await page.locator('#acct-search').fill('widget');
+    await expect(gadget).toBeHidden();
+    await page.goto('/funds');
+    await page.goto('/accounts');
+    await expect(page.locator('#acct-search')).toHaveValue('');
+    await expect(page.locator('tr.acct-row', { hasText: 'Searchable Widget E2E' })).toBeVisible();
+    await expect(page.locator('tr.acct-row', { hasText: 'Hidden Gadget E2E' })).toBeVisible();
   });
 });

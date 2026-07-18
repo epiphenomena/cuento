@@ -454,6 +454,11 @@ other = "Account"
 other = "Type"
 [accounts.col.notes]
 other = "Notes"
+# p28.9: the ephemeral (not-remembered) chart search box.
+[accounts.search.label]
+other = "Search"
+[accounts.search.placeholder]
+other = "Filter by name or path…"
 [accounts.col.balances]
 other = "Balance"
 [accounts.col.actions]

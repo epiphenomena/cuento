@@ -149,12 +149,28 @@
        until Merge is opened. */}}
   <div id="account-form" class="account-form-region"></div>
 
+  {{/* p28.9: EPHEMERAL fuzzy search over the chart rows. Lives OUTSIDE
+       #accounts-results (so a filter swap does not wipe the typed text) and is NOT a
+       named field of the persisted filter form, has no session key and no route -- so
+       it resets on every navigation, unlike the sub/active/type filters. chartsearch.js
+       (loaded on the page) filters the rows client-side; with no JS the box is inert
+       and the full tree shows. */}}
+  <div class="chart-search">
+    <label for="acct-search">{{t "accounts.search.label"}}</label>
+    <input type="text" id="acct-search" class="chart-search-input"
+           placeholder="{{t "accounts.search.placeholder"}}" autocomplete="off">
+  </div>
+
   {{template "accounts-results" .}}
   {{/* p26.25: the reusable tree collapse/expand module. Loaded on the PAGE (not the
        swapped #accounts-results partial: a <script> injected via htmx innerHTML does
        not execute). It self-inits on DOMContentLoaded and re-runs on htmx:afterSwap
        when the filter replaces #accounts-results, re-wiring the fresh table. */}}
   <script type="module" src="{{asset "treetable.js"}}"></script>
+  {{/* p28.9: the ephemeral chart search. Loaded on the PAGE (the input lives outside
+       the swapped #accounts-results, so it is never re-rendered); it self-inits on
+       DOMContentLoaded and re-applies the current query on htmx:afterSwap. */}}
+  <script type="module" src="{{asset "chartsearch.js"}}"></script>
   {{- end}}
 {{template "shell-close" .}}
 {{- end}}

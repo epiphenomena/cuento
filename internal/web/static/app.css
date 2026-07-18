@@ -558,6 +558,18 @@ input[aria-invalid="true"] {
    Type). Muted + small so it reads as secondary annotation, not the account name. */
 .acct-notes { font-size: 0.85em; color: var(--color-muted, inherit); }
 
+/* p28.9: EPHEMERAL chart search box + its filter mechanism. The box sits above the
+   tree; typing narrows the visible rows. */
+.chart-search { display: flex; gap: var(--space-2); align-items: center; margin: var(--space-3) 0; }
+.chart-search-input { min-width: 18rem; }
+/* While searching (chartsearch.js adds `searching`), an author `display` rule wins
+   over the UA `[hidden]{display:none}` treetable uses -- so search visibility governs
+   without the two mechanisms fighting over `tr.hidden`. Rows not marked
+   `search-visible` are hidden; when the box empties, `searching` is dropped and
+   treetable's collapse state governs again. */
+.tree-table.searching tr.acct-row { display: none; }
+.tree-table.searching tr.acct-row.search-visible { display: table-row; }
+
 /* The inline create/edit form region. */
 .account-form-region { margin: var(--space-4) 0; }
 .account-form { max-width: 40rem; }
