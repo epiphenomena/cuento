@@ -959,7 +959,11 @@ func (s *server) renderReportResults(w http.ResponseWriter, r *http.Request, mod
 	// (SubNavControls="report" renders the shared "report-filters" partial off the
 	// paramsForm). The wider filter sets wrap within the subnav band (flex-wrap); no
 	// report keeps its filters inline any more.
-	page := s.newShellPage(r, model)
+	// p28.23: render in the WIDE shell so a statement with many period columns
+	// (e.g. the monthly statement of activities) uses the available horizontal
+	// width instead of horizontally scrolling at the 60rem reading cap. The filter
+	// controls still render in the second-level nav (SubNavControls="report").
+	page := s.newWideShellPage(r, model)
 	page.Shell.SubNavControls = "report"
 	s.render(w, r, http.StatusOK, "report.tmpl", page)
 }
