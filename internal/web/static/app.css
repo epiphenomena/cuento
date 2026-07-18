@@ -1271,6 +1271,15 @@ input[aria-invalid="true"] {
  * ------------------------------------------------------------------ */
 .datefield-wrap { position: relative; display: inline-flex; align-items: stretch; }
 .datefield-wrap > input { position: relative; }
+/* p28.21 "not wider than needed": a date field carries a fixed ~10-char payload
+   (YYYY-MM-DD / MM/DD/YYYY), so the input sizes to that plus a little slack — it
+   must not stretch to fill a wide table cell (txn/budget grids) or form column. Width
+   the INPUT (not the wrap — widthing the wrap squashes the pick button, per the p26.8
+   note above); the inline-flex wrap then hugs input+button and never stretches. The
+   two filter-bar rules (.subnav-filters / .app-subnav-controls .report-params, also
+   8rem) already matched this; this generalizes it to every js-datefield. */
+.js-datefield { width: 8rem; max-width: 100%; }
+.datefield-wrap { max-width: 100%; }
 /* The pick button hugs the right edge of the input. */
 .datefield-pick {
   margin-left: calc(-1 * var(--radius));
