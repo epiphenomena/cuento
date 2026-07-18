@@ -98,7 +98,10 @@ type CreateAccountInput struct {
 	// accounts (ErrOpenItemBadType).
 	CurrentCash bool
 	OpenItem    bool
-	SortOrder   int64
+	// Notes is an optional free-text description ABOUT the account (nil or "" =
+	// none; p28.7). Nullable, no invariant -- documentation only.
+	Notes     *string
+	SortOrder int64
 }
 
 // UpdateAccountInput carries only fields to change (nil = leave as-is). A non-nil
@@ -118,7 +121,10 @@ type UpdateAccountInput struct {
 	// the account's type; p27.1). nil leaves it unchanged.
 	CurrentCash *bool
 	OpenItem    *bool
-	SortOrder   *int64
+	// Notes: a non-nil value sets the free-text note ("" clears it to NULL; p28.7).
+	// nil leaves it unchanged.
+	Notes     *string
+	SortOrder *int64
 }
 
 // CreateAccount creates an account (+ its names + its subsidiary memberships,
@@ -199,6 +205,7 @@ func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (int64
 				CreatedAt:        s.now().Format(time.RFC3339Nano),
 				CurrentCash:      boolToInt(in.CurrentCash),
 				OpenItem:         boolToInt(in.OpenItem),
+				Notes:            nullStringPtr(in.Notes),
 			})
 			if err != nil {
 				return fmt.Errorf("insert account: %w", err)
@@ -293,6 +300,10 @@ func (s *Store) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInp
 			if in.OpenItem != nil {
 				next.OpenItem = boolToInt(*in.OpenItem)
 			}
+			if in.Notes != nil {
+				// "" clears to NULL; a value sets it (p28.7). No invariant.
+				next.Notes = nullString(*in.Notes)
+			}
 			// The boolean type-flags are type-constrained (p27.1). Validate the
 			// resulting state against next.Type so a same-call type change is honored
 			// (types don't change here, but be explicit -- mirrors the R/E checks).
@@ -325,6 +336,7 @@ func (s *Store) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInp
 				CreatedAt:        next.CreatedAt,
 				CurrentCash:      next.CurrentCash,
 				OpenItem:         next.OpenItem,
+				Notes:            next.Notes,
 				ID:               id,
 			}); err != nil {
 				return fmt.Errorf("update account %d: %w", id, err)
@@ -503,6 +515,7 @@ func (s *Store) DeactivateAccount(ctx context.Context, id int64) error {
 				CreatedAt:        cur.CreatedAt,
 				CurrentCash:      cur.CurrentCash,
 				OpenItem:         cur.OpenItem,
+				Notes:            cur.Notes,
 				ID:               id,
 			}); err != nil {
 				return fmt.Errorf("deactivate account %d: %w", id, err)
@@ -575,7 +588,9 @@ type TreeRow struct {
 	Type         string
 	Active       int64
 	Reconcilable bool
-	OpenItem     bool // p27.1: A/R-A/P open-line marker (for the chart badge)
+	OpenItem     bool   // p27.1: A/R-A/P open-line marker (for the chart badge)
+	CurrentCash  bool   // p28.7: spendable-cash marker (for the chart indicator)
+	Notes        string // p28.7: free-text note ABOUT the account ("" = none)
 	SortOrder    int64
 	Name         string
 }
@@ -594,7 +609,7 @@ func (s *Store) Tree(ctx context.Context, lang string, subFilter *int64) ([]Tree
 		}
 		out := make([]TreeRow, len(rows))
 		for i, r := range rows {
-			out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, Reconcilable: r.Reconcilable != 0, OpenItem: r.OpenItem != 0, SortOrder: r.SortOrder, Name: r.Name}
+			out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, Reconcilable: r.Reconcilable != 0, OpenItem: r.OpenItem != 0, CurrentCash: r.CurrentCash != 0, Notes: r.Notes.String, SortOrder: r.SortOrder, Name: r.Name}
 		}
 		return out, nil
 	}
@@ -604,7 +619,7 @@ func (s *Store) Tree(ctx context.Context, lang string, subFilter *int64) ([]Tree
 	}
 	out := make([]TreeRow, len(rows))
 	for i, r := range rows {
-		out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, Reconcilable: r.Reconcilable != 0, OpenItem: r.OpenItem != 0, SortOrder: r.SortOrder, Name: r.Name}
+		out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, Reconcilable: r.Reconcilable != 0, OpenItem: r.OpenItem != 0, CurrentCash: r.CurrentCash != 0, Notes: r.Notes.String, SortOrder: r.SortOrder, Name: r.Name}
 	}
 	return out, nil
 }

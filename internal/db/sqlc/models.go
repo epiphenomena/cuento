@@ -23,6 +23,7 @@ type Account struct {
 	DefaultProgramID sql.NullInt64
 	CurrentCash      int64
 	OpenItem         int64
+	Notes            sql.NullString
 }
 
 type AccountName struct {
@@ -74,6 +75,7 @@ type AccountsVersion struct {
 	DefaultProgramID sql.NullInt64
 	CurrentCash      sql.NullInt64
 	OpenItem         sql.NullInt64
+	Notes            sql.NullString
 }
 
 // BudgetPlan is the p27.2 split-derived budget container (a named plan scoped to

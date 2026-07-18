@@ -798,6 +798,65 @@ func TestCreateAccountFlagsVersioned(t *testing.T) {
 	}
 }
 
+// accountNotes reads an account's current live notes ("" when NULL).
+func accountNotes(t *testing.T, s *Store, id int64) string {
+	t.Helper()
+	row, err := s.GetAccount(context.Background(), id)
+	if err != nil {
+		t.Fatalf("GetAccount(%d): %v", id, err)
+	}
+	return row.Notes.String
+}
+
+// TestAccountNotesRoundTrip (p28.7): a notes value persists on the live row + the
+// latest version snapshot (Z3), survives an UNRELATED no-op edit (currency-only,
+// Notes left nil), and is cleared to NULL by an empty-string Notes.
+func TestAccountNotesRoundTrip(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	note := "Synthetic reconcile monthly against the bank feed."
+	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Checking"),
+		Subsidiaries: []int64{rootID}, Notes: &note,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+	if got := accountNotes(t, s, id); got != note {
+		t.Fatalf("notes after create = %q, want %q", got, note)
+	}
+	testutil.AssertVersioned(t, d, "accounts", id, "create")
+	// The version snapshot must carry notes too (Z3 backstop).
+	var vnotes sql.NullString
+	if err := d.QueryRow(`SELECT notes FROM accounts_versions
+		WHERE entity_id = ? ORDER BY valid_from DESC, id DESC LIMIT 1`, id).Scan(&vnotes); err != nil {
+		t.Fatalf("read version snapshot notes: %v", err)
+	}
+	if vnotes.String != note {
+		t.Errorf("version snapshot notes = %q, want %q", vnotes.String, note)
+	}
+
+	// An unrelated edit (Notes nil) must PRESERVE the note (the ripple: next := cur
+	// carries it through).
+	cur := "MXN"
+	if err := s.UpdateAccount(mutCtx(), id, UpdateAccountInput{DefaultCurrency: &cur}); err != nil {
+		t.Fatalf("no-op UpdateAccount: %v", err)
+	}
+	if got := accountNotes(t, s, id); got != note {
+		t.Fatalf("notes after unrelated edit = %q, want preserved %q", got, note)
+	}
+
+	// An empty-string Notes clears it to NULL.
+	empty := ""
+	if err := s.UpdateAccount(mutCtx(), id, UpdateAccountInput{Notes: &empty}); err != nil {
+		t.Fatalf("clear UpdateAccount: %v", err)
+	}
+	if got := accountNotes(t, s, id); got != "" {
+		t.Fatalf("notes after clear = %q, want empty", got)
+	}
+}
+
 // TestCreateCurrentCashNonAsset (p27.1): current_cash on a non-asset account is
 // rejected cleanly (ErrCurrentCashNotAsset) before the tx opens; no trace.
 func TestCreateCurrentCashNonAsset(t *testing.T) {

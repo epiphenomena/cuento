@@ -74,6 +74,14 @@
     </select>
   </div>
 
+  {{/* p28.7: a free-text note ABOUT the account (a description/reminder), NOT the
+       account name. Shown in the chart-of-accounts column the per-row type used to
+       occupy. Optional; blank clears it. */}}
+  <div class="field">
+    <label for="af-notes">{{t "accounts.form.notes"}}</label>
+    <textarea id="af-notes" name="notes" rows="2" class="account-notes">{{.Notes}}</textarea>
+  </div>
+
   <div class="field check">
     <label><input type="checkbox" name="reconcilable" value="on"{{if .Reconcilable}} checked{{end}}> {{t "accounts.form.reconcilable"}}</label>
   </div>

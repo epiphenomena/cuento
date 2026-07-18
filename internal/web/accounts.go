@@ -444,8 +444,9 @@ type accountForm struct {
 	Names            []nameInput // one per enabled language (p11.4, D14); en first + required
 	Reconcilable     bool
 	Intercompany     bool
-	CurrentCash      bool // p27.1: spendable-cash marker (asset-only)
-	OpenItem         bool // p27.1: A/R-A/P open-line marker (asset/liability-only)
+	CurrentCash      bool   // p27.1: spendable-cash marker (asset-only)
+	OpenItem         bool   // p27.1: A/R-A/P open-line marker (asset/liability-only)
+	Notes            string // p28.7: free-text note ABOUT the account
 	FunctionalClass  string
 	DefaultProgram   int64
 	Form990Code      string
@@ -588,6 +589,10 @@ func overlayFormValues(form *accountForm, r *http.Request) {
 	if get("open_item") != "" {
 		form.OpenItem = true
 	}
+	// Notes: a free-text field, so a type-change re-fetch preserves whatever was typed.
+	if v := get("notes"); v != "" {
+		form.Notes = v
+	}
 	// Checkboxes only appear in the params when checked; if ANY sub_* param is
 	// present, take the submitted set as authoritative (preserving an in-progress
 	// selection). Otherwise keep the default/prefilled set.
@@ -630,6 +635,11 @@ func (s *server) accountEditForm(w http.ResponseWriter, r *http.Request) {
 	form.Intercompany = acct.Intercompany != 0
 	form.CurrentCash = acct.CurrentCash != 0
 	form.OpenItem = acct.OpenItem != 0
+	// Prefill the notes textarea so a no-op edit round-trips (an unedited save must
+	// not blank an existing note; p28.7).
+	if acct.Notes.Valid {
+		form.Notes = acct.Notes.String
+	}
 	if acct.FunctionalClass.Valid {
 		form.FunctionalClass = acct.FunctionalClass.String
 	}
@@ -794,6 +804,8 @@ func (s *server) accountCreate(w http.ResponseWriter, r *http.Request) {
 		CurrentCash: in.currentCash,
 		OpenItem:    in.openItem,
 	}
+	// Notes: always send (a non-nil pointer); "" clears to NULL in the store (p28.7).
+	create.Notes = &in.notes
 	if in.parentID > 0 {
 		create.ParentID = &in.parentID
 	}
@@ -842,6 +854,9 @@ func (s *server) accountUpdate(w http.ResponseWriter, r *http.Request) {
 		// error at 422). p27.1b.
 		CurrentCash: &in.currentCash,
 		OpenItem:    &in.openItem,
+		// Notes is authoritative on a full submit (present = the box's text, empty =
+		// cleared), so always send a non-nil pointer (p28.7).
+		Notes: &in.notes,
 	}
 	// Parent: UpdateAccount treats a non-nil ParentID as a MOVE target and has no
 	// way to express "move to NULL/top-level" (a non-nil 0 would resolve to a
@@ -930,8 +945,9 @@ type parsedAccountForm struct {
 	names           map[string]string // lang -> submitted name, for each enabled language (p11.4)
 	reconcilable    bool
 	intercompany    bool
-	currentCash     bool // p27.1
-	openItem        bool // p27.1
+	currentCash     bool   // p27.1
+	openItem        bool   // p27.1
+	notes           string // p28.7: free-text account note
 	functionalClass string
 	defaultProgram  int64
 	form990Code     string
@@ -959,6 +975,7 @@ func (s *server) parseAccountForm(r *http.Request, id int64) (accountForm, parse
 		intercompany:    r.PostFormValue("intercompany") != "",
 		currentCash:     r.PostFormValue("current_cash") != "",
 		openItem:        r.PostFormValue("open_item") != "",
+		notes:           strings.TrimSpace(r.PostFormValue("notes")),
 		functionalClass: r.PostFormValue("functional_class"),
 		defaultProgram:  parseID(r.PostFormValue("default_program")),
 		form990Code:     r.PostFormValue("form990_code"),
@@ -994,6 +1011,7 @@ func (s *server) parseAccountForm(r *http.Request, id int64) (accountForm, parse
 	form.Intercompany = in.intercompany
 	form.CurrentCash = in.currentCash
 	form.OpenItem = in.openItem
+	form.Notes = in.notes
 	form.FunctionalClass = in.functionalClass
 	form.DefaultProgram = in.defaultProgram
 	form.Form990Code = in.form990Code

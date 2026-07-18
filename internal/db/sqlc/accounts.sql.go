@@ -114,18 +114,18 @@ func (q *Queries) AccountSubsidiaries(ctx context.Context, accountID int64) ([]i
 }
 
 const accountTree = `-- name: AccountTree :many
-WITH RECURSIVE tree(id, parent_id, type, active, reconcilable, open_item, sort_order, path) AS (
-  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.open_item, a.sort_order,
+WITH RECURSIVE tree(id, parent_id, type, active, reconcilable, open_item, current_cash, notes, sort_order, path) AS (
+  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.open_item, a.current_cash, a.notes, a.sort_order,
          printf('%020d.%020d', a.sort_order, a.id)
   FROM accounts a
   WHERE a.parent_id IS NULL
   UNION ALL
-  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.open_item, a.sort_order,
+  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.open_item, a.current_cash, a.notes, a.sort_order,
          t.path || '/' || printf('%020d.%020d', a.sort_order, a.id)
   FROM accounts a
   JOIN tree t ON a.parent_id = t.id
 )
-SELECT tree.id, tree.parent_id, tree.type, tree.active, tree.reconcilable, tree.open_item, tree.sort_order,
+SELECT tree.id, tree.parent_id, tree.type, tree.active, tree.reconcilable, tree.open_item, tree.current_cash, tree.notes, tree.sort_order,
        CAST(COALESCE(
          (SELECT an1.name FROM account_names an1 WHERE an1.account_id = tree.id AND an1.lang = ?),
          (SELECT an2.name FROM account_names an2 WHERE an2.account_id = tree.id AND an2.lang = 'en'),
@@ -143,6 +143,8 @@ type AccountTreeRow struct {
 	Active       int64
 	Reconcilable int64
 	OpenItem     int64
+	CurrentCash  int64
+	Notes        sql.NullString
 	SortOrder    int64
 	Name         string
 }
@@ -174,6 +176,8 @@ func (q *Queries) AccountTree(ctx context.Context, lang string) ([]AccountTreeRo
 			&i.Active,
 			&i.Reconcilable,
 			&i.OpenItem,
+			&i.CurrentCash,
+			&i.Notes,
 			&i.SortOrder,
 			&i.Name,
 		); err != nil {
@@ -191,18 +195,18 @@ func (q *Queries) AccountTree(ctx context.Context, lang string) ([]AccountTreeRo
 }
 
 const accountTreeBySubsidiary = `-- name: AccountTreeBySubsidiary :many
-WITH RECURSIVE tree(id, parent_id, type, active, reconcilable, open_item, sort_order, path) AS (
-  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.open_item, a.sort_order,
+WITH RECURSIVE tree(id, parent_id, type, active, reconcilable, open_item, current_cash, notes, sort_order, path) AS (
+  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.open_item, a.current_cash, a.notes, a.sort_order,
          printf('%020d.%020d', a.sort_order, a.id)
   FROM accounts a
   WHERE a.parent_id IS NULL
   UNION ALL
-  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.open_item, a.sort_order,
+  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.open_item, a.current_cash, a.notes, a.sort_order,
          t.path || '/' || printf('%020d.%020d', a.sort_order, a.id)
   FROM accounts a
   JOIN tree t ON a.parent_id = t.id
 )
-SELECT tree.id, tree.parent_id, tree.type, tree.active, tree.reconcilable, tree.open_item, tree.sort_order,
+SELECT tree.id, tree.parent_id, tree.type, tree.active, tree.reconcilable, tree.open_item, tree.current_cash, tree.notes, tree.sort_order,
        CAST(COALESCE(
          (SELECT an1.name FROM account_names an1 WHERE an1.account_id = tree.id AND an1.lang = ?),
          (SELECT an2.name FROM account_names an2 WHERE an2.account_id = tree.id AND an2.lang = 'en'),
@@ -226,6 +230,8 @@ type AccountTreeBySubsidiaryRow struct {
 	Active       int64
 	Reconcilable int64
 	OpenItem     int64
+	CurrentCash  int64
+	Notes        sql.NullString
 	SortOrder    int64
 	Name         string
 }
@@ -255,6 +261,8 @@ func (q *Queries) AccountTreeBySubsidiary(ctx context.Context, arg AccountTreeBy
 			&i.Active,
 			&i.Reconcilable,
 			&i.OpenItem,
+			&i.CurrentCash,
+			&i.Notes,
 			&i.SortOrder,
 			&i.Name,
 		); err != nil {
@@ -357,7 +365,7 @@ func (q *Queries) DeleteAccountSubsidiary(ctx context.Context, arg DeleteAccount
 const getAccount = `-- name: GetAccount :one
 SELECT id, parent_id, type, default_currency, functional_class, form990_code,
        intercompany, reconcilable, active, sort_order, created_at, default_program_id,
-       current_cash, open_item
+       current_cash, open_item, notes
 FROM accounts
 WHERE id = ?
 `
@@ -384,6 +392,7 @@ func (q *Queries) GetAccount(ctx context.Context, id int64) (Account, error) {
 		&i.DefaultProgramID,
 		&i.CurrentCash,
 		&i.OpenItem,
+		&i.Notes,
 	)
 	return i, err
 }
@@ -453,8 +462,8 @@ const insertAccount = `-- name: InsertAccount :one
 INSERT INTO accounts
   (parent_id, type, default_currency, functional_class, form990_code,
    default_program_id, intercompany, reconcilable, active, sort_order, created_at,
-   current_cash, open_item)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+   current_cash, open_item, notes)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
@@ -472,6 +481,7 @@ type InsertAccountParams struct {
 	CreatedAt        string
 	CurrentCash      int64
 	OpenItem         int64
+	Notes            sql.NullString
 }
 
 // p05.2: account operations. All SQL for the store's account methods lives here
@@ -507,6 +517,7 @@ func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) (i
 		arg.CreatedAt,
 		arg.CurrentCash,
 		arg.OpenItem,
+		arg.Notes,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -594,10 +605,11 @@ const insertAccountVersion = `-- name: InsertAccountVersion :exec
 INSERT INTO accounts_versions
   (entity_id, change_id, valid_from, op, parent_id, type, default_currency,
    functional_class, form990_code, default_program_id, intercompany, reconcilable,
-   active, sort_order, created_at, current_cash, open_item)
+   active, sort_order, created_at, current_cash, open_item, notes)
 SELECT a.id, c.id, c.at, ?, a.parent_id, a.type, a.default_currency,
        a.functional_class, a.form990_code, a.default_program_id, a.intercompany,
-       a.reconcilable, a.active, a.sort_order, a.created_at, a.current_cash, a.open_item
+       a.reconcilable, a.active, a.sort_order, a.created_at, a.current_cash, a.open_item,
+       a.notes
 FROM accounts a, changes c
 WHERE c.id = ? AND a.id = ?
 `
@@ -699,7 +711,8 @@ const updateAccount = `-- name: UpdateAccount :exec
 UPDATE accounts
 SET parent_id = ?, type = ?, default_currency = ?, functional_class = ?,
     form990_code = ?, default_program_id = ?, intercompany = ?, reconcilable = ?,
-    active = ?, sort_order = ?, created_at = ?, current_cash = ?, open_item = ?
+    active = ?, sort_order = ?, created_at = ?, current_cash = ?, open_item = ?,
+    notes = ?
 WHERE id = ?
 `
 
@@ -717,6 +730,7 @@ type UpdateAccountParams struct {
 	CreatedAt        string
 	CurrentCash      int64
 	OpenItem         int64
+	Notes            sql.NullString
 	ID               int64
 }
 
@@ -741,6 +755,7 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) er
 		arg.CreatedAt,
 		arg.CurrentCash,
 		arg.OpenItem,
+		arg.Notes,
 		arg.ID,
 	)
 	return err

@@ -476,6 +476,8 @@ other = "Parent account"
 other = "— top level —"
 [accounts.form.currency]
 other = "Default currency"
+[accounts.form.notes]
+other = "Notes"
 [accounts.form.reconcilable]
 other = "Reconcilable"
 [accounts.form.intercompany]
