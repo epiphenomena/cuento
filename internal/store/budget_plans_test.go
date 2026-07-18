@@ -227,6 +227,92 @@ func TestCreateBudgetSplitAccountNotInSubsidiary(t *testing.T) {
 	}
 }
 
+// TestReplaceBudgetSplitsAtomicRollback: a replace whose FIRST desired row is invalid
+// (R/E with no program) must roll the WHOLE change back, leaving the plan's prior splits
+// INTACT -- the atomicity guarantee (a per-call delete-then-insert would have wiped them).
+func TestReplaceBudgetSplitsAtomicRollback(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	st := mkSplitSetup(t, s)
+	// Seed two valid R/E splits.
+	valid := []BudgetSplitInput{
+		{Date: "2026-01-01", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 100, Currency: "USD"},
+		{Date: "2026-02-01", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 200, Currency: "USD"},
+	}
+	if _, err := s.ReplaceBudgetSplits(mutCtx(), st.plan, valid); err != nil {
+		t.Fatalf("seed replace: %v", err)
+	}
+	before, _ := s.BudgetSplits(mutCtx(), st.plan)
+	if len(before) != 2 {
+		t.Fatalf("seeded %d splits, want 2", len(before))
+	}
+	// Now attempt a replace whose ROW 0 is an R/E revenue split with NO program (the
+	// revenue account has no default) -> rejected at insert time.
+	bad := []BudgetSplitInput{
+		{Date: "2026-03-01", AccountID: st.revenue, Amount: 500, Currency: "USD"},
+		{Date: "2026-03-02", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 300, Currency: "USD"},
+	}
+	failedIdx, err := s.ReplaceBudgetSplits(mutCtx(), st.plan, bad)
+	if !errors.Is(err, ErrBudgetSplitProgramRequired) {
+		t.Fatalf("want ErrBudgetSplitProgramRequired, got %v", err)
+	}
+	if failedIdx != 0 {
+		t.Errorf("failedIdx = %d, want 0", failedIdx)
+	}
+	// The prior two splits must still be present (nothing lost).
+	after, _ := s.BudgetSplits(mutCtx(), st.plan)
+	if len(after) != 2 {
+		t.Fatalf("after rejected replace, plan has %d splits, want the original 2", len(after))
+	}
+	if after[0].Amount != 100 || after[1].Amount != 200 {
+		t.Errorf("prior splits changed: %d/%d, want 100/200", after[0].Amount, after[1].Amount)
+	}
+}
+
+// TestReplaceBudgetSplitsSuccess: a valid replace swaps the whole set atomically.
+func TestReplaceBudgetSplitsSuccess(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	st := mkSplitSetup(t, s)
+	if _, err := s.ReplaceBudgetSplits(mutCtx(), st.plan, []BudgetSplitInput{
+		{Date: "2026-01-01", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 100, Currency: "USD"},
+	}); err != nil {
+		t.Fatalf("first replace: %v", err)
+	}
+	if _, err := s.ReplaceBudgetSplits(mutCtx(), st.plan, []BudgetSplitInput{
+		{Date: "2026-02-01", AccountID: st.receivable, Amount: 800, Currency: "USD"},
+		{Date: "2026-02-02", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 250, Currency: "USD"},
+	}); err != nil {
+		t.Fatalf("second replace: %v", err)
+	}
+	got, _ := s.BudgetSplits(mutCtx(), st.plan)
+	if len(got) != 2 {
+		t.Fatalf("after replace, %d splits, want 2", len(got))
+	}
+}
+
+// TestAppendBudgetSplitsAtomicRollback: a CSV-import batch whose second row is invalid
+// rolls the whole batch back (no partial append that a retry would duplicate).
+func TestAppendBudgetSplitsAtomicRollback(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	st := mkSplitSetup(t, s)
+	failedIdx, err := s.AppendBudgetSplits(mutCtx(), st.plan, []BudgetSplitInput{
+		{Date: "2026-01-01", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 100, Currency: "USD"},
+		{Date: "2026-01-02", AccountID: st.receivable, ProgramID: int64p(st.prog), Amount: 200, Currency: "USD"}, // A/L + program -> forbidden
+	})
+	if !errors.Is(err, ErrBudgetSplitProgramForbidden) {
+		t.Fatalf("want ErrBudgetSplitProgramForbidden, got %v", err)
+	}
+	if failedIdx != 1 {
+		t.Errorf("failedIdx = %d, want 1", failedIdx)
+	}
+	got, _ := s.BudgetSplits(mutCtx(), st.plan)
+	if len(got) != 0 {
+		t.Fatalf("after rejected append, plan has %d splits, want 0 (whole batch rolled back)", len(got))
+	}
+}
+
 func TestUpdateDeleteBudgetSplit(t *testing.T) {
 	d := testutil.NewDB(t)
 	s := New(d)

@@ -424,30 +424,18 @@ func (s *server) budgetSplitsSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Replace the plan's split set: delete the existing splits, then insert the desired.
-	// Each op is its own store change (the store validates every insert; the program
-	// rule surfaces here as a per-row error).
-	existing, err := s.store.BudgetSplits(ctx, plan.ID)
-	if err != nil {
+	// ATOMIC replace the plan's split set (delete existing + insert desired) in ONE store
+	// change: a mid-set rejection rolls the WHOLE change back, so the prior splits are
+	// never lost (a per-call delete-then-insert would permanently drop them). On a store
+	// rejection the failing desired index maps back to the echoed row's field error --
+	// desired is built from the SAME non-empty rows as echo in order, so index i aligns.
+	if failedIdx, err := s.store.ReplaceBudgetSplits(s.actorCtx(ctx), plan.ID, desired); err != nil {
+		if key, ok := budgetSplitErrorKey(err); ok {
+			s.renderBudgetGridError(w, r, plan, echo, failedIdx, key)
+			return
+		}
 		s.serverError(w)
 		return
-	}
-	for _, sp := range existing {
-		if err := s.store.DeleteBudgetSplit(s.actorCtx(ctx), sp.ID); err != nil {
-			s.serverError(w)
-			return
-		}
-	}
-	for i, in := range desired {
-		if _, err := s.store.CreateBudgetSplit(s.actorCtx(ctx), plan.ID, in); err != nil {
-			if key, ok := budgetSplitErrorKey(err); ok {
-				// Map the store's typed rejection to the echoed row's field error.
-				s.renderBudgetGridError(w, r, plan, echo, budgetEchoIndexFor(echo, desired, i), key)
-				return
-			}
-			s.serverError(w)
-			return
-		}
 	}
 	redirectAfterForm(w, r, "/budget-plans/"+strconv.FormatInt(id, 10))
 }
@@ -469,21 +457,6 @@ func budgetSplitErrorKey(err error) (string, bool) {
 		return "error.budget_plan.program_scope", true
 	}
 	return "", false
-}
-
-// budgetEchoIndexFor maps a desired-slice index back to its echo-row index. desired is
-// built in the SAME order as the non-empty echo rows (skipped rows never enter either),
-// but echo also holds rows that FAILED the web-edge gate (account/date/amount) which
-// desired skips. Since a store rejection only happens AFTER all web-edge rows passed,
-// desired[i] corresponds to the (i)-th web-edge-valid echo row; walk echo counting the
-// valid ones.
-func budgetEchoIndexFor(echo []budgetSplitRow, desired []store.BudgetSplitInput, desiredIdx int) int {
-	// On the store-rejection path every echo row passed the web-edge gate (else we'd have
-	// returned earlier), so echo and desired are 1:1 in order.
-	if desiredIdx >= 0 && desiredIdx < len(echo) {
-		return desiredIdx
-	}
-	return -1
 }
 
 // renderBudgetGridError re-renders the plan detail at 422, echoing the user's rows and
@@ -580,8 +553,7 @@ func (s *server) budgetPlanImport(w http.ResponseWriter, r *http.Request) {
 	cr.FieldsPerRecord = -1 // program column is optional; validate arity per row
 	cr.TrimLeadingSpace = true
 
-	type parsedRow struct{ in store.BudgetSplitInput }
-	var parsed []parsedRow
+	var parsed []store.BudgetSplitInput
 	lineNo := 0
 	for {
 		rec, rerr := cr.Read()
@@ -645,20 +617,24 @@ func (s *server) budgetPlanImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		in.Amount = mag
-		parsed = append(parsed, parsedRow{in: in})
+		parsed = append(parsed, in)
 	}
 
-	// Persist (each split its own store change; the store validates every row). A store
-	// rejection (e.g. R/E missing program) is a page-level hint referencing the row.
-	for i, pr := range parsed {
-		if _, err := s.store.CreateBudgetSplit(s.actorCtx(ctx), plan.ID, pr.in); err != nil {
-			if key, ok := budgetSplitErrorKey(err); ok {
-				s.renderBudgetImportRowError(w, r, plan, i+1, key)
-				return
+	// Persist the whole batch ATOMICALLY (one store change): a mid-batch store rejection
+	// (e.g. an R/E row missing a program) rolls the ENTIRE append back, so a retry after
+	// the user fixes the CSV cannot duplicate the already-good rows. The failing desired
+	// index maps back to the CSV row number for the hint.
+	if failedIdx, err := s.store.AppendBudgetSplits(s.actorCtx(ctx), plan.ID, parsed); err != nil {
+		if key, ok := budgetSplitErrorKey(err); ok {
+			row := failedIdx + 1
+			if failedIdx < 0 {
+				row = 0
 			}
-			s.serverError(w)
+			s.renderBudgetImportRowError(w, r, plan, row, key)
 			return
 		}
+		s.serverError(w)
+		return
 	}
 	redirectAfterForm(w, r, "/budget-plans/"+strconv.FormatInt(id, 10))
 }

@@ -260,6 +260,124 @@ func (s *Store) DeleteBudgetSplit(ctx context.Context, id int64) error {
 	return nil
 }
 
+// ReplaceBudgetSplits saves a plan's WHOLE split set in ONE change (p27.2c: the
+// auto-row grid's bulk submit) -- the ATOMIC replace the grid needs. It deletes every
+// existing split (version 'delete' BEFORE the live delete, rule 14) and inserts each
+// desired split (validated via resolveBudgetSplit; version 'create'), all inside the
+// SAME write funnel transaction, so a rejection rolls the ENTIRE change back and leaves
+// the prior splits intact (a per-call delete-then-insert would permanently lose the
+// existing splits on a mid-loop failure). On a desired-split rejection it returns the
+// FAILING desired index (0-based) so the handler can attach the error to that row; the
+// index is -1 for a non-row error (a bad plan id). This is the MIRROR of
+// ReplaceExpenseReportLines, minus the by-id diff (a budget-split grid has no per-row
+// id round-trip -- the whole set is replaced).
+func (s *Store) ReplaceBudgetSplits(ctx context.Context, planID int64, desired []BudgetSplitInput) (int, error) {
+	failedIdx := -1
+	_, err := s.write(ctx, "budget_plan.replace_splits", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			if _, err := q.GetBudgetPlan(ctx, planID); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return ErrBudgetPlanNotFound
+				}
+				return fmt.Errorf("load budget plan %d: %w", planID, err)
+			}
+			// Snapshot the OLD split set (the delete-set) BEFORE any insert, so the delete
+			// targets exactly the pre-existing rows regardless of the new inserts' ids.
+			existing, err := q.ListBudgetSplits(ctx, planID)
+			if err != nil {
+				return fmt.Errorf("list budget splits: %w", err)
+			}
+			// Validate + insert each desired split. A rejection sets failedIdx and returns,
+			// rolling the WHOLE change back (one tx) -- the old splits are never deleted.
+			for i, in := range desired {
+				resolved, err := resolveBudgetSplit(ctx, q, planID, in)
+				if err != nil {
+					failedIdx = i
+					return err
+				}
+				id, err := q.InsertBudgetSplit(ctx, sqlc.InsertBudgetSplitParams{
+					PlanID:      planID,
+					Description: in.Description,
+					Date:        in.Date,
+					AccountID:   in.AccountID,
+					FundID:      nullInt64Ptr(in.FundID),
+					ProgramID:   resolved.programID,
+					Amount:      in.Amount,
+					Currency:    in.Currency,
+				})
+				if err != nil {
+					failedIdx = i
+					return fmt.Errorf("insert budget split: %w", err)
+				}
+				if err := insertBudgetSplitVersion(ctx, q, changeID, "create", id); err != nil {
+					return err
+				}
+			}
+			// All desired inserts succeeded: delete the pre-existing splits (version BEFORE
+			// the live delete, rule 14).
+			for _, sp := range existing {
+				if err := insertBudgetSplitVersion(ctx, q, changeID, "delete", sp.ID); err != nil {
+					return err
+				}
+				if err := q.DeleteBudgetSplit(ctx, sp.ID); err != nil {
+					return fmt.Errorf("delete budget split %d: %w", sp.ID, err)
+				}
+			}
+			return nil
+		})
+	if err != nil {
+		return failedIdx, fmt.Errorf("replace budget splits (plan %d): %w", planID, err)
+	}
+	return -1, nil
+}
+
+// AppendBudgetSplits inserts a batch of splits (the CSV import) in ONE change: every
+// row is validated + inserted, and any rejection rolls the WHOLE batch back (so a
+// mid-batch failure never leaves a partial append that a retry would then duplicate).
+// On a rejection it returns the FAILING desired index (0-based) so the handler can name
+// the offending CSV row; -1 for a non-row error.
+func (s *Store) AppendBudgetSplits(ctx context.Context, planID int64, splits []BudgetSplitInput) (int, error) {
+	failedIdx := -1
+	_, err := s.write(ctx, "budget_plan.append_splits", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+			if _, err := q.GetBudgetPlan(ctx, planID); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return ErrBudgetPlanNotFound
+				}
+				return fmt.Errorf("load budget plan %d: %w", planID, err)
+			}
+			for i, in := range splits {
+				resolved, err := resolveBudgetSplit(ctx, q, planID, in)
+				if err != nil {
+					failedIdx = i
+					return err
+				}
+				id, err := q.InsertBudgetSplit(ctx, sqlc.InsertBudgetSplitParams{
+					PlanID:      planID,
+					Description: in.Description,
+					Date:        in.Date,
+					AccountID:   in.AccountID,
+					FundID:      nullInt64Ptr(in.FundID),
+					ProgramID:   resolved.programID,
+					Amount:      in.Amount,
+					Currency:    in.Currency,
+				})
+				if err != nil {
+					failedIdx = i
+					return fmt.Errorf("insert budget split: %w", err)
+				}
+				if err := insertBudgetSplitVersion(ctx, q, changeID, "create", id); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	if err != nil {
+		return failedIdx, fmt.Errorf("append budget splits (plan %d): %w", planID, err)
+	}
+	return -1, nil
+}
+
 // GetBudgetSplit returns a split's current live row (read; sqlc).
 func (s *Store) GetBudgetSplit(ctx context.Context, id int64) (sqlc.BudgetSplit, error) {
 	row, err := s.q.GetBudgetSplit(ctx, id)
