@@ -48,8 +48,14 @@ type navEntry struct {
 // fails), keeping the nav honest (no dead links) while being trivially appendable.
 func navSections() []navEntry {
 	return []navEntry{
-		// p23.8: the brand logo is "home" (-> the chart of accounts); no separate
-		// Home entry. Accounts leads the nav and is the landing.
+		// p28.11: the AnyUser "All" landing LEADS the nav — it IS the home page (served at
+		// /more, and at / per p26.78), so it should come first. A full card grid of EVERY
+		// navigable destination (every section, its sub-items, and every permitted report),
+		// each card perm-gated. The route path stays /more (lowest churn — the permission
+		// matrix is generated from routes()), only its nav position changed.
+		{"nav.all", "/more", AnyUser},
+		// p23.8: the brand logo is "home" (-> the chart of accounts); no separate Home
+		// entry. Accounts is the ledger landing.
 		{"nav.accounts", "/accounts", TxnRead},
 		// p26.48: "New transaction" is NO LONGER in the plain nav loop. It is a canonical
 		// top-nav action (TxnWrite, p26.33) but rendered as a DISTINCT right-aligned button
@@ -64,13 +70,6 @@ func navSections() []navEntry {
 		// shown when the user can do EITHER, and lands the parent on whichever they can
 		// reach (a pure reviewer must not land on /expenses and 403).
 		{"nav.expenses", "/expenses", ExpenseSubmit},
-		// p26.77: the last top-nav item is the AnyUser "All" landing (still served at
-		// /more) — a full card grid of EVERY navigable destination (every section, its
-		// sub-items, and every permitted report), each card perm-gated. It supersedes the
-		// old "More" hub (which listed only the sections lifted out of the top nav); the
-		// route path stays /more (lowest churn — the permission matrix is generated from
-		// routes()), only the label + page contents change. p26.78 also points / here.
-		{"nav.all", "/more", AnyUser},
 	}
 }
 
