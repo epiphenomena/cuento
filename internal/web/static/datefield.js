@@ -187,6 +187,19 @@ function calData() {
 // canonical display form, and a calendar popover behind a pick button. Idempotent.
 function enhance(input) {
   if (input.dataset.dfWired) return;
+  // Clone-safe (p28.20): a grid that clones an ALREADY-enhanced row (budgetgrid.js)
+  // copies the surrounding `.datefield-wrap` span + pick button + popover DOM (but
+  // NOT their listeners — cloneNode drops those, so the copied button is dead) and
+  // deletes dfWired to force a re-enhance. Left as-is that would build a SECOND wrap
+  // nested in the first -> a duplicate calendar button. So if this input already sits
+  // in a wrap, lift it out and drop the stale wrap first, then build exactly one
+  // fresh wrap/button/popover below. Invariant: one input -> one wrap -> one button,
+  // however many times enhance runs or the row is cloned.
+  const stale = input.closest('.datefield-wrap');
+  if (stale && stale.parentNode) {
+    stale.parentNode.insertBefore(input, stale);
+    stale.remove();
+  }
   input.dataset.dfWired = '1';
   const fmt = resolveFmt(input);
   const labels = calData();

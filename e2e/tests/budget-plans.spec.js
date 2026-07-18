@@ -84,6 +84,19 @@ test('budget-plans: create plan, R/E + open-item splits, program rule, CSV impor
   await page.locator('#bs-account-0').selectOption({ label: revName });
   await page.locator('#bs-date-0').fill('2026-03-15');
   await page.locator('#bs-amount-0').fill('400.00');
+
+  // p28.20 clone-safe datefield: filling row 0 makes the grid auto-append a fresh
+  // trailing row (budgetgrid.js cloneRow -> reEnhanceDates re-runs enhance() on the
+  // cloned, already-enhanced date input). The shared enhancer must unwrap the stale
+  // clone-copied wrap first, so EACH date cell still has exactly ONE calendar (pick)
+  // button — no duplicate. Assert one date input, one wrap, one button per cell.
+  await expect(page.locator('.bs-date-cell')).toHaveCount(2); // row 0 + the appended empty
+  for (const cell of await page.locator('.bs-date-cell').all()) {
+    await expect(cell.locator('input.js-datefield')).toHaveCount(1);
+    await expect(cell.locator('.datefield-wrap')).toHaveCount(1);
+    await expect(cell.locator('.datefield-pick')).toHaveCount(1);
+  }
+
   // Leave program unset (value 0).
   await page.locator('#budget-save-splits').click();
   await expect(page.locator('.bs-row-error .field-error')).toBeVisible();
