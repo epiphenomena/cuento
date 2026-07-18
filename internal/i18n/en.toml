@@ -2087,7 +2087,8 @@ other = "Expense review"
 [expreview.intro]
 other = "Submitted expense reports awaiting review. Open a report to review and post it as a balanced ledger transaction, or reject it back to the submitter."
 [expreview.pending_count]
-other = "%d report(s) pending review"
+one = "%d report pending review"
+other = "%d reports pending review"
 [expreview.empty]
 other = "No reports are awaiting review."
 [expreview.history]

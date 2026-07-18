@@ -2082,7 +2082,8 @@ other = "Revisión de gastos"
 [expreview.intro]
 other = "Informes de gastos enviados pendientes de revisión. Abra un informe para revisarlo y contabilizarlo como un asiento contable equilibrado, o rechácelo devolviéndolo al remitente."
 [expreview.pending_count]
-other = "%d informe(s) pendiente(s) de revisión"
+one = "%d informe pendiente de revisión"
+other = "%d informes pendientes de revisión"
 [expreview.empty]
 other = "No hay informes pendientes de revisión."
 [expreview.history]

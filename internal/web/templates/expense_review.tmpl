@@ -20,7 +20,7 @@
   <h1>{{t "expreview.title"}}</h1>
   <p class="hint">{{t "expreview.intro"}}</p>
 
-  <p class="expreview-count" role="status">{{t "expreview.pending_count" .NumPending}}</p>
+  <p class="expreview-count" role="status">{{tn "expreview.pending_count" .NumPending}}</p>
 
   {{- if .Pending}}
   <table class="expreview-table expreview-pending">
