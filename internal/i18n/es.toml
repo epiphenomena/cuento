@@ -447,6 +447,8 @@ other = "Aplicar"
 other = "Cuenta"
 [accounts.col.type]
 other = "Tipo"
+[accounts.col.notes]
+other = "Notas"
 [accounts.col.balances]
 other = "Saldo"
 [accounts.col.actions]
@@ -595,6 +597,10 @@ other = "Gasto"
 other = "C/C"
 [account.badge.ap]
 other = "C/P"
+# p28.8: indicador de cuenta de efectivo disponible (current_cash) en el catalogo,
+# junto al nombre de la cuenta como las insignias C/C–C/P.
+[accounts.badge.cash]
+other = "Efectivo"
 # p26.74: etiquetas PLURALES de seccion (nivel de estado) para los encabezados de tipo
 # inyectados en el catalogo de cuentas + los <optgroup> del selector de cuentas. Distintas
 # de las etiquetas SINGULARES por cuenta account.type.* (la columna Tipo); coinciden con las

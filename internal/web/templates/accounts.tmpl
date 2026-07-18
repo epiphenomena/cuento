@@ -82,7 +82,9 @@
     <thead>
       <tr>
         <th>{{t "accounts.col.name"}}</th>
-        <th>{{t "accounts.col.type"}}</th>
+        {{/* p28.8: the chart already GROUPS by type (p26.74 headers), so the per-row
+             Type column is redundant -- replaced by the account's free-text Notes. */}}
+        <th>{{t "accounts.col.notes"}}</th>
         <th class="acct-balances">{{t "accounts.col.balances"}}</th>
         <th>{{t "accounts.col.actions"}}</th>
       </tr>
@@ -105,8 +107,9 @@
       <tr class="acct-row{{if not .Active}} acct-inactive{{end}}" data-depth="{{.Depth}}">
         {{/* p25: the account name opens its register (the everyday drill-down); the
              dedicated Register button is gone. */}}
-        <td class="acct-name acct-depth-{{.Depth}}"><a href="/accounts/{{.ID}}/register">{{.Name}}</a>{{if .BadgeKey}} <span class="badge badge-open-item">{{t .BadgeKey}}</span>{{end}}{{if not .Active}} <span class="badge">{{t "accounts.inactive"}}</span>{{end}}</td>
-        <td>{{t (printf "account.type.%s" .Type)}}</td>
+        <td class="acct-name acct-depth-{{.Depth}}"><a href="/accounts/{{.ID}}/register">{{.Name}}</a>{{if .CurrentCash}} <span class="badge badge-current-cash" title="{{t "accounts.form.current_cash"}}">{{t "accounts.badge.cash"}}</span>{{end}}{{if .BadgeKey}} <span class="badge badge-open-item">{{t .BadgeKey}}</span>{{end}}{{if not .Active}} <span class="badge">{{t "accounts.inactive"}}</span>{{end}}</td>
+        {{/* p28.8: free-text Notes replaces the redundant Type. Rendered verbatim (stored data). */}}
+        <td class="acct-notes">{{.Notes}}</td>
         <td class="acct-balances">
           {{range .Balances}}<span class="bal">{{.}}</span> {{end}}
         </td>

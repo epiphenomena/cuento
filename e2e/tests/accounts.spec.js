@@ -46,6 +46,9 @@ test.describe('chart of accounts', () => {
     await page.locator('#af-name-en').fill('Petty Cash E2E');
     await page.locator('#af-name-es').fill('Caja Chica E2E');
     await page.locator('#af-type').selectOption('asset');
+    // p28.7/p28.8: a free-text note shows in the chart's Notes column (which replaced
+    // the redundant per-row Type).
+    await page.locator('#af-notes').fill('Reception drawer float E2E');
     // The root subsidiary (id 1, "Organization") is pre-checked on a new account;
     // ensure it is checked so the store's >=1-subsidiary rule is satisfied.
     const rootSub = page.locator('input[name="sub_1"]');
@@ -57,6 +60,9 @@ test.describe('chart of accounts', () => {
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL('**/accounts');
     await expect(page.getByText('Petty Cash E2E')).toBeVisible();
+    // The note renders in the row's Notes cell.
+    const pettyRow = page.locator('tr.acct-row', { hasText: 'Petty Cash E2E' });
+    await expect(pettyRow.locator('.acct-notes')).toHaveText('Reception drawer float E2E');
   });
 
   test('a bad submit re-renders the page with the localized field error', async ({ page, server }) => {
@@ -308,10 +314,12 @@ test.describe('chart of accounts', () => {
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL(/\/accounts$/);
 
-    // The chart shows the A/R badge next to the open_item asset's name.
+    // The chart shows the A/R badge next to the open_item asset's name, and (p28.8)
+    // the current-cash indicator badge stays visible too.
     const row = page.locator('tr.acct-row', { hasText: 'AR Cash E2E' });
     await expect(row).toBeVisible();
     await expect(row.locator('.badge-open-item')).toHaveText('A/R');
+    await expect(row.locator('.badge-current-cash')).toBeVisible();
 
     // Switching the new-account type to EQUITY hides BOTH flag controls (server-gated
     // via the htmx type re-fetch).

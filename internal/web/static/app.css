@@ -554,6 +554,9 @@ input[aria-invalid="true"] {
   border-radius: var(--radius);
   color: var(--color-muted, inherit);
 }
+/* p28.8: the chart's per-account free-text Notes column (replaces the redundant
+   Type). Muted + small so it reads as secondary annotation, not the account name. */
+.acct-notes { font-size: 0.85em; color: var(--color-muted, inherit); }
 
 /* The inline create/edit form region. */
 .account-form-region { margin: var(--space-4) 0; }

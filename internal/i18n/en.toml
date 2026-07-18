@@ -452,6 +452,8 @@ other = "Apply"
 other = "Account"
 [accounts.col.type]
 other = "Type"
+[accounts.col.notes]
+other = "Notes"
 [accounts.col.balances]
 other = "Balance"
 [accounts.col.actions]
@@ -602,6 +604,10 @@ other = "Expense"
 other = "A/R"
 [account.badge.ap]
 other = "A/P"
+# p28.8: chart indicator for a current_cash (spendable-cash) account, shown next to
+# the account name parallel to the A/R–A/P badges.
+[accounts.badge.cash]
+other = "Cash"
 # p26.74: PLURAL statement-tier section labels for the injected type headers on the
 # chart of accounts + the account-selector <optgroup>s. Distinct from the SINGULAR
 # per-account account.type.* labels (the Type column); these match the report section

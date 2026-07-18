@@ -95,6 +95,14 @@ type acctRow struct {
 	Depth        int
 	Balances     []string // pre-formatted "CCY 1,234.56" strings (rule 10)
 
+	// Notes is the account's free-text note (p28.7), shown in the chart column that
+	// REPLACES the redundant per-row type (the chart already groups by type, p26.74).
+	// Rendered verbatim (stored data, like the account name). "" = no note.
+	Notes string
+	// CurrentCash marks a spendable-cash account (p28.7); the chart shows a small
+	// indicator next to the name, parallel to the A/R-A/P badge.
+	CurrentCash bool
+
 	// BadgeKey is an i18n key for a small identifier tag next to the name (p27.1b):
 	// an open_item ASSET reads as "A/R", an open_item LIABILITY as "A/P" (direction
 	// derived from type). "" = no badge. Kept minimal; does not touch the p26.74 type
@@ -369,6 +377,8 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 			Reconcilable: row.Reconcilable,
 			Depth:        depth[row.ID],
 			BadgeKey:     openItemBadgeKey(row.OpenItem, row.Type),
+			Notes:        row.Notes,
+			CurrentCash:  row.CurrentCash,
 		}
 		for _, c := range bals[row.ID] {
 			ar.Balances = append(ar.Balances, money.FormatMoney(c.Minor, c.Currency, c.Exponent, opts))
