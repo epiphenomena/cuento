@@ -65,8 +65,6 @@ other = "Light"
 other = "Dark"
 [theme.auto]
 other = "Auto"
-[theme.apply]
-other = "Apply"
 
 # Language switcher on the login page (p10.2). Each language is labelled in its
 # OWN tongue (lang.<code> is the same in every catalog) so a speaker recognizes
@@ -123,8 +121,6 @@ other = "Enter a valid email address."
 # catalog parity but no longer rendered.
 [settings.title]
 other = "Settings"
-[settings.coming_soon]
-other = "Settings arrive in a later step."
 [settings.intro]
 other = "These preferences apply only to your account and change how dates and amounts are shown to you."
 [settings.saved]
@@ -175,10 +171,6 @@ other = "Minus sign (-1,234.50)"
 other = "Parentheses ((1,234.50))"
 [settings.error.invalid]
 other = "That value is not allowed. Please choose one of the offered options."
-
-# Admin landing stub (p10.2); the real admin pages arrive in later phases.
-[admin.coming_soon]
-other = "Admin tools arrive in a later step."
 
 # Admin index (p13.2): the section hub linking every admin area.
 [admin.intro]
@@ -269,8 +261,6 @@ other = "Enter a password."
 other = "Choose a valid transaction permission."
 [admin.users.error.last_admin]
 other = "You cannot disable the last admin."
-[admin.users.error.system_user]
-other = "The system account cannot be managed."
 
 # Admin: currencies management (p13.2). Reference data used by exchange rates later.
 [admin.currencies.title]
@@ -851,14 +841,6 @@ other = "Debit"
 other = "Credit"
 [txn.amount.signed]
 other = "Amount"
-[txn.class.none]
-other = "No class"
-[txn.class.program]
-other = "Program"
-[txn.class.management]
-other = "Management & general"
-[txn.class.fundraising]
-other = "Fundraising"
 # p26.41 combined program/class control labels: the two "class" alternates offered above the
 # program tree on an expense row (management is called "Admin" HERE for brevity; reports keep
 # the formal 990 term "Management & general" from functional.management).
@@ -876,16 +858,8 @@ other = "Description"
 other = "Main account"
 [txn.main.amount]
 other = "Balancing amount"
-[txn.col.debit]
-other = "Debit"
-[txn.col.credit]
-other = "Credit"
 [txn.col.fund]
 other = "Fund"
-[txn.col.program]
-other = "Program"
-[txn.col.class]
-other = "Functional class"
 # p26.45 combined program/class column sub-label (the merged control from p26.41).
 [txn.col.progclass]
 other = "Program · Class"
@@ -896,8 +870,6 @@ other = "Memo"
 # p26.45 memo input placeholder (the second-row memo field, now labelled via the header).
 [txn.memo_hint]
 other = "Memo"
-[txn.col.error]
-other = "Error"
 [register.new_txn]
 other = "New transaction"
 [error.txn.unbalanced]
@@ -1149,8 +1121,6 @@ other = "of which change in net assets to date"
 other = "Cumulative translation adjustment"
 [reports.balance_sheet.na.ic_reconciling]
 other = "Intercompany reconciling difference"
-[reports.balance_sheet.intercompany_warning]
-other = "Intercompany accounts do not net to zero"
 
 # p15.5 income statement: statement of activities over a period (Revenue - Expense =
 # net surplus/deficit), with comparative month/quarter columns and txn-date conversion.
@@ -1595,8 +1565,6 @@ other = "ISO (YYYY-MM-DD)"
 other = "US (MM/DD/YYYY)"
 [import.date_format.eu]
 other = "EU (DD/MM/YYYY)"
-[import.columns_hint]
-other = "Column numbers are zero-based. Use -1 for an unmapped payee or memo column."
 [import.columns_after_upload]
 other = "After you choose a file and preview, label each column below."
 [import.map_columns]
@@ -1625,10 +1593,6 @@ other = "Map a Date column and an Amount column (or Debit and Credit) to see a p
 other = "Date column"
 [import.col.amount]
 other = "Amount column"
-[import.col.debit]
-other = "Debit column"
-[import.col.credit]
-other = "Credit column"
 [import.col.desc]
 other = "Description column"
 [import.col.memo]

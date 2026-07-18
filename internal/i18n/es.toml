@@ -58,8 +58,6 @@ other = "Claro"
 other = "Oscuro"
 [theme.auto]
 other = "Automatico"
-[theme.apply]
-other = "Aplicar"
 
 # Selector de idioma en la pagina de inicio de sesion (p10.2). Cada idioma se
 # etiqueta en SU propia lengua (lang.<code> es identico en cada catalogo).
@@ -117,8 +115,6 @@ other = "Introduzca un correo electronico valido."
 # stub p10.2, conservado por paridad del catalogo pero ya no se muestra.
 [settings.title]
 other = "Ajustes"
-[settings.coming_soon]
-other = "Los ajustes llegan en un paso posterior."
 [settings.intro]
 other = "Estas preferencias solo se aplican a tu cuenta y cambian como se te muestran las fechas y los importes."
 [settings.saved]
@@ -169,10 +165,6 @@ other = "Signo menos (-1,234.50)"
 other = "Parentesis ((1,234.50))"
 [settings.error.invalid]
 other = "Ese valor no esta permitido. Elige una de las opciones ofrecidas."
-
-# Landing de administracion (stub, p10.2); las paginas reales llegan despues.
-[admin.coming_soon]
-other = "Las herramientas de administracion llegan en un paso posterior."
 
 # Indice de administracion (p13.2): el centro que enlaza cada area.
 [admin.intro]
@@ -263,8 +255,6 @@ other = "Ingrese una contrasena."
 other = "Elija un permiso de transacciones valido."
 [admin.users.error.last_admin]
 other = "No puede deshabilitar al ultimo administrador."
-[admin.users.error.system_user]
-other = "La cuenta del sistema no se puede gestionar."
 
 # Administracion: monedas (p13.2). Datos de referencia usados luego por los tipos de cambio.
 [admin.currencies.title]
@@ -845,14 +835,6 @@ other = "Debe"
 other = "Haber"
 [txn.amount.signed]
 other = "Importe"
-[txn.class.none]
-other = "Sin clase"
-[txn.class.program]
-other = "Programa"
-[txn.class.management]
-other = "Administracion y general"
-[txn.class.fundraising]
-other = "Recaudacion de fondos"
 # p26.41 etiquetas del control combinado programa/clase: las dos alternativas de "clase"
 # ofrecidas sobre el arbol de programas en una fila de gasto (aqui "management" se abrevia
 # como "Admin"; los informes conservan el termino formal 990 de functional.management).
@@ -870,16 +852,8 @@ other = "Descripcion"
 other = "Cuenta principal"
 [txn.main.amount]
 other = "Importe de balance"
-[txn.col.debit]
-other = "Debe"
-[txn.col.credit]
-other = "Haber"
 [txn.col.fund]
 other = "Fondo"
-[txn.col.program]
-other = "Programa"
-[txn.col.class]
-other = "Clase funcional"
 # p26.45 combined program/class column sub-label (the merged control from p26.41).
 [txn.col.progclass]
 other = "Programa · Clase"
@@ -890,8 +864,6 @@ other = "Nota"
 # p26.45 memo input placeholder (the second-row memo field, now labelled via the header).
 [txn.memo_hint]
 other = "Nota"
-[txn.col.error]
-other = "Error"
 [register.new_txn]
 other = "Nueva transaccion"
 [error.txn.unbalanced]
@@ -1147,8 +1119,6 @@ other = "de los cuales cambio en activos netos a la fecha"
 other = "Ajuste acumulado por conversion"
 [reports.balance_sheet.na.ic_reconciling]
 other = "Diferencia de conciliacion intercompania"
-[reports.balance_sheet.intercompany_warning]
-other = "Las cuentas intercompania no se compensan a cero"
 
 # p15.5 estado de resultados: estado de actividades de un periodo (Ingresos - Gastos =
 # superavit/deficit neto), con columnas comparativas mensuales/trimestrales y conversion
@@ -1597,8 +1567,6 @@ other = "ISO (AAAA-MM-DD)"
 other = "EE. UU. (MM/DD/AAAA)"
 [import.date_format.eu]
 other = "Europa (DD/MM/AAAA)"
-[import.columns_hint]
-other = "Los numeros de columna empiezan en cero. Usa -1 para una columna de beneficiario o memo no asignada."
 [import.columns_after_upload]
 other = "Despues de elegir un archivo y previsualizar, etiqueta cada columna abajo."
 [import.map_columns]
@@ -1627,10 +1595,6 @@ other = "Asigna una columna de Fecha y una de Monto (o Debito y Credito) para ve
 other = "Columna de fecha"
 [import.col.amount]
 other = "Columna de importe"
-[import.col.debit]
-other = "Columna de debito"
-[import.col.credit]
-other = "Columna de credito"
 [import.col.desc]
 other = "Columna de descripcion"
 [import.col.memo]
