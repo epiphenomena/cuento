@@ -149,16 +149,6 @@
 {{- end}}
 {{- end}}
 
-{{/* txn-rows: the split-grid rows fragment. It ranges the SAME single-sourced
-     "txn-row" (no fork), so an autofilled/prefilled row is byte-identical to a
-     page-rendered one (stable ids / gating / wiring). The model is the txnEditorModel
-     directly (the handler renders "txn-rows" with the model as data, not a
-     shellPage). */ -}}
-{{define "txn-rows" -}}
-{{range .Rows}}{{template "txn-row" (txnRowCtx $ .)}}
-{{end}}
-{{- end}}
-
 {{/* desc-suggest: the p26.18 per-split description autocomplete fragment. A list of
      ranked DISTINCT descriptions (GET /descriptions/suggest?q=&sub=), most-recently
      -used first, sub-preferred. Each <li class="desc-suggestion" role="option"

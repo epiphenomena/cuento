@@ -176,7 +176,6 @@ function initEditor(form) {
     if (!subSel) return;
     const sub = subSel.value;
     const accountSubs = {};
-    form.querySelectorAll('#txn-account-0 option[data-account-option]').forEach(() => {});
     // Build account->subs from ANY row's option list (all rows share the option set).
     const first = form.querySelector('.txn-account');
     if (first) {
@@ -237,7 +236,7 @@ function initEditor(form) {
     clone.querySelectorAll('[id],[name]').forEach((el) => {
       if (el.id) el.id = el.id.replace(/-\d+$/, `-${idx}`);
       if (el.name) el.name = el.name.replace(/_\d+$/, `_${idx}`);
-      if (el.tagName === 'INPUT') el.value = el.type === 'hidden' && el.name.startsWith('split_id') ? '' : '';
+      if (el.tagName === 'INPUT') el.value = '';
       if (el.tagName === 'SELECT') el.selectedIndex = 0;
     });
     // p26.19: the description input's data-desc-container points at its per-row listbox id
