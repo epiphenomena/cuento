@@ -141,6 +141,15 @@ type IDs struct {
 // ptr returns a pointer to v (concise optional-field construction).
 func ptr[T any](v T) *T { return &v }
 
+// notesPtr maps a synthetic notes string to the store's optional *string: "" -> nil
+// (no note, stored NULL), else a pointer to the text (p28.7).
+func notesPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
 // Build constructs the canonical synthetic dataset (Appendix D) into the store, in
 // dependency order, and returns the ids. All amounts are minor units (cents; USD
 // and MXN both have exponent 2). Net-debit signs (D2): asset/expense debits +,

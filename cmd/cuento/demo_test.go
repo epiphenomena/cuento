@@ -93,6 +93,10 @@ func TestDemoGeneratorAntiDrift(t *testing.T) {
 	atLeast("open_item receivables", count(`SELECT count(*) FROM accounts WHERE open_item = 1 AND type = 'asset'`), 1)
 	atLeast("open_item payables", count(`SELECT count(*) FROM accounts WHERE open_item = 1 AND type = 'liability'`), 1)
 
+	// p28.7: at least one account carries a free-text note, so the chart's Notes
+	// column (p28.8) shows populated in the demo.
+	atLeast("accounts with notes", count(`SELECT count(*) FROM accounts WHERE notes IS NOT NULL AND notes != ''`), 1)
+
 	// Funds including at least one RESTRICTED fund.
 	atLeast("funds", count(`SELECT count(*) FROM funds`), 3)
 	atLeast("restricted funds", count(`SELECT count(*) FROM funds WHERE restriction != 'unrestricted'`), 1)
