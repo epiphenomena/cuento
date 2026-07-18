@@ -186,6 +186,8 @@ func (s *Store) MergeAccount(ctx context.Context, src, dst int64) error {
 				Active:           0,
 				SortOrder:        srcAcct.SortOrder,
 				CreatedAt:        srcAcct.CreatedAt,
+				CurrentCash:      srcAcct.CurrentCash,
+				OpenItem:         srcAcct.OpenItem,
 				ID:               src,
 			}); err != nil {
 				return fmt.Errorf("deactivate source %d: %w", src, err)

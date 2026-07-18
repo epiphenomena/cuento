@@ -758,5 +758,166 @@ func TestCreateFunctionalClassNonExpense(t *testing.T) {
 	}
 }
 
+// accountFlags reads an account's current_cash / open_item live flags.
+func accountFlags(t *testing.T, s *Store, id int64) (currentCash, openItem bool) {
+	t.Helper()
+	row, err := s.GetAccount(context.Background(), id)
+	if err != nil {
+		t.Fatalf("GetAccount(%d): %v", id, err)
+	}
+	return row.CurrentCash != 0, row.OpenItem != 0
+}
+
+// TestCreateAccountFlagsVersioned (p27.1): creating an asset with current_cash +
+// open_item persists both flags on the live row AND the latest version snapshot
+// (so Z3 stays clean).
+func TestCreateAccountFlagsVersioned(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Receivable Cash"),
+		Subsidiaries: []int64{rootID}, CurrentCash: true, OpenItem: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+	cc, oi := accountFlags(t, s, id)
+	if !cc || !oi {
+		t.Fatalf("live flags = (cc=%v, oi=%v), want both true", cc, oi)
+	}
+	testutil.AssertVersioned(t, d, "accounts", id, "create")
+	// The version snapshot must carry the flags too (Z3 backstop).
+	var vcc, voi int64
+	if err := d.QueryRow(`SELECT current_cash, open_item FROM accounts_versions
+		WHERE entity_id = ? ORDER BY valid_from DESC, id DESC LIMIT 1`, id).Scan(&vcc, &voi); err != nil {
+		t.Fatalf("read version snapshot: %v", err)
+	}
+	if vcc != 1 || voi != 1 {
+		t.Errorf("version snapshot flags = (cc=%d, oi=%d), want (1,1)", vcc, voi)
+	}
+}
+
+// TestCreateCurrentCashNonAsset (p27.1): current_cash on a non-asset account is
+// rejected cleanly (ErrCurrentCashNotAsset) before the tx opens; no trace.
+func TestCreateCurrentCashNonAsset(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	before := countChanges(t, d)
+	_, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "liability", DefaultCurrency: "USD", Names: enName("Loan"),
+		Subsidiaries: []int64{rootID}, CurrentCash: true,
+	})
+	if !errors.Is(err, ErrCurrentCashNotAsset) {
+		t.Fatalf("current_cash on liability: err = %v, want ErrCurrentCashNotAsset", err)
+	}
+	if n := countChanges(t, d); n != before {
+		t.Errorf("changes count = %d, want %d (rejected create leaves no trace)", n, before)
+	}
+}
+
+// TestCreateOpenItemBadType (p27.1): open_item on a type outside {asset,liability}
+// is rejected cleanly (ErrOpenItemBadType); no trace.
+func TestCreateOpenItemBadType(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	before := countChanges(t, d)
+	_, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "equity", DefaultCurrency: "USD", Names: enName("Opening"),
+		Subsidiaries: []int64{rootID}, OpenItem: true,
+	})
+	if !errors.Is(err, ErrOpenItemBadType) {
+		t.Fatalf("open_item on equity: err = %v, want ErrOpenItemBadType", err)
+	}
+	if n := countChanges(t, d); n != before {
+		t.Errorf("changes count = %d, want %d (rejected create leaves no trace)", n, before)
+	}
+}
+
+// TestUpdateAccountFlagsRoundTrip (p27.1): setting the flags via UpdateAccount
+// persists them; a subsequent unrelated no-op edit (changing nothing about the
+// flags) leaves them intact -- next := cur carries them through.
+func TestUpdateAccountFlagsRoundTrip(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Bank"),
+		Subsidiaries: []int64{rootID},
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+	// Set both flags.
+	if err := s.UpdateAccount(mutCtx(), id, UpdateAccountInput{
+		CurrentCash: ptr(true), OpenItem: ptr(true),
+	}); err != nil {
+		t.Fatalf("UpdateAccount set flags: %v", err)
+	}
+	if cc, oi := accountFlags(t, s, id); !cc || !oi {
+		t.Fatalf("after set: flags = (cc=%v, oi=%v), want both true", cc, oi)
+	}
+	// An unrelated update (sort order) must NOT clear the flags.
+	if err := s.UpdateAccount(mutCtx(), id, UpdateAccountInput{SortOrder: ptr(int64(5))}); err != nil {
+		t.Fatalf("UpdateAccount unrelated: %v", err)
+	}
+	if cc, oi := accountFlags(t, s, id); !cc || !oi {
+		t.Errorf("after unrelated update: flags = (cc=%v, oi=%v), want both true (carried through)", cc, oi)
+	}
+	// Clearing one flag works.
+	if err := s.UpdateAccount(mutCtx(), id, UpdateAccountInput{CurrentCash: ptr(false)}); err != nil {
+		t.Fatalf("UpdateAccount clear: %v", err)
+	}
+	if cc, oi := accountFlags(t, s, id); cc || !oi {
+		t.Errorf("after clear current_cash: flags = (cc=%v, oi=%v), want (false,true)", cc, oi)
+	}
+}
+
+// TestUpdateCurrentCashNonAsset (p27.1): setting current_cash on a non-asset
+// account via UpdateAccount is rejected (ErrCurrentCashNotAsset).
+func TestUpdateCurrentCashNonAsset(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "liability", DefaultCurrency: "USD", Names: enName("Payable"),
+		Subsidiaries: []int64{rootID},
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+	err = s.UpdateAccount(mutCtx(), id, UpdateAccountInput{CurrentCash: ptr(true)})
+	if !errors.Is(err, ErrCurrentCashNotAsset) {
+		t.Fatalf("current_cash on liability update: err = %v, want ErrCurrentCashNotAsset", err)
+	}
+	// open_item on a liability IS allowed (payable).
+	if err := s.UpdateAccount(mutCtx(), id, UpdateAccountInput{OpenItem: ptr(true)}); err != nil {
+		t.Fatalf("open_item on liability update: %v", err)
+	}
+}
+
+// TestDeactivatePreservesFlags (p27.1): DeactivateAccount writes the full account
+// row from cur; it must carry the flags through (else Z3 diverges).
+func TestDeactivatePreservesFlags(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Petty Cash"),
+		Subsidiaries: []int64{rootID}, CurrentCash: true,
+	})
+	if err != nil {
+		t.Fatalf("CreateAccount: %v", err)
+	}
+	if err := s.DeactivateAccount(mutCtx(), id); err != nil {
+		t.Fatalf("DeactivateAccount: %v", err)
+	}
+	if cc, _ := accountFlags(t, s, id); !cc {
+		t.Errorf("after deactivate: current_cash = false, want true (carried through)")
+	}
+}
+
 // ptr returns a pointer to v — for the *int64/*string optional update fields.
 func ptr[T any](v T) *T { return &v }

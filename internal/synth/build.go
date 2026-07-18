@@ -61,6 +61,8 @@ type acctSpec struct {
 	subs         []int64
 	reconcilable bool
 	intercompany bool
+	currentCash  bool // p27.1: spendable-cash marker (asset-only)
+	openItem     bool // p27.1: A/R-A/P open-line marker (asset/liability-only)
 	fClass       *string
 	defProgram   *int64
 	code         *string
@@ -80,17 +82,17 @@ func buildAccounts(ctx context.Context, s *store.Store, ids *IDs) error {
 	// Create parents first so children can reference them.
 	specs := []acctSpec{
 		// --- Assets (natural leaves; no grouping parent) ---
-		{dst: &ids.CheckingUS, typ: "asset", nameEN: "Checking US", nameES: "Cuenta corriente EE. UU.", currency: "USD", subs: []int64{ids.US}, reconcilable: true},
-		{dst: &ids.CheckingMX, typ: "asset", nameEN: "Checking MX", nameES: "Cuenta corriente MX", currency: "MXN", subs: []int64{ids.MX}, reconcilable: true},
+		{dst: &ids.CheckingUS, typ: "asset", nameEN: "Checking US", nameES: "Cuenta corriente EE. UU.", currency: "USD", subs: []int64{ids.US}, reconcilable: true, currentCash: true},
+		{dst: &ids.CheckingMX, typ: "asset", nameEN: "Checking MX", nameES: "Cuenta corriente MX", currency: "MXN", subs: []int64{ids.MX}, reconcilable: true, currentCash: true},
 		{dst: &ids.Savings, typ: "asset", nameEN: "Savings", nameES: "Ahorros", currency: "USD", subs: []int64{ids.Root}},
 		{dst: &ids.CashMXN, typ: "asset", nameEN: "Cash MXN", nameES: "Efectivo MXN", currency: "MXN", subs: []int64{ids.MX}},
 		{dst: &ids.Building, typ: "asset", nameEN: "Building", nameES: "Edificio", currency: "USD", subs: []int64{ids.US}, code: ptr("X.10")},
-		{dst: &ids.DueFromMX, typ: "asset", nameEN: "Due from RV Mexico", nameES: "Por cobrar de RV Mexico", currency: "USD", subs: []int64{ids.US}, intercompany: true},
+		{dst: &ids.DueFromMX, typ: "asset", nameEN: "Due from RV Mexico", nameES: "Por cobrar de RV Mexico", currency: "USD", subs: []int64{ids.US}, intercompany: true, openItem: true},
 		{dst: &ids.FXClearing, typ: "asset", nameEN: "FX Clearing", nameES: "Compensacion de cambio", currency: "USD", subs: all},
 
 		// --- Liabilities ---
 		{dst: &ids.CreditCard, typ: "liability", nameEN: "Credit Card", nameES: "Tarjeta de credito", currency: "USD", subs: []int64{ids.US}, reconcilable: true},
-		{dst: &ids.DueToIntl, typ: "liability", nameEN: "Due to RV Internacional", nameES: "Por pagar a RV Internacional", currency: "USD", subs: []int64{ids.MX}, intercompany: true},
+		{dst: &ids.DueToIntl, typ: "liability", nameEN: "Due to RV Internacional", nameES: "Por pagar a RV Internacional", currency: "USD", subs: []int64{ids.MX}, intercompany: true, openItem: true},
 
 		// --- Equity ---
 		{dst: &ids.OpeningBalances, typ: "equity", nameEN: "Opening Balances", nameES: "Saldos iniciales", currency: "USD", subs: all},
@@ -142,6 +144,8 @@ func createAccount(ctx context.Context, s *store.Store, sp acctSpec) error {
 		DefaultProgramID: sp.defProgram,
 		Intercompany:     sp.intercompany,
 		Reconcilable:     sp.reconcilable,
+		CurrentCash:      sp.currentCash,
+		OpenItem:         sp.openItem,
 	})
 	if err != nil {
 		return fmt.Errorf("create account %q: %w", sp.nameEN, err)

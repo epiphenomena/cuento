@@ -82,6 +82,7 @@ WHERE v.id IS NULL OR v.op = 'delete'
    OR v.default_program_id IS NOT c.default_program_id
    OR v.form990_code IS NOT c.form990_code
    OR v.intercompany IS NOT c.intercompany OR v.reconcilable IS NOT c.reconcilable
+   OR v.current_cash IS NOT c.current_cash OR v.open_item IS NOT c.open_item
    OR v.active IS NOT c.active OR v.sort_order IS NOT c.sort_order
    OR v.created_at IS NOT c.created_at
 UNION ALL
@@ -615,3 +616,20 @@ WHERE a.active = 1
       WHERE chain.depth < 100000
     )
     SELECT 1 FROM chain WHERE code IS NOT NULL)`
+
+// --- Z20: current_cash / open_item flags only on allowed account types (p27.1) --
+// The two boolean account attributes are type-constrained (store-enforced +
+// trigger backstop): current_cash marks spendable cash and is meaningful only on
+// ASSET accounts; open_item marks a receivable/payable open-line account and is
+// meaningful only on ASSET or LIABILITY accounts (asset -> A/R, liability -> A/P).
+// A flag set on the wrong type is a defect (Error), mirroring how Z14/Z15 police
+// the functional-class / program presence rules on splits.
+const sqlZ20 = `
+SELECT 'account ' || CAST(a.id AS TEXT) || ' has current_cash on non-asset type ' || a.type
+FROM accounts a
+WHERE a.current_cash = 1 AND a.type <> 'asset'
+UNION ALL
+SELECT 'account ' || CAST(a.id AS TEXT) || ' has open_item on type ' || a.type
+       || ' (allowed only on asset/liability)'
+FROM accounts a
+WHERE a.open_item = 1 AND a.type NOT IN ('asset','liability')`

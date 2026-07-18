@@ -352,14 +352,16 @@ func (q *Queries) DeleteAccountSubsidiary(ctx context.Context, arg DeleteAccount
 
 const getAccount = `-- name: GetAccount :one
 SELECT id, parent_id, type, default_currency, functional_class, form990_code,
-       intercompany, reconcilable, active, sort_order, created_at, default_program_id
+       intercompany, reconcilable, active, sort_order, created_at, default_program_id,
+       current_cash, open_item
 FROM accounts
 WHERE id = ?
 `
 
 // Column order matches the accounts table's PHYSICAL order (default_program_id was
-// ADDed last by 00008), so sqlc maps the result to the sqlc.Account model rather
-// than a bespoke GetAccountRow -- accounts.go depends on GetAccount returning Account.
+// ADDed last by 00008; current_cash + open_item ADDed last by 00027), so sqlc maps
+// the result to the sqlc.Account model rather than a bespoke GetAccountRow --
+// accounts.go depends on GetAccount returning Account.
 func (q *Queries) GetAccount(ctx context.Context, id int64) (Account, error) {
 	row := q.db.QueryRowContext(ctx, getAccount, id)
 	var i Account
@@ -376,6 +378,8 @@ func (q *Queries) GetAccount(ctx context.Context, id int64) (Account, error) {
 		&i.SortOrder,
 		&i.CreatedAt,
 		&i.DefaultProgramID,
+		&i.CurrentCash,
+		&i.OpenItem,
 	)
 	return i, err
 }
@@ -444,8 +448,9 @@ const insertAccount = `-- name: InsertAccount :one
 
 INSERT INTO accounts
   (parent_id, type, default_currency, functional_class, form990_code,
-   default_program_id, intercompany, reconcilable, active, sort_order, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+   default_program_id, intercompany, reconcilable, active, sort_order, created_at,
+   current_cash, open_item)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
@@ -461,6 +466,8 @@ type InsertAccountParams struct {
 	Active           int64
 	SortOrder        int64
 	CreatedAt        string
+	CurrentCash      int64
+	OpenItem         int64
 }
 
 // p05.2: account operations. All SQL for the store's account methods lives here
@@ -494,6 +501,8 @@ func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) (i
 		arg.Active,
 		arg.SortOrder,
 		arg.CreatedAt,
+		arg.CurrentCash,
+		arg.OpenItem,
 	)
 	var id int64
 	err := row.Scan(&id)
@@ -581,10 +590,10 @@ const insertAccountVersion = `-- name: InsertAccountVersion :exec
 INSERT INTO accounts_versions
   (entity_id, change_id, valid_from, op, parent_id, type, default_currency,
    functional_class, form990_code, default_program_id, intercompany, reconcilable,
-   active, sort_order, created_at)
+   active, sort_order, created_at, current_cash, open_item)
 SELECT a.id, c.id, c.at, ?, a.parent_id, a.type, a.default_currency,
        a.functional_class, a.form990_code, a.default_program_id, a.intercompany,
-       a.reconcilable, a.active, a.sort_order, a.created_at
+       a.reconcilable, a.active, a.sort_order, a.created_at, a.current_cash, a.open_item
 FROM accounts a, changes c
 WHERE c.id = ? AND a.id = ?
 `
@@ -686,7 +695,7 @@ const updateAccount = `-- name: UpdateAccount :exec
 UPDATE accounts
 SET parent_id = ?, type = ?, default_currency = ?, functional_class = ?,
     form990_code = ?, default_program_id = ?, intercompany = ?, reconcilable = ?,
-    active = ?, sort_order = ?, created_at = ?
+    active = ?, sort_order = ?, created_at = ?, current_cash = ?, open_item = ?
 WHERE id = ?
 `
 
@@ -702,6 +711,8 @@ type UpdateAccountParams struct {
 	Active           int64
 	SortOrder        int64
 	CreatedAt        string
+	CurrentCash      int64
+	OpenItem         int64
 	ID               int64
 }
 
@@ -724,6 +735,8 @@ func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) er
 		arg.Active,
 		arg.SortOrder,
 		arg.CreatedAt,
+		arg.CurrentCash,
+		arg.OpenItem,
 		arg.ID,
 	)
 	return err

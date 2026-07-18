@@ -80,6 +80,7 @@ var checks = []check{
 	{Rule: "Z17", Severity: Warning, SQL: sqlZ17},
 	{Rule: "Z18", Severity: Warning, SQL: sqlZ18},
 	{Rule: "Z19", Severity: Warning, SQL: sqlZ19},
+	{Rule: "Z20", Severity: Error, SQL: sqlZ20},
 }
 
 // Check runs every registered integrity rule against db and returns the

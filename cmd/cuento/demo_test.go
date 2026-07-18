@@ -83,6 +83,12 @@ func TestDemoGeneratorAntiDrift(t *testing.T) {
 	atLeast("programs", count(`SELECT count(*) FROM programs`), 2)
 	atLeast("account types", count(`SELECT count(DISTINCT type) FROM accounts`), 5)
 
+	// p27.1 shared account attributes: at least one spendable-cash account, one
+	// open-item receivable (asset -> A/R) and one open-item payable (liability -> A/P).
+	atLeast("current_cash accounts", count(`SELECT count(*) FROM accounts WHERE current_cash = 1`), 1)
+	atLeast("open_item receivables", count(`SELECT count(*) FROM accounts WHERE open_item = 1 AND type = 'asset'`), 1)
+	atLeast("open_item payables", count(`SELECT count(*) FROM accounts WHERE open_item = 1 AND type = 'liability'`), 1)
+
 	// Funds including at least one RESTRICTED fund.
 	atLeast("funds", count(`SELECT count(*) FROM funds`), 3)
 	atLeast("restricted funds", count(`SELECT count(*) FROM funds WHERE restriction != 'unrestricted'`), 1)

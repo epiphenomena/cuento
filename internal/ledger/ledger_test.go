@@ -462,10 +462,11 @@ func TestZ8Z9CleanRecon(t *testing.T) {
 	exec(t, w.d, `INSERT INTO accounts_versions
 		(entity_id, change_id, valid_from, op, parent_id, type, default_currency,
 		 functional_class, default_program_id, form990_code, intercompany, reconcilable,
-		 active, sort_order, created_at)
+		 active, sort_order, created_at, current_cash, open_item)
 		SELECT id, (SELECT MAX(id) FROM changes), (SELECT MAX(at) FROM changes), 'update',
 		 parent_id, type, default_currency, functional_class, default_program_id,
-		 form990_code, intercompany, reconcilable, active, sort_order, created_at
+		 form990_code, intercompany, reconcilable, active, sort_order, created_at,
+		 current_cash, open_item
 		FROM accounts WHERE id = ?`, w.checkingUS)
 	chkSplit := int64(0)
 	if err := w.d.QueryRow(`SELECT id FROM splits WHERE account_id = ? AND transaction_id = ?`,
@@ -735,6 +736,59 @@ func TestZ19UnmappedActiveLeaf(t *testing.T) {
 	}
 	if ledger.HasErrors(vs) {
 		t.Errorf("Z19 corruption should not raise Error violations; got %v", vs)
+	}
+}
+
+// --- Z20: current_cash / open_item only on allowed account types (p27.1) ------
+
+func TestZ20CurrentCashWrongType(t *testing.T) {
+	w := newWorld(t)
+	// current_cash=1 on a LIABILITY is invalid. The store + trigger forbid it, so
+	// drop the trigger and raw-set the flag; append a matching version so ONLY Z20
+	// (not Z3) fires.
+	dropTriggers(t, w.d, "trg_accounts_current_cash_asset_only_update")
+	exec(t, w.d, `UPDATE accounts SET current_cash = 1 WHERE id = ?`, w.dueTo)
+	exec(t, w.d, `INSERT INTO accounts_versions
+		(entity_id, change_id, valid_from, op, parent_id, type, default_currency,
+		 functional_class, default_program_id, form990_code, intercompany, reconcilable,
+		 active, sort_order, created_at, current_cash, open_item)
+		SELECT id, (SELECT MAX(id) FROM changes), (SELECT MAX(at) FROM changes), 'update',
+		 parent_id, type, default_currency, functional_class, default_program_id,
+		 form990_code, intercompany, reconcilable, active, sort_order, created_at,
+		 current_cash, open_item
+		FROM accounts WHERE id = ?`, w.dueTo)
+	vs := checkAll(t, w.d)
+	got := rulesOf(vs)
+	if !got["Z20"] {
+		t.Errorf("want Z20 flagged; got %v", keys(got))
+	}
+	if got["Z3"] {
+		t.Errorf("Z3 fired unexpectedly (version snapshot should match live); got %v", keys(got))
+	}
+	for _, v := range vs {
+		if v.Rule == "Z20" && v.Severity != ledger.Error {
+			t.Errorf("Z20 severity = %s, want error", v.Severity)
+		}
+	}
+}
+
+func TestZ20OpenItemWrongType(t *testing.T) {
+	w := newWorld(t)
+	// open_item=1 on an EQUITY account is invalid (allowed only asset/liability).
+	dropTriggers(t, w.d, "trg_accounts_open_item_al_only_update")
+	exec(t, w.d, `UPDATE accounts SET open_item = 1 WHERE id = ?`, w.equity)
+	exec(t, w.d, `INSERT INTO accounts_versions
+		(entity_id, change_id, valid_from, op, parent_id, type, default_currency,
+		 functional_class, default_program_id, form990_code, intercompany, reconcilable,
+		 active, sort_order, created_at, current_cash, open_item)
+		SELECT id, (SELECT MAX(id) FROM changes), (SELECT MAX(at) FROM changes), 'update',
+		 parent_id, type, default_currency, functional_class, default_program_id,
+		 form990_code, intercompany, reconcilable, active, sort_order, created_at,
+		 current_cash, open_item
+		FROM accounts WHERE id = ?`, w.equity)
+	got := rulesOf(checkAll(t, w.d))
+	if !got["Z20"] {
+		t.Errorf("want Z20 flagged; got %v", keys(got))
 	}
 }
 

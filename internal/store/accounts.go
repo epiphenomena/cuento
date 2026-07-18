@@ -62,6 +62,13 @@ var (
 	// ErrFunctionalClassNotExpense: a default functional_class is allowed only on
 	// expense accounts (D21). Validated cleanly here; the trigger is the backstop.
 	ErrFunctionalClassNotExpense = errors.New("store: functional_class allowed only on expense accounts")
+	// ErrCurrentCashNotAsset: the current_cash flag (spendable-cash marker, p27.1)
+	// is meaningful only on asset accounts. Validated here; a trigger backstops it.
+	ErrCurrentCashNotAsset = errors.New("store: current_cash allowed only on asset accounts")
+	// ErrOpenItemBadType: the open_item flag (A/R-A/P open-line marker, p27.1) is
+	// meaningful only on asset (receivable) or liability (payable) accounts.
+	// Validated here; a trigger backstops it.
+	ErrOpenItemBadType = errors.New("store: open_item allowed only on asset or liability accounts")
 	// ErrAccountNotFound: the requested account does not exist.
 	ErrAccountNotFound = errors.New("store: account not found")
 )
@@ -85,7 +92,13 @@ type CreateAccountInput struct {
 	DefaultProgramID *int64
 	Intercompany     bool
 	Reconcilable     bool
-	SortOrder        int64
+	// CurrentCash marks a spendable-cash account (p27.1); allowed only on asset
+	// accounts (ErrCurrentCashNotAsset). OpenItem marks an A/R-A/P open-line account
+	// (asset -> receivable, liability -> payable); allowed only on asset/liability
+	// accounts (ErrOpenItemBadType).
+	CurrentCash bool
+	OpenItem    bool
+	SortOrder   int64
 }
 
 // UpdateAccountInput carries only fields to change (nil = leave as-is). A non-nil
@@ -101,7 +114,11 @@ type UpdateAccountInput struct {
 	DefaultProgramID *int64
 	Intercompany     *bool
 	Reconcilable     *bool
-	SortOrder        *int64
+	// CurrentCash / OpenItem: a non-nil value sets the flag (type-validated against
+	// the account's type; p27.1). nil leaves it unchanged.
+	CurrentCash *bool
+	OpenItem    *bool
+	SortOrder   *int64
 }
 
 // CreateAccount creates an account (+ its names + its subsidiary memberships,
@@ -122,6 +139,12 @@ func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (int64
 	// before opening the tx (its existence/active check runs inside fn).
 	if in.DefaultProgramID != nil && in.Type != "revenue" && in.Type != "expense" {
 		return 0, ErrDefaultProgramNotRE
+	}
+	// The boolean type-flags are type-constrained (p27.1): current_cash asset-only,
+	// open_item asset/liability-only. Reject early (no tx opened) -- the trigger is
+	// the backstop.
+	if err := checkFlagTypes(in.Type, in.CurrentCash, in.OpenItem); err != nil {
+		return 0, err
 	}
 
 	var newID int64
@@ -174,6 +197,8 @@ func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (int64
 				Active:           1,
 				SortOrder:        in.SortOrder,
 				CreatedAt:        s.now().Format(time.RFC3339Nano),
+				CurrentCash:      boolToInt(in.CurrentCash),
+				OpenItem:         boolToInt(in.OpenItem),
 			})
 			if err != nil {
 				return fmt.Errorf("insert account: %w", err)
@@ -262,6 +287,18 @@ func (s *Store) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInp
 			if in.Reconcilable != nil {
 				next.Reconcilable = boolToInt(*in.Reconcilable)
 			}
+			if in.CurrentCash != nil {
+				next.CurrentCash = boolToInt(*in.CurrentCash)
+			}
+			if in.OpenItem != nil {
+				next.OpenItem = boolToInt(*in.OpenItem)
+			}
+			// The boolean type-flags are type-constrained (p27.1). Validate the
+			// resulting state against next.Type so a same-call type change is honored
+			// (types don't change here, but be explicit -- mirrors the R/E checks).
+			if err := checkFlagTypes(next.Type, next.CurrentCash != 0, next.OpenItem != 0); err != nil {
+				return err
+			}
 			if in.SortOrder != nil {
 				next.SortOrder = *in.SortOrder
 			}
@@ -286,6 +323,8 @@ func (s *Store) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInp
 				Active:           next.Active,
 				SortOrder:        next.SortOrder,
 				CreatedAt:        next.CreatedAt,
+				CurrentCash:      next.CurrentCash,
+				OpenItem:         next.OpenItem,
 				ID:               id,
 			}); err != nil {
 				return fmt.Errorf("update account %d: %w", id, err)
@@ -462,6 +501,8 @@ func (s *Store) DeactivateAccount(ctx context.Context, id int64) error {
 				Active:           0,
 				SortOrder:        cur.SortOrder,
 				CreatedAt:        cur.CreatedAt,
+				CurrentCash:      cur.CurrentCash,
+				OpenItem:         cur.OpenItem,
 				ID:               id,
 			}); err != nil {
 				return fmt.Errorf("deactivate account %d: %w", id, err)
@@ -622,6 +663,21 @@ func typeCompatible(parentType, childType string) bool {
 	default:
 		return false
 	}
+}
+
+// checkFlagTypes enforces the p27.1 boolean type-flag constraints: current_cash is
+// asset-only (ErrCurrentCashNotAsset); open_item is asset/liability-only
+// (ErrOpenItemBadType, the type deriving A/R vs A/P). A flag left false is always
+// allowed. Shared by CreateAccount (early, on the input) and UpdateAccount (on the
+// resulting next state); the migration's triggers backstop it.
+func checkFlagTypes(accountType string, currentCash, openItem bool) error {
+	if currentCash && accountType != "asset" {
+		return ErrCurrentCashNotAsset
+	}
+	if openItem && accountType != "asset" && accountType != "liability" {
+		return ErrOpenItemBadType
+	}
+	return nil
 }
 
 // subSet returns an account's current subsidiary id set.

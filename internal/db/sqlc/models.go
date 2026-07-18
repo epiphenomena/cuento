@@ -21,6 +21,8 @@ type Account struct {
 	SortOrder        int64
 	CreatedAt        string
 	DefaultProgramID sql.NullInt64
+	CurrentCash      int64
+	OpenItem         int64
 }
 
 type AccountName struct {
@@ -70,6 +72,8 @@ type AccountsVersion struct {
 	SortOrder        int64
 	CreatedAt        string
 	DefaultProgramID sql.NullInt64
+	CurrentCash      sql.NullInt64
+	OpenItem         sql.NullInt64
 }
 
 type Budget struct {

@@ -20,16 +20,19 @@
 -- (D24). Returns the new id for the store to snapshot + return.
 INSERT INTO accounts
   (parent_id, type, default_currency, functional_class, form990_code,
-   default_program_id, intercompany, reconcilable, active, sort_order, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+   default_program_id, intercompany, reconcilable, active, sort_order, created_at,
+   current_cash, open_item)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id;
 
 -- name: GetAccount :one
 -- Column order matches the accounts table's PHYSICAL order (default_program_id was
--- ADDed last by 00008), so sqlc maps the result to the sqlc.Account model rather
--- than a bespoke GetAccountRow -- accounts.go depends on GetAccount returning Account.
+-- ADDed last by 00008; current_cash + open_item ADDed last by 00027), so sqlc maps
+-- the result to the sqlc.Account model rather than a bespoke GetAccountRow --
+-- accounts.go depends on GetAccount returning Account.
 SELECT id, parent_id, type, default_currency, functional_class, form990_code,
-       intercompany, reconcilable, active, sort_order, created_at, default_program_id
+       intercompany, reconcilable, active, sort_order, created_at, default_program_id,
+       current_cash, open_item
 FROM accounts
 WHERE id = ?;
 
@@ -43,24 +46,25 @@ WHERE id = ?;
 UPDATE accounts
 SET parent_id = ?, type = ?, default_currency = ?, functional_class = ?,
     form990_code = ?, default_program_id = ?, intercompany = ?, reconcilable = ?,
-    active = ?, sort_order = ?, created_at = ?
+    active = ?, sort_order = ?, created_at = ?, current_cash = ?, open_item = ?
 WHERE id = ?;
 
 -- name: InsertAccountVersion :exec
 -- Snapshot-from-live version append for accounts (STANDARD single-column entity,
 -- entity_id = accounts.id). Must run AFTER the live write. Snapshot column set
--- matches 00005_accounts.sql + the 00008 default_program_id ripple exactly:
--- adding default_program_id to accounts requires it here too, or Z3 (current ==
--- latest snapshot) diverges for accounts touched after p07.1. Params (plain
+-- matches 00005_accounts.sql + the 00008 default_program_id ripple + the 00027
+-- current_cash/open_item ripple exactly: adding a column to accounts requires it
+-- here too, or Z3 (current == latest snapshot) diverges for accounts touched after
+-- that migration. Params (plain
 -- positional, each used once): op, change_id, entity_id -> generated fields Op,
 -- ID (change_id), ID_2 (entity_id).
 INSERT INTO accounts_versions
   (entity_id, change_id, valid_from, op, parent_id, type, default_currency,
    functional_class, form990_code, default_program_id, intercompany, reconcilable,
-   active, sort_order, created_at)
+   active, sort_order, created_at, current_cash, open_item)
 SELECT a.id, c.id, c.at, ?, a.parent_id, a.type, a.default_currency,
        a.functional_class, a.form990_code, a.default_program_id, a.intercompany,
-       a.reconcilable, a.active, a.sort_order, a.created_at
+       a.reconcilable, a.active, a.sort_order, a.created_at, a.current_cash, a.open_item
 FROM accounts a, changes c
 WHERE c.id = ? AND a.id = ?;
 
