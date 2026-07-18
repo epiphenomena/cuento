@@ -29,6 +29,7 @@
 // Guarded so importing under Node is side-effect free (no `document`), like combobox.js.
 
 import { isRowEmpty } from './rowstate.js';
+import { comboKeyAction } from './combokey.js';
 
 // --- PURE helpers (node-tested; no `document`) ------------------------------
 
@@ -211,11 +212,25 @@ function enhanceDescField(input, ctx) {
       evt.stopPropagation();
       active = (active - 1 + opts.length) % opts.length;
       renderActive();
-    } else if (evt.key === 'Enter') {
-      if (!open || active < 0 || !opts[active]) return;
-      evt.preventDefault();
-      evt.stopPropagation();
-      pick(opts[active]);
+    } else if (evt.key === 'Enter' || evt.key === 'Tab') {
+      // p28.3: select-and-advance, shared with the account/fund/program combos via the
+      // pure comboKeyAction. When the suggestion list is OPEN with a highlighted item:
+      // BOTH Enter and Tab COMMIT it (pick -> full description + prefill); Enter also
+      // advances focus to the next field (the row's account) and preventDefaults +
+      // stopPropagations so it neither submits nor double-advances via the txn grid's Enter
+      // handler; Tab lets the browser's NATIVE Tab (or the txn grid's own Tab move) advance
+      // -- so we do NOT preventDefault/stopPropagation it, committing first is enough (the
+      // blur reconcile then prefills from the committed full text, not the partial typed).
+      const { commit, preventDefault, focusNext } = comboKeyAction(evt.key, {
+        open,
+        hasActive: active >= 0 && !!opts[active],
+      });
+      if (commit) {
+        if (preventDefault) evt.preventDefault();
+        if (focusNext) evt.stopPropagation(); // Enter: we advance ourselves; keep the grid out
+        pick(opts[active]);
+        if (focusNext && ctx.advance) ctx.advance(input);
+      }
     } else if (evt.key === 'Escape') {
       if (!open) return;
       evt.preventDefault();
@@ -371,7 +386,22 @@ function contextFor(input) {
     }
   }
 
-  return { listOf, subOf, rowValuesOf, writeRow };
+  // advance (p28.3) moves focus to the row's ACCOUNT field -- the cell that always follows
+  // the description in every grid (txn: desc->account; expense: el-desc->el-account) -- after
+  // an Enter-pick. The account combo's overlay input is the visible target when enhanced, so
+  // prefer it; else the native select. Called only on Enter (Tab uses native/grid advance).
+  function advance(el) {
+    const r = el.closest('.txn-row, .el-row') || el.closest('tr');
+    if (!r) return;
+    const acct = r.querySelector('.txn-account, .el-account');
+    // Focus the native account <select> -- the tab stop (same target Tab lands on). For a
+    // combo-enhanced select the p26.44 bridge then redirects a printed key to its overlay,
+    // so typing an account works immediately; we do NOT focus the overlay directly (that
+    // would auto-open the list on a mere focus, surprising after an Enter on description).
+    if (acct && typeof acct.focus === 'function') acct.focus();
+  }
+
+  return { listOf, subOf, rowValuesOf, writeRow, advance };
 }
 
 // resyncRowCombos refreshes each enhanced combo overlay's text in one row from its

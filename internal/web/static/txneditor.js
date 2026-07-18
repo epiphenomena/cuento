@@ -272,7 +272,7 @@ function initEditor(form) {
     if (errCell) errCell.textContent = '';
     table.appendChild(clone);
     form.querySelector('#txn-rows-count').value = String(form.querySelectorAll('.txn-row').length);
-    initCombos(clone); // enhance the clone's clean account select
+    initCombos(clone, { onAdvance: advanceComboFocus }); // enhance the clone's clean account select
     initDescField(clone); // p26.19: re-wire the clone's clean description input
     wireRow(clone);
     gateRow(clone);
@@ -420,6 +420,30 @@ function initEditor(form) {
     if (!spec) return false;
     if (spec.always) return true;
     return !!rowReveal(rowIndex)[spec.reveal];
+  }
+
+  // advanceComboFocus (p28.3): after an Enter-pick from an OPEN combobox overlay, move
+  // focus to the NEXT grid cell -- SKIPPING visibility:hidden cells (the progclass cell on
+  // non-R/E rows), reusing the same gridCols model the keyboard traversal uses. The
+  // overlay input carries no id, so the grid's keydown handler never sees it; this is the
+  // combobox's dedicated onAdvance hook. `select` is the enhanced native <select> (its id
+  // is txn-<field>-<i>), from which we derive the current row/col. Enter-pick from the LAST
+  // visible cell just leaves focus on the picked select (no wrap).
+  function advanceComboFocus(select) {
+    if (!select || !select.id) return;
+    const m = /^txn-([a-z]+)-(\d+)$/.exec(select.id);
+    if (!m) return;
+    const rowIndex = Number(m[2]);
+    let col = colOfField(m[1]);
+    if (col < 0) return;
+    for (col += 1; col < gridCols.length; col += 1) {
+      if (!gridIsVisible(rowIndex, col)) continue;
+      const target = cellInput(rowIndex, col);
+      if (target && typeof target.focus === 'function') {
+        target.focus();
+        return;
+      }
+    }
   }
 
   // Swap two rows' VALUES field-by-field (ids stay stable -- the whole editor keys
@@ -606,8 +630,9 @@ function initEditor(form) {
   if (subSel) subSel.addEventListener('change', markSubsidiaryConflicts);
 
   // p26.2: enhance the account combo on every row present on initial render / after a
-  // whole-form htmx swap (subsidiary re-filter, 422 re-render). Idempotent.
-  initCombos(form);
+  // whole-form htmx swap (subsidiary re-filter, 422 re-render). Idempotent. p28.3: pass
+  // onAdvance so an Enter-pick from an open combo overlay advances to the next grid cell.
+  initCombos(form, { onAdvance: advanceComboFocus });
   // p26.19: wire the per-row description autocomplete + prefill on every row (idempotent,
   // like initCombos -- covers initial render, htmx swaps, and clones via addRow).
   initDescField(form);

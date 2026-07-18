@@ -43,6 +43,7 @@
 // Guarded so importing under Node is side-effect free (no `document`), like txneditor.js.
 
 import { rankOptions } from './combofilter.js';
+import { comboKeyAction } from './combokey.js';
 
 // optionLabel: the display label for an <option> -- its data-path (the dotted ancestor
 // path from p26.1) if present, else its trimmed text.
@@ -69,6 +70,12 @@ function enhance(select, opts) {
   const freeText = !!(opts && opts.allowFreeText);
   const onInputCb = opts && typeof opts.onInput === 'function' ? opts.onInput : null;
   const onPickCb = opts && typeof opts.onPick === 'function' ? opts.onPick : null;
+  // p28.3: onAdvance(select) moves focus to the NEXT field after an Enter-pick from an
+  // OPEN highlighted list. The entry grids pass their tested next-cell mover (which skips
+  // visibility:hidden cells); non-grid combos pass nothing and simply commit without a
+  // programmatic advance (Enter with the list open still commits; there is just no "next
+  // field" to jump to). Tab never uses this -- native Tab does its own advancing.
+  const onAdvanceCb = opts && typeof opts.onAdvance === 'function' ? opts.onAdvance : null;
 
   // Wrapper is a sibling container the overlay lives in; the select is moved inside it so
   // the input can be absolutely positioned over the select's box.
@@ -203,10 +210,25 @@ function enhance(select, opts) {
     } else if (evt.key === 'ArrowUp') {
       evt.preventDefault();
       if (items.length) { active = (active - 1 + items.length) % items.length; renderList(); }
-    } else if (evt.key === 'Enter') {
-      if (!list.hidden && active >= 0 && items[active]) {
-        evt.preventDefault();
-        pick(items[active].value);
+    } else if (evt.key === 'Enter' || evt.key === 'Tab') {
+      // p28.3: unified select-and-advance. When the list is OPEN with a highlighted item,
+      // BOTH Enter and Tab COMMIT that item; Enter also advances focus (and preventDefaults
+      // so it neither submits nor bubbles to a grid Enter=save), while Tab lets NATIVE Tab
+      // advance (no preventDefault -- committing first is enough). When the list is closed
+      // / nothing highlighted, neither key is special: Enter/Tab fall through to native
+      // (a closed-list Enter still reaches the grid's save handler).
+      const open = !list.hidden && items.length > 0;
+      const { commit, preventDefault, focusNext } = comboKeyAction(evt.key, {
+        open,
+        hasActive: active >= 0 && !!items[active],
+      });
+      if (commit) {
+        if (preventDefault) evt.preventDefault();
+        pick(items[active].value); // pick() closes the list + sets the selection
+        // Enter: jump to the next field. Tab: skip (native Tab already advances -- and the
+        // pick's input.value write means the deferred blur reconcile keeps the committed
+        // label, so Tab no longer reverts the highlight to the old selection).
+        if (focusNext && onAdvanceCb) onAdvanceCb(select);
       }
     } else if (evt.key === 'Escape') {
       if (!list.hidden) { evt.preventDefault(); close(); syncInputToSelection(); }
@@ -271,12 +293,12 @@ function enhance(select, opts) {
 // Plain (no-opts) enhancement -- account/fund/program. The payee combo is enhanced
 // separately by txneditor.js with its freeText opts, so it is skipped here via a
 // data-combo-manual marker.
-function initCombos(root) {
+function initCombos(root, opts) {
   const scope = root || (typeof document !== 'undefined' ? document : null);
   if (!scope || typeof scope.querySelectorAll !== 'function') return;
   scope
     .querySelectorAll('select.combo-input:not([data-combo]):not([data-combo-manual])')
-    .forEach((sel) => enhance(sel));
+    .forEach((sel) => enhance(sel, opts));
 }
 
 // resyncCombos refreshes each enhanced overlay's visible text from its select's current

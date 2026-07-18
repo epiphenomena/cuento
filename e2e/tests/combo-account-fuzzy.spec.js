@@ -142,6 +142,115 @@ test.describe('non-grid account pickers are fuzzy + hierarchy comboboxes (p28.2)
   });
 });
 
+// p28.3: when the combo/description suggestion list is OPEN with a HIGHLIGHTED item,
+// BOTH Enter and Tab must (a) commit that item and (b) advance focus to the next field.
+// This proves it on an ACCOUNT combo (Enter and Tab) and on the DESCRIPTION field (Enter).
+test.describe('Enter and Tab select-and-advance (p28.3)', () => {
+  test('account combo: Enter commits + advances to amount; Tab commits + advances too', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'Adv Checking');
+    await createAsset(page, 'Adv Savings');
+
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await expect(page.locator('#txn-account-0')).toBeVisible();
+    const savingsVal = await page.locator('#txn-account-0 option', { hasText: 'Adv Savings' }).first().getAttribute('value');
+
+    // --- ENTER: focus the native account select (the tab stop), type a fuzzy query (the
+    //     p26.44 bridge opens the overlay list highlighted), press Enter. It must commit the
+    //     highlighted option AND move focus to the amount cell.
+    await page.locator('#txn-account-0').focus();
+    await page.keyboard.type('advsav'); // subsequence of "Adv Savings"
+    const acctList = page.locator('.txn-row[data-row="0"] .txn-account-cell .combo-list');
+    await expect(acctList).toBeVisible();
+    await expect(acctList.locator('.combo-option', { hasText: 'Adv Savings' })).toBeVisible();
+    await page.keyboard.press('Enter');
+    // (a) committed:
+    await expect(page.locator('#txn-account-0')).toHaveValue(/** @type {string} */ (savingsVal));
+    // (b) advanced to the next field (amount):
+    await expect(page.locator('#txn-amount-0')).toBeFocused();
+
+    // --- TAB: do the same on the freshly auto-appended row 1, pressing Tab instead. Tab must
+    //     commit the highlighted option (not leave the typed text uncommitted) AND advance
+    //     focus off the account cell (native Tab -> amount).
+    await expect(page.locator('#txn-account-1')).toBeVisible();
+    await page.locator('#txn-account-1').focus();
+    await page.keyboard.type('advchk'); // subsequence of "Adv Checking"
+    const acctList1 = page.locator('.txn-row[data-row="1"] .txn-account-cell .combo-list');
+    await expect(acctList1).toBeVisible();
+    await expect(acctList1.locator('.combo-option', { hasText: 'Adv Checking' })).toBeVisible();
+    const checkingVal = await page.locator('#txn-account-1 option', { hasText: 'Adv Checking' }).first().getAttribute('value');
+    await page.keyboard.press('Tab');
+    // (a) Tab committed the highlight (did NOT revert to the old selection via the blur timer):
+    await expect(page.locator('#txn-account-1')).toHaveValue(/** @type {string} */ (checkingVal));
+    // (b) focus advanced off the account cell to the amount input:
+    await expect(page.locator('#txn-amount-1')).toBeFocused();
+  });
+
+  test('description field: Enter commits the suggestion + advances to the account cell', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'DescAdv Checking');
+    await createAsset(page, 'DescAdv Savings');
+
+    // Seed a prior transaction whose body split carries a recallable description.
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await page.locator('#txn-main-account').selectOption({ label: 'DescAdv Checking' });
+    await page.locator('#txn-account-0').selectOption({ label: 'DescAdv Savings' });
+    await page.locator('#txn-amount-0').fill('40.00');
+    await page.locator('#txn-desc-0').fill('DescAdvance recall');
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+    // New entry: type a prefix on row 0's description, the suggestion opens highlighted,
+    // press Enter -> commit the full description AND advance focus to the account cell.
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    const desc0 = page.locator('#txn-desc-0');
+    await desc0.click();
+    await desc0.fill('DescAdvance');
+    const suggestion = page.locator('#txn-desc-list-0 .desc-suggestion', { hasText: 'DescAdvance recall' });
+    await expect(suggestion).toBeVisible();
+    await page.keyboard.press('Enter');
+    // (a) committed the full suggestion text into the description input:
+    await expect(desc0).toHaveValue('DescAdvance recall');
+    // (b) focus advanced to the row's account <select> (the cell after description):
+    await expect(page.locator('#txn-account-0')).toBeFocused();
+  });
+
+  test('description field: Tab commits the suggestion + advances to the account cell', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'DescTab Checking');
+    await createAsset(page, 'DescTab Savings');
+
+    // Seed a prior transaction whose body split carries a recallable description.
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await page.locator('#txn-main-account').selectOption({ label: 'DescTab Checking' });
+    await page.locator('#txn-account-0').selectOption({ label: 'DescTab Savings' });
+    await page.locator('#txn-amount-0').fill('40.00');
+    await page.locator('#txn-desc-0').fill('DescTab recall');
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+    // New entry: type a prefix on row 0's description, the suggestion opens highlighted,
+    // press Tab -> commit the full description (NOT leave the partial typed text) AND
+    // advance focus to the account cell (native/grid Tab move after the commit).
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    const desc0 = page.locator('#txn-desc-0');
+    await desc0.click();
+    await desc0.fill('DescTab');
+    const suggestion = page.locator('#txn-desc-list-0 .desc-suggestion', { hasText: 'DescTab recall' });
+    await expect(suggestion).toBeVisible();
+    await page.keyboard.press('Tab');
+    // (a) Tab committed the full suggestion text (not the partial "DescTab" typed):
+    await expect(desc0).toHaveValue('DescTab recall');
+    // (b) focus advanced to the row's account <select> (the cell after description):
+    await expect(page.locator('#txn-account-0')).toBeFocused();
+  });
+});
+
 test.describe('account combobox fuzzy matching (p26.44)', () => {
   test('account (header + body) and fund all filter/rank/pick a subsequence query', async ({ page, server }) => {
     await login(page, server);
