@@ -502,9 +502,9 @@ func TestZ8Z9CleanRecon(t *testing.T) {
 		 form990_code, intercompany, reconcilable, active, sort_order, created_at,
 		 current_cash, open_item
 		FROM accounts WHERE id = ?`, w.checkingUS)
-	chkSplit := int64(0)
+	chkSplit := ids.SplitID(0)
 	if err := w.d.QueryRow(`SELECT id FROM splits WHERE account_id = ? AND transaction_id = ?`,
-		w.checkingUS, w.txPlain).Scan(&chkSplit); err != nil {
+		w.checkingUS, int64(w.txPlain)).Scan(&chkSplit); err != nil {
 		t.Fatalf("find checking split: %v", err)
 	}
 	reconID, err := w.s.StartReconciliation(mutCtx(), w.checkingUS, "USD", "2025-03-31", -10000)

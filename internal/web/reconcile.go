@@ -300,7 +300,7 @@ func reconStartErrorField(err error) (field, key string) {
 // reconSplitRow is one workspace split line: date/description/memo/fund-chip/amount
 // plus its cleared state and the stable toggle/row ids.
 type reconSplitRow struct {
-	SplitID     int64
+	SplitID     ids.SplitID
 	TxnID       int64 // p26.50: the split's transaction id, for the per-row Edit link
 	RowID       string
 	ToggleID    string
@@ -433,8 +433,8 @@ func (s *server) buildWorkspace(ctx context.Context, reconID int64) (reconWorksp
 		model.Rows = append(model.Rows, reconSplitRow{
 			SplitID:     sp.SplitID,
 			TxnID:       int64(sp.TxnID),
-			RowID:       reconRowID(sp.SplitID),
-			ToggleID:    reconToggleID(sp.SplitID),
+			RowID:       reconRowID(int64(sp.SplitID)),
+			ToggleID:    reconToggleID(int64(sp.SplitID)),
 			Date:        money.FormatDate(parseISOForDisplay(sp.Date), df),
 			Description: sp.Description,
 			Memo:        memo,
@@ -470,7 +470,7 @@ func (s *server) buildWorkspace(ctx context.Context, reconID int64) (reconWorksp
 func (s *server) reconToggle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	reconID := parseID(r.PathValue("id"))
-	splitID := parseID(r.PathValue("sid"))
+	splitID := ids.SplitID(parseID(r.PathValue("sid")))
 
 	// Determine the current state so the toggle flips it. A split absent from the
 	// workspace set (wrong account/currency, deleted, or prior-finalized) is a 404.

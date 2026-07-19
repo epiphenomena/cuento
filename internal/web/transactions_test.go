@@ -283,7 +283,7 @@ func TestTxnEditSplitIDRoundTrip(t *testing.T) {
 		t.Fatalf("want 3 seeded splits, got %d", len(live))
 	}
 	// Record version counts before the edit.
-	before := map[int64]int{}
+	before := map[ids.SplitID]int{}
 	for _, s := range live {
 		before[s.ID] = splitVersionCountWeb(t, e, s.ID)
 	}
@@ -297,7 +297,7 @@ func TestTxnEditSplitIDRoundTrip(t *testing.T) {
 	// Order splits by position for deterministic row indices.
 	rows := live
 	for i, s := range rows {
-		f.Set("split_id_"+itoa(int64(i)), itoa(s.ID))
+		f.Set("split_id_"+itoa(int64(i)), itoa(int64(s.ID)))
 		f.Set("account_"+itoa(int64(i)), itoa(s.AccountID))
 		f.Set("amount_"+itoa(int64(i)), signedStr(s.Amount))
 		if s.FundID.Valid {
@@ -876,7 +876,7 @@ func TestTxnPerms(t *testing.T) {
 // splitFull mirrors a stored split across EVERY business column INCLUDING description
 // (store.SplitState omits it), so the p26.34 idempotency test can assert byte-identity.
 type splitFull struct {
-	ID              int64
+	ID              ids.SplitID
 	AccountID       int64
 	Amount          int64
 	FundID          sql.NullInt64
@@ -984,7 +984,7 @@ func TestTxnMainHeaderSingleFundIdempotent(t *testing.T) {
 	}
 	main := before[0]
 	body := before[1:]
-	beforeVer := map[int64]int{}
+	beforeVer := map[ids.SplitID]int{}
 	for _, s := range before {
 		beforeVer[s.ID] = splitVersionCountWeb(t, e, s.ID)
 	}
@@ -997,7 +997,7 @@ func TestTxnMainHeaderSingleFundIdempotent(t *testing.T) {
 		t.Fatalf("edit GET: %d", editRec.Code)
 	}
 	eb := editRec.Body.String()
-	if !strings.Contains(eb, `id="txn-main-splitid"`) || !strings.Contains(eb, `value="`+itoa(main.ID)+`"`) {
+	if !strings.Contains(eb, `id="txn-main-splitid"`) || !strings.Contains(eb, `value="`+itoa(int64(main.ID))+`"`) {
 		t.Fatalf("edit form did not round-trip the main split id in the header; body:\n%s", eb)
 	}
 	// The main (salaries) account is selected in the header account select.
@@ -1016,9 +1016,9 @@ func TestTxnMainHeaderSingleFundIdempotent(t *testing.T) {
 	// Re-submit via the header form (main amount OMITTED, fund derived). Round-trip the
 	// main split id so UpdateTransaction diffs by id (no churn).
 	f := mainHeaderForm(e.sub1, main, body)
-	f.Set("main_split_id", itoa(main.ID))
+	f.Set("main_split_id", itoa(int64(main.ID)))
 	for i, b := range body {
-		f.Set("split_id_"+itoa(int64(i)), itoa(b.ID))
+		f.Set("split_id_"+itoa(int64(i)), itoa(int64(b.ID)))
 	}
 
 	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(int64(id)), f)
@@ -1167,7 +1167,7 @@ func TestTxnMultiFundReloadFlatFallback(t *testing.T) {
 	live := splitStatesByPosition(t, e, id)
 	for i, s := range live {
 		si := itoa(int64(i))
-		f.Set("split_id_"+si, itoa(s.ID))
+		f.Set("split_id_"+si, itoa(int64(s.ID)))
 		f.Set("account_"+si, itoa(s.AccountID))
 		f.Set("amount_"+si, signedStr(s.Amount))
 		if s.FundID.Valid {
@@ -1300,10 +1300,10 @@ func latestTxnID(t *testing.T, e *txnWebEnv) ids.TransactionID {
 }
 
 // splitVersionCountWeb counts splits_versions rows for a split (trap 1 assertion).
-func splitVersionCountWeb(t *testing.T, e *txnWebEnv, splitID int64) int {
+func splitVersionCountWeb(t *testing.T, e *txnWebEnv, splitID ids.SplitID) int {
 	t.Helper()
 	var n int
-	if err := e.db.QueryRow(`SELECT COUNT(*) FROM splits_versions WHERE entity_id = ?`, splitID).Scan(&n); err != nil {
+	if err := e.db.QueryRow(`SELECT COUNT(*) FROM splits_versions WHERE entity_id = ?`, int64(splitID)).Scan(&n); err != nil {
 		t.Fatalf("split version count(%d): %v", splitID, err)
 	}
 	return n
@@ -1398,7 +1398,7 @@ func TestTxnProgClassNonRootIdempotent(t *testing.T) {
 		!sal.FunctionalClass.Valid || sal.FunctionalClass.String != "management" {
 		t.Fatalf("seed split 0 not management/non-root program: %+v", sal)
 	}
-	beforeVer := map[int64]int{}
+	beforeVer := map[ids.SplitID]int{}
 	for _, s := range before {
 		beforeVer[s.ID] = splitVersionCountWeb(t, e, s.ID)
 	}
@@ -1415,7 +1415,7 @@ func TestTxnProgClassNonRootIdempotent(t *testing.T) {
 	f.Set("currency", "USD")
 	f.Set("rows", "2")
 	// Row 0: salaries, Admin (c:management), program carrier = Educacion (the stored program).
-	f.Set("split_id_0", itoa(sal.ID))
+	f.Set("split_id_0", itoa(int64(sal.ID)))
 	f.Set("account_0", itoa(e.salaries))
 	f.Set("amount_0", "100.00")
 	f.Set("fund_0", "")
@@ -1423,7 +1423,7 @@ func TestTxnProgClassNonRootIdempotent(t *testing.T) {
 	f.Set("program_0", itoa(int64(e.progEdu)))
 	f.Set("memo_0", "Admin payroll")
 	// Row 1: checking, no program/class (asset).
-	f.Set("split_id_1", itoa(before[1].ID))
+	f.Set("split_id_1", itoa(int64(before[1].ID)))
 	f.Set("account_1", itoa(e.checking))
 	f.Set("amount_1", "-100.00")
 	f.Set("fund_1", "")

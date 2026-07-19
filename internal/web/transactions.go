@@ -401,7 +401,7 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 	bodyRow := func(idx int, sp sqlc.Split) txnRowModel {
 		row := txnRowModel{
 			Index:       idx,
-			SplitID:     strconv.FormatInt(sp.ID, 10),
+			SplitID:     strconv.FormatInt(int64(sp.ID), 10),
 			Account:     sp.AccountID,
 			Amount:      money.Format(sp.Amount, exp, fmtOpts),
 			Description: sp.Description,
@@ -430,7 +430,7 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 		model.MainAccount = m.AccountID
 		model.MainDescription = m.Description
 		model.MainMemo = m.Memo
-		model.MainSplitID = strconv.FormatInt(m.ID, 10)
+		model.MainSplitID = strconv.FormatInt(int64(m.ID), 10)
 		model.MainAmount = money.Format(m.Amount, exp, fmtOpts)
 		if m.FundID.Valid {
 			model.MainFund = m.FundID.Int64
@@ -859,7 +859,8 @@ func (s *server) parseSplitForms(r *http.Request, exp int, acctType map[int64]st
 		}
 		pos++
 		if id := parseID(splitID); id != 0 {
-			sp.ID = &id
+			sid := ids.SplitID(id)
+			sp.ID = &sid
 		}
 		if fund != 0 {
 			f := ids.FundID(fund)
@@ -1024,7 +1025,8 @@ func autoBalanceMain(main mainHeaderInput, body []store.SplitInput) ([]store.Spl
 	// idempotent case). A fan-out's extra mains are new inserts.
 	if len(mains) == 1 {
 		if id := parseID(main.SplitID); id != 0 {
-			mains[0].ID = &id
+			sid := ids.SplitID(id)
+			mains[0].ID = &sid
 		}
 	}
 

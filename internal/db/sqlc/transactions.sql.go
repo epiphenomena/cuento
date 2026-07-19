@@ -68,7 +68,7 @@ DELETE FROM splits WHERE id = ?
 // Hard-delete one split row (the replace-set diff removes splits dropped from the
 // input). For op='delete' the version row is captured BEFORE this runs (the live
 // row must still exist to snapshot from) -- the removal-op ordering.
-func (q *Queries) DeleteSplit(ctx context.Context, id int64) error {
+func (q *Queries) DeleteSplit(ctx context.Context, id ids.SplitID) error {
 	_, err := q.db.ExecContext(ctx, deleteSplit, id)
 	return err
 }
@@ -165,7 +165,7 @@ type InsertSplitParams struct {
 // required iff R/E account (trigger backstop); functional_class required iff
 // expense account (trigger backstop); the store DEFAULTS both before insert so the
 // triggers never fire on the happy path. Returns the new id.
-func (q *Queries) InsertSplit(ctx context.Context, arg InsertSplitParams) (int64, error) {
+func (q *Queries) InsertSplit(ctx context.Context, arg InsertSplitParams) (ids.SplitID, error) {
 	row := q.db.QueryRowContext(
 		ctx, insertSplit,
 		arg.TransactionID,
@@ -178,7 +178,7 @@ func (q *Queries) InsertSplit(ctx context.Context, arg InsertSplitParams) (int64
 		arg.Description,
 		arg.Position,
 	)
-	var id int64
+	var id ids.SplitID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -196,7 +196,7 @@ WHERE c.id = ? AND s.id = ?
 type InsertSplitVersionParams struct {
 	Op   string
 	ID   ids.ChangeID
-	ID_2 int64
+	ID_2 ids.SplitID
 }
 
 // Snapshot-from-live version append for splits (STANDARD single-id entity,
@@ -339,7 +339,7 @@ UPDATE splits SET account_id = ? WHERE id = ?
 
 type RepointSplitAccountParams struct {
 	AccountID int64
-	ID        int64
+	ID        ids.SplitID
 }
 
 // Move ONE split to a new account_id (the merge repoint). The store versions the
@@ -399,15 +399,15 @@ SELECT id FROM splits WHERE account_id = ? ORDER BY id
 // (splits on active leaves) would otherwise still see splits stranded on the
 // deactivated source. Captured BEFORE any repoint write so the moved rows are not
 // confused with the destination's pre-existing splits.
-func (q *Queries) SplitIdsByAccount(ctx context.Context, accountID int64) ([]int64, error) {
+func (q *Queries) SplitIdsByAccount(ctx context.Context, accountID int64) ([]ids.SplitID, error) {
 	rows, err := q.db.QueryContext(ctx, splitIdsByAccount, accountID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []int64
+	var items []ids.SplitID
 	for rows.Next() {
-		var id int64
+		var id ids.SplitID
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
@@ -485,7 +485,7 @@ ORDER BY sv.valid_from, sv.id
 `
 
 type SplitVersionHistoryRow struct {
-	EntityID        int64
+	EntityID        ids.SplitID
 	ChangeID        ids.ChangeID
 	Op              string
 	ValidFrom       string
@@ -559,7 +559,7 @@ type SplitVersionsAsOfParams struct {
 }
 
 type SplitVersionsAsOfRow struct {
-	EntityID        int64
+	EntityID        ids.SplitID
 	Op              string
 	TransactionID   ids.TransactionID
 	AccountID       int64
@@ -625,7 +625,7 @@ type SplitsByAccountCurrencyParams struct {
 }
 
 type SplitsByAccountCurrencyRow struct {
-	ID            int64
+	ID            ids.SplitID
 	TransactionID ids.TransactionID
 }
 
@@ -884,7 +884,7 @@ type UpdateSplitParams struct {
 	Memo            string
 	Description     string
 	Position        int64
-	ID              int64
+	ID              ids.SplitID
 }
 
 // Live update of one split's business columns (replace-set diff: only splits that

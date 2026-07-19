@@ -44,15 +44,15 @@ WHERE s.transaction_id = ? AND r.status = 'finalized'
 // account/fund on a changed split, split deletion, header date/currency change)
 // BEFORE the split-lock trigger fires -- a clean typed error instead of a raw
 // ABORT. NULL reconciliation_id (uncleared) and open-recon splits are excluded.
-func (q *Queries) FinalizedReconciledSplitIDs(ctx context.Context, transactionID ids.TransactionID) ([]int64, error) {
+func (q *Queries) FinalizedReconciledSplitIDs(ctx context.Context, transactionID ids.TransactionID) ([]ids.SplitID, error) {
 	rows, err := q.db.QueryContext(ctx, finalizedReconciledSplitIDs, transactionID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []int64
+	var items []ids.SplitID
 	for rows.Next() {
-		var id int64
+		var id ids.SplitID
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
@@ -151,7 +151,7 @@ WHERE s.id = ?
 `
 
 type GetSplitForReconcileRow struct {
-	ID               int64
+	ID               ids.SplitID
 	AccountID        int64
 	ReconciliationID sql.NullInt64
 	TransactionID    ids.TransactionID
@@ -163,7 +163,7 @@ type GetSplitForReconcileRow struct {
 // SetSplitReconciled validates against (split account == recon account, split
 // currency (from its txn, D3) == recon currency). transaction_id is returned so a
 // caller can locate the parent txn.
-func (q *Queries) GetSplitForReconcile(ctx context.Context, id int64) (GetSplitForReconcileRow, error) {
+func (q *Queries) GetSplitForReconcile(ctx context.Context, id ids.SplitID) (GetSplitForReconcileRow, error) {
 	row := q.db.QueryRowContext(ctx, getSplitForReconcile, id)
 	var i GetSplitForReconcileRow
 	err := row.Scan(
@@ -428,7 +428,7 @@ ORDER BY t.date, s.id
 `
 
 type ReconciliationClearedSplitsRow struct {
-	ID            int64
+	ID            ids.SplitID
 	TransactionID ids.TransactionID
 	Amount        int64
 	FundID        sql.NullInt64
@@ -562,7 +562,7 @@ UPDATE splits SET reconciliation_id = ? WHERE id = ?
 
 type SetSplitReconciliationParams struct {
 	ReconciliationID sql.NullInt64
-	ID               int64
+	ID               ids.SplitID
 }
 
 // Set (clear) or NULL (unclear) a split's reconciliation_id. LIVE-ONLY column
@@ -594,7 +594,7 @@ type WorkspaceSplitsParams struct {
 }
 
 type WorkspaceSplitsRow struct {
-	ID               int64
+	ID               ids.SplitID
 	TransactionID    ids.TransactionID
 	Amount           int64
 	FundID           sql.NullInt64

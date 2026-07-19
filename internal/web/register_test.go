@@ -498,9 +498,9 @@ func TestRegisterParentRollupCounterAccount(t *testing.T) {
 	for _, sp := range splits {
 		switch sp.AccountID {
 		case boa:
-			boaSplit = sp.ID
+			boaSplit = int64(sp.ID)
 		case wf:
-			wfSplit = sp.ID
+			wfSplit = int64(sp.ID)
 		}
 	}
 
@@ -694,7 +694,7 @@ func TestRegisterHtmxPaging(t *testing.T) {
 	// and NOT re-render the first row (append semantics).
 	q := url.Values{}
 	q.Set("cursor_date", cur.Date)
-	q.Set("cursor_id", strconv.FormatInt(cur.SplitID, 10))
+	q.Set("cursor_id", strconv.FormatInt(int64(cur.SplitID), 10))
 	frag := asUser(t, e.h, e.sm, reader, http.MethodGet, base+"?"+q.Encode(), nil)
 	if frag.Code != http.StatusOK {
 		t.Fatalf("htmx paging: %d body=%s", frag.Code, frag.Body.String())

@@ -69,9 +69,9 @@ func newReconEnv(t *testing.T) reconEnv {
 func strp(s string) *string { return &s }
 
 // checkingSplitID returns the id of the Checking split on a transaction.
-func checkingSplitID(t *testing.T, d *sql.DB, txnID ids.TransactionID, checking int64) int64 {
+func checkingSplitID(t *testing.T, d *sql.DB, txnID ids.TransactionID, checking int64) ids.SplitID {
 	t.Helper()
-	var id int64
+	var id ids.SplitID
 	if err := d.QueryRow(`SELECT id FROM splits WHERE transaction_id = ? AND account_id = ?`, int64(txnID), checking).Scan(&id); err != nil {
 		t.Fatalf("checkingSplitID(txn %d): %v", txnID, err)
 	}
@@ -79,10 +79,10 @@ func checkingSplitID(t *testing.T, d *sql.DB, txnID ids.TransactionID, checking 
 }
 
 // reconOf returns a split's live reconciliation_id (or 0 when NULL).
-func reconOf(t *testing.T, d *sql.DB, splitID int64) int64 {
+func reconOf(t *testing.T, d *sql.DB, splitID ids.SplitID) int64 {
 	t.Helper()
 	var r sql.NullInt64
-	if err := d.QueryRow(`SELECT reconciliation_id FROM splits WHERE id = ?`, splitID).Scan(&r); err != nil {
+	if err := d.QueryRow(`SELECT reconciliation_id FROM splits WHERE id = ?`, int64(splitID)).Scan(&r); err != nil {
 		t.Fatalf("reconOf(%d): %v", splitID, err)
 	}
 	if !r.Valid {
@@ -398,7 +398,7 @@ func TestEditReconciledTxnBlocked(t *testing.T) {
 	}
 	sp := txnSplits(t, e.d, txn)
 	// Identify the two split ids by account.
-	var expID, chkID int64
+	var expID, chkID ids.SplitID
 	for _, x := range sp {
 		if x.AccountID == e.expense {
 			expID = x.ID
@@ -894,7 +894,7 @@ func TestReconciliationWorkspaceReads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReconciliationWorkspaceSplits: %v", err)
 	}
-	wsIDs := map[int64]bool{}
+	wsIDs := map[ids.SplitID]bool{}
 	for _, w := range ws {
 		wsIDs[w.SplitID] = true
 	}

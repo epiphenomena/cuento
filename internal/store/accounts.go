@@ -573,12 +573,12 @@ func (s *Store) AccountIsLeaf(ctx context.Context, id int64) (bool, error) {
 // the merge will move (including soft-deleted-txn splits -- see the query
 // comment); a count is len() of this, guaranteeing preview == effect by
 // construction rather than a second COUNT query that could drift (p11.2).
-func (s *Store) SplitIDsForAccount(ctx context.Context, accountID int64) ([]int64, error) {
-	ids, err := s.q.SplitIdsByAccount(ctx, accountID)
+func (s *Store) SplitIDsForAccount(ctx context.Context, accountID int64) ([]ids.SplitID, error) {
+	sids, err := s.q.SplitIdsByAccount(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("store: split ids for account %d: %w", accountID, err)
 	}
-	return ids, nil
+	return sids, nil
 }
 
 // ReconciledSplitCount returns how many splits on an account are cleared against a

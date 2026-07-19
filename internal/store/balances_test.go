@@ -35,11 +35,11 @@ type balEnv struct {
 	checking, fxclear, contrib, salaries int64
 
 	// checking split ids in post order, for cursor assertions.
-	t1check, t2check, t5check, t3check, t6check int64
+	t1check, t2check, t5check, t3check, t6check ids.SplitID
 	// salaries split ids for the program-filter register.
-	t2sal, t3sal int64
+	t2sal, t3sal ids.SplitID
 	// fxclear split ids for the multi-currency register.
-	t5fx, t4fx int64
+	t5fx, t4fx ids.SplitID
 }
 
 // newBalEnv builds balEnv exactly, posting the seven transactions (T7 soft-deleted)
@@ -133,14 +133,14 @@ type split struct {
 
 // post posts a transaction and returns (txnID, firstSplitID). Used when only the
 // first split id is captured; postN returns all split ids.
-func (e balEnv) post(t *testing.T, date string, sub ids.SubsidiaryID, ccy, memo string, sp ...split) (ids.TransactionID, int64) {
+func (e balEnv) post(t *testing.T, date string, sub ids.SubsidiaryID, ccy, memo string, sp ...split) (ids.TransactionID, ids.SplitID) {
 	t.Helper()
 	id, sids := e.postN(t, date, sub, ccy, memo, sp...)
 	return id, sids[0]
 }
 
 // postN posts a transaction and returns (txnID, splitIDsInOrder).
-func (e balEnv) postN(t *testing.T, date string, sub ids.SubsidiaryID, ccy, memo string, sp ...split) (ids.TransactionID, []int64) {
+func (e balEnv) postN(t *testing.T, date string, sub ids.SubsidiaryID, ccy, memo string, sp ...split) (ids.TransactionID, []ids.SplitID) {
 	t.Helper()
 	in := PostTransactionInput{Date: date, SubsidiaryID: sub, Currency: ccy, Memo: memo}
 	for i, s := range sp {
@@ -162,16 +162,16 @@ func (e balEnv) postN(t *testing.T, date string, sub ids.SubsidiaryID, ccy, memo
 }
 
 // splitIDsInOrder returns a transaction's live split ids ordered by (position, id).
-func splitIDsInOrder(t *testing.T, d *sql.DB, txnID ids.TransactionID) []int64 {
+func splitIDsInOrder(t *testing.T, d *sql.DB, txnID ids.TransactionID) []ids.SplitID {
 	t.Helper()
 	rows, err := d.Query(`SELECT id FROM splits WHERE transaction_id = ? ORDER BY position, id`, int64(txnID))
 	if err != nil {
 		t.Fatalf("splitIDsInOrder: %v", err)
 	}
 	defer func() { _ = rows.Close() }()
-	var out []int64
+	var out []ids.SplitID
 	for rows.Next() {
-		var id int64
+		var id ids.SplitID
 		if err := rows.Scan(&id); err != nil {
 			t.Fatalf("scan split id: %v", err)
 		}
@@ -509,7 +509,7 @@ func TestRegisterRunningBalance(t *testing.T) {
 	// cumulative (oldest->this-row), so the TOP row carries the latest balance (9000)
 	// and it decreases downward to the oldest split.
 	wantRun := []struct {
-		splitID int64
+		splitID ids.SplitID
 		amount  int64
 		running int64
 	}{
@@ -757,7 +757,8 @@ func TestRegisterParentRollup(t *testing.T) {
 	// the merged descendant sequence (each row's value unchanged), so the top row shows
 	// the latest combined balance (15000).
 	want := []struct {
-		split, amount, running, acct int64
+		split                 ids.SplitID
+		amount, running, acct int64
 	}{
 		{wf2, 3000, 15000, wf},
 		{boa2, -3000, 12000, boa},

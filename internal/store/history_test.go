@@ -143,7 +143,7 @@ func TestHistoryUpdateShowsFundAndClassSplitDiffs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TransactionSplits: %v", err)
 	}
-	var supID, chkID int64
+	var supID, chkID ids.SplitID
 	for _, sp := range live {
 		if sp.AccountID == e.supplies {
 			supID = sp.ID
@@ -212,7 +212,7 @@ func TestHistoryUpdateShowsRemovedSplit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TransactionSplits: %v", err)
 	}
-	var salID, chkID int64
+	var salID, chkID ids.SplitID
 	for _, sp := range live {
 		switch sp.AccountID {
 		case e.salaries:
@@ -334,7 +334,7 @@ func TestHistoryStateReconstructsFullSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TransactionSplits: %v", err)
 	}
-	var salID, chkID int64
+	var salID, chkID ids.SplitID
 	for _, sp := range live {
 		if sp.AccountID == e.salaries {
 			salID = sp.ID
@@ -388,7 +388,7 @@ func TestHistoryStateMemoOnlyEditKeepsSplitsUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TransactionSplits: %v", err)
 	}
-	var salID, chkID int64
+	var salID, chkID ids.SplitID
 	for _, sp := range live {
 		if sp.AccountID == e.salaries {
 			salID = sp.ID
@@ -444,7 +444,7 @@ func TestHistoryStateGhostThenDropped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TransactionSplits: %v", err)
 	}
-	var salID, chkID int64
+	var salID, chkID ids.SplitID
 	for _, sp := range liveSplits {
 		switch sp.AccountID {
 		case e.salaries:

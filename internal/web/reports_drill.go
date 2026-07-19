@@ -292,7 +292,7 @@ func (s *server) renderDrillRows(
 		exp := exps[rw.Currency]
 
 		out = append(out, drillRow{
-			SplitID:        rw.SplitID,
+			SplitID:        int64(rw.SplitID),
 			TxnID:          int64(rw.TxnID),
 			Amount:         rw.Amount,
 			Currency:       rw.Currency,
@@ -314,7 +314,7 @@ func (s *server) renderDrillRows(
 // register's resolveCounterAccount (which knows the self account id), the drill query
 // filtered to one account so the self split is identified by its split id -- the
 // counter is the other split when the txn has exactly two.
-func resolveDrillCounter(ctx context.Context, st *store.Store, txnID ids.TransactionID, selfSplitID int64, names map[int64]string) (counterAccount, error) {
+func resolveDrillCounter(ctx context.Context, st *store.Store, txnID ids.TransactionID, selfSplitID ids.SplitID, names map[int64]string) (counterAccount, error) {
 	splits, err := st.TransactionSplits(ctx, txnID)
 	if err != nil {
 		return counterAccount{}, err

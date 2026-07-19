@@ -151,7 +151,7 @@ func (s *Store) StartReconciliation(ctx context.Context, accountID int64, curren
 // cannot be cleared (ErrSplitDeleted). This is a LIVE-ONLY column update (00014):
 // NO split version is appended -- but it STILL runs through the funnel (rule 2), so
 // a changes row anchors the tx boundary + actor.
-func (s *Store) SetSplitReconciled(ctx context.Context, reconID ids.ReconciliationID, splitID int64, on bool) error {
+func (s *Store) SetSplitReconciled(ctx context.Context, reconID ids.ReconciliationID, splitID ids.SplitID, on bool) error {
 	_, err := s.write(ctx, "reconciliation.toggle", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			recon, err := q.GetReconciliation(ctx, reconID)
@@ -431,7 +431,7 @@ type ReconciliationSummary struct {
 // it is currently cleared against this recon. It carries RAW values; the web layer
 // formats them (rule 10) and resolves names.
 type ReconciliationWorkspaceSplit struct {
-	SplitID      int64
+	SplitID      ids.SplitID
 	TxnID        ids.TransactionID
 	Amount       int64 // net-debit signed minor units (D2)
 	FundID       *ids.FundID
@@ -559,7 +559,7 @@ func (s *Store) ReconciliationsForAccount(ctx context.Context, accountID int64) 
 // them, rule 10). Mirrors ReconciliationWorkspaceSplit but without the Cleared flag
 // (these are all cleared, by definition of the query).
 type ReconciliationStatementSplit struct {
-	SplitID      int64
+	SplitID      ids.SplitID
 	TxnID        ids.TransactionID
 	Amount       int64 // net-debit signed minor units (D2)
 	FundID       *ids.FundID

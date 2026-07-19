@@ -17,10 +17,10 @@ import (
 // (newTxnEnv, mkAcct, mutCtx, countChanges, txnSplits, splitVersionCount).
 
 // liveSplitAccount reads one split's current live account_id.
-func liveSplitAccount(t *testing.T, d *sql.DB, splitID int64) int64 {
+func liveSplitAccount(t *testing.T, d *sql.DB, splitID ids.SplitID) int64 {
 	t.Helper()
 	var acct int64
-	if err := d.QueryRow(`SELECT account_id FROM splits WHERE id = ?`, splitID).Scan(&acct); err != nil {
+	if err := d.QueryRow(`SELECT account_id FROM splits WHERE id = ?`, int64(splitID)).Scan(&acct); err != nil {
 		t.Fatalf("liveSplitAccount(%d): %v", splitID, err)
 	}
 	return acct
@@ -103,7 +103,7 @@ func TestMergeRepointsSplitsAndRecons(t *testing.T) {
 	}
 
 	// Every src split now lives (live) on dst.
-	for _, id := range []int64{srcSplitA.ID, srcSplitB.ID} {
+	for _, id := range []ids.SplitID{srcSplitA.ID, srcSplitB.ID} {
 		if got := liveSplitAccount(t, e.d, id); got != dst {
 			t.Errorf("split %d account = %d, want dst %d", id, got, dst)
 		}
@@ -114,8 +114,8 @@ func TestMergeRepointsSplitsAndRecons(t *testing.T) {
 	}
 
 	// Each moved split got an op='update' version row (2 rows total: create + update).
-	for _, id := range []int64{srcSplitA.ID, srcSplitB.ID} {
-		testutil.AssertVersioned(t, e.d, "splits", id, "update")
+	for _, id := range []ids.SplitID{srcSplitA.ID, srcSplitB.ID} {
+		testutil.AssertVersioned(t, e.d, "splits", int64(id), "update")
 		if n := splitVersionCount(t, e.d, id); n != 2 {
 			t.Errorf("split %d version count = %d, want 2 (create + merge update)", id, n)
 		}
@@ -171,8 +171,8 @@ func TestMergeBlockedSourceReconciled(t *testing.T) {
 		t.Fatalf("PostTransaction: %v", err)
 	}
 	// Clear the srcBank split against an OPEN reconciliation on srcBank.
-	var bankSplit int64
-	if err := e.d.QueryRow(`SELECT id FROM splits WHERE transaction_id = ? AND account_id = ?`, txnID, srcBank).Scan(&bankSplit); err != nil {
+	var bankSplit ids.SplitID
+	if err := e.d.QueryRow(`SELECT id FROM splits WHERE transaction_id = ? AND account_id = ?`, int64(txnID), srcBank).Scan(&bankSplit); err != nil {
 		t.Fatalf("find bank split: %v", err)
 	}
 	reconID, err := e.s.StartReconciliation(ctx, srcBank, "USD", "2026-01-31", 10_000)
@@ -365,7 +365,7 @@ func TestMergeHistoryIntact(t *testing.T) {
 }
 
 // splitStateByID finds one split in a reconstructed transaction state.
-func splitStateByID(t *testing.T, st TransactionState, id int64) SplitState {
+func splitStateByID(t *testing.T, st TransactionState, id ids.SplitID) SplitState {
 	t.Helper()
 	if !st.Present {
 		t.Fatalf("transaction not present as of that time")

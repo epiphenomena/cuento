@@ -45,7 +45,7 @@ func TestHistoryTimelineRendersDiffs(t *testing.T) {
 	// Read the created split ids so the edit is a per-split UPDATE (diff by id).
 	live, err := e.st.TransactionSplits(ctx, id)
 	must(t, err, "splits")
-	var salID, chkID int64
+	var salID, chkID ids.SplitID
 	for _, sp := range live {
 		if sp.AccountID == e.salaries {
 			salID = sp.ID

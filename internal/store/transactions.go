@@ -87,7 +87,7 @@ var (
 // path. On UpdateTransaction, ID identifies an existing split to diff against (nil
 // = a new split to insert).
 type SplitInput struct {
-	ID              *int64
+	ID              *ids.SplitID
 	AccountID       int64
 	Amount          int64
 	FundID          *ids.FundID
@@ -112,7 +112,7 @@ type PostTransactionInput struct {
 // actually written. UpdateTransaction diffs RESOLVED values against the live split
 // (not raw input) so an omitted-but-already-defaulted field counts as unchanged.
 type resolvedSplit struct {
-	id              *int64 // existing split id, if any (update diff)
+	id              *ids.SplitID // existing split id, if any (update diff)
 	accountID       int64
 	amount          int64
 	fundID          sql.NullInt64
@@ -204,8 +204,8 @@ func (s *Store) UpdateTransaction(ctx context.Context, id ids.TransactionID, in 
 			if err != nil {
 				return fmt.Errorf("load splits of %d: %w", id, err)
 			}
-			liveByID := make(map[int64]sqlc.Split, len(live))
-			liveAccountByID := make(map[int64]int64, len(live))
+			liveByID := make(map[ids.SplitID]sqlc.Split, len(live))
+			liveAccountByID := make(map[ids.SplitID]int64, len(live))
 			for _, sp := range live {
 				liveByID[sp.ID] = sp
 				liveAccountByID[sp.ID] = sp.AccountID
@@ -234,7 +234,7 @@ func (s *Store) UpdateTransaction(ctx context.Context, id ids.TransactionID, in 
 				return fmt.Errorf("locked splits of %d: %w", id, err)
 			}
 			if len(locked) > 0 {
-				lockedSet := make(map[int64]bool, len(locked))
+				lockedSet := make(map[ids.SplitID]bool, len(locked))
 				for _, sid := range locked {
 					lockedSet[sid] = true
 				}
@@ -243,7 +243,7 @@ func (s *Store) UpdateTransaction(ctx context.Context, id ids.TransactionID, in 
 					return ErrSplitReconciled
 				}
 				// A locked split absent from the input would be deleted below.
-				inputIDs := make(map[int64]bool, len(resolved))
+				inputIDs := make(map[ids.SplitID]bool, len(resolved))
 				for _, r := range resolved {
 					if r.id != nil {
 						inputIDs[*r.id] = true
@@ -268,7 +268,7 @@ func (s *Store) UpdateTransaction(ctx context.Context, id ids.TransactionID, in 
 
 			// Track which existing split ids the input keeps, so we can delete the
 			// rest. An input split id that is not on this txn is an error.
-			kept := make(map[int64]bool, len(resolved))
+			kept := make(map[ids.SplitID]bool, len(resolved))
 			for _, r := range resolved {
 				if r.id == nil {
 					// New split: insert + op='create'.
@@ -426,7 +426,7 @@ func (s *Store) SubsidiaryTxnCount(ctx context.Context, subsidiaryID ids.Subsidi
 // returned by SplitsByAccountCurrency for callers that need to enumerate an account's
 // splits filtered by transaction currency (e.g. the demo reconciliation seam).
 type AccountSplitRef struct {
-	ID            int64
+	ID            ids.SplitID
 	TransactionID ids.TransactionID
 }
 
@@ -488,7 +488,7 @@ type TransactionState struct {
 
 // SplitState is one split as of a time.
 type SplitState struct {
-	ID              int64
+	ID              ids.SplitID
 	AccountID       int64
 	Amount          int64
 	FundID          sql.NullInt64
@@ -525,7 +525,7 @@ func (s *Store) TransactionAsOf(ctx context.Context, id ids.TransactionID, at ti
 	// rows are ordered (entity_id, valid_from DESC, id DESC): the FIRST row per
 	// entity_id is that split's latest snapshot as of `at`. Skip op='delete'.
 	var splits []SplitState
-	seen := make(map[int64]bool)
+	seen := make(map[ids.SplitID]bool)
 	for _, r := range rows {
 		if seen[r.EntityID] {
 			continue
@@ -570,7 +570,7 @@ func (s *Store) TransactionAsOf(ctx context.Context, id ids.TransactionID, at ti
 // every other split still requires an active account. A map-miss (bogus/absent id)
 // -> false: the active-account check applies, and the missing id is caught later as
 // ErrSplitNotFound.
-func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in PostTransactionInput, liveAccountByID map[int64]int64) ([]resolvedSplit, error) {
+func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in PostTransactionInput, liveAccountByID map[ids.SplitID]int64) ([]resolvedSplit, error) {
 	if len(in.Splits) < 2 {
 		return nil, ErrTooFewSplits
 	}
@@ -615,9 +615,9 @@ func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in Post
 	// rows would not sum to zero -- an unbalanced commit that the zero-sum check
 	// cannot catch. Rejecting here, before any write, rolls the change back with no
 	// audit trace.
-	var seenID map[int64]bool
+	var seenID map[ids.SplitID]bool
 	if liveAccountByID != nil {
-		seenID = make(map[int64]bool, len(in.Splits))
+		seenID = make(map[ids.SplitID]bool, len(in.Splits))
 	}
 	for i := range in.Splits {
 		sp := in.Splits[i]
@@ -884,7 +884,7 @@ func insertTransactionVersion(ctx context.Context, q *sqlc.Queries, changeID ids
 
 // insertSplitVersion appends the splits snapshot-from-live version row. For
 // op='delete' the caller runs this BEFORE the live DELETE.
-func insertSplitVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID int64) error {
+func insertSplitVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID ids.SplitID) error {
 	if err := q.InsertSplitVersion(ctx, sqlc.InsertSplitVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append split version (entity %d, op %s): %w", entityID, op, err)
 	}

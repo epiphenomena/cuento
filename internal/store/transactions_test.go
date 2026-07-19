@@ -106,10 +106,10 @@ func txnSplits(t *testing.T, d *sql.DB, txnID ids.TransactionID) []SplitState {
 }
 
 // splitVersionCount returns how many splits_versions rows exist for one split id.
-func splitVersionCount(t *testing.T, d *sql.DB, splitID int64) int {
+func splitVersionCount(t *testing.T, d *sql.DB, splitID ids.SplitID) int {
 	t.Helper()
 	var n int
-	if err := d.QueryRow(`SELECT COUNT(*) FROM splits_versions WHERE entity_id = ?`, splitID).Scan(&n); err != nil {
+	if err := d.QueryRow(`SELECT COUNT(*) FROM splits_versions WHERE entity_id = ?`, int64(splitID)).Scan(&n); err != nil {
 		t.Fatalf("splitVersionCount(%d): %v", splitID, err)
 	}
 	return n
@@ -165,7 +165,7 @@ func TestPostBalanced(t *testing.T) {
 		t.Fatalf("live splits = %d, want 2", len(sps))
 	}
 	for _, sp := range sps {
-		testutil.AssertVersioned(t, e.d, "splits", sp.ID, "create")
+		testutil.AssertVersioned(t, e.d, "splits", int64(sp.ID), "create")
 	}
 }
 
@@ -261,11 +261,11 @@ func TestSplitDescriptionRoundTrip(t *testing.T) {
 	}
 
 	// The splits_versions snapshot for split[0] carries the description (rule 5).
-	testutil.AssertVersioned(t, e.d, "splits", splits[0].ID, "create")
+	testutil.AssertVersioned(t, e.d, "splits", int64(splits[0].ID), "create")
 	var snapDesc string
 	if err := e.d.QueryRow(
 		`SELECT description FROM splits_versions WHERE entity_id = ? ORDER BY id DESC LIMIT 1`,
-		splits[0].ID,
+		int64(splits[0].ID),
 	).Scan(&snapDesc); err != nil {
 		t.Fatalf("read splits_versions description: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestSplitDescriptionRoundTrip(t *testing.T) {
 	if splits2[0].Description != upd.Splits[0].Description {
 		t.Errorf("updated split[0] description = %q, want %q", splits2[0].Description, upd.Splits[0].Description)
 	}
-	testutil.AssertVersioned(t, e.d, "splits", splits[0].ID, "update")
+	testutil.AssertVersioned(t, e.d, "splits", int64(splits[0].ID), "update")
 
 	// Z3 stays clean with a POPULATED description (current live row == latest snapshot).
 	assertLedgerClean(t, e.d)
@@ -612,7 +612,7 @@ func TestUpdateDiffsSplits(t *testing.T) {
 		t.Fatalf("want 3 splits")
 	}
 	// Identify by account+amount: split0 (600), split1 (400), split2 (-1000).
-	var s0, s1, s2 int64
+	var s0, s1, s2 ids.SplitID
 	for _, sp := range live {
 		switch {
 		case sp.AccountID == e.salaries && sp.Amount == 600:
@@ -624,7 +624,7 @@ func TestUpdateDiffsSplits(t *testing.T) {
 		}
 	}
 	// Each has exactly 1 version (the create).
-	for _, sid := range []int64{s0, s1, s2} {
+	for _, sid := range []ids.SplitID{s0, s1, s2} {
 		if c := splitVersionCount(t, e.d, sid); c != 1 {
 			t.Fatalf("split %d version count = %d, want 1 after create", sid, c)
 		}
@@ -655,9 +655,9 @@ func TestUpdateDiffsSplits(t *testing.T) {
 	if c := splitVersionCount(t, e.d, s2); c != 2 {
 		t.Errorf("s2 versions = %d, want 2 (create+delete)", c)
 	}
-	testutil.AssertVersioned(t, e.d, "splits", s2, "delete")
+	testutil.AssertVersioned(t, e.d, "splits", int64(s2), "delete")
 	// The new split exists with a single create version.
-	var newSplit int64
+	var newSplit ids.SplitID
 	for _, sp := range txnSplits(t, e.d, id) {
 		if sp.AccountID == e.credit {
 			newSplit = sp.ID
@@ -699,7 +699,7 @@ func TestUpdateDuplicateExistingSplitIDRejected(t *testing.T) {
 		t.Fatalf("want 3 splits")
 	}
 	// Pick the first salaries split (id "5" in the worked case) and the credit split.
-	var dupID, creditID int64
+	var dupID, creditID ids.SplitID
 	for _, sp := range live {
 		switch {
 		case sp.AccountID == e.salaries && sp.Amount == 100:
@@ -816,7 +816,7 @@ func TestUpdateKeepsInactiveAccountOnUnchangedSplit(t *testing.T) {
 	if len(live) != 2 {
 		t.Fatalf("want 2 splits, got %d", len(live))
 	}
-	var salariesSplit, checkingSplit int64
+	var salariesSplit, checkingSplit ids.SplitID
 	for _, sp := range live {
 		switch sp.AccountID {
 		case e.salaries:
@@ -864,7 +864,7 @@ func TestUpdateChangeToInactiveAccountRejected(t *testing.T) {
 		t.Fatalf("PostTransaction: %v", err)
 	}
 	live := txnSplits(t, e.d, id)
-	var salariesSplit, checkingSplit int64
+	var salariesSplit, checkingSplit ids.SplitID
 	for _, sp := range live {
 		switch sp.AccountID {
 		case e.salaries:
@@ -903,7 +903,7 @@ func TestUpdateNewSplitOnInactiveAccountRejected(t *testing.T) {
 		t.Fatalf("PostTransaction: %v", err)
 	}
 	live := txnSplits(t, e.d, id)
-	var salariesSplit, checkingSplit int64
+	var salariesSplit, checkingSplit ids.SplitID
 	for _, sp := range live {
 		switch sp.AccountID {
 		case e.salaries:
@@ -945,7 +945,7 @@ func TestDeleteIsSoft(t *testing.T) {
 		t.Fatalf("PostTransaction: %v", err)
 	}
 	sps := txnSplits(t, e.d, id)
-	preCounts := map[int64]int{}
+	preCounts := map[ids.SplitID]int{}
 	for _, sp := range sps {
 		preCounts[sp.ID] = splitVersionCount(t, e.d, sp.ID)
 	}
@@ -1049,7 +1049,7 @@ func TestTransactionAsOf(t *testing.T) {
 		t.Fatalf("PostTransaction: %v", err)
 	}
 	live := txnSplits(t, d, id)
-	var salSplit, chkSplit int64
+	var salSplit, chkSplit ids.SplitID
 	for _, sp := range live {
 		if sp.AccountID == salaries {
 			salSplit = sp.ID
@@ -1098,7 +1098,7 @@ func TestTransactionAsOf(t *testing.T) {
 		t.Fatalf("mid split set size = %d, want 2", len(st.Splits))
 	}
 	// Assert the SET membership AND each split's values at edit1.
-	byID := map[int64]SplitState{}
+	byID := map[ids.SplitID]SplitState{}
 	for _, sp := range st.Splits {
 		byID[sp.ID] = sp
 	}

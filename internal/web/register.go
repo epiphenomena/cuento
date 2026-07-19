@@ -134,7 +134,7 @@ func registerRows(
 		exp := exps[r.Currency]
 
 		rows = append(rows, regRow{
-			SplitID:           r.SplitID,
+			SplitID:           int64(r.SplitID),
 			TxnID:             int64(r.TxnID),
 			DateISO:           r.Date,
 			Amount:            r.Amount,
@@ -341,7 +341,7 @@ func (s *server) registerPage(w http.ResponseWriter, r *http.Request) {
 		Rows:         rows,
 		HasMore:      hasMore,
 		NextDate:     next.Date,
-		NextID:       next.SplitID,
+		NextID:       int64(next.SplitID),
 		FilterFrom:   echo.from,
 		FilterTo:     echo.to,
 		FilterText:   filters.Text,
@@ -439,7 +439,7 @@ func parseRegisterCursor(r *http.Request) store.RegisterCursor {
 	q := r.URL.Query()
 	return store.RegisterCursor{
 		Date:    q.Get("cursor_date"),
-		SplitID: parseID(q.Get("cursor_id")),
+		SplitID: ids.SplitID(parseID(q.Get("cursor_id"))),
 	}
 }
 

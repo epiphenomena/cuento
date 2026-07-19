@@ -76,7 +76,7 @@ type FieldDiff struct {
 // against the empty side so the web layer can render the whole line. Position lets
 // the web layer label the split (e.g. "line 1").
 type SplitDiff struct {
-	SplitID  int64
+	SplitID  ids.SplitID
 	Op       string // "create" | "update" | "delete"
 	Position int64
 	Fields   []FieldDiff
@@ -101,7 +101,7 @@ type HistHeaderState struct {
 // that moved on an update so the web layer can emphasize exactly those cells; Old
 // carries the prior-version value of each changed field (for the struck old value).
 type HistSplitState struct {
-	SplitID         int64
+	SplitID         ids.SplitID
 	AccountID       int64
 	Amount          int64
 	FundID          sql.NullInt64
@@ -193,7 +193,7 @@ func (s *Store) TransactionHistory(ctx context.Context, id ids.TransactionID) ([
 	// Split diffs: group each split's snapshots by entity_id (rows are oldest-first,
 	// so per split the sequence is chronological). For each snapshot compute its diff
 	// vs the split's previous snapshot and attach it to the snapshot's change entry.
-	prevSplit := make(map[int64]*sqlc.SplitVersionHistoryRow)
+	prevSplit := make(map[ids.SplitID]*sqlc.SplitVersionHistoryRow)
 	for i := range splitRows {
 		row := splitRows[i]
 		e := ensure(row.ChangeID, row.ActorID, row.ActorName, row.At)
@@ -252,8 +252,8 @@ func reconstructStates(out []HistoryEntry, hdrRows []sqlc.TransactionVersionHist
 	}
 
 	var header HistHeaderState
-	live := make(map[int64]*HistSplitState) // split id -> carried-forward live state
-	prevSplitRow := make(map[int64]*sqlc.SplitVersionHistoryRow)
+	live := make(map[ids.SplitID]*HistSplitState) // split id -> carried-forward live state
+	prevSplitRow := make(map[ids.SplitID]*sqlc.SplitVersionHistoryRow)
 
 	for i := range out {
 		cid := out[i].ChangeID

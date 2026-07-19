@@ -306,12 +306,12 @@ type RegisterFilters struct {
 // the previous page. The zero value (Date == "") is the first page.
 type RegisterCursor struct {
 	Date    string
-	SplitID int64
+	SplitID ids.SplitID
 }
 
 // RegisterRow is one register line with its per-currency running balance.
 type RegisterRow struct {
-	SplitID         int64
+	SplitID         ids.SplitID
 	TxnID           ids.TransactionID
 	Date            string
 	SubsidiaryID    ids.SubsidiaryID
@@ -449,7 +449,7 @@ func (s *Store) RegisterPage(
 // balance that tracks the fund's ASSET-side (unexpended) position -- the same
 // quantity FundBalancesAsOf reports. IsAsset marks the rows that MOVE the balance.
 type FundLedgerRow struct {
-	SplitID         int64
+	SplitID         ids.SplitID
 	TxnID           ids.TransactionID
 	Date            string
 	SubsidiaryID    ids.SubsidiaryID
@@ -532,7 +532,7 @@ type DrillFilter struct {
 // list renders (reusing the register row rendering) and the txn id each row links to
 // (the p12.4 editor/history).
 type DrillRow struct {
-	SplitID         int64
+	SplitID         ids.SplitID
 	TxnID           ids.TransactionID
 	Date            string
 	SubsidiaryID    ids.SubsidiaryID

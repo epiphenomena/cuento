@@ -33,8 +33,8 @@ type reconWebEnv struct {
 	reader ids.UserID
 
 	checking int64
-	spDep    int64             // +250 checking split
-	spExp    int64             // -400 checking split
+	spDep    ids.SplitID       // +250 checking split
+	spExp    ids.SplitID       // -400 checking split
 	txnDep   ids.TransactionID // the deposit transaction (owns spDep)
 	txnExp   ids.TransactionID // the expense transaction (owns spExp)
 }
@@ -106,9 +106,9 @@ func newReconWebEnv(t *testing.T) reconWebEnv {
 
 // splitOnAccount returns the id of the split on `account` within `txn` (test helper,
 // direct SQL against the throwaway db).
-func splitOnAccount(t *testing.T, db *sql.DB, txn ids.TransactionID, account int64) int64 {
+func splitOnAccount(t *testing.T, db *sql.DB, txn ids.TransactionID, account int64) ids.SplitID {
 	t.Helper()
-	var id int64
+	var id ids.SplitID
 	if err := db.QueryRow(`SELECT id FROM splits WHERE transaction_id = ? AND account_id = ?`, int64(txn), account).Scan(&id); err != nil {
 		t.Fatalf("splitOnAccount(txn %d, acct %d): %v", txn, account, err)
 	}
@@ -149,10 +149,10 @@ func TestReconWorkspaceRendersSplits(t *testing.T) {
 	}
 	body := rec.Body.String()
 	// Both uncleared splits appear with a per-split toggle control carrying a stable id.
-	if !strings.Contains(body, reconToggleID(e.spDep)) {
+	if !strings.Contains(body, reconToggleID(int64(e.spDep))) {
 		t.Errorf("workspace missing toggle for deposit split; body:\n%s", body)
 	}
-	if !strings.Contains(body, reconToggleID(e.spExp)) {
+	if !strings.Contains(body, reconToggleID(int64(e.spExp))) {
 		t.Errorf("workspace missing toggle for expense split")
 	}
 	// The sticky summary + difference chip is present.
@@ -205,7 +205,7 @@ func TestToggleReturnsPartialAndUpdatesDifference(t *testing.T) {
 	e := newReconWebEnv(t)
 	id := e.startRecon(t, 0) // statement 0; opening 0 => difference starts at 0
 
-	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), e.spDep), url.Values{})
+	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), int64(e.spDep)), url.Values{})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("toggle POST = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
@@ -216,7 +216,7 @@ func TestToggleReturnsPartialAndUpdatesDifference(t *testing.T) {
 		t.Errorf("toggle response looks like a full document (should be a partial):\n%s", body)
 	}
 	// The flipped row is returned (the toggle now reads "clear off" / checked state).
-	if !strings.Contains(body, reconToggleID(e.spDep)) {
+	if !strings.Contains(body, reconToggleID(int64(e.spDep))) {
 		t.Errorf("toggle response missing the flipped row")
 	}
 	// The OOB summary swap is present (recon-summary with hx-swap-oob).
@@ -248,7 +248,7 @@ func TestToggleReturnsPartialAndUpdatesDifference(t *testing.T) {
 		t.Errorf("difference after clearing +250 = %d, want -25000", sum.Difference)
 	}
 	// A second toggle unclears it (round-trips).
-	rec2 := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), e.spDep), url.Values{})
+	rec2 := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), int64(e.spDep)), url.Values{})
 	if rec2.Code != http.StatusOK {
 		t.Fatalf("second toggle = %d, want 200", rec2.Code)
 	}
@@ -378,7 +378,7 @@ func TestReconPermsReadCannotAct(t *testing.T) {
 	for _, tc := range []struct {
 		name, method, path string
 	}{
-		{"toggle", http.MethodPost, reconTogglePath(int64(id), e.spDep)},
+		{"toggle", http.MethodPost, reconTogglePath(int64(id), int64(e.spDep))},
 		{"finalize", http.MethodPost, reconFinalizePath(int64(id))},
 		{"reopen", http.MethodPost, reconReopenPath(int64(id))},
 		{"start", http.MethodPost, "/reconciliations"},
@@ -390,7 +390,7 @@ func TestReconPermsReadCannotAct(t *testing.T) {
 	}
 
 	// Writer CAN toggle (200).
-	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), e.spDep), url.Values{}); rec.Code != http.StatusOK {
+	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), int64(e.spDep)), url.Values{}); rec.Code != http.StatusOK {
 		t.Errorf("writer toggle = %d, want 200", rec.Code)
 	}
 }
@@ -440,7 +440,7 @@ func (e reconWebEnv) finalizeRecon(t *testing.T) ids.ReconciliationID {
 	t.Helper()
 	ctx := store.WithActor(context.Background(), store.Actor{ID: e.writer})
 	id := e.startRecon(t, -15_000)
-	for _, sp := range []int64{e.spDep, e.spExp} {
+	for _, sp := range []ids.SplitID{e.spDep, e.spExp} {
 		if err := e.st.SetSplitReconciled(ctx, id, sp, true); err != nil {
 			t.Fatalf("clear split %d: %v", sp, err)
 		}
@@ -556,7 +556,7 @@ func TestReconEditUpdatesSummaryAndGate(t *testing.T) {
 	e := newReconWebEnv(t)
 	// Start at statement 0, clear the +250 deposit => difference -250, Finalize disabled.
 	id := e.startRecon(t, 0)
-	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), e.spDep), url.Values{}); rec.Code != http.StatusOK {
+	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), int64(e.spDep)), url.Values{}); rec.Code != http.StatusOK {
 		t.Fatalf("toggle deposit = %d", rec.Code)
 	}
 	before := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(int64(id)), nil).Body.String()
@@ -613,7 +613,7 @@ func TestReconDiscardReleasesAndRemovesFromList(t *testing.T) {
 	e := newReconWebEnv(t)
 	id := e.startRecon(t, 0)
 	// Clear the deposit split against this recon.
-	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), e.spDep), url.Values{}); rec.Code != http.StatusOK {
+	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), int64(e.spDep)), url.Values{}); rec.Code != http.StatusOK {
 		t.Fatalf("toggle = %d", rec.Code)
 	}
 

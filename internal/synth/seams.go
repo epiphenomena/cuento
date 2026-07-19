@@ -97,7 +97,7 @@ func ExtendReconciliation(ctx context.Context, s *store.Store, ids *IDs) (cleare
 	}
 
 	skip := map[entids.TransactionID]bool{ids.MayRentTxn: true, ids.JuneDonationTxn: true}
-	var toClear []int64
+	var toClear []entids.SplitID
 	for _, sp := range splits {
 		if skip[sp.TransactionID] {
 			continue

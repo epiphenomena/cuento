@@ -102,7 +102,7 @@ type FundLedgerParams struct {
 }
 
 type FundLedgerRow struct {
-	SplitID         int64
+	SplitID         ids.SplitID
 	TxnID           ids.TransactionID
 	Date            string
 	SubsidiaryID    ids.SubsidiaryID
