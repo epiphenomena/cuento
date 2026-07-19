@@ -936,3 +936,26 @@ Owner: qualified row labels (account path + fund + program), monthly columns, an
 **Bucket thresholds** (`|variance| / |budgeted|`): `variance == 0` → neutral (no color); `< 0.10` → slight; `[0.10, 0.25)` → moderate; `≥ 0.25` → large; **`budgeted == 0 && variance != 0` → large** (a wholly unbudgeted/uncollected figure is the strongest signal — guards the divide); both-zero → neutral.
 
 **Golden diff (reviewed, reconciles).** `budget_variance_sample.{txt,csv}` regenerated: rows regrouped from per-month into per-key (dotted labels like `Revenue.Contributions`, `Expenses.Food Purchases`), month columns added, each cell now `B / A / V`. Numbers reconcile against the retired golden: e.g. Contributions (Unrestricted/General/USD) 2026-01 (−4000) + 2026-04 (−3500) → Total budgeted −7500; Salaries 2026-02 (1800/8500/6700) + 2026-05 (1850/0/−1850) → 3650/8500/4850; grand totals USD −3250/8850/12100 and MXN 0/1500/1500 — IDENTICAL to before.
+
+### p31 (proposal) — FX under GAAP: remeasurement to income vs. translation to CTA (2026-07-19, owner-requested design)
+
+**Problem.** Under D3, cross-currency value movements flow through the equity-class **FX Clearing** account, whose converted balance IS the cumulative FX gain/loss — and because FX Clearing is equity, **every** FX effect currently lands in Net Assets; **none** is recognized in the change in net assets (income). That is not GAAP-faithful.
+
+**GAAP framework (ASC 830) — two distinct mechanisms landing in different places.** The discriminator is an entity's **functional currency** (in cuento, `subsidiaries.base_currency`, D18):
+- **Foreign-currency TRANSACTIONS → remeasurement → INCOME (830-20).** A balance denominated in a currency ≠ the entity's functional currency (e.g. a USD-functional subsidiary holding a Lempira bank account) is a *monetary* item remeasured to the closing rate at each report date; the resulting gain/loss goes to the **change in net assets** (income). Revenue/expense itself is measured at the transaction-date rate.
+- **Foreign-ENTITY TRANSLATION → CTA → EQUITY (830-30).** Translating a foreign subsidiary whose functional currency ≠ the reporting currency (e.g. the HN entity's HNL books → USD for consolidation): assets/liabilities at closing, revenue/expense at transaction/average, the net translation adjustment → a **Cumulative Translation Adjustment within Net Assets** (an OCI-like equity component), NOT income. cuento already does this for the intercompany-elimination residual (p26.70).
+
+So the owner's intuition is half-right: the *remeasurement* piece is recognized as revenue/expense (income), but the *translation* piece is NOT — it stays in equity/CTA.
+
+**How posted entries actually work (owner's Lempira example).** Scenario: a USD-functional subsidiary pays an expense out of a Lempira (HNL) bank account.
+- **This is a single-currency (HNL) transaction, and does NOT run through FX Clearing.** Both legs are HNL — `DR Expense (HNL) / CR HNL Bank (HNL)` — so the zero-sum invariant holds trivially in HNL. In cuento's model amounts are stored NATIVELY and converted at REPORT time (the expense at the transaction-date rate on the Statement of Activities, the HNL bank at the closing rate on the balance sheet). There is no "convert to USD" step at posting.
+- **FX Clearing is only for a transaction that moves value BETWEEN two currencies** (sell HNL to buy USD; transfer HNL-bank → USD-bank). That genuine cross-currency flow is the D3 two-transaction / FX-Clearing case.
+- **The FX gain/loss is therefore inherently a report-time computation, not a per-transaction posted entry.** Because the ledger holds native amounts and the USD value only exists at report time, the remeasurement gain/loss on the HNL monetary balance (its USD value drifting with the rate between acquisition and report date) is *computed* at report time, not journaled per transaction. Trying to post it per-transaction would require either keeping USD functional-currency books (a much bigger change to the native model) or posting USD-equivalent adjustments against HNL balances (awkward, fights D3).
+
+**Proposal (report-time recognition primary; posted entries optional).**
+1. Treat `subsidiaries.base_currency` as the functional currency; classify each split's FX exposure by transaction-currency == vs != the sub's functional currency.
+2. **Recognize the remeasurement FX gain/loss in the change in net assets** — compute it at report time from the transaction-date vs closing-rate valuation of foreign-currency **monetary** balances (cash/receivables/payables; non-monetary items stay at historical rate), and present an explicit "FX gain/loss" line on the Statement of Activities so the balance sheet foots without stranding the effect in the net-asset plug.
+3. **Split the FX Clearing / consolidation residual** into its remeasurement component (→ income, step 2) and its foreign-entity-translation component (→ CTA in Net Assets, per-subsidiary, extending p26.70), so only true translation remains in equity.
+4. **(Optional) Posted remeasurement entries** — a period-end journal option to a dedicated "FX gain/loss" account for orgs wanting a real audit trail instead of a report-time figure; documented as a heavier alternative given the native-storage tradeoff.
+
+Sequenced as PLAN Phase 31 (untick, future work).
