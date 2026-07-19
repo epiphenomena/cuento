@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"database/sql"
+	"encoding/csv"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -368,6 +369,101 @@ func TestTrialBalanceReportCSV(t *testing.T) {
 	if !strings.Contains(body, "250.00") {
 		t.Errorf("CSV body missing machine-plain amount 250.00; body:\n%s", body)
 	}
+}
+
+// TestReportCSVMetadataPreamble: a downloaded report CSV begins with a two-line
+// metadata header -- line 1 the localized report title, line 2 the date context --
+// followed by a blank row and then the table header, for BOTH an as-of report
+// (balance sheet) and a period report (income statement). The preamble is emitted by
+// the handler (writeReportCSVPreamble), not by reports.WriteCSV, so the reports
+// goldens stay unchanged. We parse the body as real CSV (FieldsPerRecord = -1 to
+// allow the ragged 1-2 field preamble rows) so a title-with-a-comma quoting
+// regression would surface, not just a substring match.
+func TestReportCSVMetadataPreamble(t *testing.T) {
+	h, st, _, sm := reportsApp(t)
+	admin := mkUser(t, st, "admin", "none", true)
+
+	// asof: the balance sheet declares ParamsSpec.AsOf -> ["As of", <date>].
+	t.Run("asof", func(t *testing.T) {
+		rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.BalanceSheetReportID+".csv", nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("balance sheet CSV status = %d, want 200", rec.Code)
+		}
+		body := rec.Body.String()
+		assertBlankSeparatorLine(t, body)
+		// csv.Reader drops the blank separator line, so parsed rows are
+		// [title, date, <table header>, ...data].
+		rows := parseCSVBody(t, body)
+		if len(rows) < 3 {
+			t.Fatalf("CSV has %d rows, want title + date + table; body:\n%s", len(rows), body)
+		}
+		wantTitle := i18n.T("en", "reports.balance_sheet.title")
+		if got := rows[0]; len(got) != 1 || got[0] != wantTitle {
+			t.Errorf("row 0 = %q, want title line [%q]", got, wantTitle)
+		}
+		asofLabel := i18n.T("en", "reports.params.asof")
+		if got := rows[1]; len(got) != 2 || got[0] != asofLabel || got[1] == "" {
+			t.Errorf("row 1 = %q, want [%q, <date>]", got, asofLabel)
+		}
+		// The table (its localized header row) still follows the preamble intact.
+		wantHeader := i18n.T("en", "reports.balance_sheet.col.line")
+		if got := rows[2]; len(got) == 0 || got[0] != wantHeader {
+			t.Errorf("row 2 = %q, want the table header starting with %q", got, wantHeader)
+		}
+	})
+
+	// period: the income statement declares ParamsSpec.Period -> ["From", d, "To", d].
+	t.Run("period", func(t *testing.T) {
+		rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.IncomeStatementReportID+".csv", nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("income statement CSV status = %d, want 200", rec.Code)
+		}
+		body := rec.Body.String()
+		assertBlankSeparatorLine(t, body)
+		rows := parseCSVBody(t, body)
+		if len(rows) < 3 {
+			t.Fatalf("CSV has %d rows, want title + date + table; body:\n%s", len(rows), body)
+		}
+		wantTitle := i18n.T("en", "reports.income_statement.title")
+		if got := rows[0]; len(got) != 1 || got[0] != wantTitle {
+			t.Errorf("row 0 = %q, want title line [%q]", got, wantTitle)
+		}
+		fromLabel := i18n.T("en", "reports.params.from")
+		toLabel := i18n.T("en", "reports.params.to")
+		if got := rows[1]; len(got) != 4 || got[0] != fromLabel || got[1] == "" || got[2] != toLabel || got[3] == "" {
+			t.Errorf("row 1 = %q, want [%q, <date>, %q, <date>]", got, fromLabel, toLabel)
+		}
+		wantHeader := i18n.T("en", "reports.income_statement.col.line")
+		if got := rows[2]; len(got) == 0 || got[0] != wantHeader {
+			t.Errorf("row 2 = %q, want the table header starting with %q", got, wantHeader)
+		}
+	})
+}
+
+// parseCSVBody parses a downloaded report CSV, tolerating the ragged 1-2 field
+// metadata preamble rows (FieldsPerRecord = -1) that precede the fixed-width table.
+func parseCSVBody(t *testing.T, body string) [][]string {
+	t.Helper()
+	r := csv.NewReader(strings.NewReader(body))
+	r.FieldsPerRecord = -1
+	rows, err := r.ReadAll()
+	if err != nil {
+		t.Fatalf("parse CSV body: %v; body:\n%s", err, body)
+	}
+	return rows
+}
+
+// assertBlankSeparatorLine confirms the metadata preamble ends with a blank line
+// (an empty CSV record) before the table -- the visual separation the owner asked
+// for. csv.Reader silently skips blank lines, so we check the raw body.
+func assertBlankSeparatorLine(t *testing.T, body string) {
+	t.Helper()
+	for _, ln := range strings.Split(body, "\n") {
+		if strings.Trim(ln, "\r") == "" {
+			return
+		}
+	}
+	t.Errorf("CSV body has no blank separator line between preamble and table; body:\n%s", body)
 }
 
 // TestReportPermissionThroughGrant: a report route enforces its group grant like any

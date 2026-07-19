@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/csv"
 	"errors"
 	"net/http"
 	"strconv"
@@ -1015,9 +1016,58 @@ func (s *server) reportCSV(w http.ResponseWriter, r *http.Request) {
 	h.Set("Content-Type", "text/csv; charset=utf-8")
 	h.Set("Content-Disposition", "attachment; filename=\""+rep.ID+".csv\"")
 	h.Set("Cache-Control", "no-store")
+
+	// Owner request: a downloaded CSV opens in a spreadsheet with the report's title
+	// and its date context (as-of, or from/to) at the top, so the file is
+	// self-describing away from the app. Emit a small metadata preamble on its OWN
+	// csv.Writer BEFORE the table -- its rows are 1-2 fields wide (ragged vs. the
+	// table's N columns), which is fine because each writer tracks its own field
+	// count, and we Flush() it before WriteCSV writes to the same ResponseWriter. The
+	// preamble is handler-side (localized here) so the i18n-free reports.WriteCSV and
+	// its goldens stay unchanged.
+	writeReportCSVPreamble(w, rep, params, lang, dateFormatFor(u))
+
 	// Best-effort: a write error mid-stream has already sent a 200 header, so there
 	// is no clean way to signal it; the export is a read with no side effects.
 	_ = reports.WriteCSV(w, localized, func(key string) string { return i18n.T(lang, key) }, exps)
+}
+
+// writeReportCSVPreamble streams the two-line metadata header (title, then the date
+// context) plus a trailing blank row ahead of the report table. It keys on the
+// report's ParamsSpec, not on whether a date happens to be set, so:
+//   - AsOf report   -> ["As of", <asof>]
+//   - Period report -> ["From", <from>, "To", <to>]
+//   - both (rare)   -> both date rows
+//   - neither (scope-only) -> title + blank only, no date row
+//
+// Dates are formatted in the user's date format (rule 10). Labels reuse the existing
+// params catalog keys (reports.params.asof/from/to) so no new i18n keys are needed.
+// Errors are ignored: the caller is a best-effort export whose 200 header is already
+// committed.
+func writeReportCSVPreamble(w http.ResponseWriter, rep reports.Report, params reports.Params, lang string, df money.DateFormat) {
+	cw := csv.NewWriter(w)
+
+	_ = cw.Write([]string{i18n.T(lang, rep.TitleKey)})
+
+	if rep.ParamsSpec.AsOf && params.AsOf != "" {
+		_ = cw.Write([]string{
+			i18n.T(lang, "reports.params.asof"),
+			money.FormatDate(parseISOForDisplay(params.AsOf), df),
+		})
+	}
+	if rep.ParamsSpec.Period && (params.From != "" || params.To != "") {
+		_ = cw.Write([]string{
+			i18n.T(lang, "reports.params.from"),
+			money.FormatDate(parseISOForDisplay(params.From), df),
+			i18n.T(lang, "reports.params.to"),
+			money.FormatDate(parseISOForDisplay(params.To), df),
+		})
+	}
+
+	// Blank separator row between the metadata and the table.
+	_ = cw.Write([]string{})
+
+	cw.Flush()
 }
 
 // localizeLabelCells returns a copy of t with each LABEL cell resolved to a
