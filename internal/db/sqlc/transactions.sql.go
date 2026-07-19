@@ -308,15 +308,15 @@ SELECT subtree.id FROM subtree
 // is set must carry a program inside R's subtree, else ErrFundProgramScope. Like
 // ProgramDescendants, the store builds a set and checks membership in Go (sqlc's
 // sqlite analyzer rejects a recursive-CTE alias in an outer EXISTS/WHERE).
-func (q *Queries) ProgramSubtreeIDs(ctx context.Context, id int64) ([]int64, error) {
+func (q *Queries) ProgramSubtreeIDs(ctx context.Context, id ids.ProgramID) ([]ids.ProgramID, error) {
 	rows, err := q.db.QueryContext(ctx, programSubtreeIDs, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []int64
+	var items []ids.ProgramID
 	for rows.Next() {
-		var id int64
+		var id ids.ProgramID
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}

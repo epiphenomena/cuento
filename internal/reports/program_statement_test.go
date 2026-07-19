@@ -485,7 +485,7 @@ func TestProgramStatementRollupDrillReconciles(t *testing.T) {
 		t.Errorf("rollup drill should not set a single ProgramID, got %v", *d.ProgramID)
 	}
 	// The set is General's subtree (self + Educación + Food Pantry).
-	wantSet := map[int64]bool{f.IDs.General: true, f.IDs.Educacion: true, f.IDs.FoodPantry: true}
+	wantSet := map[reports.ProgramID]bool{f.IDs.General: true, f.IDs.Educacion: true, f.IDs.FoodPantry: true}
 	if len(d.ProgramIDs) != len(wantSet) {
 		t.Errorf("rollup drill ProgramIDs = %v, want subtree %v", d.ProgramIDs, wantSet)
 	}
@@ -764,11 +764,11 @@ func psAccountNames(t *testing.T, f *fixture.Fixture) map[int64]string {
 func psDrillSum(t *testing.T, f *fixture.Fixture, d *reports.Drill) int64 {
 	t.Helper()
 	progs := d.ProgramIDs
-	var ptrs []*int64
+	var ptrs []*reports.ProgramID
 	if len(progs) == 0 {
-		ptrs = []*int64{d.ProgramID}
+		ptrs = []*reports.ProgramID{d.ProgramID}
 	} else {
-		ptrs = make([]*int64, len(progs))
+		ptrs = make([]*reports.ProgramID, len(progs))
 		for i := range progs {
 			id := progs[i]
 			ptrs[i] = &id

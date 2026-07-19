@@ -48,7 +48,7 @@ type FunctionalCell struct {
 // revenue/expense splits carry a program. Rows are raw per (program, account) --
 // the tree rollup is the report layer's job.
 type ProgramCell struct {
-	ProgramID int64
+	ProgramID ids.ProgramID
 	AccountID int64
 	Currency  string
 	Amount    int64
@@ -178,7 +178,7 @@ func (s *Store) FunctionalActivity(ctx context.Context, from, to string, scopeSu
 type FunctionalCellProgram struct {
 	AccountID       int64
 	FunctionalClass string
-	ProgramID       int64
+	ProgramID       ids.ProgramID
 	Currency        string
 	Amount          int64
 }
@@ -204,7 +204,7 @@ func (s *Store) FunctionalActivityByProgram(ctx context.Context, from, to string
 		out[i] = FunctionalCellProgram{
 			AccountID:       r.AccountID,
 			FunctionalClass: r.FunctionalClass.String,
-			ProgramID:       r.ProgramID.Int64,
+			ProgramID:       ids.ProgramID(r.ProgramID.Int64),
 			Currency:        r.Currency,
 			Amount:          r.Activity,
 		}
@@ -229,7 +229,7 @@ func (s *Store) ProgramActivity(ctx context.Context, from, to string, scopeSub i
 	for i, r := range rows {
 		// program_id is NOT NULL-filtered in SQL, so Valid is always true.
 		out[i] = ProgramCell{
-			ProgramID: r.ProgramID.Int64,
+			ProgramID: ids.ProgramID(r.ProgramID.Int64),
 			AccountID: r.AccountID,
 			Currency:  r.Currency,
 			Amount:    r.Activity,
@@ -247,7 +247,7 @@ type BudgetKeyCell struct {
 	SubsidiaryID int64
 	AccountID    int64
 	FundID       ids.FundID // 0 = unrestricted
-	ProgramID    int64
+	ProgramID    ids.ProgramID
 	Currency     string
 	Date         string
 	Amount       int64 // signed minor units (net-debit, D2)
@@ -276,7 +276,7 @@ func (s *Store) BudgetKeyActivity(ctx context.Context, from, to string, scopeSub
 			SubsidiaryID: r.SubsidiaryID,
 			AccountID:    r.AccountID,
 			FundID:       r.FundID,
-			ProgramID:    r.ProgramID.Int64,
+			ProgramID:    ids.ProgramID(r.ProgramID.Int64),
 			Currency:     r.Currency,
 			Date:         r.Date,
 			Amount:       r.Activity,
@@ -294,12 +294,12 @@ func (s *Store) BudgetKeyActivity(ctx context.Context, from, to string, scopeSub
 // "no filter on this dimension". Text matches (case-insensitively, substring)
 // against the transaction memo, the split memo, or the payee name.
 type RegisterFilters struct {
-	From       string      // "" = no lower bound (YYYY-MM-DD)
-	To         string      // "" = no upper bound (YYYY-MM-DD)
-	Text       string      // "" = no text filter
-	FundID     *ids.FundID // nil = any fund; a fund id filters to that fund's splits
-	Subsidiary *int64      // nil = any subsidiary
-	ProgramID  *int64      // nil = any program
+	From       string         // "" = no lower bound (YYYY-MM-DD)
+	To         string         // "" = no upper bound (YYYY-MM-DD)
+	Text       string         // "" = no text filter
+	FundID     *ids.FundID    // nil = any fund; a fund id filters to that fund's splits
+	Subsidiary *int64         // nil = any subsidiary
+	ProgramID  *ids.ProgramID // nil = any program
 }
 
 // RegisterCursor is the keyset position: the (Date, SplitID) of the LAST row of
@@ -319,7 +319,7 @@ type RegisterRow struct {
 	AccountID       int64 // the split's OWN account (a descendant leaf for a parent rollup)
 	Amount          int64 // signed minor units (net-debit, D2)
 	FundID          *ids.FundID
-	ProgramID       *int64
+	ProgramID       *ids.ProgramID
 	FunctionalClass *string
 	SplitMemo       string
 	TxnMemo         string
@@ -383,7 +383,7 @@ func (s *Store) RegisterPage(
 		Column12:     subActive,
 		SubsidiaryID: derefOr0(filters.Subsidiary),
 		Column14:     progActive,
-		ProgramID:    nullInt64Ptr(filters.ProgramID),
+		ProgramID:    ids.Null(filters.ProgramID),
 	})
 	if err != nil {
 		return nil, RegisterCursor{}, false, fmt.Errorf("store: register page (account %d): %w", accountID, err)
@@ -424,7 +424,7 @@ func (s *Store) RegisterPage(
 			AccountID:       r.AccountID,
 			Amount:          r.Amount,
 			FundID:          ids.Ptr[ids.FundID](r.FundID),
-			ProgramID:       nullInt64ToPtr(r.ProgramID),
+			ProgramID:       ids.Ptr[ids.ProgramID](r.ProgramID),
 			FunctionalClass: nullStringToPtr(r.FunctionalClass),
 			SplitMemo:       r.SplitMemo,
 			TxnMemo:         r.TxnMemo,
@@ -457,7 +457,7 @@ type FundLedgerRow struct {
 	Amount          int64 // signed minor units (net-debit, D2)
 	AccountID       int64
 	IsAsset         bool
-	ProgramID       *int64
+	ProgramID       *ids.ProgramID
 	FunctionalClass *string
 	SplitMemo       string
 	TxnMemo         string
@@ -491,7 +491,7 @@ func (s *Store) FundLedger(ctx context.Context, fundID ids.FundID, asof string) 
 			Amount:          r.Amount,
 			AccountID:       r.AccountID,
 			IsAsset:         r.IsAsset != 0,
-			ProgramID:       nullInt64ToPtr(r.ProgramID),
+			ProgramID:       ids.Ptr[ids.ProgramID](r.ProgramID),
 			FunctionalClass: nullStringToPtr(r.FunctionalClass),
 			SplitMemo:       r.SplitMemo,
 			TxnMemo:         r.TxnMemo,
@@ -522,9 +522,9 @@ type DrillFilter struct {
 	From string
 	To   string
 
-	FundID    *ids.FundID // nil = any fund
-	ProgramID *int64      // nil = any program
-	Class     *string     // nil = any functional class
+	FundID    *ids.FundID    // nil = any fund
+	ProgramID *ids.ProgramID // nil = any program
+	Class     *string        // nil = any functional class
 }
 
 // DrillRow is one split behind a report figure: its raw signed amount (net-debit,
@@ -539,7 +539,7 @@ type DrillRow struct {
 	Currency        string
 	Amount          int64 // signed minor units (net-debit, D2)
 	FundID          *ids.FundID
-	ProgramID       *int64
+	ProgramID       *ids.ProgramID
 	FunctionalClass *string
 	SplitMemo       string
 	TxnMemo         string
@@ -578,7 +578,7 @@ func (s *Store) DrillSplits(ctx context.Context, f DrillFilter) ([]DrillRow, err
 		Column10:        fundActive,
 		FundID:          ids.Null(f.FundID),
 		Column12:        progActive,
-		ProgramID:       nullInt64Ptr(f.ProgramID),
+		ProgramID:       ids.Null(f.ProgramID),
 		Column14:        classActive,
 		FunctionalClass: nullStringPtr(f.Class),
 	})
@@ -596,7 +596,7 @@ func (s *Store) DrillSplits(ctx context.Context, f DrillFilter) ([]DrillRow, err
 			Currency:        r.Currency,
 			Amount:          r.Amount,
 			FundID:          ids.Ptr[ids.FundID](r.FundID),
-			ProgramID:       nullInt64ToPtr(r.ProgramID),
+			ProgramID:       ids.Ptr[ids.ProgramID](r.ProgramID),
 			FunctionalClass: nullStringToPtr(r.FunctionalClass),
 			SplitMemo:       r.SplitMemo,
 			TxnMemo:         r.TxnMemo,

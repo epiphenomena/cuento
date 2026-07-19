@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"cuento/internal/ids"
 	"cuento/internal/ledger"
 	"cuento/internal/testutil/fixture"
 )
@@ -229,7 +230,7 @@ func TestFixtureKnownAggregates(t *testing.T) {
 	for _, sp := range st.Splits {
 		if sp.AccountID == f.IDs.ProgramSupplies {
 			if sp.FundID.Valid && sp.FundID.Int64 == int64(f.IDs.BecaAgua) &&
-				sp.ProgramID.Valid && sp.ProgramID.Int64 == f.IDs.Educacion {
+				sp.ProgramID.Valid && sp.ProgramID.Int64 == int64(f.IDs.Educacion) {
 				restricted = true
 			}
 		}
@@ -302,7 +303,7 @@ type fkey struct {
 }
 
 type pkey struct {
-	prog int64
+	prog ids.ProgramID
 	acct int64
 	ccy  string
 }

@@ -46,8 +46,8 @@ type txnWebEnv struct {
 	grantRev int64 // revenue, sub1+sub2
 	supplies int64 // expense, no default class, sub1
 
-	progEdu  int64 // program under root, the fund's scope
-	progRoot int64
+	progEdu  ids.ProgramID // program under root, the fund's scope
+	progRoot ids.ProgramID
 
 	fund ids.FundID // scoped to sub1, program scope = progEdu
 }
@@ -75,7 +75,7 @@ func newTxnWebEnv(t *testing.T) *txnWebEnv {
 	e.progEdu, err = st.CreateProgram(ctx, store.CreateProgramInput{Name: "Educacion", ParentID: e.progRoot})
 	must(t, err, "prog edu")
 
-	mkAcct := func(name, typ string, subs []int64, class string, defProg *int64) int64 {
+	mkAcct := func(name, typ string, subs []int64, class string, defProg *ids.ProgramID) int64 {
 		in := store.CreateAccountInput{
 			Type: typ, DefaultCurrency: "USD",
 			Names: map[string]string{"en": name}, Subsidiaries: subs,
@@ -121,8 +121,8 @@ func (e *txnWebEnv) balancedForm(debitAmt, creditAmt string) url.Values {
 	f.Set("account_0", itoa(e.salaries))
 	f.Set("amount_0", debitAmt)
 	f.Set("fund_0", "")
-	f.Set("progclass_0", "p:"+itoa(e.progRoot))
-	f.Set("program_0", itoa(e.progRoot))
+	f.Set("progclass_0", "p:"+itoa(int64(e.progRoot)))
+	f.Set("program_0", itoa(int64(e.progRoot)))
 	// row 1: checking (asset) credit
 	f.Set("split_id_1", "")
 	f.Set("account_1", itoa(e.checking))
@@ -422,7 +422,7 @@ func TestTxnFundProgramScopeGoesToRow(t *testing.T) {
 	f.Set("account_0", itoa(e.grantRev))
 	f.Set("amount_0", "-100.00")
 	f.Set("fund_0", itoa(int64(e.fund)))
-	f.Set("program_0", itoa(e.progRoot)) // outside the fund's Educación scope
+	f.Set("program_0", itoa(int64(e.progRoot))) // outside the fund's Educación scope
 	f.Set("split_id_1", "")
 	f.Set("account_1", itoa(e.checking))
 	f.Set("amount_1", "100.00")
@@ -457,7 +457,7 @@ func TestTxnAccountNotInSubGoesToRow(t *testing.T) {
 	f.Set("account_0", itoa(e.salaries))
 	f.Set("amount_0", "100.00")
 	f.Set("class_0", "program")
-	f.Set("program_0", itoa(e.progRoot))
+	f.Set("program_0", itoa(int64(e.progRoot)))
 	f.Set("split_id_1", "")
 	f.Set("account_1", itoa(e.cashB)) // not in sub1
 	f.Set("amount_1", "-100.00")
@@ -1210,7 +1210,7 @@ func TestTxnMainHeaderBodyErrorLandsOnRow(t *testing.T) {
 	f.Set("main_account", itoa(e.checking))
 	f.Set("account_0", itoa(e.supplies)) // expense, no default class
 	f.Set("amount_0", "50.00")
-	f.Set("program_0", itoa(e.progRoot))
+	f.Set("program_0", itoa(int64(e.progRoot)))
 	// class_0 deliberately omitted.
 	f.Set("rows", "1")
 
@@ -1394,7 +1394,7 @@ func TestTxnProgClassNonRootIdempotent(t *testing.T) {
 	// The salaries split must carry the NON-ROOT program (the discriminator: a naive re-save
 	// that dropped the carrier would default it back to root and corrupt this).
 	sal := before[0]
-	if sal.AccountID != e.salaries || !sal.ProgramID.Valid || sal.ProgramID.Int64 != e.progEdu ||
+	if sal.AccountID != e.salaries || !sal.ProgramID.Valid || sal.ProgramID.Int64 != int64(e.progEdu) ||
 		!sal.FunctionalClass.Valid || sal.FunctionalClass.String != "management" {
 		t.Fatalf("seed split 0 not management/non-root program: %+v", sal)
 	}
@@ -1420,7 +1420,7 @@ func TestTxnProgClassNonRootIdempotent(t *testing.T) {
 	f.Set("amount_0", "100.00")
 	f.Set("fund_0", "")
 	f.Set("progclass_0", "c:management")
-	f.Set("program_0", itoa(e.progEdu))
+	f.Set("program_0", itoa(int64(e.progEdu)))
 	f.Set("memo_0", "Admin payroll")
 	// Row 1: checking, no program/class (asset).
 	f.Set("split_id_1", itoa(before[1].ID))

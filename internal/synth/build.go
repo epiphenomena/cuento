@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	entids "cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -35,7 +36,7 @@ func buildOrg(ctx context.Context, s *store.Store, ids *IDs) error {
 	}
 	ids.MX = mx
 
-	ids.General = seedRootProgram
+	ids.General = entids.ProgramID(seedRootProgram)
 	edu, err := s.CreateProgram(ctx, store.CreateProgramInput{ParentID: ids.General, Name: "Educacion", SortOrder: 1})
 	if err != nil {
 		return fmt.Errorf("create Educacion program: %w", err)
@@ -65,7 +66,7 @@ type acctSpec struct {
 	openItem     bool   // p27.1: A/R-A/P open-line marker (asset/liability-only)
 	notes        string // p28.7: free-text note ABOUT the account (synthetic, rule 11)
 	fClass       *string
-	defProgram   *int64
+	defProgram   *entids.ProgramID
 	code         *string
 }
 

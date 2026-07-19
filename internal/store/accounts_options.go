@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // This file holds the READ-ONLY option/lookup queries the chart-of-accounts form
@@ -238,7 +239,7 @@ type AccountEditorOption struct {
 	// The combobox (p26.2) displays it and fuzzy-matches on it; it is never stored.
 	Path           string
 	Type           string
-	DefaultProgram *int64
+	DefaultProgram *ids.ProgramID
 	DefaultClass   string // "" = none
 	// OpenItem marks an A/R-A/P open-line account (p27.1). The budget-split editor
 	// (p27.2c) offers R/E leaves AND open_item asset/liability leaves, so it needs
@@ -321,10 +322,7 @@ func (s *Store) AccountEditorOptionsWith(ctx context.Context, lang string, subID
 			OpenItem:      acct.OpenItem != 0,
 			SubsidiaryIDs: subs,
 		}
-		if acct.DefaultProgramID.Valid {
-			v := acct.DefaultProgramID.Int64
-			opt.DefaultProgram = &v
-		}
+		opt.DefaultProgram = ids.Ptr[ids.ProgramID](acct.DefaultProgramID)
 		if acct.FunctionalClass.Valid {
 			opt.DefaultClass = acct.FunctionalClass.String
 		}
@@ -366,10 +364,7 @@ func (s *Store) AccountEditorOptionsWith(ctx context.Context, lang string, subID
 				SubsidiaryIDs: subs,
 				Unavailable:   true,
 			}
-			if acct.DefaultProgramID.Valid {
-				v := acct.DefaultProgramID.Int64
-				opt.DefaultProgram = &v
-			}
+			opt.DefaultProgram = ids.Ptr[ids.ProgramID](acct.DefaultProgramID)
 			if acct.FunctionalClass.Valid {
 				opt.DefaultClass = acct.FunctionalClass.String
 			}

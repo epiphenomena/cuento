@@ -30,10 +30,10 @@ import (
 // the created entity ids (by source key) and the surfaced warnings (non-balancing
 // groups etc. -- NEVER silently forced, docs hazard #4).
 type BuildResult struct {
-	SubsidiaryIDs map[string]int64      // subsidiary name -> id (incl. renamed root)
-	ProgramIDs    map[string]int64      // program name -> id (incl. seeded root "General"? no -- created)
-	FundIDs       map[string]ids.FundID // source donor -> fund id
-	AccountIDs    map[string]int64      // source_acct -> account id
+	SubsidiaryIDs map[string]int64         // subsidiary name -> id (incl. renamed root)
+	ProgramIDs    map[string]ids.ProgramID // program name -> id (incl. seeded root "General"? no -- created)
+	FundIDs       map[string]ids.FundID    // source donor -> fund id
+	AccountIDs    map[string]int64         // source_acct -> account id
 	Warnings      []string
 
 	// CampusFundID is the id of the marker-driven "campus" fund (cfg.CampusFund),
@@ -70,7 +70,7 @@ const rootSubsidiaryID = int64(1)
 func newResult() *BuildResult {
 	return &BuildResult{
 		SubsidiaryIDs: map[string]int64{},
-		ProgramIDs:    map[string]int64{},
+		ProgramIDs:    map[string]ids.ProgramID{},
 		FundIDs:       map[string]ids.FundID{},
 		AccountIDs:    map[string]int64{},
 		tidTxns:       map[string][]int64{},
@@ -375,7 +375,7 @@ func (b *builder) subsidiaries(ctx context.Context) error {
 
 // rootProgramID is the seeded root program ("General", migration id 1). Programs
 // derived from `kat` are created under it (D24).
-const rootProgramID = int64(1)
+const rootProgramID = ids.ProgramID(1)
 
 // programs creates the program tree: one program per distinct name in the kat
 // map (Programs) and the klass map (ProgramClasses), nested per ProgramParents
@@ -454,7 +454,7 @@ func (b *builder) funds(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("fund %q: %w", fc.Name, err)
 		}
-		var prog *int64
+		var prog *ids.ProgramID
 		if fc.Program != "" {
 			pid, ok := b.res.ProgramIDs[fc.Program]
 			if !ok {
@@ -499,7 +499,7 @@ func (b *builder) campusFund(ctx context.Context) error {
 	if len(subs) == 0 {
 		return fmt.Errorf("campus fund %q: no child subsidiaries configured", fc.Name)
 	}
-	var prog *int64
+	var prog *ids.ProgramID
 	if fc.Program != "" {
 		pid, ok := b.res.ProgramIDs[fc.Program]
 		if !ok {

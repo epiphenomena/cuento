@@ -373,7 +373,7 @@ func programNameMap(ctx context.Context, st *store.Store) (map[int64]string, err
 	}
 	m := make(map[int64]string, len(progs))
 	for _, p := range progs {
-		m[p.ID] = p.Name
+		m[int64(p.ID)] = p.Name
 	}
 	return m, nil
 }

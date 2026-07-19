@@ -427,7 +427,8 @@ func (s *server) parseRegisterFilters(r *http.Request, u *store.CurrentUser) (st
 		f.Subsidiary = &id
 	}
 	if id := parseID(q.Get("prog")); id > 0 {
-		f.ProgramID = &id
+		pid := ids.ProgramID(id)
+		f.ProgramID = &pid
 	}
 	return f, echo
 }
@@ -480,7 +481,7 @@ func (s *server) attachRegisterFilterOptions(ctx context.Context, m *registerPag
 		return err
 	}
 	for _, p := range progs {
-		m.Programs = append(m.Programs, regFilterOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
+		m.Programs = append(m.Programs, regFilterOption{ID: int64(p.ID), Name: p.Name, Path: progPaths[p.ID]})
 	}
 	return nil
 }

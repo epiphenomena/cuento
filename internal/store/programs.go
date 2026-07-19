@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // Program operations (p07.1) -- programs are a dimension (D24): a single-root tree
@@ -55,7 +56,7 @@ var (
 // required (> 0): the single root exists from the seed, so every created program
 // is a child (a second root is ErrProgramSecondRoot).
 type CreateProgramInput struct {
-	ParentID  int64
+	ParentID  ids.ProgramID
 	Name      string
 	SortOrder int64
 }
@@ -64,7 +65,7 @@ type CreateProgramInput struct {
 // non-nil ParentID moves the program (validated against cycles and
 // root-immovability).
 type UpdateProgramInput struct {
-	ParentID  *int64
+	ParentID  *ids.ProgramID
 	Name      *string
 	SortOrder *int64
 }
@@ -72,12 +73,12 @@ type UpdateProgramInput struct {
 // CreateProgram creates a child program and returns its new id. It rejects a
 // missing/invalid parent with a typed error (not leaning on the trigger) and
 // versions the create under one change.
-func (s *Store) CreateProgram(ctx context.Context, in CreateProgramInput) (int64, error) {
+func (s *Store) CreateProgram(ctx context.Context, in CreateProgramInput) (ids.ProgramID, error) {
 	if in.ParentID <= 0 {
 		return 0, ErrProgramSecondRoot
 	}
 
-	var newID int64
+	var newID ids.ProgramID
 	_, err := s.write(ctx, "program.create", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			// Validate the parent exists inside the tx (transaction-consistent).
@@ -89,7 +90,7 @@ func (s *Store) CreateProgram(ctx context.Context, in CreateProgramInput) (int64
 			}
 
 			id, err := q.InsertProgram(ctx, sqlc.InsertProgramParams{
-				ParentID:  sql.NullInt64{Int64: in.ParentID, Valid: true},
+				ParentID:  sql.NullInt64{Int64: int64(in.ParentID), Valid: true},
 				Name:      in.Name,
 				Active:    1,
 				SortOrder: in.SortOrder,
@@ -111,7 +112,7 @@ func (s *Store) CreateProgram(ctx context.Context, in CreateProgramInput) (int64
 // if it would give the root a parent (ErrProgramRootImmovable) or create a cycle
 // (ErrCycle: the new parent must not be the program itself nor any descendant).
 // The version append reflects the NEW values (it runs after the live update).
-func (s *Store) UpdateProgram(ctx context.Context, id int64, in UpdateProgramInput) error {
+func (s *Store) UpdateProgram(ctx context.Context, id ids.ProgramID, in UpdateProgramInput) error {
 	_, err := s.write(ctx, "program.update", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			cur, err := q.GetProgram(ctx, id)
@@ -148,7 +149,7 @@ func (s *Store) UpdateProgram(ctx context.Context, id int64, in UpdateProgramInp
 						return ErrCycle
 					}
 				}
-				next.ParentID = sql.NullInt64{Int64: *in.ParentID, Valid: true}
+				next.ParentID = sql.NullInt64{Int64: int64(*in.ParentID), Valid: true}
 			}
 
 			if err := q.UpdateProgram(ctx, sqlc.UpdateProgramParams{
@@ -173,7 +174,7 @@ func (s *Store) UpdateProgram(ctx context.Context, id int64, in UpdateProgramInp
 // children (ErrProgramHasActiveChildren). Deactivation is op='update', NOT
 // 'delete': the entity still exists and keeps its history -- it only blocks NEW
 // use (the full split-based blocks-new-use assertion lands in p08).
-func (s *Store) DeactivateProgram(ctx context.Context, id int64) error {
+func (s *Store) DeactivateProgram(ctx context.Context, id ids.ProgramID) error {
 	_, err := s.write(ctx, "program.deactivate", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			cur, err := q.GetProgram(ctx, id)
@@ -184,7 +185,7 @@ func (s *Store) DeactivateProgram(ctx context.Context, id int64) error {
 				return fmt.Errorf("load program %d: %w", id, err)
 			}
 
-			n, err := q.CountActiveProgramChildren(ctx, sql.NullInt64{Int64: id, Valid: true})
+			n, err := q.CountActiveProgramChildren(ctx, sql.NullInt64{Int64: int64(id), Valid: true})
 			if err != nil {
 				return fmt.Errorf("count active children of %d: %w", id, err)
 			}
@@ -214,7 +215,7 @@ func (s *Store) DeactivateProgram(ctx context.Context, id int64) error {
 // generated positional-param names (ID=change_id, Op, ID_2=entity_id) behind one
 // call site. It MUST run after the live write so the snapshot captures the new
 // values.
-func insertProgramVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID int64) error {
+func insertProgramVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.ProgramID) error {
 	if err := q.InsertProgramVersion(ctx, sqlc.InsertProgramVersionParams{
 		ID:   changeID,
 		Op:   op,
@@ -226,7 +227,7 @@ func insertProgramVersion(ctx context.Context, q *sqlc.Queries, changeID int64, 
 }
 
 // GetProgram returns the current live row for one program (read; sqlc).
-func (s *Store) GetProgram(ctx context.Context, id int64) (sqlc.Program, error) {
+func (s *Store) GetProgram(ctx context.Context, id ids.ProgramID) (sqlc.Program, error) {
 	row, err := s.q.GetProgram(ctx, id)
 	if err != nil {
 		return sqlc.Program{}, fmt.Errorf("store: get program %d: %w", id, err)
@@ -251,33 +252,33 @@ func (s *Store) ProgramTree(ctx context.Context) ([]sqlc.ProgramTreeRow, error) 
 // A top-level program's path is just its name (the seeded root "General"). No lang
 // param: program names are single stored proper nouns (no per-language variant), unlike
 // account names. Read via ProgramTree (rule 2).
-func (s *Store) ProgramPaths(ctx context.Context) (map[int64]string, error) {
+func (s *Store) ProgramPaths(ctx context.Context) (map[ids.ProgramID]string, error) {
 	rows, err := s.ProgramTree(ctx)
 	if err != nil {
 		return nil, err
 	}
-	parentOf := make(map[int64]sql.NullInt64, len(rows))
-	nameOf := make(map[int64]string, len(rows))
+	parentOf := make(map[ids.ProgramID]sql.NullInt64, len(rows))
+	nameOf := make(map[ids.ProgramID]string, len(rows))
 	for _, r := range rows {
 		parentOf[r.ID] = r.ParentID
 		nameOf[r.ID] = r.Name
 	}
-	pathOf := func(id int64) string {
+	pathOf := func(id ids.ProgramID) string {
 		var seg []string
 		for n, valid := id, true; valid; {
 			seg = append(seg, nameOf[n])
 			p := parentOf[n]
-			if !p.Valid || p.Int64 == n {
+			if !p.Valid || p.Int64 == int64(n) {
 				break
 			}
-			n = p.Int64
+			n = ids.ProgramID(p.Int64)
 		}
 		for i, j := 0, len(seg)-1; i < j; i, j = i+1, j-1 {
 			seg[i], seg[j] = seg[j], seg[i]
 		}
 		return strings.Join(seg, ".")
 	}
-	out := make(map[int64]string, len(rows))
+	out := make(map[ids.ProgramID]string, len(rows))
 	for _, r := range rows {
 		out[r.ID] = pathOf(r.ID)
 	}
@@ -286,7 +287,7 @@ func (s *Store) ProgramPaths(ctx context.Context) (map[int64]string, error) {
 
 // ProgramDescendants returns a program plus its transitive closure (self
 // included) -- the primitive report scoping uses (D24). Read; recursive CTE.
-func (s *Store) ProgramDescendants(ctx context.Context, id int64) ([]sqlc.ProgramDescendantsRow, error) {
+func (s *Store) ProgramDescendants(ctx context.Context, id ids.ProgramID) ([]sqlc.ProgramDescendantsRow, error) {
 	rows, err := s.q.ProgramDescendants(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("store: program descendants of %d: %w", id, err)
@@ -298,7 +299,7 @@ func (s *Store) ProgramDescendants(ctx context.Context, id int64) ([]sqlc.Progra
 // it is allowed only on revenue/expense accounts (ErrDefaultProgramNotRE, D24), the
 // program must exist (ErrDefaultProgramMissing) and be active (ErrDefaultProgramInactive).
 // It runs inside fn on the tx-bound queries so a rejection rolls the change back.
-func checkDefaultProgram(ctx context.Context, q *sqlc.Queries, programID int64, accountType string) error {
+func checkDefaultProgram(ctx context.Context, q *sqlc.Queries, programID ids.ProgramID, accountType string) error {
 	if accountType != "revenue" && accountType != "expense" {
 		return ErrDefaultProgramNotRE
 	}

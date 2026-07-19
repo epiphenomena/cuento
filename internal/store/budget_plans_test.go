@@ -20,9 +20,10 @@ import (
 // plan on it, an R/E (expense) account mapped to it, a revenue account, an
 // open_item receivable account, a program, and a fund scoped to the sub.
 type splitSetup struct {
-	sub, expense, revenue, receivable, prog int64
-	fund                                    ids.FundID
-	plan                                    ids.BudgetPlanID
+	sub, expense, revenue, receivable int64
+	prog                              ids.ProgramID
+	fund                              ids.FundID
+	plan                              ids.BudgetPlanID
 }
 
 func mkSplitSetup(t *testing.T, s *Store) splitSetup {
@@ -63,11 +64,13 @@ func mkSplitSetup(t *testing.T, s *Store) splitSetup {
 	return splitSetup{sub: sub, plan: plan, expense: expense, revenue: revenue, receivable: receivable, prog: prog, fund: fund}
 }
 
-func int64p(n int64) *int64 { return &n }
-
 // fundp returns a pointer to a fund id (the typed FundID pointer BudgetSplitInput
-// carries), the fund-typed sibling of int64p.
+// carries).
 func fundp(id ids.FundID) *ids.FundID { return &id }
+
+// progp returns a pointer to a program id (the typed ProgramID pointer
+// BudgetSplitInput carries), the program-typed sibling of fundp.
+func progp(id ids.ProgramID) *ids.ProgramID { return &id }
 
 // TestDeleteBudgetPlanCascade: deleting a plan HARD-deletes it and all its splits
 // under one change, appending a 'delete' version for the plan AND each split (rule 14
@@ -79,7 +82,7 @@ func TestDeleteBudgetPlanCascade(t *testing.T) {
 
 	sp1, err := s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
 		Description: "Rent", Date: "2026-01-01", AccountID: st.expense,
-		ProgramID: int64p(st.prog), Amount: 100_000, Currency: "USD",
+		ProgramID: progp(st.prog), Amount: 100_000, Currency: "USD",
 	})
 	if err != nil {
 		t.Fatalf("create split: %v", err)
@@ -142,7 +145,7 @@ func TestCreateBudgetSplitRE(t *testing.T) {
 	st := mkSplitSetup(t, s)
 	id, err := s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
 		Description: "Monthly rent", Date: "2026-03-15", AccountID: st.expense,
-		FundID: fundp(st.fund), ProgramID: int64p(st.prog), Amount: 120000, Currency: "USD",
+		FundID: fundp(st.fund), ProgramID: progp(st.prog), Amount: 120000, Currency: "USD",
 	})
 	if err != nil {
 		t.Fatalf("create R/E split: %v", err)
@@ -152,7 +155,7 @@ func TestCreateBudgetSplitRE(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get split: %v", err)
 	}
-	if !got.ProgramID.Valid || got.ProgramID.Int64 != st.prog {
+	if !got.ProgramID.Valid || got.ProgramID.Int64 != int64(st.prog) {
 		t.Errorf("R/E split program = %v, want %d", got.ProgramID, st.prog)
 	}
 	if got.Amount != 120000 {
@@ -167,7 +170,7 @@ func TestCreateBudgetSplitREProgramPrefill(t *testing.T) {
 	s := New(d)
 	st := mkSplitSetup(t, s)
 	// Give the expense account a default program.
-	if err := s.UpdateAccount(mutCtx(), st.expense, UpdateAccountInput{DefaultProgramID: int64p(st.prog)}); err != nil {
+	if err := s.UpdateAccount(mutCtx(), st.expense, UpdateAccountInput{DefaultProgramID: progp(st.prog)}); err != nil {
 		t.Fatalf("set default program: %v", err)
 	}
 	id, err := s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
@@ -177,7 +180,7 @@ func TestCreateBudgetSplitREProgramPrefill(t *testing.T) {
 		t.Fatalf("create split (prefill): %v", err)
 	}
 	got, _ := s.GetBudgetSplit(mutCtx(), id)
-	if !got.ProgramID.Valid || got.ProgramID.Int64 != st.prog {
+	if !got.ProgramID.Valid || got.ProgramID.Int64 != int64(st.prog) {
 		t.Errorf("prefilled program = %v, want %d", got.ProgramID, st.prog)
 	}
 }
@@ -222,7 +225,7 @@ func TestCreateBudgetSplitALProgramForbidden(t *testing.T) {
 	s := New(d)
 	st := mkSplitSetup(t, s)
 	_, err := s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
-		Date: "2026-04-01", AccountID: st.receivable, ProgramID: int64p(st.prog),
+		Date: "2026-04-01", AccountID: st.receivable, ProgramID: progp(st.prog),
 		Amount: 8000, Currency: "USD",
 	})
 	if !errors.Is(err, ErrBudgetSplitProgramForbidden) {
@@ -264,7 +267,7 @@ func TestCreateBudgetSplitAccountNotInSubsidiary(t *testing.T) {
 		t.Fatalf("create account in other sub: %v", err)
 	}
 	_, err = s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
-		Date: "2026-04-01", AccountID: acct, ProgramID: int64p(st.prog), Amount: 100, Currency: "USD",
+		Date: "2026-04-01", AccountID: acct, ProgramID: progp(st.prog), Amount: 100, Currency: "USD",
 	})
 	if !errors.Is(err, ErrBudgetSplitAccountSub) {
 		t.Fatalf("want ErrBudgetSplitAccountSub, got %v", err)
@@ -280,8 +283,8 @@ func TestReplaceBudgetSplitsAtomicRollback(t *testing.T) {
 	st := mkSplitSetup(t, s)
 	// Seed two valid R/E splits.
 	valid := []BudgetSplitInput{
-		{Date: "2026-01-01", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 100, Currency: "USD"},
-		{Date: "2026-02-01", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 200, Currency: "USD"},
+		{Date: "2026-01-01", AccountID: st.expense, ProgramID: progp(st.prog), Amount: 100, Currency: "USD"},
+		{Date: "2026-02-01", AccountID: st.expense, ProgramID: progp(st.prog), Amount: 200, Currency: "USD"},
 	}
 	if _, err := s.ReplaceBudgetSplits(mutCtx(), st.plan, valid); err != nil {
 		t.Fatalf("seed replace: %v", err)
@@ -294,7 +297,7 @@ func TestReplaceBudgetSplitsAtomicRollback(t *testing.T) {
 	// revenue account has no default) -> rejected at insert time.
 	bad := []BudgetSplitInput{
 		{Date: "2026-03-01", AccountID: st.revenue, Amount: 500, Currency: "USD"},
-		{Date: "2026-03-02", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 300, Currency: "USD"},
+		{Date: "2026-03-02", AccountID: st.expense, ProgramID: progp(st.prog), Amount: 300, Currency: "USD"},
 	}
 	failedIdx, err := s.ReplaceBudgetSplits(mutCtx(), st.plan, bad)
 	if !errors.Is(err, ErrBudgetSplitProgramRequired) {
@@ -319,13 +322,13 @@ func TestReplaceBudgetSplitsSuccess(t *testing.T) {
 	s := New(d)
 	st := mkSplitSetup(t, s)
 	if _, err := s.ReplaceBudgetSplits(mutCtx(), st.plan, []BudgetSplitInput{
-		{Date: "2026-01-01", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 100, Currency: "USD"},
+		{Date: "2026-01-01", AccountID: st.expense, ProgramID: progp(st.prog), Amount: 100, Currency: "USD"},
 	}); err != nil {
 		t.Fatalf("first replace: %v", err)
 	}
 	if _, err := s.ReplaceBudgetSplits(mutCtx(), st.plan, []BudgetSplitInput{
 		{Date: "2026-02-01", AccountID: st.receivable, Amount: 800, Currency: "USD"},
-		{Date: "2026-02-02", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 250, Currency: "USD"},
+		{Date: "2026-02-02", AccountID: st.expense, ProgramID: progp(st.prog), Amount: 250, Currency: "USD"},
 	}); err != nil {
 		t.Fatalf("second replace: %v", err)
 	}
@@ -342,8 +345,8 @@ func TestAppendBudgetSplitsAtomicRollback(t *testing.T) {
 	s := New(d)
 	st := mkSplitSetup(t, s)
 	failedIdx, err := s.AppendBudgetSplits(mutCtx(), st.plan, []BudgetSplitInput{
-		{Date: "2026-01-01", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 100, Currency: "USD"},
-		{Date: "2026-01-02", AccountID: st.receivable, ProgramID: int64p(st.prog), Amount: 200, Currency: "USD"}, // A/L + program -> forbidden
+		{Date: "2026-01-01", AccountID: st.expense, ProgramID: progp(st.prog), Amount: 100, Currency: "USD"},
+		{Date: "2026-01-02", AccountID: st.receivable, ProgramID: progp(st.prog), Amount: 200, Currency: "USD"}, // A/L + program -> forbidden
 	})
 	if !errors.Is(err, ErrBudgetSplitProgramForbidden) {
 		t.Fatalf("want ErrBudgetSplitProgramForbidden, got %v", err)
@@ -362,13 +365,13 @@ func TestUpdateDeleteBudgetSplit(t *testing.T) {
 	s := New(d)
 	st := mkSplitSetup(t, s)
 	id, err := s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
-		Date: "2026-03-15", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 100, Currency: "USD",
+		Date: "2026-03-15", AccountID: st.expense, ProgramID: progp(st.prog), Amount: 100, Currency: "USD",
 	})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	if err := s.UpdateBudgetSplit(mutCtx(), id, BudgetSplitInput{
-		Date: "2026-03-16", AccountID: st.expense, ProgramID: int64p(st.prog), Amount: 200, Currency: "USD",
+		Date: "2026-03-16", AccountID: st.expense, ProgramID: progp(st.prog), Amount: 200, Currency: "USD",
 	}); err != nil {
 		t.Fatalf("update: %v", err)
 	}

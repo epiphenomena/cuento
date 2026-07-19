@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -162,7 +163,7 @@ func (s *server) buildSettingsForm(r *http.Request, form settingsForm) (settings
 		if p.Active == 0 {
 			continue
 		}
-		form.Programs = append(form.Programs, programOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
+		form.Programs = append(form.Programs, programOption{ID: int64(p.ID), Name: p.Name, Path: progPaths[p.ID]})
 	}
 	form.Langs = langOptions(form.Locale)
 	form.DateFormats = dateFormatOptions()
@@ -213,14 +214,15 @@ func (s *server) settingsUpdate(w http.ResponseWriter, r *http.Request) {
 
 	// default_program: "" (the "none" option) clears it; a non-empty value must parse
 	// to a positive id (existence is checked in the store). Mirrors default_subsidiary.
-	var defaultProgram *int64
+	var defaultProgram *ids.ProgramID
 	if v := r.PostFormValue("default_program"); v != "" {
 		id, perr := strconv.ParseInt(v, 10, 64)
 		if perr != nil || id <= 0 {
 			s.renderSettingsError(w, r, form, "default_program")
 			return
 		}
-		defaultProgram = &id
+		pid := ids.ProgramID(id)
+		defaultProgram = &pid
 		form.DefaultProgram = id
 	}
 

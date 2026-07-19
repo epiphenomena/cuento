@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 const countActiveProgramChildren = `-- name: CountActiveProgramChildren :one
@@ -31,7 +33,7 @@ FROM programs
 WHERE id = ?
 `
 
-func (q *Queries) GetProgram(ctx context.Context, id int64) (Program, error) {
+func (q *Queries) GetProgram(ctx context.Context, id ids.ProgramID) (Program, error) {
 	row := q.db.QueryRowContext(ctx, getProgram, id)
 	var i Program
 	err := row.Scan(
@@ -76,14 +78,14 @@ type InsertProgramParams struct {
 // Live insert of a CHILD. parent_id is validated present/valid in the store
 // (ErrProgramSecondRoot / ErrProgramParentMissing) BEFORE this runs, so a second
 // root never reaches the trigger. Returns the new id for the store to snapshot.
-func (q *Queries) InsertProgram(ctx context.Context, arg InsertProgramParams) (int64, error) {
+func (q *Queries) InsertProgram(ctx context.Context, arg InsertProgramParams) (ids.ProgramID, error) {
 	row := q.db.QueryRowContext(ctx, insertProgram,
 		arg.ParentID,
 		arg.Name,
 		arg.Active,
 		arg.SortOrder,
 	)
-	var id int64
+	var id ids.ProgramID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -99,7 +101,7 @@ WHERE c.id = ? AND p.id = ?
 type InsertProgramVersionParams struct {
 	Op   string
 	ID   int64
-	ID_2 int64
+	ID_2 ids.ProgramID
 }
 
 // The snapshot-from-live version append (rule 5, D4). Reads the CURRENT live row
@@ -132,7 +134,7 @@ FROM prog
 `
 
 type ProgramDescendantsRow struct {
-	ID        int64
+	ID        ids.ProgramID
 	ParentID  sql.NullInt64
 	Name      string
 	Active    int64
@@ -143,7 +145,7 @@ type ProgramDescendantsRow struct {
 // move cycle check use, D24). Self is the recursive base case, so it is ALWAYS
 // included; the store's cycle check (new parent must not be self nor any
 // descendant) relies on that.
-func (q *Queries) ProgramDescendants(ctx context.Context, id int64) ([]ProgramDescendantsRow, error) {
+func (q *Queries) ProgramDescendants(ctx context.Context, id ids.ProgramID) ([]ProgramDescendantsRow, error) {
 	rows, err := q.db.QueryContext(ctx, programDescendants, id)
 	if err != nil {
 		return nil, err
@@ -190,7 +192,7 @@ ORDER BY tree.path
 `
 
 type ProgramTreeRow struct {
-	ID        int64
+	ID        ids.ProgramID
 	ParentID  sql.NullInt64
 	Name      string
 	Active    int64
@@ -240,7 +242,7 @@ type UpdateProgramParams struct {
 	Name      string
 	Active    int64
 	SortOrder int64
-	ID        int64
+	ID        ids.ProgramID
 }
 
 // Live update: rename / move (parent) / active / sort. The store reads the

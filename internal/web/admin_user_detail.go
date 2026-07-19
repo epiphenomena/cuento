@@ -129,7 +129,7 @@ func (s *server) buildUserDetail(r *http.Request, id ids.UserID) (userDetailMode
 	if err != nil {
 		return userDetailModel{}, err
 	}
-	heldScope := make(map[string]*int64, len(held)) // group -> current scope (nil = org-wide)
+	heldScope := make(map[string]*ids.ProgramID, len(held)) // group -> current scope (nil = org-wide)
 	heldSet := make(map[string]bool, len(held))
 	for _, g := range held {
 		heldSet[g.Group] = true
@@ -166,8 +166,9 @@ func (s *server) buildUserDetail(r *http.Request, id ids.UserID) (userDetailMode
 	for _, g := range groups {
 		row := grantCheckbox{Name: g, Granted: heldSet[g], ScopeSelectable: pdGroups[g]}
 		if scope := heldScope[g]; scope != nil {
-			row.ProgramID = scope
-			row.ScopeName = progName[*scope]
+			sid := int64(*scope)
+			row.ProgramID = &sid
+			row.ScopeName = progName[sid]
 		}
 		model.Grants = append(model.Grants, row)
 	}
@@ -241,7 +242,7 @@ func (s *server) userSetGrants(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	heldSet := make(map[string]bool, len(held))
-	heldScope := make(map[string]*int64, len(held))
+	heldScope := make(map[string]*ids.ProgramID, len(held))
 	for _, g := range held {
 		heldSet[g.Group] = true
 		heldScope[g.Group] = g.ProgramID
@@ -262,7 +263,7 @@ func (s *server) userSetGrants(w http.ResponseWriter, r *http.Request) {
 	// is the "program_<name>" value, HONORED only for a program-dimensioned group naming a
 	// real program (else nil = org-wide).
 	wanted := make(map[string]bool, len(groups))
-	wantScope := make(map[string]*int64, len(groups))
+	wantScope := make(map[string]*ids.ProgramID, len(groups))
 	for _, g := range groups {
 		wanted[g] = r.PostForm.Get("grant_"+g) != ""
 		if wanted[g] && pdGroups[g] {
@@ -303,7 +304,7 @@ func (s *server) userSetGrants(w http.ResponseWriter, r *http.Request) {
 // naming a REAL program in progs. A non-empty value that is not a real program id
 // yields (nil,false) -- the caller then leaves the grant org-wide rather than scoping
 // to a bogus id (a crafted-input guard, mirroring programExists on the report page).
-func parseProgramScope(raw string, progs []programOption) (*int64, bool) {
+func parseProgramScope(raw string, progs []programOption) (*ids.ProgramID, bool) {
 	if raw == "" {
 		return nil, true
 	}
@@ -311,13 +312,14 @@ func parseProgramScope(raw string, progs []programOption) (*int64, bool) {
 	if err != nil || !programExists(progs, id) {
 		return nil, false
 	}
-	return &id, true
+	pid := ids.ProgramID(id)
+	return &pid, true
 }
 
 // sameScope reports whether two optional program scopes are equal (both nil, or both
 // non-nil naming the same program) -- the no-op guard that keeps a resave with an
 // unchanged scope from re-granting (and appending a spurious version row).
-func sameScope(a, b *int64) bool {
+func sameScope(a, b *ids.ProgramID) bool {
 	switch {
 	case a == nil && b == nil:
 		return true

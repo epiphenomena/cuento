@@ -16,7 +16,7 @@ type sp struct {
 	acct   int64
 	amount int64 // minor units, net-debit sign (D2)
 	fund   *entids.FundID
-	prog   *int64
+	prog   *entids.ProgramID
 	class  *string
 	desc   string // per-split free-text description; "" leaves it empty
 }

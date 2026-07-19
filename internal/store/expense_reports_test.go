@@ -496,7 +496,7 @@ func TestPostAndConvertExpenseReport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed cash: %v", err)
 	}
-	prog := int64(1) // seeded root "General"
+	prog := ids.ProgramID(1) // seeded root "General"
 	fc := "program"
 
 	// A submitted report (one expense line).
@@ -658,7 +658,7 @@ func seedPostedTxn(t *testing.T, s *Store, expenseAcct int64) int64 {
 	}
 	// Program id 1 is the seeded root "General" (migration 00008); an R/E split
 	// requires a program (Z15) and a functional class (Z16).
-	prog := int64(1)
+	prog := ids.ProgramID(1)
 	fc := "program"
 	txnID, err := s.PostTransaction(sysCtx, PostTransactionInput{
 		Date: "2025-06-01", SubsidiaryID: 1, Currency: "USD",

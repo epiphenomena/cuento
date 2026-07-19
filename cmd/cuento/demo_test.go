@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"cuento/internal/db"
+	"cuento/internal/ids"
 	"cuento/internal/ledger"
 	"cuento/internal/reports"
 	"cuento/internal/store"
@@ -185,7 +186,8 @@ func assertDemoProgramScopedGrant(ctx context.Context, t *testing.T, sqldb *sql.
 	// Resolve the Educacion program id + the demo Root subsidiary, then compute the
 	// grant's subtree via the SAME primitive production uses (ProgramSubtree).
 	st := store.New(sqldb)
-	var educacionID, rootSub int64
+	var educacionID ids.ProgramID
+	var rootSub int64
 	if err := sqldb.QueryRowContext(ctx, `SELECT id FROM programs WHERE name = 'Educacion'`).Scan(&educacionID); err != nil {
 		t.Fatalf("resolve Educacion id: %v", err)
 	}

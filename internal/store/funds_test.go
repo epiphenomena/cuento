@@ -212,7 +212,7 @@ func TestProgramScopeStored(t *testing.T) {
 	}
 
 	f := getFund(t, s, id)
-	if !f.ProgramID.Valid || f.ProgramID.Int64 != prog {
+	if !f.ProgramID.Valid || f.ProgramID.Int64 != int64(prog) {
 		t.Errorf("live program_id = %+v, want %d", f.ProgramID, prog)
 	}
 
@@ -224,13 +224,13 @@ func TestProgramScopeStored(t *testing.T) {
 	).Scan(&vProg); err != nil {
 		t.Fatalf("read fund version program_id: %v", err)
 	}
-	if !vProg.Valid || vProg.Int64 != prog {
+	if !vProg.Valid || vProg.Int64 != int64(prog) {
 		t.Errorf("snapshot program_id = %+v, want %d", vProg, prog)
 	}
 
 	// A missing program is rejected cleanly with no trace.
 	before := countChanges(t, d)
-	bad := int64(9999)
+	bad := ids.ProgramID(9999)
 	if _, err := s.CreateFund(mutCtx(), CreateFundInput{
 		Name: "BadProg", Restriction: "purpose",
 		ProgramID: &bad, Subsidiaries: []int64{subA},

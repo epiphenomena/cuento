@@ -108,7 +108,7 @@ func TestFundsListNegativeBadge(t *testing.T) {
 		t.Fatalf("create checking: %v", err)
 	}
 	mgmt := "management"
-	root := int64(1)
+	root := ids.ProgramID(1)
 	salaries, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "expense", DefaultCurrency: "USD",
 		Names: map[string]string{"en": "Salaries"}, Subsidiaries: []int64{1},
@@ -267,7 +267,7 @@ func TestFundCreateHappyPath(t *testing.T) {
 	form.Set("funder", "New Donor")
 	form.Set("purpose", "Scholarships")
 	form.Set("restriction", "purpose")
-	form.Set("program_id", itoa(ids.Educacion))
+	form.Set("program_id", itoa(int64(ids.Educacion)))
 	form.Set("sub_"+itoa(ids.US), itoa(ids.US))
 
 	rec := asUser(t, h, sm, writer, http.MethodPost, "/funds", form)
@@ -283,7 +283,7 @@ func TestFundCreateHappyPath(t *testing.T) {
 	for _, f := range funds {
 		if f.Name == "New Scholarship Fund" {
 			found = true
-			if !f.ProgramID.Valid || f.ProgramID.Int64 != ids.Educacion {
+			if !f.ProgramID.Valid || f.ProgramID.Int64 != int64(ids.Educacion) {
 				t.Errorf("created fund program scope = %v, want Educacion", f.ProgramID)
 			}
 		}

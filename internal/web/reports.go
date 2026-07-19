@@ -258,11 +258,8 @@ func (s *server) resolveParams(
 			return reports.Params{}, paramsForm{}, err
 		}
 		if len(scopeIDs) > 0 {
-			p.ProgramScope = make([]reports.ProgramID, len(scopeIDs))
-			for i, id := range scopeIDs {
-				p.ProgramScope[i] = reports.ProgramID(id)
-			}
-			if p.Program != 0 && !containsID(scopeIDs, int64(p.Program)) {
+			p.ProgramScope = scopeIDs
+			if p.Program != 0 && !containsID(scopeIDs, p.Program) {
 				p.Program = 0 // an out-of-scope selection falls back to the scoped comparative view
 			}
 		}
@@ -281,7 +278,7 @@ func (s *server) resolveParams(
 // carries a program id -- resolves that program's subtree (self + descendants) via
 // the store. Admin callers never reach here (resolveParams gates on !IsAdmin). A
 // resolved-but-empty subtree cannot happen (ProgramSubtree always includes self).
-func (s *server) grantProgramScope(ctx context.Context, u *store.CurrentUser, group string) ([]int64, error) {
+func (s *server) grantProgramScope(ctx context.Context, u *store.CurrentUser, group string) ([]ids.ProgramID, error) {
 	grants, err := s.store.ReportGrants(ctx, u.ID)
 	if err != nil {
 		return nil, err
@@ -300,7 +297,7 @@ func (s *server) grantProgramScope(ctx context.Context, u *store.CurrentUser, gr
 
 // containsID reports whether id is in ids (a small linear scan for the grant-scope
 // clamp; the subtree sets are small).
-func containsID(ids []int64, id int64) bool {
+func containsID[T ~int64](ids []T, id T) bool {
 	for _, v := range ids {
 		if v == id {
 			return true
@@ -424,7 +421,7 @@ func (s *server) programStatementOptions(ctx context.Context) ([]programOption, 
 	}
 	out := make([]programOption, 0, len(tree))
 	for _, p := range tree {
-		out = append(out, programOption{ID: p.ID, Name: p.Name, Path: paths[p.ID]})
+		out = append(out, programOption{ID: int64(p.ID), Name: p.Name, Path: paths[p.ID]})
 	}
 	return out, nil
 }

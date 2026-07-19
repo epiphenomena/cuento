@@ -49,9 +49,9 @@ func (s *Store) SuggestDescriptions(ctx context.Context, q string, sub int64) ([
 type DescriptionPrefill struct {
 	Found     bool
 	AccountID int64
-	Amount    int64      // signed minor units (net-debit sign, D1/D2)
-	FundID    ids.FundID // 0 == unrestricted
-	ProgramID int64      // 0 == none
+	Amount    int64         // signed minor units (net-debit sign, D1/D2)
+	FundID    ids.FundID    // 0 == unrestricted
+	ProgramID ids.ProgramID // 0 == none
 	Class     string
 	Memo      string
 	Currency  string
@@ -91,7 +91,7 @@ func (s *Store) PrefillDescription(ctx context.Context, q string, sub int64) (De
 		out.FundID = ids.FundID(row.FundID.Int64)
 	}
 	if row.ProgramID.Valid {
-		out.ProgramID = row.ProgramID.Int64
+		out.ProgramID = ids.ProgramID(row.ProgramID.Int64)
 	}
 	return out, nil
 }

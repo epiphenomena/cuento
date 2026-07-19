@@ -63,9 +63,9 @@ type IDs struct {
 	MX   int64 // "RV Mexico" (MXN)
 
 	// Programs.
-	General    int64 // seeded root
-	Educacion  int64
-	FoodPantry int64
+	General    ids.ProgramID // seeded root
+	Educacion  ids.ProgramID
+	FoodPantry ids.ProgramID
 
 	// Asset accounts.
 	CheckingUS int64

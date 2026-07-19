@@ -80,7 +80,7 @@ type Drill struct {
 	// that dimension). A fund-balances cell sets FundID; a program-statement cell
 	// sets ProgramID; a functional-expense cell sets Class.
 	FundID    *FundID
-	ProgramID *int64
+	ProgramID *ProgramID
 	Class     *string
 
 	// FundIDs is an optional fund SET (p15.9): the drilled figure sums splits across
@@ -103,7 +103,7 @@ type Drill struct {
 	// program at a time (no SQL change), the caller loops the set. ProgramID and
 	// ProgramIDs are mutually exclusive: a cell sets at most one (ProgramIDs when it
 	// aggregates a program subtree, ProgramID for a single leaf program).
-	ProgramIDs []int64
+	ProgramIDs []ProgramID
 
 	// Mode selects the date treatment (as-of cumulative vs period activity).
 	Mode DrillMode
@@ -143,12 +143,12 @@ func (d Drill) Encode() string {
 		q.Set("funds", strings.Join(ids, ","))
 	}
 	if d.ProgramID != nil {
-		q.Set("prog", strconv.FormatInt(*d.ProgramID, 10))
+		q.Set("prog", strconv.FormatInt(int64(*d.ProgramID), 10))
 	}
 	if len(d.ProgramIDs) > 0 {
 		ids := make([]string, len(d.ProgramIDs))
 		for i, id := range d.ProgramIDs {
-			ids[i] = strconv.FormatInt(id, 10)
+			ids[i] = strconv.FormatInt(int64(id), 10)
 		}
 		q.Set("progs", strings.Join(ids, ","))
 	}
@@ -212,13 +212,14 @@ func DecodeDrill(q url.Values) Drill {
 	}
 	if v := strings.TrimSpace(q.Get("prog")); v != "" {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
-			d.ProgramID = &id
+			pid := ProgramID(id)
+			d.ProgramID = &pid
 		}
 	}
 	if v := strings.TrimSpace(q.Get("progs")); v != "" {
 		for _, part := range strings.Split(v, ",") {
 			if id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64); err == nil && id != 0 {
-				d.ProgramIDs = append(d.ProgramIDs, id)
+				d.ProgramIDs = append(d.ProgramIDs, ProgramID(id))
 			}
 		}
 		sort.Slice(d.ProgramIDs, func(i, j int) bool { return d.ProgramIDs[i] < d.ProgramIDs[j] })

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // Account operations (p05.2). These COPY the versioned-entity discipline the
@@ -89,7 +90,7 @@ type CreateAccountInput struct {
 	// DefaultProgramID is optional (nil = none). It is meaningful ONLY on
 	// revenue/expense accounts (D24, ErrDefaultProgramNotRE); it must reference an
 	// existing, active program. It prefills a split's required program_id (p08).
-	DefaultProgramID *int64
+	DefaultProgramID *ids.ProgramID
 	Intercompany     bool
 	Reconcilable     bool
 	// CurrentCash marks a spendable-cash account (p27.1); allowed only on asset
@@ -114,7 +115,7 @@ type UpdateAccountInput struct {
 	Form990Code     *string
 	// DefaultProgramID: a non-nil, positive value sets the default program (R/E
 	// only, active; D24). A non-nil zero (0) clears it. nil leaves it unchanged.
-	DefaultProgramID *int64
+	DefaultProgramID *ids.ProgramID
 	Intercompany     *bool
 	Reconcilable     *bool
 	// CurrentCash / OpenItem: a non-nil value sets the flag (type-validated against
@@ -197,7 +198,7 @@ func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (int64
 				DefaultCurrency:  in.DefaultCurrency,
 				FunctionalClass:  nullStringPtr(in.FunctionalClass),
 				Form990Code:      nullStringPtr(in.Form990Code),
-				DefaultProgramID: nullInt64Ptr(in.DefaultProgramID),
+				DefaultProgramID: ids.Null(in.DefaultProgramID),
 				Intercompany:     boolToInt(in.Intercompany),
 				Reconcilable:     boolToInt(in.Reconcilable),
 				Active:           1,
@@ -285,7 +286,7 @@ func (s *Store) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInp
 					if err := checkDefaultProgram(ctx, q, *in.DefaultProgramID, next.Type); err != nil {
 						return err
 					}
-					next.DefaultProgramID = sql.NullInt64{Int64: *in.DefaultProgramID, Valid: true}
+					next.DefaultProgramID = sql.NullInt64{Int64: int64(*in.DefaultProgramID), Valid: true}
 				}
 			}
 			if in.Intercompany != nil {

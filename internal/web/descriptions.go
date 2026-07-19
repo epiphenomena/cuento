@@ -84,7 +84,7 @@ func (s *server) descriptionsPrefill(w http.ResponseWriter, r *http.Request) {
 		model.AccountID = pf.AccountID
 		model.AmountInput = money.Format(pf.Amount, exp, money.FormatOpts{Number: numberFormatFor(u)})
 		model.FundID = int64(pf.FundID)
-		model.ProgramID = pf.ProgramID
+		model.ProgramID = int64(pf.ProgramID)
 		model.Class = pf.Class
 		model.Memo = pf.Memo
 	}

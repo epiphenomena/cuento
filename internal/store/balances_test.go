@@ -29,7 +29,7 @@ type balEnv struct {
 	ctx context.Context
 
 	subUS, subCA int64
-	educ         int64
+	educ         ids.ProgramID
 	grant        ids.FundID
 
 	checking, fxclear, contrib, salaries int64
@@ -127,7 +127,7 @@ type split struct {
 	acct   int64
 	amount int64
 	fund   *ids.FundID
-	prog   *int64
+	prog   *ids.ProgramID
 	fclass *string
 }
 
@@ -456,8 +456,9 @@ func TestProgramActivity(t *testing.T) {
 	}
 	// Key by (program, account, currency).
 	type pk struct {
-		prog, acct int64
-		ccy        string
+		prog ids.ProgramID
+		acct int64
+		ccy  string
 	}
 	m := make(map[pk]int64, len(cells))
 	for _, c := range cells {

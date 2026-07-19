@@ -154,7 +154,7 @@ type persona struct {
 // program-subtree scope (p27.4). ProgramID nil == unscoped.
 type personaGrant struct {
 	group     string
-	programID *int64
+	programID *ids.ProgramID
 }
 
 // grantScopeFor builds the grantScope decide() expects for a persona on a group,

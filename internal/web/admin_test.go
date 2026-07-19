@@ -301,7 +301,7 @@ func TestAdminGrantsProgramScope(t *testing.T) {
 	// Grant "financial" (a program-dimensioned group) scoped to the program.
 	scoped := url.Values{}
 	scoped.Set("grant_financial", "1")
-	scoped.Set("program_financial", itoa(prog))
+	scoped.Set("program_financial", itoa(int64(prog)))
 	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/grants", scoped)
 	if rec.Code >= 400 {
 		t.Fatalf("scoped grant returned %d, body: %s", rec.Code, rec.Body.String())
@@ -329,7 +329,7 @@ func TestAdminGrantsProgramScope(t *testing.T) {
 	craft := url.Values{}
 	craft.Set("grant_financial", "1")
 	craft.Set("grant_funds", "1")
-	craft.Set("program_funds", itoa(prog))
+	craft.Set("program_funds", itoa(int64(prog)))
 	rec = asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/grants", craft)
 	if rec.Code >= 400 {
 		t.Fatalf("funds grant returned %d, body: %s", rec.Code, rec.Body.String())
@@ -352,7 +352,7 @@ func TestAdminGrantsProgramScope(t *testing.T) {
 	// NOT for "funds" (empty-coverage). Re-scope financial so the current-scope shows.
 	rescope := url.Values{}
 	rescope.Set("grant_financial", "1")
-	rescope.Set("program_financial", itoa(prog))
+	rescope.Set("program_financial", itoa(int64(prog)))
 	rescope.Set("grant_funds", "1")
 	asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/grants", rescope)
 	get := asUser(t, h, sm, admin, http.MethodGet, "/admin/users/"+itoa(int64(target)), nil)

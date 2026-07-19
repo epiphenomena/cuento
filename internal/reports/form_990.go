@@ -269,7 +269,7 @@ func (b *f990Builder) programTypeLines(
 		if len(c.descendants) > 1 {
 			d.ProgramIDs = c.descendants
 		} else {
-			id := int64(c.id)
+			id := c.id
 			d.ProgramID = &id
 		}
 		b.rows = append(b.rows, Row{

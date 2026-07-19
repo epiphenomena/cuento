@@ -200,7 +200,7 @@ type BudgetSplitInput struct {
 	Date        string
 	AccountID   int64
 	FundID      *ids.FundID
-	ProgramID   *int64
+	ProgramID   *ids.ProgramID
 	Amount      int64
 	Currency    string
 }
@@ -531,12 +531,12 @@ func resolveBudgetSplit(ctx context.Context, q *sqlc.Queries, planID ids.BudgetP
 	// does; reject if still unset), FORBIDDEN on A/L (DECISIONS tension 3).
 	var programID sql.NullInt64
 	if isRE {
-		var pid int64
+		var pid ids.ProgramID
 		switch {
 		case in.ProgramID != nil:
 			pid = *in.ProgramID
 		case acct.DefaultProgramID.Valid:
-			pid = acct.DefaultProgramID.Int64
+			pid = ids.ProgramID(acct.DefaultProgramID.Int64)
 		default:
 			return resolvedBudgetSplit{}, ErrBudgetSplitProgramRequired
 		}
@@ -553,7 +553,7 @@ func resolveBudgetSplit(ctx context.Context, q *sqlc.Queries, planID ids.BudgetP
 		// Fund-program scope (R/E only): the resolved program must be inside the
 		// fund's program subtree if the fund has one (D20).
 		if fund != nil && fund.ProgramID.Valid {
-			subtree, err := q.ProgramSubtreeIDs(ctx, fund.ProgramID.Int64)
+			subtree, err := q.ProgramSubtreeIDs(ctx, ids.ProgramID(fund.ProgramID.Int64))
 			if err != nil {
 				return resolvedBudgetSplit{}, fmt.Errorf("budget split fund program subtree %d: %w", fund.ProgramID.Int64, err)
 			}
@@ -568,7 +568,7 @@ func resolveBudgetSplit(ctx context.Context, q *sqlc.Queries, planID ids.BudgetP
 				return resolvedBudgetSplit{}, ErrBudgetSplitProgramScope
 			}
 		}
-		programID = sql.NullInt64{Int64: pid, Valid: true}
+		programID = sql.NullInt64{Int64: int64(pid), Valid: true}
 	} else if in.ProgramID != nil {
 		return resolvedBudgetSplit{}, ErrBudgetSplitProgramForbidden
 	}

@@ -554,7 +554,7 @@ func post2(t *testing.T, e txnEnv, sub, debitAcct int64, debitAmt int64, creditA
 }
 
 // newFund creates a fund scoped to subs (optionally a program scope) and returns id.
-func newFund(t *testing.T, s *Store, name string, subs []int64, programID *int64) ids.FundID {
+func newFund(t *testing.T, s *Store, name string, subs []int64, programID *ids.ProgramID) ids.FundID {
 	t.Helper()
 	id, err := s.CreateFund(mutCtx(), CreateFundInput{
 		Name: name, Restriction: "purpose", Subsidiaries: subs, ProgramID: programID,

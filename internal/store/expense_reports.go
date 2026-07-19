@@ -195,7 +195,7 @@ type ExpenseReportLineInput struct {
 	AccountID   int64
 	Amount      int64
 	FundID      *ids.FundID
-	ProgramID   *int64
+	ProgramID   *ids.ProgramID
 	Memo        string
 	Description string // per-line free-text (p26.15; payee->description migration, INERT this step)
 }
@@ -218,7 +218,7 @@ func (s *Store) AddExpenseReportLine(ctx context.Context, reportID ids.ExpenseRe
 				AccountID:   in.AccountID,
 				Amount:      in.Amount,
 				FundID:      ids.Null(in.FundID),
-				ProgramID:   nullInt64Ptr(in.ProgramID),
+				ProgramID:   ids.Null(in.ProgramID),
 				Memo:        in.Memo,
 				Description: in.Description,
 			})
@@ -256,7 +256,7 @@ func (s *Store) UpdateExpenseReportLine(ctx context.Context, lineID ids.ExpenseR
 				AccountID:   in.AccountID,
 				Amount:      in.Amount,
 				FundID:      ids.Null(in.FundID),
-				ProgramID:   nullInt64Ptr(in.ProgramID),
+				ProgramID:   ids.Null(in.ProgramID),
 				Memo:        in.Memo,
 				Description: in.Description,
 				ID:          lineID,
@@ -346,7 +346,7 @@ func (s *Store) ReplaceExpenseReportLines(ctx context.Context, reportID ids.Expe
 						AccountID:   d.AccountID,
 						Amount:      d.Amount,
 						FundID:      ids.Null(d.FundID),
-						ProgramID:   nullInt64Ptr(d.ProgramID),
+						ProgramID:   ids.Null(d.ProgramID),
 						Memo:        d.Memo,
 						Description: d.Description,
 						ID:          d.ID,
@@ -363,7 +363,7 @@ func (s *Store) ReplaceExpenseReportLines(ctx context.Context, reportID ids.Expe
 					AccountID:   d.AccountID,
 					Amount:      d.Amount,
 					FundID:      ids.Null(d.FundID),
-					ProgramID:   nullInt64Ptr(d.ProgramID),
+					ProgramID:   ids.Null(d.ProgramID),
 					Memo:        d.Memo,
 					Description: d.Description,
 				})

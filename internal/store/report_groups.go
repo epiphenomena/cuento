@@ -47,7 +47,7 @@ type ReportGrant struct {
 	// ProgramID is the granted program-subtree ROOT (nil = unscoped). It is a
 	// pointer so nil is distinguishable from program id 0 (which is never a real
 	// program).
-	ProgramID *int64
+	ProgramID *ids.ProgramID
 }
 
 // ReportGrants returns the report-group grants a user holds -- each a group name
@@ -63,10 +63,7 @@ func (s *Store) ReportGrants(ctx context.Context, userID ids.UserID) ([]ReportGr
 	out := make([]ReportGrant, 0, len(rows))
 	for _, r := range rows {
 		g := ReportGrant{Group: r.GroupName}
-		if r.ProgramID.Valid {
-			id := r.ProgramID.Int64
-			g.ProgramID = &id
-		}
+		g.ProgramID = ids.Ptr[ids.ProgramID](r.ProgramID)
 		out = append(out, g)
 	}
 	return out, nil
@@ -77,16 +74,16 @@ func (s *Store) ReportGrants(ctx context.Context, userID ids.UserID) ([]ReportGr
 // A read reusing the ProgramDescendants recursive CTE; the write-closure-only
 // ProgramSubtreeIDs (transactions.sql) is not reachable outside a write, so this is
 // the read-path analogue for the web layer's grant-scope resolution.
-func (s *Store) ProgramSubtree(ctx context.Context, id int64) ([]int64, error) {
+func (s *Store) ProgramSubtree(ctx context.Context, id ids.ProgramID) ([]ids.ProgramID, error) {
 	rows, err := s.q.ProgramDescendants(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("store: program subtree of %d: %w", id, err)
 	}
-	ids := make([]int64, 0, len(rows))
+	out := make([]ids.ProgramID, 0, len(rows))
 	for _, r := range rows {
-		ids = append(ids, r.ID)
+		out = append(out, r.ID)
 	}
-	return ids, nil
+	return out, nil
 }
 
 // ReportGroupNames returns every code-declared report group, in declared sort
@@ -119,13 +116,13 @@ func (s *Store) ReportGroupNames(ctx context.Context) ([]string, error) {
 //
 // The system user (id 1) is refused (ErrSystemUser). programID, when non-nil, is the
 // granted program-subtree root (self + descendants covered at report time).
-func (s *Store) GrantReportGroup(ctx context.Context, userID ids.UserID, group string, programID *int64) error {
+func (s *Store) GrantReportGroup(ctx context.Context, userID ids.UserID, group string, programID *ids.ProgramID) error {
 	if userID == systemUserID {
 		return ErrSystemUser
 	}
 	want := sql.NullInt64{}
 	if programID != nil {
-		want = sql.NullInt64{Int64: *programID, Valid: true}
+		want = sql.NullInt64{Int64: int64(*programID), Valid: true}
 	}
 	_, err := s.write(ctx, "user.grant", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {

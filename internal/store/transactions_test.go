@@ -33,7 +33,7 @@ type txnEnv struct {
 	contrib  int64 // revenue, default program=root
 	equity   int64 // equity, US
 
-	educ int64 // program under root
+	educ ids.ProgramID // program under root
 }
 
 func newTxnEnv(t *testing.T) txnEnv {
@@ -61,11 +61,11 @@ func newTxnEnv(t *testing.T) txnEnv {
 
 // rootProgramMarker points at the root program id; tests take its address when a
 // split explicitly tags the root program.
-var rootProgramMarker int64 = rootProgramID
+var rootProgramMarker ids.ProgramID = rootProgramID
 
 // mkAcct creates a leaf account of the given type mapped to subs, optionally with a
 // default functional class and default program, and returns its id.
-func mkAcct(t *testing.T, s *Store, typ, name string, subs []int64, fClass *string, defProg *int64) int64 {
+func mkAcct(t *testing.T, s *Store, typ, name string, subs []int64, fClass *string, defProg *ids.ProgramID) int64 {
 	t.Helper()
 	in := CreateAccountInput{
 		Type: typ, DefaultCurrency: "USD", Names: enName(name), Subsidiaries: subs,
@@ -520,7 +520,7 @@ func TestPostProgramDefaulted(t *testing.T) {
 	}
 	for _, sp := range txnSplits(t, e.d, id) {
 		if sp.AccountID == feeAcct {
-			if !sp.ProgramID.Valid || sp.ProgramID.Int64 != e.educ {
+			if !sp.ProgramID.Valid || sp.ProgramID.Int64 != int64(e.educ) {
 				t.Errorf("fee split program = %v, want educ %d (account default)", sp.ProgramID, e.educ)
 			}
 		}
@@ -540,7 +540,7 @@ func TestPostProgramDefaulted(t *testing.T) {
 	}
 	for _, sp := range txnSplits(t, e.d, id2) {
 		if sp.AccountID == e.salaries {
-			if !sp.ProgramID.Valid || sp.ProgramID.Int64 != rootProgramID {
+			if !sp.ProgramID.Valid || sp.ProgramID.Int64 != int64(rootProgramID) {
 				t.Errorf("salaries split program = %v, want root %d", sp.ProgramID, rootProgramID)
 			}
 		}
@@ -1106,7 +1106,7 @@ func TestTransactionAsOf(t *testing.T) {
 	if sal.Amount != 1_200 {
 		t.Errorf("mid salaries amount = %d, want 1200 (edit1)", sal.Amount)
 	}
-	if !sal.ProgramID.Valid || sal.ProgramID.Int64 != educ {
+	if !sal.ProgramID.Valid || sal.ProgramID.Int64 != int64(educ) {
 		t.Errorf("mid salaries program = %v, want educ %d", sal.ProgramID, educ)
 	}
 	if !sal.FundID.Valid || sal.FundID.Int64 != int64(fundA) {
@@ -1175,7 +1175,7 @@ func TestConcurrentPostsSerialize(t *testing.T) {
 // --- fixture helpers ------------------------------------------------------
 
 // mkFund creates a fund scoped to subs, optionally to a program subtree.
-func mkFund(t *testing.T, s *Store, name string, subs []int64, prog *int64) ids.FundID {
+func mkFund(t *testing.T, s *Store, name string, subs []int64, prog *ids.ProgramID) ids.FundID {
 	t.Helper()
 	in := CreateFundInput{Name: name, Restriction: "purpose", Subsidiaries: subs}
 	if prog != nil {
@@ -1190,7 +1190,7 @@ func mkFund(t *testing.T, s *Store, name string, subs []int64, prog *int64) ids.
 }
 
 // mkAcctDefProg creates a leaf account with a default program (no functional class).
-func mkAcctDefProg(t *testing.T, s *Store, typ, name string, subs []int64, defProg int64) int64 {
+func mkAcctDefProg(t *testing.T, s *Store, typ, name string, subs []int64, defProg ids.ProgramID) int64 {
 	t.Helper()
 	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: typ, DefaultCurrency: "USD", Names: enName(name), Subsidiaries: subs,
@@ -1256,7 +1256,7 @@ func TestAccountMissingRejectedEveryPath(t *testing.T) {
 	if err := s.SubmitExpenseReport(ctx, reportID); err != nil {
 		t.Fatalf("SubmitExpenseReport: %v", err)
 	}
-	prog := int64(1)
+	prog := ids.ProgramID(1)
 	fc := "program"
 	expIn := PostTransactionInput{
 		Date: "2025-06-01", SubsidiaryID: 1, Currency: "USD",
@@ -1272,7 +1272,7 @@ func TestAccountMissingRejectedEveryPath(t *testing.T) {
 
 // mkAcctFull creates a leaf expense account with an explicit default functional
 // class and default program.
-func mkAcctFull(t *testing.T, s *Store, typ, name string, subs []int64, fClass string, defProg int64) int64 {
+func mkAcctFull(t *testing.T, s *Store, typ, name string, subs []int64, fClass string, defProg ids.ProgramID) int64 {
 	t.Helper()
 	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: typ, DefaultCurrency: "USD", Names: enName(name), Subsidiaries: subs,

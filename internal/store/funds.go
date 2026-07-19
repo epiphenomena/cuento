@@ -59,7 +59,7 @@ type CreateFundInput struct {
 	Funder       string
 	Purpose      string
 	Restriction  string
-	ProgramID    *int64
+	ProgramID    *ids.ProgramID
 	StartDate    *string
 	EndDate      *string
 	Notes        string
@@ -78,7 +78,7 @@ type UpdateFundInput struct {
 	Funder       *string
 	Purpose      *string
 	Restriction  *string
-	ProgramID    *int64
+	ProgramID    *ids.ProgramID
 	StartDate    *string
 	EndDate      *string
 	Notes        *string
@@ -111,7 +111,7 @@ func (s *Store) CreateFund(ctx context.Context, in CreateFundInput) (ids.FundID,
 				Funder:      in.Funder,
 				Purpose:     in.Purpose,
 				Restriction: in.Restriction,
-				ProgramID:   nullInt64Ptr(in.ProgramID),
+				ProgramID:   ids.Null(in.ProgramID),
 				StartDate:   nullStringPtr(in.StartDate),
 				EndDate:     nullStringPtr(in.EndDate),
 				Notes:       in.Notes,
@@ -194,7 +194,7 @@ func (s *Store) UpdateFund(ctx context.Context, id ids.FundID, in UpdateFundInpu
 					if err := checkFundProgram(ctx, q, *in.ProgramID); err != nil {
 						return err
 					}
-					next.ProgramID = sql.NullInt64{Int64: *in.ProgramID, Valid: true}
+					next.ProgramID = sql.NullInt64{Int64: int64(*in.ProgramID), Valid: true}
 				}
 			}
 
@@ -349,7 +349,7 @@ func (s *Store) ActiveFunds(ctx context.Context, subsidiaryID int64) ([]sqlc.Fun
 // must exist if set). It runs inside fn on the tx-bound queries so a rejection
 // rolls the change back. Existence only: the task requires "must exist if set",
 // not active.
-func checkFundProgram(ctx context.Context, q *sqlc.Queries, programID int64) error {
+func checkFundProgram(ctx context.Context, q *sqlc.Queries, programID ids.ProgramID) error {
 	if _, err := q.GetProgram(ctx, programID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrFundProgramMissing

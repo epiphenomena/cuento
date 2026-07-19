@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -22,7 +23,7 @@ import (
 // BOOKKEEPING: viewing is TxnRead, managing is TxnWrite.
 
 // progByName returns the id of the program with the given name, or 0.
-func progByName(t *testing.T, st *store.Store, name string) int64 {
+func progByName(t *testing.T, st *store.Store, name string) ids.ProgramID {
 	t.Helper()
 	rows, err := st.ProgramTree(context.Background())
 	if err != nil {
@@ -93,7 +94,7 @@ func TestProgramsRename(t *testing.T) {
 	form.Set("name", "New Name")
 	form.Set("parent_id", "1")
 
-	rec := asUser(t, h, sm, book, http.MethodPost, "/programs/"+itoa(id), form)
+	rec := asUser(t, h, sm, book, http.MethodPost, "/programs/"+itoa(int64(id)), form)
 	if rec.Code >= 400 {
 		t.Fatalf("rename returned %d, body: %s", rec.Code, rec.Body.String())
 	}
@@ -120,14 +121,14 @@ func TestProgramsMove(t *testing.T) {
 	// Move B under A.
 	form := url.Values{}
 	form.Set("name", "B")
-	form.Set("parent_id", itoa(a))
+	form.Set("parent_id", itoa(int64(a)))
 
-	rec := asUser(t, h, sm, book, http.MethodPost, "/programs/"+itoa(b), form)
+	rec := asUser(t, h, sm, book, http.MethodPost, "/programs/"+itoa(int64(b)), form)
 	if rec.Code >= 400 {
 		t.Fatalf("move returned %d, body: %s", rec.Code, rec.Body.String())
 	}
 	prog, _ := st.GetProgram(context.Background(), b)
-	if !prog.ParentID.Valid || prog.ParentID.Int64 != a {
+	if !prog.ParentID.Valid || prog.ParentID.Int64 != int64(a) {
 		t.Errorf("B parent = %v, want %d", prog.ParentID, a)
 	}
 }
@@ -155,10 +156,10 @@ func TestProgramsMoveOptionsExcludeDescendants(t *testing.T) {
 		t.Fatalf("buildProgramForm: %v", err)
 	}
 	for _, opt := range form.Parents {
-		if opt.ID == parent {
+		if opt.ID == int64(parent) {
 			t.Errorf("parent options include the subject %d", parent)
 		}
-		if opt.ID == child {
+		if opt.ID == int64(child) {
 			t.Errorf("parent options include descendant %d", child)
 		}
 	}
@@ -209,7 +210,7 @@ func TestProgramsRootImmovable(t *testing.T) {
 	// POST an update to the ROOT (id 1) asking to move it under child.
 	form := url.Values{}
 	form.Set("name", "General")
-	form.Set("parent_id", itoa(child))
+	form.Set("parent_id", itoa(int64(child)))
 
 	rec := asUser(t, h, sm, book, http.MethodPost, "/programs/1", form)
 	if rec.Code != http.StatusUnprocessableEntity {
@@ -233,7 +234,7 @@ func TestProgramsDeactivateChildless(t *testing.T) {
 		t.Fatalf("seed program: %v", err)
 	}
 
-	rec := asUser(t, h, sm, book, http.MethodPost, "/programs/"+itoa(id)+"/deactivate", url.Values{})
+	rec := asUser(t, h, sm, book, http.MethodPost, "/programs/"+itoa(int64(id))+"/deactivate", url.Values{})
 	if rec.Code >= 400 {
 		t.Fatalf("deactivate returned %d, body: %s", rec.Code, rec.Body.String())
 	}
@@ -259,7 +260,7 @@ func TestProgramsDeactivateBlockedWithActiveChildren(t *testing.T) {
 		t.Fatalf("seed child: %v", err)
 	}
 
-	rec := asUser(t, h, sm, book, http.MethodPost, "/programs/"+itoa(parent)+"/deactivate", url.Values{})
+	rec := asUser(t, h, sm, book, http.MethodPost, "/programs/"+itoa(int64(parent))+"/deactivate", url.Values{})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("blocked deactivate: status=%d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
@@ -358,7 +359,7 @@ func TestProgramActivityTotalsMatchQuery(t *testing.T) {
 	}
 	wantMap := map[[2]string]int64{}
 	for _, c := range cells {
-		wantMap[[2]string{itoa(c.ProgramID), c.Currency}] += c.Amount
+		wantMap[[2]string{itoa(int64(c.ProgramID)), c.Currency}] += c.Amount
 	}
 
 	got, err := programActivityTotals(ctx, st, from, to, 1)
@@ -368,7 +369,7 @@ func TestProgramActivityTotalsMatchQuery(t *testing.T) {
 	gotMap := map[[2]string]int64{}
 	for pid, list := range got {
 		for _, cell := range list {
-			gotMap[[2]string{itoa(pid), cell.Currency}] += cell.Minor
+			gotMap[[2]string{itoa(int64(pid)), cell.Currency}] += cell.Minor
 		}
 	}
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/testutil"
 )
 
@@ -15,10 +16,10 @@ import (
 // (ErrProgramSecondRoot vs ErrSecondRoot, ProgramTree vs SubTree, etc.).
 
 // rootProgramID is the seeded root program's id (00008 seeds id 1, NULL parent).
-const rootProgramID int64 = 1
+const rootProgramID ids.ProgramID = 1
 
 // getProgram reads a program's current live row through the store read method.
-func getProgram(t *testing.T, s *Store, id int64) (parentID sql.NullInt64, name string, active int64) {
+func getProgram(t *testing.T, s *Store, id ids.ProgramID) (parentID sql.NullInt64, name string, active int64) {
 	t.Helper()
 	row, err := s.GetProgram(context.Background(), id)
 	if err != nil {
@@ -28,7 +29,7 @@ func getProgram(t *testing.T, s *Store, id int64) (parentID sql.NullInt64, name 
 }
 
 // latestProgramVersion reads the newest programs_versions snapshot for an entity.
-func latestProgramVersion(t *testing.T, d *sql.DB, entityID int64) (op, name string, active int64, parentID sql.NullInt64) {
+func latestProgramVersion(t *testing.T, d *sql.DB, entityID ids.ProgramID) (op, name string, active int64, parentID sql.NullInt64) {
 	t.Helper()
 	err := d.QueryRow(
 		`SELECT op, name, active, parent_id
@@ -60,10 +61,10 @@ func TestCreateProgramVersioned(t *testing.T) {
 		t.Fatalf("CreateProgram returned id %d, want positive", id)
 	}
 
-	testutil.AssertVersioned(t, d, "programs", id, "create")
+	testutil.AssertVersioned(t, d, "programs", int64(id), "create")
 
 	parent, name, active := getProgram(t, s, id)
-	if !parent.Valid || parent.Int64 != rootProgramID {
+	if !parent.Valid || parent.Int64 != int64(rootProgramID) {
 		t.Errorf("live parent = %+v, want %d", parent, rootProgramID)
 	}
 	if name != "Youth Services" || active != 1 {
@@ -167,7 +168,7 @@ func TestProgramRootImmovable(t *testing.T) {
 	if err := s.UpdateProgram(mutCtx(), rootProgramID, UpdateProgramInput{Name: &newName}); err != nil {
 		t.Fatalf("rename root program: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "programs", rootProgramID, "update")
+	testutil.AssertVersioned(t, d, "programs", int64(rootProgramID), "update")
 	parent, name, _ := getProgram(t, s, rootProgramID)
 	if parent.Valid {
 		t.Errorf("root parent = %+v after rename, want NULL", parent)
@@ -191,7 +192,7 @@ func TestDeactivateProgramBlocksNewUse(t *testing.T) {
 		t.Fatalf("DeactivateProgram: %v", err)
 	}
 
-	testutil.AssertVersioned(t, d, "programs", id, "update")
+	testutil.AssertVersioned(t, d, "programs", int64(id), "update")
 	_, _, active := getProgram(t, s, id)
 	if active != 0 {
 		t.Errorf("live active = %d, want 0", active)
@@ -245,12 +246,12 @@ func TestProgramTree(t *testing.T) {
 		t.Fatalf("ProgramTree: %v", err)
 	}
 
-	gotIDs := make([]int64, len(tree))
+	gotIDs := make([]ids.ProgramID, len(tree))
 	for i, row := range tree {
 		gotIDs[i] = row.ID
 	}
 	// Pre-order with B (sort 0) before A (sort 1): root, B, A, A1.
-	want := []int64{rootProgramID, b, a, a1}
+	want := []ids.ProgramID{rootProgramID, b, a, a1}
 	if len(gotIDs) != len(want) {
 		t.Fatalf("ProgramTree returned %v, want %v", gotIDs, want)
 	}
@@ -275,7 +276,7 @@ func TestProgramPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProgramPaths: %v", err)
 	}
-	want := map[int64]string{
+	want := map[ids.ProgramID]string{
 		rootProgramID: "General",
 		educ:          "General.Education",
 		k12:           "General.Education.K12",
@@ -304,11 +305,11 @@ func TestProgramDescendants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ProgramDescendants(a): %v", err)
 	}
-	got := make(map[int64]bool, len(rows))
+	got := make(map[ids.ProgramID]bool, len(rows))
 	for _, r := range rows {
 		got[r.ID] = true
 	}
-	for _, id := range []int64{a, a1, a11} {
+	for _, id := range []ids.ProgramID{a, a1, a11} {
 		if !got[id] {
 			t.Errorf("ProgramDescendants(a) missing %d (self+closure): got %v", id, got)
 		}
@@ -366,11 +367,11 @@ func TestAccountDefaultProgramREOnly(t *testing.T) {
 	}
 	testutil.AssertVersioned(t, d, "accounts", rev, "create")
 
-	if got := accountDefaultProgram(t, d, rev); !got.Valid || got.Int64 != prog {
+	if got := accountDefaultProgram(t, d, rev); !got.Valid || got.Int64 != int64(prog) {
 		t.Errorf("live default_program_id = %+v, want %d", got, prog)
 	}
 	// Snapshot must carry it too.
-	if got := latestAccountVersionDefaultProgram(t, d, rev); !got.Valid || got.Int64 != prog {
+	if got := latestAccountVersionDefaultProgram(t, d, rev); !got.Valid || got.Int64 != int64(prog) {
 		t.Errorf("snapshot default_program_id = %+v, want %d", got, prog)
 	}
 
@@ -380,10 +381,10 @@ func TestAccountDefaultProgramREOnly(t *testing.T) {
 	if err := s.UpdateAccount(mutCtx(), rev, UpdateAccountInput{SortOrder: &newSort}); err != nil {
 		t.Fatalf("UpdateAccount (unrelated field): %v", err)
 	}
-	if got := accountDefaultProgram(t, d, rev); !got.Valid || got.Int64 != prog {
+	if got := accountDefaultProgram(t, d, rev); !got.Valid || got.Int64 != int64(prog) {
 		t.Errorf("default_program_id after unrelated update = %+v, want %d (must survive)", got, prog)
 	}
-	if got := latestAccountVersionDefaultProgram(t, d, rev); !got.Valid || got.Int64 != prog {
+	if got := latestAccountVersionDefaultProgram(t, d, rev); !got.Valid || got.Int64 != int64(prog) {
 		t.Errorf("snapshot default_program_id after update = %+v, want %d", got, prog)
 	}
 
@@ -418,7 +419,7 @@ func TestAccountDefaultProgramREOnly(t *testing.T) {
 	}
 
 	// A non-nil 0 CLEARS the default program (back to NULL) on the revenue acct.
-	clear := int64(0)
+	clear := ids.ProgramID(0)
 	if err := s.UpdateAccount(mutCtx(), rev, UpdateAccountInput{DefaultProgramID: &clear}); err != nil {
 		t.Fatalf("UpdateAccount clear default program: %v", err)
 	}

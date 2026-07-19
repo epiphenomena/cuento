@@ -91,7 +91,7 @@ type SplitInput struct {
 	AccountID       int64
 	Amount          int64
 	FundID          *ids.FundID
-	ProgramID       *int64
+	ProgramID       *ids.ProgramID
 	FunctionalClass *string
 	Memo            string
 	Description     string // per-split free-text (p26.15; payee->description migration, INERT this step)
@@ -730,12 +730,12 @@ func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID int64, 
 	// Program defaulting (always resolves for R/E; must be NULL for A/L/E).
 	var programID sql.NullInt64
 	if isRE {
-		var pid int64
+		var pid ids.ProgramID
 		switch {
 		case in.ProgramID != nil:
 			pid = *in.ProgramID
 		case acct.DefaultProgramID.Valid:
-			pid = acct.DefaultProgramID.Int64
+			pid = ids.ProgramID(acct.DefaultProgramID.Int64)
 		default:
 			pid = root.ID
 		}
@@ -752,12 +752,12 @@ func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID int64, 
 		// Fund-program scope (R/E only): if the fund has a program scope, the
 		// resolved program must be inside that subtree (D20).
 		if fund != nil && fund.ProgramID.Valid {
-			ids, err := q.ProgramSubtreeIDs(ctx, fund.ProgramID.Int64)
+			subtree, err := q.ProgramSubtreeIDs(ctx, ids.ProgramID(fund.ProgramID.Int64))
 			if err != nil {
 				return resolvedSplit{}, fmt.Errorf("fund program subtree %d: %w", fund.ProgramID.Int64, err)
 			}
 			inScope := false
-			for _, sid := range ids {
+			for _, sid := range subtree {
 				if sid == pid {
 					inScope = true
 					break
@@ -767,7 +767,7 @@ func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID int64, 
 				return resolvedSplit{}, ErrFundProgramScope
 			}
 		}
-		programID = sql.NullInt64{Int64: pid, Valid: true}
+		programID = sql.NullInt64{Int64: int64(pid), Valid: true}
 	} else if in.ProgramID != nil {
 		return resolvedSplit{}, ErrProgramOnBalanceSheet
 	}

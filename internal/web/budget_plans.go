@@ -392,7 +392,7 @@ func (s *server) budgetSplitOptions(ctx context.Context, sub int64, include ...i
 		if p.Active == 0 {
 			continue
 		}
-		programs = append(programs, txnOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
+		programs = append(programs, txnOption{ID: int64(p.ID), Name: p.Name, Path: progPaths[p.ID]})
 	}
 	return accounts, funds, programs, nil
 }
@@ -497,7 +497,7 @@ func (s *server) budgetSplitsSave(w http.ResponseWriter, r *http.Request) {
 			in.FundID = &f
 		}
 		if prog > 0 {
-			p := prog
+			p := ids.ProgramID(prog)
 			in.ProgramID = &p
 		}
 		desired = append(desired, in)
@@ -628,9 +628,9 @@ func (s *server) budgetPlanImport(w http.ResponseWriter, r *http.Request) {
 	for _, f := range funds {
 		fundByName[strings.ToLower(f.Name)] = ids.FundID(f.ID)
 	}
-	progByName := make(map[string]int64, len(progs))
+	progByName := make(map[string]ids.ProgramID, len(progs))
 	for _, p := range progs {
-		progByName[strings.ToLower(p.Name)] = p.ID
+		progByName[strings.ToLower(p.Name)] = ids.ProgramID(p.ID)
 	}
 
 	cr := csv.NewReader(file)

@@ -155,7 +155,7 @@ func (s *server) programNameMap(ctx context.Context) (map[int64]string, error) {
 	}
 	m := make(map[int64]string, len(progs))
 	for _, p := range progs {
-		m[p.ID] = p.Name
+		m[int64(p.ID)] = p.Name
 	}
 	return m, nil
 }
@@ -377,7 +377,7 @@ func (s *server) buildFundForm(ctx context.Context, id ids.FundID) (fundForm, er
 		return form, err
 	}
 	for _, p := range progs {
-		form.Programs = append(form.Programs, programOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
+		form.Programs = append(form.Programs, programOption{ID: int64(p.ID), Name: p.Name, Path: progPaths[p.ID]})
 	}
 	return form, nil
 }
@@ -456,7 +456,8 @@ func (s *server) fundCreate(w http.ResponseWriter, r *http.Request) {
 		Subsidiaries: in.subs,
 	}
 	if in.programID > 0 {
-		create.ProgramID = &in.programID
+		pid := ids.ProgramID(in.programID)
+		create.ProgramID = &pid
 	}
 	if _, err := s.store.CreateFund(s.actorCtx(ctx), create); err != nil {
 		s.renderFundFormError(w, r, form, err)
@@ -490,7 +491,7 @@ func (s *server) fundUpdate(w http.ResponseWriter, r *http.Request) {
 		Subsidiaries: nonNilSubs(in.subs),
 	}
 	// program_id: a positive value sets the scope; 0/absent CLEARS it (non-nil 0).
-	prog := in.programID
+	prog := ids.ProgramID(in.programID)
 	upd.ProgramID = &prog
 	if err := s.store.UpdateFund(s.actorCtx(ctx), id, upd); err != nil {
 		s.renderFundFormError(w, r, form, err)

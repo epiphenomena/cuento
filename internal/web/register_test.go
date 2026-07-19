@@ -104,14 +104,14 @@ func newRegEnv(t *testing.T) *regEnv {
 
 // prog returns the program id required for a revenue/expense split (the seeded
 // root "General", id 1).
-const generalProgram int64 = 1
+const generalProgram ids.ProgramID = 1
 
 // post2 posts a simple balanced 2-split txn (debit `debit`, credit `credit`) in
 // USD on subA, with an optional fund on both splits and program on R/E splits. desc
 // (when non-empty) is set as the debit split's per-line description.
 func (e *regEnv) post2(t *testing.T, ctx context.Context, date string, amount int64, debit, credit int64, fund *ids.FundID, desc string) int64 {
 	t.Helper()
-	prog := func(acct int64) *int64 {
+	prog := func(acct int64) *ids.ProgramID {
 		if acct == e.expense || acct == e.otherExp || acct == e.revenue {
 			p := generalProgram
 			return &p
@@ -380,8 +380,8 @@ func TestRegisterDescriptionColumn(t *testing.T) {
 	}
 }
 
-func ptrI(v int64) *int64   { return &v }
-func ptrS(v string) *string { return &v }
+func ptrI(v ids.ProgramID) *ids.ProgramID { return &v }
+func ptrS(v string) *string               { return &v }
 
 // -- gating: counter-account, fund chip, sub badge, recon column -----------
 

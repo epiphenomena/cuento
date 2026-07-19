@@ -127,7 +127,7 @@ func (s *server) reportDrill(w http.ResponseWriter, r *http.Request) {
 	// a parent program's figure folds in its descendant programs, so its drill unions
 	// the per-program split sets (account SET × program SET). With no program set the
 	// single ProgramID applies (the established shape). Mutually exclusive with ProgramID.
-	progFilters := []*int64{d.ProgramID}
+	progFilters := []*ids.ProgramID{d.ProgramID}
 	if len(d.ProgramIDs) > 0 {
 		progFilters = progFilters[:0]
 		for i := range d.ProgramIDs {
@@ -218,12 +218,12 @@ func (s *server) reportDrill(w http.ResponseWriter, r *http.Request) {
 // survives only if it is in the granted subtree. An empty result means NO program is in
 // scope for this drill, so the caller lists nothing (a sibling-subtree drill request
 // yields an empty page, never sibling splits).
-func clampProgramFilters(requested []*int64, scope []int64) []*int64 {
-	inScope := make(map[int64]bool, len(scope))
+func clampProgramFilters(requested []*ids.ProgramID, scope []ids.ProgramID) []*ids.ProgramID {
+	inScope := make(map[ids.ProgramID]bool, len(scope))
 	for _, id := range scope {
 		inScope[id] = true
 	}
-	out := make([]*int64, 0, len(requested))
+	out := make([]*ids.ProgramID, 0, len(requested))
 	for _, p := range requested {
 		if p != nil && inScope[*p] {
 			out = append(out, p)

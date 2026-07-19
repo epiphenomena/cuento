@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -775,7 +776,7 @@ func (s *server) buildAccountForm(ctx context.Context, id int64, typ string) (ac
 			return form, err
 		}
 		for _, p := range progs {
-			form.Programs = append(form.Programs, programOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
+			form.Programs = append(form.Programs, programOption{ID: int64(p.ID), Name: p.Name, Path: progPaths[p.ID]})
 		}
 	}
 
@@ -836,7 +837,8 @@ func (s *server) accountCreate(w http.ResponseWriter, r *http.Request) {
 		create.FunctionalClass = &in.functionalClass
 	}
 	if (in.typ == "revenue" || in.typ == "expense") && in.defaultProgram > 0 {
-		create.DefaultProgramID = &in.defaultProgram
+		dp := ids.ProgramID(in.defaultProgram)
+		create.DefaultProgramID = &dp
 	}
 	if in.form990Code != "" {
 		create.Form990Code = &in.form990Code
@@ -893,7 +895,7 @@ func (s *server) accountUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if in.typ == "revenue" || in.typ == "expense" {
-		dp := in.defaultProgram // 0 clears (per UpdateAccountInput semantics)
+		dp := ids.ProgramID(in.defaultProgram) // 0 clears (per UpdateAccountInput semantics)
 		upd.DefaultProgramID = &dp
 	}
 	// 990 code: "" clears, a value sets (validated against type).

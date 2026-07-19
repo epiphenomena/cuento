@@ -214,7 +214,7 @@ type FunctionalCell struct {
 
 // ProgramCell is one expected (program, account, currency) activity cell.
 type ProgramCell struct {
-	Program  int64
+	Program  ids.ProgramID
 	Account  int64
 	Currency string
 	Amount   int64

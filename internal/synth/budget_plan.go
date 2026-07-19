@@ -51,7 +51,7 @@ func ExtendSampleBudgetPlan(ctx context.Context, s *store.Store, ids *IDs) error
 		date    string
 		account int64
 		fund    *entids.FundID
-		program *int64 // nil => rely on account default (R/E) or none (A/L)
+		program *entids.ProgramID // nil => rely on account default (R/E) or none (A/L)
 		amount  int64
 	}{
 		// Revenue, General program, unrestricted -- monthly-ish inflows, varied dates.

@@ -37,7 +37,7 @@ func seedSubmittedReport(t *testing.T, st *store.Store, amount int64) reviewRepo
 	// An expense leaf account with a default program + functional class, so the prefilled
 	// R/E row satisfies Z15/Z16 without the reviewer filling hidden gating fields.
 	fc := "program"
-	rootProg := int64(1)
+	rootProg := ids.ProgramID(1)
 	expense, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "expense", DefaultCurrency: "USD",
 		Names: map[string]string{"en": "Travel", "es": "Viajes"}, Subsidiaries: []int64{1},

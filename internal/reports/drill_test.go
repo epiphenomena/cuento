@@ -19,7 +19,7 @@ import (
 // fund/program/class filters) survives Encode -> parse -> DecodeDrill unchanged.
 func TestDrillRoundTrip(t *testing.T) {
 	fund := reports.FundID(7)
-	prog := int64(9)
+	prog := reports.ProgramID(9)
 	class := "program"
 
 	cases := []struct {
@@ -78,7 +78,7 @@ func TestDrillRoundTrip(t *testing.T) {
 				Scope:      1,
 				AccountIDs: []int64{5, 6},
 				Currency:   "USD",
-				ProgramIDs: []int64{1, 2, 3},
+				ProgramIDs: []reports.ProgramID{1, 2, 3},
 				Mode:       reports.DrillPeriod,
 				From:       "2025-01-01",
 				To:         "2026-06-30",

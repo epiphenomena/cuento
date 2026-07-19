@@ -27,7 +27,7 @@ func mutCtx() context.Context {
 // program.
 var (
 	rootSub  = int64(1)
-	rootProg = int64(1)
+	rootProg = ids.ProgramID(1)
 )
 
 // world is a small VALID chart + transactions the tests share. It is built ONLY
@@ -38,7 +38,7 @@ type world struct {
 	s *store.Store
 
 	subUS, subMX int64
-	prog         int64
+	prog         ids.ProgramID
 	fund         ids.FundID
 
 	checkingUS int64 // asset, US
@@ -139,7 +139,7 @@ func mkSub(t *testing.T, s *store.Store, name string) int64 {
 	return id
 }
 
-func mkProg(t *testing.T, s *store.Store, name string) int64 {
+func mkProg(t *testing.T, s *store.Store, name string) ids.ProgramID {
 	t.Helper()
 	id, err := s.CreateProgram(mutCtx(), store.CreateProgramInput{ParentID: rootProg, Name: name})
 	if err != nil {
@@ -149,7 +149,7 @@ func mkProg(t *testing.T, s *store.Store, name string) int64 {
 }
 
 // mkFundScoped creates a fund optionally scoped to a program subtree (progScope).
-func mkFundScoped(t *testing.T, s *store.Store, name string, subs []int64, progScope *int64) ids.FundID {
+func mkFundScoped(t *testing.T, s *store.Store, name string, subs []int64, progScope *ids.ProgramID) ids.FundID {
 	t.Helper()
 	id, err := s.CreateFund(mutCtx(), store.CreateFundInput{
 		Name: name, Restriction: "purpose", Subsidiaries: subs, ProgramID: progScope,
@@ -166,7 +166,7 @@ type acct struct {
 	subs         []int64
 	parent       *int64
 	fclass       *string
-	defProg      *int64
+	defProg      *ids.ProgramID
 	code990      *string
 	intercompany bool
 }

@@ -353,7 +353,7 @@ func firstSubsidiaryWithREPair(ctx context.Context, st *store.Store) (int64, lea
 
 // firstProgram returns the id of the first active program, erroring if none exists
 // (a budget line requires a program, Z15).
-func firstProgram(ctx context.Context, st *store.Store) (int64, error) {
+func firstProgram(ctx context.Context, st *store.Store) (ids.ProgramID, error) {
 	tree, err := st.ProgramTree(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("program tree: %w", err)

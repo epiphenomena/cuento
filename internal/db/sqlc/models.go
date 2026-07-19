@@ -295,7 +295,7 @@ type OrgSetting struct {
 }
 
 type Program struct {
-	ID        int64
+	ID        ids.ProgramID
 	ParentID  sql.NullInt64
 	Name      string
 	Active    int64
@@ -304,7 +304,7 @@ type Program struct {
 
 type ProgramsVersion struct {
 	ID        int64
-	EntityID  int64
+	EntityID  ids.ProgramID
 	ChangeID  int64
 	ValidFrom string
 	Op        string

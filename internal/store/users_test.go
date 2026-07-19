@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/testutil"
 )
 
@@ -175,7 +176,7 @@ func TestUpdateUserSettingsVersioned(t *testing.T) {
 	// Root subsidiary is seeded id 1; use it as a valid default. The seeded root
 	// program (id 1) is a valid default program.
 	rootSub := int64(1)
-	rootProg := int64(1)
+	rootProg := ids.ProgramID(1)
 	in := UserSettingsInput{
 		Locale: "es", DateFormat: "EU", NumberFormat: "EU",
 		DisplayMode: "dr_cr", NegStyle: "parens", Theme: "dark",
@@ -260,6 +261,7 @@ func TestUpdateUserSettingsRejectsInvalid(t *testing.T) {
 		DisplayMode: "signed", NegStyle: "minus", Theme: "auto",
 	}
 	bad := int64(999999)
+	badProg := ids.ProgramID(999999)
 	cases := map[string]func(UserSettingsInput) UserSettingsInput{
 		"locale":        func(i UserSettingsInput) UserSettingsInput { i.Locale = "de"; return i },
 		"date_format":   func(i UserSettingsInput) UserSettingsInput { i.DateFormat = "XX"; return i },
@@ -268,7 +270,7 @@ func TestUpdateUserSettingsRejectsInvalid(t *testing.T) {
 		"neg_style":     func(i UserSettingsInput) UserSettingsInput { i.NegStyle = "XX"; return i },
 		"theme":         func(i UserSettingsInput) UserSettingsInput { i.Theme = "XX"; return i },
 		"default_sub":   func(i UserSettingsInput) UserSettingsInput { i.DefaultSubsidiaryID = &bad; return i },
-		"default_prog":  func(i UserSettingsInput) UserSettingsInput { i.DefaultProgramID = &bad; return i },
+		"default_prog":  func(i UserSettingsInput) UserSettingsInput { i.DefaultProgramID = &badProg; return i },
 	}
 	for name, mut := range cases {
 		if err := s.UpdateUserSettings(ctx, id, mut(base), okLocale); !errors.Is(err, ErrInvalidSetting) {

@@ -42,7 +42,7 @@ func stageReviewBatch(t *testing.T, st *store.Store, description, memo string) r
 		t.Fatalf("CreateAccount checking: %v", err)
 	}
 	fc := "program"
-	rootProg := int64(1)
+	rootProg := ids.ProgramID(1)
 	expense, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "expense", DefaultCurrency: "USD",
 		Names: map[string]string{"en": "Supplies", "es": "Suministros"}, Subsidiaries: []int64{1},

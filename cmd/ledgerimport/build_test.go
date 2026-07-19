@@ -390,7 +390,7 @@ func TestProgramTreeFromKlass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProgram: %v", err)
 	}
-	if !prog.ParentID.Valid || prog.ParentID.Int64 != edu {
+	if !prog.ParentID.Valid || prog.ParentID.Int64 != int64(edu) {
 		t.Errorf("Summer Camp parent = %v, want Education (%d)", prog.ParentID, edu)
 	}
 
@@ -613,7 +613,7 @@ func TestMappingAppliesSubFundProgramFunction(t *testing.T) {
 	if fund.Name != "Grant One" || fund.Restriction != "purpose" {
 		t.Errorf("fund wrong: %+v", fund)
 	}
-	if !fund.ProgramID.Valid || fund.ProgramID.Int64 != res.ProgramIDs["Education"] {
+	if !fund.ProgramID.Valid || fund.ProgramID.Int64 != int64(res.ProgramIDs["Education"]) {
 		t.Errorf("fund program scope not applied: %+v", fund.ProgramID)
 	}
 
@@ -1476,7 +1476,7 @@ func mustSub(t *testing.T, st *store.Store, id int64) sqlc.Subsidiary {
 	return s
 }
 
-func assertSplitFundProgram(t *testing.T, sqldb *sql.DB, res *BuildResult, srcAcct string, wantFund ids.FundID, wantProg int64) {
+func assertSplitFundProgram(t *testing.T, sqldb *sql.DB, res *BuildResult, srcAcct string, wantFund ids.FundID, wantProg ids.ProgramID) {
 	t.Helper()
 	acctID := res.AccountIDs[srcAcct]
 	rows, err := sqldb.Query(`SELECT fund_id, program_id FROM splits WHERE account_id = ?`, acctID)
@@ -1494,7 +1494,7 @@ func assertSplitFundProgram(t *testing.T, sqldb *sql.DB, res *BuildResult, srcAc
 		if asInt(f) != int64(wantFund) {
 			t.Errorf("split on %s fund_id = %v, want %d", srcAcct, f, wantFund)
 		}
-		if asInt(p) != wantProg {
+		if asInt(p) != int64(wantProg) {
 			t.Errorf("split on %s program_id = %v, want %d", srcAcct, p, wantProg)
 		}
 	}
@@ -1742,7 +1742,7 @@ func TestCorrectionPostsBalancedAdjustment(t *testing.T) {
 	}
 	if l, ok := byAcct[res.AccountIDs["Grant Revenue"]]; !ok || l.amount != -400000 {
 		t.Errorf("Grant Revenue leg = %+v, want amount -400000", l)
-	} else if !l.prog.Valid || l.prog.Int64 != res.ProgramIDs["Education"] {
+	} else if !l.prog.Valid || l.prog.Int64 != int64(res.ProgramIDs["Education"]) {
 		t.Errorf("Grant Revenue leg program = %v, want Education %d", l.prog, res.ProgramIDs["Education"])
 	}
 

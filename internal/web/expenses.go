@@ -495,7 +495,7 @@ func (s *server) expenseLineOptions(ctx context.Context, sub int64, include ...i
 		if p.Active == 0 {
 			continue
 		}
-		programs = append(programs, txnOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
+		programs = append(programs, txnOption{ID: int64(p.ID), Name: p.Name, Path: progPaths[p.ID]})
 	}
 	return accounts, funds, programs, nil
 }
@@ -613,7 +613,7 @@ func (s *server) expenseLinesSave(w http.ResponseWriter, r *http.Request) {
 			d.FundID = &f
 		}
 		if prog > 0 {
-			p := prog
+			p := ids.ProgramID(prog)
 			d.ProgramID = &p
 		}
 		desired = append(desired, d)

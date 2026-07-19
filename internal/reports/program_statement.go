@@ -94,7 +94,7 @@ func registerProgramStatement(reg *Registry) {
 type progCol struct {
 	id          ProgramID
 	name        string
-	descendants []int64 // self + all descendants (for the rollup-cell drill)
+	descendants []ProgramID // self + all descendants (for the rollup-cell drill)
 }
 
 // runProgramStatement computes the program statement Table (p15.10, p29.15). It reads the
@@ -174,12 +174,12 @@ func programColumns(ctx context.Context, tk *Toolkit, p Params) ([]progCol, erro
 		return nil, err
 	}
 	// Descendants (self + subtree) per program, for the rollup-cell drill.
-	descOf := func(id int64) ([]int64, error) {
+	descOf := func(id ProgramID) ([]ProgramID, error) {
 		rows, err := tk.Store().ProgramDescendants(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		ids := make([]int64, 0, len(rows))
+		ids := make([]ProgramID, 0, len(rows))
 		for _, r := range rows {
 			ids = append(ids, r.ID)
 		}
@@ -191,12 +191,12 @@ func programColumns(ctx context.Context, tk *Toolkit, p Params) ([]progCol, erro
 		// Single-program subtree: one column, the chosen program rolled up.
 		var name string
 		for _, n := range tree {
-			if n.ID == int64(p.Program) {
+			if n.ID == p.Program {
 				name = n.Name
 				break
 			}
 		}
-		desc, err := descOf(int64(p.Program))
+		desc, err := descOf(p.Program)
 		if err != nil {
 			return nil, err
 		}
@@ -210,7 +210,7 @@ func programColumns(ctx context.Context, tk *Toolkit, p Params) ([]progCol, erro
 		if err != nil {
 			return nil, err
 		}
-		cols = append(cols, progCol{id: ProgramID(n.ID), name: n.Name, descendants: desc})
+		cols = append(cols, progCol{id: n.ID, name: n.Name, descendants: desc})
 	}
 	return cols, nil
 }
@@ -411,7 +411,7 @@ func (b *psBuilder) cellDrill(acct AccountID, ccy string, c progCol, raw int64) 
 	if len(c.descendants) > 1 {
 		d.ProgramIDs = c.descendants // rollup: union the subtree's per-program splits
 	} else {
-		id := int64(c.id)
+		id := c.id
 		d.ProgramID = &id // leaf: single program
 	}
 	return d

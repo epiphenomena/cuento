@@ -368,7 +368,7 @@ type CurrentUser struct {
 	// DefaultProgramID is the user's preferred program for new revenue/expense splits
 	// (p26.5); nil = unset. It is the program-prefill fallback tier BELOW the account's
 	// own default_program (account default wins) and ABOVE the root program.
-	DefaultProgramID *int64
+	DefaultProgramID *ids.ProgramID
 	// CanSubmitExpenses is the standalone expense-submit capability (p20.1),
 	// INDEPENDENT of txn_perm: a pure submitter has txn_perm='none' yet may submit
 	// expense reports. decide() (web) reads this to gate the ExpenseSubmit perm.
@@ -419,10 +419,7 @@ func (s *Store) UserByID(ctx context.Context, id ids.UserID) (CurrentUser, error
 		v := row.DefaultSubsidiaryID.Int64
 		cu.DefaultSubsidiaryID = &v
 	}
-	if row.DefaultProgramID.Valid {
-		v := row.DefaultProgramID.Int64
-		cu.DefaultProgramID = &v
-	}
+	cu.DefaultProgramID = ids.Ptr[ids.ProgramID](row.DefaultProgramID)
 	cu.CanSubmitExpenses = row.CanSubmitExpenses != 0
 	return cu, nil
 }
@@ -478,7 +475,7 @@ type UserSettingsInput struct {
 	DefaultSubsidiaryID *int64
 	// DefaultProgramID is nil to CLEAR the preference; a non-nil id must reference an
 	// existing program (p26.5). Validated exactly like DefaultSubsidiaryID.
-	DefaultProgramID *int64
+	DefaultProgramID *ids.ProgramID
 }
 
 // UpdateUserSettings persists a user's personal preferences on the live row and
@@ -529,7 +526,7 @@ func (s *Store) UpdateUserSettings(ctx context.Context, userID ids.UserID, in Us
 				NegStyle:            in.NegStyle,
 				Theme:               in.Theme,
 				DefaultSubsidiaryID: nullInt64Ptr(in.DefaultSubsidiaryID),
-				DefaultProgramID:    nullInt64Ptr(in.DefaultProgramID),
+				DefaultProgramID:    ids.Null(in.DefaultProgramID),
 				ID:                  userID,
 			}); err != nil {
 				return fmt.Errorf("update settings: %w", err)

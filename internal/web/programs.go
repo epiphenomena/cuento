@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -33,7 +34,7 @@ import (
 // testable directly against the p08.4 ProgramActivity query without scraping HTML
 // or depending on time.Now. Numbers come STRAIGHT from ProgramActivity; this only
 // sums per currency and attaches each currency's exponent for rendering.
-func programActivityTotals(ctx context.Context, st *store.Store, from, to string, scopeSub int64) (map[int64][]balanceCell, error) {
+func programActivityTotals(ctx context.Context, st *store.Store, from, to string, scopeSub int64) (map[ids.ProgramID][]balanceCell, error) {
 	cells, err := st.ProgramActivity(ctx, from, to, scopeSub)
 	if err != nil {
 		return nil, err
@@ -44,14 +45,14 @@ func programActivityTotals(ctx context.Context, st *store.Store, from, to string
 	}
 	// Sum per (program, currency); the ProgramActivity rows are per (program,
 	// account, currency), so several rows can share a (program, currency) key.
-	sums := make(map[int64]map[string]int64)
+	sums := make(map[ids.ProgramID]map[string]int64)
 	for _, c := range cells {
 		if sums[c.ProgramID] == nil {
 			sums[c.ProgramID] = make(map[string]int64)
 		}
 		sums[c.ProgramID][c.Currency] += c.Amount
 	}
-	out := make(map[int64][]balanceCell, len(sums))
+	out := make(map[ids.ProgramID][]balanceCell, len(sums))
 	for pid, byCcy := range sums {
 		for ccy, minor := range byCcy {
 			out[pid] = append(out[pid], balanceCell{
@@ -136,7 +137,7 @@ func (s *server) buildProgramsPage(ctx context.Context, from, to string) (progra
 	}
 
 	opts := formatOptsFor(u)
-	depth := make(map[int64]int, len(rows))
+	depth := make(map[ids.ProgramID]int, len(rows))
 	model := programsPageModel{
 		From: money.FormatDate(parseISOForDisplay(from), dateFormatFor(u)),
 		To:   money.FormatDate(parseISOForDisplay(to), dateFormatFor(u)),
@@ -144,11 +145,11 @@ func (s *server) buildProgramsPage(ctx context.Context, from, to string) (progra
 	for _, row := range rows {
 		d := 0
 		if row.ParentID.Valid {
-			d = depth[row.ParentID.Int64] + 1
+			d = depth[ids.ProgramID(row.ParentID.Int64)] + 1
 		}
 		depth[row.ID] = d
 		pr := progRow{
-			ID:     row.ID,
+			ID:     int64(row.ID),
 			Name:   row.Name,
 			Active: row.Active != 0,
 			Depth:  d,
@@ -208,7 +209,7 @@ func (s *server) programNewForm(w http.ResponseWriter, r *http.Request) {
 // from the program's current state, for an inline htmx swap.
 func (s *server) programEditForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
+	id := ids.ProgramID(parseID(r.PathValue("id")))
 	prog, err := s.store.GetProgram(ctx, id)
 	if err != nil {
 		http.NotFound(w, r)
@@ -231,12 +232,12 @@ func (s *server) programEditForm(w http.ResponseWriter, r *http.Request) {
 // every program EXCEPT the subject and its descendants (so the select never OFFERS
 // a cycle) -- presentation only; the store still enforces cycles and root
 // immovability (like buildSubsidiaryForm).
-func (s *server) buildProgramForm(ctx context.Context, id int64) (programForm, error) {
-	form := programForm{ID: id}
+func (s *server) buildProgramForm(ctx context.Context, id ids.ProgramID) (programForm, error) {
+	form := programForm{ID: int64(id)}
 
 	// Exclude the subject + its descendants from the parent options on edit (self +
 	// transitive closure; ProgramDescendants includes self as its base case).
-	excluded := map[int64]bool{}
+	excluded := map[ids.ProgramID]bool{}
 	if id != 0 {
 		desc, err := s.store.ProgramDescendants(ctx, id)
 		if err != nil {
@@ -261,7 +262,7 @@ func (s *server) buildProgramForm(ctx context.Context, id int64) (programForm, e
 		if excluded[p.ID] {
 			continue
 		}
-		form.Parents = append(form.Parents, programOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
+		form.Parents = append(form.Parents, programOption{ID: int64(p.ID), Name: p.Name, Path: progPaths[p.ID]})
 	}
 	return form, nil
 }
@@ -280,7 +281,7 @@ func (s *server) programCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := s.store.CreateProgram(s.actorCtx(ctx), store.CreateProgramInput{
-		ParentID: in.parentID,
+		ParentID: ids.ProgramID(in.parentID),
 		Name:     in.name,
 	}); err != nil {
 		s.renderProgramFormError(w, r, form, err)
@@ -296,7 +297,7 @@ func (s *server) programCreate(w http.ResponseWriter, r *http.Request) {
 // re-rendered at 422.
 func (s *server) programUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
+	id := ids.ProgramID(parseID(r.PathValue("id")))
 	form, in, err := s.parseProgramForm(r, id)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -308,7 +309,8 @@ func (s *server) programUpdate(w http.ResponseWriter, r *http.Request) {
 	// Reparenting the ROOT is still attempted (the form for the root omits the
 	// select, but a raw submit reaches the store, which returns ErrProgramRootImmovable).
 	if in.parentID > 0 {
-		upd.ParentID = &in.parentID
+		pid := ids.ProgramID(in.parentID)
+		upd.ParentID = &pid
 	}
 	if err := s.store.UpdateProgram(s.actorCtx(ctx), id, upd); err != nil {
 		s.renderProgramFormError(w, r, form, err)
@@ -325,7 +327,7 @@ func (s *server) programUpdate(w http.ResponseWriter, r *http.Request) {
 // keeps history intact (op=update, not delete, D24). Success redirects to the list.
 func (s *server) programDeactivate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
+	id := ids.ProgramID(parseID(r.PathValue("id")))
 	if err := s.store.DeactivateProgram(s.actorCtx(ctx), id); err != nil {
 		if key := programPageErrorKey(err); key != "" {
 			from, to := s.programPeriod(r)
@@ -356,7 +358,7 @@ type parsedProgramForm struct {
 // is threaded into buildProgramForm so a 422 re-render of an EDIT excludes the
 // subject + descendants from the parent select -- exactly as the initial edit GET
 // does. It does NOT validate business rules (the store owns that).
-func (s *server) parseProgramForm(r *http.Request, id int64) (programForm, parsedProgramForm, error) {
+func (s *server) parseProgramForm(r *http.Request, id ids.ProgramID) (programForm, parsedProgramForm, error) {
 	if err := r.ParseForm(); err != nil {
 		return programForm{}, parsedProgramForm{}, err
 	}

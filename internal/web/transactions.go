@@ -866,7 +866,8 @@ func (s *server) parseSplitForms(r *http.Request, exp int, acctType map[int64]st
 			sp.FundID = &f
 		}
 		if prog != 0 {
-			sp.ProgramID = &prog
+			p := ids.ProgramID(prog)
+			sp.ProgramID = &p
 		}
 		if class != "" {
 			c := class
@@ -994,7 +995,7 @@ func autoBalanceMain(main mainHeaderInput, body []store.SplitInput) ([]store.Spl
 			sp.FundID = &k
 		}
 		if main.ProgramID != 0 {
-			p := main.ProgramID
+			p := ids.ProgramID(main.ProgramID)
 			sp.ProgramID = &p
 		}
 		if main.Class != "" {
@@ -1010,7 +1011,7 @@ func autoBalanceMain(main mainHeaderInput, body []store.SplitInput) ([]store.Spl
 	if len(mains) == 0 {
 		sp := store.SplitInput{AccountID: main.AccountID, Amount: 0, Memo: main.Memo, Description: main.Description}
 		if main.ProgramID != 0 {
-			p := main.ProgramID
+			p := ids.ProgramID(main.ProgramID)
 			sp.ProgramID = &p
 		}
 		if main.Class != "" {
@@ -1124,9 +1125,9 @@ func (s *server) newEditorModel(ctx context.Context, u *store.CurrentUser, sub i
 			continue
 		}
 		if !p.ParentID.Valid {
-			model.RootProgram = p.ID
+			model.RootProgram = int64(p.ID)
 		}
-		model.Programs = append(model.Programs, txnOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
+		model.Programs = append(model.Programs, txnOption{ID: int64(p.ID), Name: p.Name, Path: progPaths[p.ID]})
 	}
 
 	return model, nil
@@ -1143,7 +1144,7 @@ func toTxnAccountOptions(accts []store.AccountEditorOption) []txnAccountOption {
 			Unavailable: a.Unavailable,
 		}
 		if a.DefaultProgram != nil {
-			opt.DefaultProgram = *a.DefaultProgram
+			opt.DefaultProgram = int64(*a.DefaultProgram)
 		}
 		out = append(out, opt)
 	}
@@ -1213,10 +1214,11 @@ func (s *server) injectMainAccount(ctx context.Context, model *txnEditorModel) {
 // an anonymous request or an unset preference. Threaded to the client as data-user-program
 // so gateRow can use it as a program-prefill tier below the account's own default_program.
 func userDefaultProgram(u *store.CurrentUser) *int64 {
-	if u == nil {
+	if u == nil || u.DefaultProgramID == nil {
 		return nil
 	}
-	return u.DefaultProgramID
+	v := int64(*u.DefaultProgramID)
+	return &v
 }
 
 // sanitizeOrigin validates a `from`/origin value for the Cancel link (p26.33). To avoid
