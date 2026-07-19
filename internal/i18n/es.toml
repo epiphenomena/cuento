@@ -1933,6 +1933,13 @@ other = "Elegir fecha"
 other = "Mes anterior"
 [cal.next_month]
 other = "Mes siguiente"
+# p29.2 month/year navigator: the title button opens a month grid; ‹ año › steps.
+[cal.choose_month]
+other = "Elegir mes y año"
+[cal.prev_year]
+other = "Año anterior"
+[cal.next_year]
+other = "Año siguiente"
 
 # p26.77 "All" landing.
 [nav.all]

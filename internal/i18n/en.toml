@@ -1939,6 +1939,13 @@ other = "Pick a date"
 other = "Previous month"
 [cal.next_month]
 other = "Next month"
+# p29.2 month/year navigator: the title button opens a month grid; ‹ year › steps.
+[cal.choose_month]
+other = "Choose month and year"
+[cal.prev_year]
+other = "Previous year"
+[cal.next_year]
+other = "Next year"
 
 # p26.77 "All" landing: the top-nav item + the card grid of every destination
 # (sections + sub-items + granted reports), grouped into labeled sections. Card

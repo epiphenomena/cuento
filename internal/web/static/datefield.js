@@ -180,6 +180,9 @@ function calData() {
     pick: b.calPick || 'Pick a date',
     prev: b.calPrev || 'Previous month',
     next: b.calNext || 'Next month',
+    choose: b.calChoose || 'Choose month and year',
+    prevYear: b.calPrevYear || 'Previous year',
+    nextYear: b.calNextYear || 'Next year',
   };
 }
 
@@ -244,6 +247,7 @@ function enhance(input) {
   wrap.appendChild(pop);
 
   let view = null; // {y,m} of the displayed month
+  let mode = 'day'; // 'day' grid or 'month' (the p29.2 month+year navigator)
 
   function close() {
     pop.hidden = true;
@@ -252,6 +256,7 @@ function enhance(input) {
   function open() {
     const cur = parseDate(input.value, fmt, new Date()) || todayOf(new Date());
     view = { y: cur.y, m: cur.m };
+    mode = 'day';
     render(cur);
     pop.hidden = false;
     btn.setAttribute('aria-expanded', 'true');
@@ -259,17 +264,28 @@ function enhance(input) {
     if (sel) sel.focus();
   }
 
+  // render draws the popover for the current `mode`: the day grid, or the p29.2
+  // month+year navigator. `selected` is the currently-picked date (highlighted in the
+  // day view; its month is highlighted in the month view).
   function render(selected) {
+    if (mode === 'month') { renderMonthView(selected); return; }
+    renderDayView(selected);
+  }
+
+  function renderDayView(selected) {
     pop.textContent = '';
-    // Header: prev, "Month Year", next.
+    // Header: ‹ prev month, a "Month Year" BUTTON (opens the navigator), next month ›.
     const head = document.createElement('div');
     head.className = 'datefield-head';
     const prev = navButton('‹', labels.prev, () => { view = shiftMonth({ y: view.y, m: view.m, d: 1 }, -1); render(selected); focusGrid(); });
     const next = navButton('›', labels.next, () => { view = shiftMonth({ y: view.y, m: view.m, d: 1 }, 1); render(selected); focusGrid(); });
-    const title = document.createElement('span');
+    const title = document.createElement('button');
+    title.type = 'button';
     title.className = 'datefield-title';
+    title.setAttribute('aria-label', labels.choose);
     const monthName = labels.months[view.m - 1] || String(view.m);
     title.textContent = `${monthName} ${view.y}`;
+    title.addEventListener('click', () => { mode = 'month'; render(selected); focusMonthGrid(); });
     head.append(prev, title, next);
     pop.appendChild(head);
 
@@ -315,6 +331,51 @@ function enhance(input) {
     if (d) d.focus();
   }
 
+  // renderMonthView draws the p29.2 month+year navigator: a ‹ year › header plus a
+  // grid of the 12 localized month names. Picking a month returns to the day grid on
+  // that month/year (via shiftMonth to keep the day-clamp consistent).
+  function renderMonthView(selected) {
+    pop.textContent = '';
+    const head = document.createElement('div');
+    head.className = 'datefield-head';
+    const prev = navButton('‹', labels.prevYear, () => { view = shiftMonth({ y: view.y, m: view.m, d: 1 }, -12); render(selected); focusMonthGrid(); });
+    const next = navButton('›', labels.nextYear, () => { view = shiftMonth({ y: view.y, m: view.m, d: 1 }, 12); render(selected); focusMonthGrid(); });
+    const title = document.createElement('span');
+    title.className = 'datefield-title';
+    title.textContent = String(view.y);
+    head.append(prev, title, next);
+    pop.appendChild(head);
+
+    const grid = document.createElement('div');
+    grid.className = 'datefield-months';
+    for (let m = 1; m <= 12; m++) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'datefield-month';
+      b.textContent = labels.months[m - 1] || String(m);
+      b.dataset.month = String(m);
+      if (view.m === m) b.setAttribute('aria-current', 'true');
+      b.addEventListener('click', () => pickMonth(m, selected));
+      grid.appendChild(b);
+    }
+    pop.appendChild(grid);
+  }
+
+  // pickMonth moves `view` to month m of the displayed year, switches back to the day
+  // grid, and re-renders there (shiftMonth from the current view keeps the day-clamp).
+  function pickMonth(m, selected) {
+    view = shiftMonth({ y: view.y, m: view.m, d: 1 }, m - view.m);
+    view = { y: view.y, m: view.m };
+    mode = 'day';
+    render(selected);
+    focusGrid();
+  }
+
+  function focusMonthGrid() {
+    const cur = pop.querySelector('.datefield-month[aria-current="true"]') || pop.querySelector('.datefield-month');
+    if (cur) cur.focus();
+  }
+
   function navButton(glyph, label, onClick) {
     const b = document.createElement('button');
     b.type = 'button';
@@ -337,6 +398,19 @@ function enhance(input) {
     if (evt.key === 'Escape') {
       close();
       btn.focus();
+      return;
+    }
+    // Month navigator (p29.2): arrows walk the 12-month grid (3 cols), Enter picks.
+    const monthCell = evt.target.closest('.datefield-month');
+    if (monthCell) {
+      if (evt.key === 'Enter' || evt.key === ' ') return; // native button activation picks
+      const mDelta = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -3, ArrowDown: 3 }[evt.key];
+      if (mDelta === undefined) return;
+      evt.preventDefault();
+      const want = Number(monthCell.dataset.month) + mDelta;
+      if (want < 1 || want > 12) return; // stay within the year (the ‹ year › nav steps)
+      const cell = pop.querySelector(`.datefield-month[data-month="${want}"]`);
+      if (cell) cell.focus();
       return;
     }
     const day = evt.target.closest('.datefield-day');

@@ -60,3 +60,48 @@ test('datefield: prev/next month arrows walk both directions and keep the popove
   await expect(pop).toBeVisible();
   await expect(title).toHaveText('December 2025');
 });
+
+test('datefield: the month/year title opens a navigator to step the year and pick a month', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+  const { pop } = await openPicker(page); // March 2026
+  const title = pop.locator('.datefield-title');
+  await expect(title).toHaveText('March 2026');
+
+  // Click the title -> the month navigator opens (year label + 12 month buttons).
+  await title.click();
+  await expect(pop).toBeVisible();
+  await expect(pop.locator('.datefield-months')).toBeVisible();
+  await expect(pop.locator('.datefield-month')).toHaveCount(12);
+  await expect(pop.locator('.datefield-title')).toHaveText('2026');
+
+  // Step the year forward once via the ‹ year › nav (the header now steps YEARS).
+  await pop.locator('.datefield-nav').last().click();
+  await expect(pop.locator('.datefield-title')).toHaveText('2027');
+
+  // Pick September -> back to the day grid on September 2027.
+  await pop.locator('.datefield-month', { hasText: 'September' }).click();
+  await expect(pop.locator('.datefield-months')).toHaveCount(0);
+  await expect(pop.locator('.datefield-grid')).toBeVisible();
+  await expect(pop.locator('.datefield-title')).toHaveText('September 2027');
+  await expect(pop).toBeVisible();
+
+  // Keyboard access (like the day grid): arrows walk the month grid, Enter picks,
+  // Escape closes. Self-discriminating: if arrow nav were dead, Enter would pick
+  // January (the focused start), not May.
+  await title.click(); // reopen the navigator on Sept 2027
+  await pop.locator('.datefield-month[data-month="1"]').focus(); // January
+  await page.keyboard.press('ArrowRight'); // -> February (+1)
+  await page.keyboard.press('ArrowDown'); // -> May (+3, the grid is 3 columns)
+  await page.keyboard.press('Enter'); // native button activation picks May
+  await expect(pop.locator('.datefield-grid')).toBeVisible();
+  await expect(pop.locator('.datefield-title')).toHaveText('May 2027');
+
+  // Escape from the navigator closes the whole popover.
+  await title.click();
+  await expect(pop.locator('.datefield-months')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(pop).toBeHidden();
+});

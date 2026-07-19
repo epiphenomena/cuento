@@ -1368,7 +1368,40 @@ input[aria-invalid="true"] {
   justify-content: space-between;
   margin-bottom: var(--space-2);
 }
-.datefield-title { font-weight: 600; }
+/* The header title is a button (p29.2: opens the month+year navigator); style it as
+   plain bold text, not a control, but keep it focusable/hoverable. */
+.datefield-title {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius);
+  font: inherit;
+  font-weight: 600;
+}
+button.datefield-title:hover { background: var(--color-surface-alt); }
+/* p29.2 month navigator: a 3-column grid of the 12 localized month names. */
+.datefield-months {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+.datefield-month {
+  padding: var(--space-2) 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.datefield-month:hover { background: var(--color-surface-alt); }
+.datefield-month[aria-current="true"] {
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  font-weight: 600;
+}
 .datefield-nav {
   padding: 0 var(--space-2);
   border: var(--border);
