@@ -1,7 +1,8 @@
-// p26.2 combobox -- unit tests for the PURE fuzzy ranking (trap 2). No `document`.
+// p26.2 / p30.13 combobox -- unit tests for the PURE fuzzy ranking (trap 2). No `document`.
 // rankOptions(query, options) ranks dotted-path option labels; the DOM glue in
-// combobox.js drives it. Behavior under test: empty query preserves order; non-empty
-// is a subsequence match, best first, non-matches excluded; dotted-path aware.
+// combobox.js drives it. Behavior under test: empty query preserves order; a non-empty
+// query is TOKENIZED on segment/word separators and every fragment must be a CONTIGUOUS
+// (adjacency) substring of the label; non-matches excluded; best first; dotted-path aware.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -34,6 +35,10 @@ test('blank/whitespace query -> original order (treated as empty)', () => {
   assert.deepEqual(labels(rankOptions('   ', ACCOUNTS)), labels(ACCOUNTS));
 });
 
+test('separator-only query -> original order (no fragments)', () => {
+  assert.deepEqual(labels(rankOptions('...', ACCOUNTS)), labels(ACCOUNTS));
+});
+
 test('empty query returns a NEW array, does not mutate input', () => {
   const before = labels(ACCOUNTS);
   const r = rankOptions('', ACCOUNTS);
@@ -41,13 +46,44 @@ test('empty query returns a NEW array, does not mutate input', () => {
   assert.deepEqual(labels(ACCOUNTS), before);
 });
 
+// ---- p30.13 owner acceptance set, all against a "Food Purchases" label ----
+
+const FOOD = [{ label: 'Food Purchases', value: '1' }];
+
+test('p30.13 acceptance: foo MATCHES Food Purchases (contiguous substring of "Food")', () => {
+  assert.deepEqual(labels(rankOptions('foo', FOOD)), ['Food Purchases']);
+});
+
+test('p30.13 acceptance: pur MATCHES Food Purchases (contiguous substring of "Purchases")', () => {
+  assert.deepEqual(labels(rankOptions('pur', FOOD)), ['Food Purchases']);
+});
+
+test('p30.13 acceptance: "f p" MATCHES (two fragments, each contiguous)', () => {
+  assert.deepEqual(labels(rankOptions('f p', FOOD)), ['Food Purchases']);
+});
+
+test('p30.13 acceptance: "food purchases" MATCHES', () => {
+  assert.deepEqual(labels(rankOptions('food purchases', FOOD)), ['Food Purchases']);
+});
+
+test('p30.13 acceptance: fp does NOT match (no contiguous "fp" anywhere)', () => {
+  assert.deepEqual(rankOptions('fp', FOOD), []);
+});
+
+// ---- dotted-path / leaf regressions ----
+
 test('dotted query c.boa ranks Cash.BOA highest', () => {
   const r = rankOptions('c.boa', ACCOUNTS);
   assert.ok(r.length > 0);
   assert.equal(r[0].label, 'Cash.BOA');
-  // Cash.BOA.Payroll also matches c.boa as a subsequence, but the exact-leaf/prefix
+  // Cash.BOA.Payroll also matches (both "c" and "boa" are contiguous), but the exact-leaf
   // fit puts plain Cash.BOA first.
   assert.ok(labels(r).includes('Cash.BOA.Payroll'));
+});
+
+test('cash.boa (full segments) also matches Cash.BOA', () => {
+  const r = rankOptions('cash.boa', ACCOUNTS);
+  assert.equal(r[0].label, 'Cash.BOA');
 });
 
 test('leaf-only query boa matches the leaf segment of Cash.BOA', () => {
@@ -56,13 +92,22 @@ test('leaf-only query boa matches the leaf segment of Cash.BOA', () => {
   assert.ok(labels(r).includes('Cash.BOA.Payroll'));
 });
 
+test('leaf query boa ranks Cash.BOA above an account that only CONTAINS boa mid-word', () => {
+  const opts = [
+    { label: 'Global.Aboard Fund', value: '1' }, // "boa" mid-word in "Aboard"
+    { label: 'Cash.BOA', value: '2' }, // "boa" is the boundary+leaf segment
+  ];
+  const r = rankOptions('boa', opts);
+  assert.equal(r[0].label, 'Cash.BOA');
+});
+
 test('case-insensitive: BOA and boa rank identically', () => {
   assert.deepEqual(labels(rankOptions('BOA', ACCOUNTS)), labels(rankOptions('boa', ACCOUNTS)));
 });
 
 test('non-matches are EXCLUDED', () => {
   const r = rankOptions('boa', ACCOUNTS);
-  // Nothing without a b-o-a subsequence survives.
+  // Nothing without a contiguous "boa" survives.
   assert.ok(!labels(r).includes('Accounts Receivable'));
   assert.ok(!labels(r).includes('Expenses.Rent'));
 });
@@ -71,27 +116,28 @@ test('query matching nothing -> empty array', () => {
   assert.deepEqual(rankOptions('zzzq', ACCOUNTS), []);
 });
 
-test('prefix match beats scattered subsequence', () => {
+test('prefix match beats a non-prefix boundary match', () => {
   const opts = [
-    { label: 'Grants.Water.Restricted', value: '1' }, // has "rest" scattered
+    { label: 'Grants.Water.Restricted', value: '1' }, // "rest" boundary/leaf, not a prefix
     { label: 'Restricted Cash', value: '2' }, // "rest" is a true prefix
   ];
   const r = rankOptions('rest', opts);
   assert.equal(r[0].label, 'Restricted Cash');
 });
 
-test('contiguous run beats gappy subsequence for the same query', () => {
+test('adjacency: a gappy would-be subsequence no longer matches', () => {
   const opts = [
-    { label: 'Rabbit Ordinary Analysis', value: '1' }, // r..o..a gappy
-    { label: 'Road', value: '2' }, // roa contiguous
+    { label: 'Rabbit Ordinary Analysis', value: '1' }, // r..o..a gappy, NOT contiguous "roa"
+    { label: 'Road', value: '2' }, // "roa" contiguous
   ];
   const r = rankOptions('roa', opts);
-  assert.equal(r[0].label, 'Road');
+  // Only the contiguous match survives; the gappy one is excluded entirely.
+  assert.deepEqual(labels(r), ['Road']);
 });
 
 test('word-boundary match beats mid-word for a leaf query', () => {
   const opts = [
-    { label: 'Subscriptions', value: '1' }, // 'rent' not present; use 'rip'? keep simple
+    { label: 'Subscriptions', value: '1' }, // no "rent"
     { label: 'Expenses.Rent', value: '2' },
     { label: 'Parenting', value: '3' }, // contains "rent" mid-word
   ];

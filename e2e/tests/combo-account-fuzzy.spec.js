@@ -121,7 +121,7 @@ test.describe('non-grid account pickers are fuzzy + hierarchy comboboxes (p28.2)
     const srcList = srcCell.locator('.combo-list');
     await srcInput.click();
     await srcInput.fill('');
-    await srcInput.type('hipar.leaf'); // subsequence of "Hier Parent.Hier Leaf"
+    await srcInput.type('hier.leaf'); // adjacency fragments of "Hier Parent.Hier Leaf"
     const wanted = srcList.locator('.combo-option', { hasText: 'Hier Parent.Hier Leaf' });
     await expect(wanted).toBeVisible();
     await expect(srcList).toBeVisible();
@@ -137,7 +137,7 @@ test.describe('non-grid account pickers are fuzzy + hierarchy comboboxes (p28.2)
     const rpList = rpCell.locator('.combo-list');
     await rpInput.click();
     await rpInput.fill('');
-    await rpInput.type('hipar.leaf');
+    await rpInput.type('hier.leaf');
     await expect(rpList.locator('.combo-option', { hasText: 'Hier Parent.Hier Leaf' })).toBeVisible();
   });
 });
@@ -160,7 +160,7 @@ test.describe('Enter and Tab select-and-advance (p28.3)', () => {
     //     p26.44 bridge opens the overlay list highlighted), press Enter. It must commit the
     //     highlighted option AND move focus to the amount cell.
     await page.locator('#txn-account-0').focus();
-    await page.keyboard.type('advsav'); // subsequence of "Adv Savings"
+    await page.keyboard.type('adv sav'); // adjacency fragments of "Adv Savings"
     const acctList = page.locator('.txn-row[data-row="0"] .txn-account-cell .combo-list');
     await expect(acctList).toBeVisible();
     await expect(acctList.locator('.combo-option', { hasText: 'Adv Savings' })).toBeVisible();
@@ -175,7 +175,7 @@ test.describe('Enter and Tab select-and-advance (p28.3)', () => {
     //     focus off the account cell (native Tab -> amount).
     await expect(page.locator('#txn-account-1')).toBeVisible();
     await page.locator('#txn-account-1').focus();
-    await page.keyboard.type('advchk'); // subsequence of "Adv Checking"
+    await page.keyboard.type('adv check'); // adjacency fragments of "Adv Checking"
     const acctList1 = page.locator('.txn-row[data-row="1"] .txn-account-cell .combo-list');
     await expect(acctList1).toBeVisible();
     await expect(acctList1.locator('.combo-option', { hasText: 'Adv Checking' })).toBeVisible();
@@ -198,7 +198,7 @@ test.describe('Enter and Tab select-and-advance (p28.3)', () => {
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
     await page.locator('#txn-main-account').focus();
-    await page.keyboard.type('hdrchk'); // subsequence of "HdrAdv Checking"
+    await page.keyboard.type('hdr check'); // adjacency fragments of "HdrAdv Checking"
     const list = page.locator('#txn-main-header .combo-list');
     await expect(list).toBeVisible();
     await expect(list.locator('.combo-option', { hasText: 'HdrAdv Checking' })).toBeVisible();
@@ -223,7 +223,7 @@ test.describe('Enter and Tab select-and-advance (p28.3)', () => {
     await page.getByRole('button', { name: /merge accounts/i }).click();
     await expect(page.locator('#mg-src')).toBeVisible();
     await page.locator('#mg-src').focus();
-    await page.keyboard.type('mrgone'); // subsequence of "MrgAdv One"
+    await page.keyboard.type('mrg one'); // adjacency fragments of "MrgAdv One"
     const list = page.locator('#mg-src').locator('xpath=ancestor::div[contains(@class,"combo")][1]').locator('.combo-list');
     await expect(list).toBeVisible();
     await expect(list.locator('.combo-option', { hasText: 'MrgAdv One' })).toBeVisible();
@@ -315,22 +315,22 @@ test.describe('account combobox fuzzy matching (p26.44)', () => {
     const checkingVal = await page.locator('#txn-account-0 option', { hasText: 'Fuzz Checking' }).first().getAttribute('value');
     const fundVal = await page.locator('#txn-fund-0 option', { hasText: 'Fuzzfund Restricted' }).first().getAttribute('value');
 
-    // FUND (the control the task says works) -- a subsequence query 'fzrest'.
+    // FUND (the control the task says works) -- adjacency fragments 'fuzz rest'.
     await assertFuzzy(
       page,
       page.locator('.txn-row[data-row="0"] .txn-fund-cell .combo'),
       page.locator('#txn-fund-0'),
-      'fzrest',
+      'fuzz rest',
       'Fuzzfund Restricted',
       /** @type {string} */ (fundVal),
     );
 
-    // BODY ACCOUNT -- the SAME kind of subsequence query 'fzsav' (leaf fragment of Savings).
+    // BODY ACCOUNT -- the SAME kind of adjacency query 'fuzz sav' (leaf fragment of Savings).
     await assertFuzzy(
       page,
       page.locator('.txn-row[data-row="0"] .txn-account-cell .combo'),
       page.locator('#txn-account-0'),
-      'fzsav',
+      'fuzz sav',
       'Fuzz Savings',
       /** @type {string} */ (savingsVal),
     );
@@ -340,7 +340,7 @@ test.describe('account combobox fuzzy matching (p26.44)', () => {
       page,
       page.locator('#txn-main-header .combo'),
       page.locator('#txn-main-account'),
-      'fzchk',
+      'fuzz check',
       'Fuzz Checking',
       /** @type {string} */ (checkingVal),
     );
@@ -407,21 +407,21 @@ test.describe('account combobox fuzzy matching (p26.44)', () => {
 
     // ACCOUNT: focus the native select (the REAL tab stop), then type a fuzzy subsequence.
     await page.locator('#txn-account-0').focus();
-    await page.keyboard.type('kbsav'); // subsequence of "Kb Savings"
+    await page.keyboard.type('kb sav'); // adjacency fragments of "Kb Savings"
     const acctCell = page.locator('.txn-row[data-row="0"] .txn-account-cell');
     const acctList = acctCell.locator('.combo-list');
     await expect(acctList).toBeVisible();
     await expect(acctList.locator('.combo-option', { hasText: 'Kb Savings' })).toBeVisible();
     await expect(acctList.locator('.combo-option', { hasText: 'Kb Checking' })).toHaveCount(0);
     // The overlay carries the typed text (the native typeahead jump was suppressed).
-    await expect(acctCell.locator('.combo-text')).toHaveValue('kbsav');
+    await expect(acctCell.locator('.combo-text')).toHaveValue('kb sav');
     // Enter on the open list picks the top-ranked option into the native select.
     await page.keyboard.press('Enter');
     await expect(page.locator('#txn-account-0')).toHaveValue(/** @type {string} */ (savingsVal));
 
     // FUND: the same shared bridge -- focus the native fund select and type.
     await page.locator('#txn-fund-0').focus();
-    await page.keyboard.type('kbrest'); // subsequence of "Kbfund Restricted"
+    await page.keyboard.type('kb rest'); // adjacency fragments of "Kbfund Restricted"
     const fundCell = page.locator('.txn-row[data-row="0"] .txn-fund-cell');
     const fundList = fundCell.locator('.combo-list');
     await expect(fundList).toBeVisible();
