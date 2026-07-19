@@ -35,17 +35,25 @@ import (
 // guard keys on it, so a rerun is a no-op.
 const devseedBudgetName = "Sample Cash-Flow Plan"
 
-// devseedCmd implements `cuento devseed <thing> [-db PATH]`. Currently the only
-// thing is `budget`.
+// devseedExpenseMarker is the distinctive first-line description devseed stamps on its
+// sample expense report. The idempotency guard keys on it (a report whose first line
+// carries this marker already exists), so a rerun is a no-op -- expense reports have no
+// name field to key on, so a marker line is the stable handle.
+const devseedExpenseMarker = "Sample expense (cuento devseed)"
+
+// devseedCmd implements `cuento devseed <thing> [-db PATH]`. Targets are `budget` and
+// `expense-report`.
 func devseedCmd(args []string) error {
 	if len(args) == 0 {
 		devseedUsage()
-		return errors.New("devseed: a target is required (e.g. budget)")
+		return errors.New("devseed: a target is required (e.g. budget, expense-report)")
 	}
 	sub, rest := args[0], args[1:]
 	switch sub {
 	case "budget":
 		return devseedBudgetCmd(rest)
+	case "expense-report":
+		return devseedExpenseReportCmd(rest)
 	default:
 		devseedUsage()
 		return fmt.Errorf("devseed: unknown target %q", sub)
@@ -54,7 +62,8 @@ func devseedCmd(args []string) error {
 
 func devseedUsage() {
 	_, _ = fmt.Fprintf(stdout, "usage: cuento devseed <target> [-db PATH]\n\ntargets:\n"+
-		"  budget    seed a SYNTHETIC sample budget plan + splits (for the budget reports)\n")
+		"  budget          seed a SYNTHETIC sample budget plan + splits (for the budget reports)\n"+
+		"  expense-report  seed a SYNTHETIC submitted expense report (for the expense pages + review queue)\n")
 }
 
 // devseedBudgetCmd migrates the db, opens the store, and seeds the sample budget plan.
@@ -95,6 +104,135 @@ func devseedBudgetCmd(args []string) error {
 	}
 	_, _ = fmt.Fprintf(stdout, "devseed budget: created %q in %s\n", devseedBudgetName, *dbPath)
 	return nil
+}
+
+// devseedExpenseReportCmd migrates the db, opens the store, and seeds the sample
+// expense report. Mirrors devseedBudgetCmd: migrate FIRST so the command is
+// self-sufficient against a db built before the expense-report migrations landed.
+func devseedExpenseReportCmd(args []string) error {
+	fs := flag.NewFlagSet("devseed expense-report", flag.ContinueOnError)
+	dbPath := fs.String("db", defaultDBPath, "path to the SQLite database file")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	if err := db.Migrate(ctx, *dbPath); err != nil {
+		return fmt.Errorf("devseed expense-report: migrate: %w", err)
+	}
+
+	st, closeFn, err := openStore(*dbPath)
+	if err != nil {
+		return err
+	}
+	defer closeFn()
+
+	ctx = store.WithActor(ctx, systemActor)
+	created, err := seedSampleExpenseReport(ctx, st)
+	if err != nil {
+		return fmt.Errorf("devseed expense-report: %w", err)
+	}
+	if !created {
+		_, _ = fmt.Fprintf(stdout, "devseed expense-report: a sample report already exists in %s (no-op)\n", *dbPath)
+		return nil
+	}
+	_, _ = fmt.Fprintf(stdout, "devseed expense-report: created a submitted sample report in %s\n", *dbPath)
+	return nil
+}
+
+// seedSampleExpenseReport creates one synthetic SUBMITTED expense report (a report with
+// a couple of lines, then submitted so it lands in BOTH the submitter's list and the
+// reviewer queue) against whatever user / subsidiary / expense leaf / program the db
+// already has. It returns created=false (writing nothing) when a marker report already
+// exists. Every reference is resolved DYNAMICALLY -- no real names or values are
+// hardcoded (rule 11) -- and a db missing the minimum shape (a user, a subsidiary with
+// an expense leaf, a program) is a clear error rather than a partial seed. Built on the
+// store (write funnel + invariants, rule 2), so it stays aligned with schema changes.
+func seedSampleExpenseReport(ctx context.Context, st *store.Store) (bool, error) {
+	// Resolve the submitter (any user; the first one). A report needs a submitter.
+	submitterID, err := firstUser(ctx, st)
+	if err != nil {
+		return false, err
+	}
+
+	// Idempotency: skip if this submitter already has a report whose first line carries
+	// the marker (expense reports have no name to key on).
+	existing, err := st.ExpenseReportsBySubmitter(ctx, submitterID)
+	if err != nil {
+		return false, fmt.Errorf("list expense reports: %w", err)
+	}
+	for _, r := range existing {
+		lines, err := st.ExpenseReportLines(ctx, r.ID)
+		if err != nil {
+			return false, fmt.Errorf("expense report lines: %w", err)
+		}
+		for _, ln := range lines {
+			if ln.Description == devseedExpenseMarker {
+				return false, nil
+			}
+		}
+	}
+
+	// Resolve a subsidiary that has an expense leaf (the R/E pair helper guarantees the
+	// expense leaf is scoped to the returned subsidiary, matching the report) and a
+	// program (an expense line carries one).
+	subID, _, expAcct, err := firstSubsidiaryWithREPair(ctx, st)
+	if err != nil {
+		return false, err
+	}
+	progID, err := firstProgram(ctx, st)
+	if err != nil {
+		return false, err
+	}
+
+	reportID, err := st.CreateExpenseReport(ctx, submitterID, subID)
+	if err != nil {
+		return false, fmt.Errorf("create expense report: %w", err)
+	}
+
+	// Two SYNTHETIC round-figure lines on the expense leaf (the marker rides the first).
+	lines := []struct {
+		amount int64
+		desc   string
+	}{
+		{125_00, devseedExpenseMarker},
+		{48_50, "Sample travel (cuento devseed)"},
+	}
+	for _, l := range lines {
+		if _, err := st.AddExpenseReportLine(ctx, reportID, store.ExpenseReportLineInput{
+			AccountID:   expAcct.id,
+			Amount:      l.amount,
+			ProgramID:   &progID,
+			Description: l.desc,
+		}); err != nil {
+			return false, fmt.Errorf("add expense report line: %w", err)
+		}
+	}
+
+	if err := st.SubmitExpenseReport(ctx, reportID); err != nil {
+		return false, fmt.Errorf("submit expense report: %w", err)
+	}
+	return true, nil
+}
+
+// firstUser returns the id of the first non-disabled user in the db, erroring if none
+// exists (an expense report needs a submitter).
+func firstUser(ctx context.Context, st *store.Store) (int64, error) {
+	users, err := st.ListUsers(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list users: %w", err)
+	}
+	for _, u := range users {
+		if !u.Disabled {
+			return u.ID, nil
+		}
+	}
+	return 0, errors.New("no active user in db (an expense report needs a submitter)")
 }
 
 // seedSampleBudgetPlan creates a synthetic sample budget PLAN (the p27.2 split-derived

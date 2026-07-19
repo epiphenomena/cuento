@@ -86,3 +86,84 @@ func TestSeedSampleBudgetPlan(t *testing.T) {
 		t.Errorf("found %d sample plans after rerun, want 1", n)
 	}
 }
+
+// TestSeedSampleExpenseReport proves the devseed expense-report builder resolves the
+// submitter / subsidiary / expense leaf / program dynamically from an existing db,
+// creates a SUBMITTED report + lines through the store write funnel (versioned), keeps
+// the ledger clean, and is idempotent on a second run.
+func TestSeedSampleExpenseReport(t *testing.T) {
+	f := fixture.New(t)
+	ctx := store.WithActor(context.Background(), systemActor)
+
+	// The canonical fixture seeds no users; an expense report needs a submitter.
+	if _, err := f.Store.CreateUser(ctx, store.CreateUserInput{
+		Username: "seed-submitter", DisplayName: "Seed Submitter", TxnPerm: "none",
+	}); err != nil {
+		t.Fatalf("create submitter: %v", err)
+	}
+
+	created, err := seedSampleExpenseReport(ctx, f.Store)
+	if err != nil {
+		t.Fatalf("seedSampleExpenseReport: %v", err)
+	}
+	if !created {
+		t.Fatalf("first seed reported not-created")
+	}
+
+	// Exactly one submitted report, carrying the marker line, all versioned (rule 5).
+	submitted, err := f.Store.ExpenseReportsByStatus(ctx, "submitted")
+	if err != nil {
+		t.Fatalf("list submitted reports: %v", err)
+	}
+	if len(submitted) != 1 {
+		t.Fatalf("found %d submitted reports, want 1", len(submitted))
+	}
+	reportID := submitted[0].ID
+	// The report went through the write funnel: created, then the submit appended an
+	// 'update' version (draft -> submitted), which is the latest op (rule 5).
+	testutil.AssertVersioned(t, f.DB, "expense_reports", reportID, "update")
+
+	lines, err := f.Store.ExpenseReportLines(ctx, reportID)
+	if err != nil {
+		t.Fatalf("expense report lines: %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("sample report has %d lines, want 2", len(lines))
+	}
+	hasMarker := false
+	for _, ln := range lines {
+		if ln.Description == devseedExpenseMarker {
+			hasMarker = true
+		}
+	}
+	if !hasMarker {
+		t.Errorf("sample report is missing its marker line %q", devseedExpenseMarker)
+	}
+
+	// Ledger stays clean (a submitted report is not yet a posted transaction).
+	vs, err := ledger.Check(ctx, f.DB)
+	if err != nil {
+		t.Fatalf("ledger.Check: %v", err)
+	}
+	for _, v := range vs {
+		if v.Severity == ledger.Error {
+			t.Errorf("unexpected Error after seed: %s: %s", v.Rule, v.Detail)
+		}
+	}
+
+	// Idempotent: a second run is a no-op (created=false, still one report).
+	created2, err := seedSampleExpenseReport(ctx, f.Store)
+	if err != nil {
+		t.Fatalf("second seedSampleExpenseReport: %v", err)
+	}
+	if created2 {
+		t.Errorf("second seed created a duplicate report")
+	}
+	after, err := f.Store.ExpenseReportsByStatus(ctx, "submitted")
+	if err != nil {
+		t.Fatalf("list submitted reports after rerun: %v", err)
+	}
+	if len(after) != 1 {
+		t.Errorf("found %d submitted reports after rerun, want 1", len(after))
+	}
+}
