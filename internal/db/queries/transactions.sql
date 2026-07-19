@@ -309,3 +309,14 @@ ORDER BY s.id;
 -- store refuses the merge when this count is > 0 (ErrMergeSourceReconciled). Full
 -- recon repointing stays backlog; this closes the integrity hole cleanly.
 SELECT COUNT(*) FROM splits WHERE account_id = ? AND reconciliation_id IS NOT NULL;
+
+-- name: LedgerDateRange :one
+-- The oldest and newest posting dates across ALL non-deleted transactions (p29.12).
+-- The report param resolver uses it so an OMITTED period bound brackets everything:
+-- an empty From defaults to the day BEFORE min_date, an empty To to the day AFTER
+-- max_date. MIN/MAX over an empty ledger yield SQL NULL (both columns), which the
+-- store reads as ok=false so the caller keeps its year-start/today fallback. CAST to
+-- TEXT so sqlc types the columns as sql.NullString rather than interface{}.
+SELECT CAST(MIN(date) AS TEXT) AS min_date, CAST(MAX(date) AS TEXT) AS max_date
+FROM transactions
+WHERE deleted = 0;

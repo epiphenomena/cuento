@@ -262,6 +262,34 @@ func (q *Queries) InsertTransactionVersion(ctx context.Context, arg InsertTransa
 	return err
 }
 
+const ledgerDateRange = `-- name: LedgerDateRange :one
+SELECT CAST(MIN(date) AS TEXT) AS min_date, CAST(MAX(date) AS TEXT) AS max_date
+FROM transactions
+WHERE deleted = 0
+`
+
+// LedgerDateRangeRow carries the oldest/newest posting dates. Over an EMPTY ledger
+// MIN/MAX return SQL NULL, so both columns are nullable (sql.NullString); the store's
+// LedgerDateRange wrapper reports ok=false in that case. (Hand-typed as NullString:
+// sqlc types CAST(MIN(...) AS TEXT) as a bare string, which would fail to scan the
+// NULL an empty ledger yields.)
+type LedgerDateRangeRow struct {
+	MinDate sql.NullString
+	MaxDate sql.NullString
+}
+
+// The oldest and newest posting dates across ALL non-deleted transactions (p29.12).
+// The report param resolver uses it so an OMITTED period bound brackets everything:
+// an empty From defaults to the day BEFORE min_date, an empty To to the day AFTER
+// max_date. MIN/MAX over an empty ledger yield SQL NULL (both columns), which the
+// store reads as ok=false so the caller keeps its year-start/today fallback.
+func (q *Queries) LedgerDateRange(ctx context.Context) (LedgerDateRangeRow, error) {
+	row := q.db.QueryRowContext(ctx, ledgerDateRange)
+	var i LedgerDateRangeRow
+	err := row.Scan(&i.MinDate, &i.MaxDate)
+	return i, err
+}
+
 const programSubtreeIDs = `-- name: ProgramSubtreeIDs :many
 WITH RECURSIVE subtree(id, parent_id, name, active, sort_order) AS (
   SELECT p0.id, p0.parent_id, p0.name, p0.active, p0.sort_order

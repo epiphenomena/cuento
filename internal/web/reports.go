@@ -98,10 +98,31 @@ func (s *server) resolveParams(
 		p.AsOf = resolveDate(first(q, "asof"), df, today)
 	}
 	if rep.ParamsSpec.Period {
-		// Default period: year-to-date (Jan 1 of the current year .. today).
+		// p29.12: an OMITTED period bound brackets ALL data -- an empty From defaults to
+		// the day BEFORE the oldest non-deleted transaction, an empty To to the day AFTER
+		// the newest -- so a cleared bound captures everything. Fall back to the prior
+		// year-to-date default (Jan 1 .. today) when the bound is present-but-unparseable
+		// or when the ledger is empty (ok=false). Only query the range when at least one
+		// bound is missing.
 		yearStart := time.Date(today.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
-		p.From = resolveDate(first(q, "from"), df, yearStart)
-		p.To = resolveDate(first(q, "to"), df, today)
+		fromDefault, toDefault := yearStart, today
+		fromRaw, toRaw := first(q, "from"), first(q, "to")
+		if fromRaw == "" || toRaw == "" {
+			if lo, hi, ok, err := s.store.LedgerDateRange(ctx); err != nil {
+				return reports.Params{}, paramsForm{}, err
+			} else if ok {
+				// Bracket everything: day BEFORE the oldest, day AFTER the newest. ISO in,
+				// ISO out (mirrors resolveDate's time arithmetic; the store keeps ISO).
+				if t, perr := time.Parse("2006-01-02", lo); perr == nil {
+					fromDefault = t.AddDate(0, 0, -1)
+				}
+				if t, perr := time.Parse("2006-01-02", hi); perr == nil {
+					toDefault = t.AddDate(0, 0, 1)
+				}
+			}
+		}
+		p.From = resolveDate(fromRaw, df, fromDefault)
+		p.To = resolveDate(toRaw, df, toDefault)
 	}
 	if rep.ParamsSpec.Granularity {
 		p.Granularity = reports.ParseGranularity(first(q, "granularity"))

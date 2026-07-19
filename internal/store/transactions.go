@@ -390,6 +390,24 @@ func (s *Store) GetTransaction(ctx context.Context, id int64) (sqlc.Transaction,
 	return row, nil
 }
 
+// LedgerDateRange returns the oldest (min) and newest (max) posting dates across ALL
+// non-deleted transactions, as ISO strings, plus ok=false when the ledger is EMPTY
+// (p29.12). The report param resolver uses it so an OMITTED period bound brackets
+// everything: an empty From defaults to the day BEFORE min, an empty To to the day
+// AFTER max. Global (all subsidiaries) for simplicity (DECISIONS p29.12). Read-only;
+// sqlc. On an empty ledger MIN/MAX yield SQL NULL, surfaced here as ok=false so the
+// caller keeps its own fallback (the current year-start/today default).
+func (s *Store) LedgerDateRange(ctx context.Context) (min, max string, ok bool, err error) {
+	row, err := s.q.LedgerDateRange(ctx)
+	if err != nil {
+		return "", "", false, fmt.Errorf("store: ledger date range: %w", err)
+	}
+	if !row.MinDate.Valid || !row.MaxDate.Valid {
+		return "", "", false, nil
+	}
+	return row.MinDate.String, row.MaxDate.String, true, nil
+}
+
 // SubsidiaryTxnCount returns the number of transactions (including soft-deleted)
 // posted to a subsidiary. The historical importer uses it as a per-subsidiary
 // idempotency guard: a non-zero count means the subsidiary was already imported,

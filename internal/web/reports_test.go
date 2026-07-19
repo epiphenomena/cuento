@@ -375,6 +375,40 @@ func TestWideMatrixReportsFullWidth(t *testing.T) {
 	}
 }
 
+// TestPeriodDefaultBracketsAllData (p29.12): on a PERIOD report with NO from/to, an
+// empty From defaults to the day BEFORE the oldest non-deleted transaction and an
+// empty To to the day AFTER the newest -- so an omitted bound captures everything.
+// reportsApp seeds a single 2025-06-01 posting, so the defaults are 2025-05-31 and
+// 2025-06-02. An EXPLICIT from/to is respected unchanged.
+func TestPeriodDefaultBracketsAllData(t *testing.T) {
+	h, st, _, sm := reportsApp(t)
+	admin := mkUser(t, st, "admin", "none", true)
+
+	// No from/to -> the params form shows the bracketed defaults (ISO rendered).
+	rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.IncomeStatementReportID, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("income statement status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "2025-05-31") {
+		t.Errorf("empty From should default to the day BEFORE the oldest txn (2025-05-31); body:\n%s", body)
+	}
+	if !strings.Contains(body, "2025-06-02") {
+		t.Errorf("empty To should default to the day AFTER the newest txn (2025-06-02); body:\n%s", body)
+	}
+
+	// An EXPLICIT period is respected (not overridden by the bracket default).
+	rec = asUser(t, h, sm, admin, http.MethodGet,
+		"/reports/"+reports.IncomeStatementReportID+"?from=2025-01-01&to=2025-12-31", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("explicit-period status = %d, want 200", rec.Code)
+	}
+	body = rec.Body.String()
+	if !strings.Contains(body, "2025-01-01") || !strings.Contains(body, "2025-12-31") {
+		t.Errorf("explicit from/to should be respected verbatim; body:\n%s", body)
+	}
+}
+
 // TestTrialBalanceReportCSV: the CSV endpoint returns text/csv, an attachment
 // filename, and a parseable body whose header + rows reflect the report (proving the
 // CSV renderer is wired through the route with the same params).

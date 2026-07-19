@@ -969,6 +969,48 @@ func TestDeleteIsSoft(t *testing.T) {
 	}
 }
 
+// TestLedgerDateRange (p29.12): the min/max posting dates over NON-deleted
+// transactions, ok=false on an empty ledger, and a soft-deleted extreme date is
+// excluded from the range.
+func TestLedgerDateRange(t *testing.T) {
+	e := newTxnEnv(t)
+
+	// Empty ledger -> ok=false, and the caller keeps its own fallback.
+	if _, _, ok, err := e.s.LedgerDateRange(mutCtx()); err != nil || ok {
+		t.Fatalf("empty ledger: got ok=%v err=%v, want ok=false err=nil", ok, err)
+	}
+
+	post := func(date string) int64 {
+		in := e.balancedInput(100)
+		in.Date = date
+		id, err := e.s.PostTransaction(mutCtx(), in)
+		if err != nil {
+			t.Fatalf("PostTransaction(%s): %v", date, err)
+		}
+		return id
+	}
+	post("2025-03-15")
+	post("2025-07-20")
+
+	min, max, ok, err := e.s.LedgerDateRange(mutCtx())
+	if err != nil || !ok {
+		t.Fatalf("populated ledger: ok=%v err=%v, want ok=true", ok, err)
+	}
+	if min != "2025-03-15" || max != "2025-07-20" {
+		t.Errorf("range = [%s, %s], want [2025-03-15, 2025-07-20]", min, max)
+	}
+
+	// A soft-deleted transaction at an EXTREME date must not widen the range.
+	del := post("2030-12-31")
+	if err := e.s.DeleteTransaction(mutCtx(), del); err != nil {
+		t.Fatalf("DeleteTransaction: %v", err)
+	}
+	min, max, ok, err = e.s.LedgerDateRange(mutCtx())
+	if err != nil || !ok || min != "2025-03-15" || max != "2025-07-20" {
+		t.Errorf("after soft-delete: range = [%s, %s] ok=%v, want [2025-03-15, 2025-07-20] ok=true", min, max, ok)
+	}
+}
+
 // --- As-of reconstruction -------------------------------------------------
 
 func TestTransactionAsOf(t *testing.T) {
