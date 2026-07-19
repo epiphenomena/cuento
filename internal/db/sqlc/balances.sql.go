@@ -89,6 +89,71 @@ func (q *Queries) BudgetKeyActivity(ctx context.Context, arg BudgetKeyActivityPa
 	return items, nil
 }
 
+const subDatedBalancesAsOf = `-- name: SubDatedBalancesAsOf :many
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT t.subsidiary_id, sp.account_id, t.currency, t.date,
+       CAST(SUM(sp.amount) AS INTEGER) AS activity
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+WHERE t.deleted = 0
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY t.subsidiary_id, sp.account_id, t.currency, t.date
+ORDER BY t.subsidiary_id, sp.account_id, t.currency, t.date
+`
+
+type SubDatedBalancesAsOfParams struct {
+	ID   int64
+	Date string
+}
+
+type SubDatedBalancesAsOfRow struct {
+	SubsidiaryID ids.SubsidiaryID
+	AccountID    ids.AccountID
+	Currency     string
+	Date         string
+	Activity     int64
+}
+
+// Per (subsidiary, account, currency, date): signed net-debit activity of the
+// non-deleted splits on that date, for every txn date <= asof in the scope closure.
+// Preserves the holding subsidiary (functional currency) and the transaction date (so
+// the FX toolkit values each dated flow at its transaction-date rate for the ASC
+// 830-20 remeasurement basis while the summed balance values at closing). Params:
+// scopeSub, asof. p31.1.
+func (q *Queries) SubDatedBalancesAsOf(ctx context.Context, arg SubDatedBalancesAsOfParams) ([]SubDatedBalancesAsOfRow, error) {
+	rows, err := q.db.QueryContext(ctx, subDatedBalancesAsOf, arg.ID, arg.Date)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SubDatedBalancesAsOfRow
+	for rows.Next() {
+		var i SubDatedBalancesAsOfRow
+		if err := rows.Scan(
+			&i.SubsidiaryID,
+			&i.AccountID,
+			&i.Currency,
+			&i.Date,
+			&i.Activity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const drillSplits = `-- name: DrillSplits :many
 WITH RECURSIVE scope(id) AS (
   SELECT s.id FROM subsidiaries s WHERE s.id = ?

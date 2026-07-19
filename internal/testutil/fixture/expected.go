@@ -89,6 +89,31 @@ type Expected struct {
 	// plan id + the natural report window (the span of its split dates) so the p27.3
 	// cash-flow / variance report tests can drive the plan without re-deriving them.
 	SampleBudgetPlan SampleBudgetPlanExpected
+
+	// FX is the Phase 31 remeasurement seam, populated ONLY after
+	// (*Fixture).ExtendFX(t) is called; the zero value (Bank 0) means the seam has
+	// not been applied. It captures the Lempira (HNL) account + the hand-computed
+	// remeasurement FX loss recognized in income (ASC 830-20).
+	FX FXExpected
+}
+
+// FXExpected holds the Phase 31 ExtendFX seam's expectations for the Lempira example:
+// an HNL bank in the USD-functional US sub whose residual monetary balance remeasures
+// to USD at the closing rate while its HNL flows are measured at transaction-date rates.
+// Every figure is derived INDEPENDENTLY from the deterministic HNL schedule (out-of-band
+// hand computation), so the FX-detail report and the Statement-of-Activities FX line are
+// validated against a number they did not themselves produce (no circular oracle).
+type FXExpected struct {
+	Bank ids.AccountID // Banco Lempira (HNL current_cash asset in the US sub)
+	// AsOf is the closing/report date the remeasurement is computed at (2026-06-30).
+	AsOf string
+	// NativeHNL is Banco Lempira's residual native balance at AsOf (minor units).
+	NativeHNL int64
+	// EndingUSDMinor is NativeHNL converted to USD at the AsOf closing rate (half-even).
+	EndingUSDMinor int64
+	// RemeasurementUSDMinor is the remeasurement FX gain/loss recognized in the change
+	// in net assets (negative = loss): EndingUSDMinor − (Σ HNL flows at txn-date rates).
+	RemeasurementUSDMinor int64
 }
 
 // SampleBudgetPlanExpected holds the p27.2 sample budget-PLAN seam's expectations:

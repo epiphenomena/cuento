@@ -1194,6 +1194,36 @@ other = "Cumulative translation adjustment"
 [reports.balance_sheet.na.ic_reconciling]
 other = "Intercompany reconciling difference"
 
+# p31 FX conversion details: ASC 830-20 remeasurement of foreign-currency monetary
+# balances, as-of a date and scoped to a subsidiary. Shows native balance, closing rate,
+# historical basis, remeasured value, and the FX gain/(loss) recognized in income.
+[reports.fx_detail.title]
+other = "FX Conversion Details"
+[reports.fx_detail.functional]
+other = "functional"
+[reports.fx_detail.col.account]
+other = "Account"
+[reports.fx_detail.col.currency]
+other = "Foreign currency"
+[reports.fx_detail.col.native]
+other = "Native balance"
+[reports.fx_detail.col.historical]
+other = "Historical basis"
+[reports.fx_detail.col.remeasured]
+other = "Remeasured at closing"
+[reports.fx_detail.col.gain_loss]
+other = "FX gain/(loss)"
+[reports.fx_detail.col.rate]
+other = "Closing rate"
+[reports.fx_detail.col.rate_date]
+other = "Rate date"
+[reports.fx_detail.total.subsidiary]
+other = "Total FX gain/(loss)"
+[reports.fx_detail.total.recognized]
+other = "Recognized in change in net assets"
+[reports.fx_detail.empty]
+other = "No foreign-currency monetary balances to remeasure."
+
 # p15.5 income statement: statement of activities over a period (Revenue - Expense =
 # net surplus/deficit), with comparative month/quarter columns and txn-date conversion.
 [reports.income_statement.title]
@@ -1212,6 +1242,8 @@ other = "Expenses"
 other = "Total revenue"
 [reports.income_statement.total.expenses]
 other = "Total expenses"
+[reports.income_statement.fx_gain_loss]
+other = "FX remeasurement gain/(loss)"
 [reports.income_statement.net]
 other = "Change in net assets"
 
@@ -2012,6 +2044,8 @@ other = "Backups, integrity checks, and other maintenance tasks."
 other = "Debit and credit balances for every account, proving the ledger nets to zero."
 [reports.balance_sheet.desc]
 other = "Assets, liabilities, and net assets at a point in time."
+[reports.fx_detail.desc]
+other = "ASC 830-20 remeasurement of foreign-currency monetary balances and the FX gain/(loss) recognized in income."
 [reports.income_statement.desc]
 other = "Revenue and expense over a period, per subsidiary or consolidated."
 [reports.account_ledger.desc]

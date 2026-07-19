@@ -84,6 +84,14 @@ func TestDemoGeneratorAntiDrift(t *testing.T) {
 	atLeast("subsidiaries", count(`SELECT count(*) FROM subsidiaries`), 3)
 	atLeast("currencies used by subsidiaries", count(`SELECT count(DISTINCT base_currency) FROM subsidiaries`), 2)
 
+	// p31 FX remeasurement: at least one transaction denominated in a currency that is
+	// NOT its subsidiary's functional (base) currency -- the ASC 830-20 remeasurement
+	// exposure the FX-detail report and Statement-of-Activities FX line demonstrate (the
+	// Lempira example: an HNL transaction in the USD-functional US sub).
+	atLeast("cross-functional-currency transactions",
+		count(`SELECT count(*) FROM transactions t JOIN subsidiaries s ON s.id = t.subsidiary_id
+		        WHERE t.deleted = 0 AND t.currency <> s.base_currency`), 1)
+
 	// Programs + a full chart of accounts across all five types.
 	atLeast("programs", count(`SELECT count(*) FROM programs`), 2)
 	atLeast("account types", count(`SELECT count(DISTINCT type) FROM accounts`), 5)

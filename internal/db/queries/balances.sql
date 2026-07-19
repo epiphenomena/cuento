@@ -40,6 +40,30 @@ WHERE t.deleted = 0
 GROUP BY sp.account_id, t.currency
 ORDER BY sp.account_id, t.currency;
 
+-- name: SubDatedBalancesAsOf :many
+-- Per (subsidiary, account, currency, DATE): signed net-debit activity of the
+-- non-deleted splits on that date, for every txn date <= asof whose subsidiary is in
+-- the scope closure. Unlike SubtreeBalancesAsOf (which consolidates the whole subtree
+-- into one balance per account/currency), this preserves BOTH the HOLDING subsidiary
+-- (so the report knows each balance's functional currency = that sub's base_currency)
+-- and the transaction DATE (so the FX toolkit can value each dated flow at its own
+-- transaction-date rate for the ASC 830-20 remeasurement basis, while the summed
+-- balance values at the closing rate). Params: scopeSub (CTE base), asof. p31.1.
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT t.subsidiary_id, sp.account_id, t.currency, t.date,
+       CAST(SUM(sp.amount) AS INTEGER) AS activity
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+WHERE t.deleted = 0
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY t.subsidiary_id, sp.account_id, t.currency, t.date
+ORDER BY t.subsidiary_id, sp.account_id, t.currency, t.date;
+
 -- name: PeriodActivity :many
 -- Per (account, currency): signed activity over from <= date <= to in scope.
 -- Params: scopeSub, from, to.

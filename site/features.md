@@ -61,7 +61,67 @@ converted balance on reports is the cumulative FX gain or loss. Report-time
 conversion uses the latest on-or-before rate (balance-sheet figures at the closing
 rate, activity at each transaction date's rate) with half-even rounding at
 aggregates. Rates are stored per pair per date and can be fetched by
-`cuento ratesync` or imported from a CSV.
+`cuento ratesync` or imported from a CSV. FX follows GAAP (ASC 830): a
+foreign-currency monetary balance's remeasurement gain or loss is recognized in
+the change in net assets (ASC 830-20), while a foreign entity's translation for
+consolidation stays in equity as a Cumulative Translation Adjustment (ASC
+830-30). See **Foreign currency (ASC 830)** below.
+
+## Foreign currency (ASC 830)
+
+Each subsidiary's functional currency is its base currency — a management
+determination (ASC 830-10-45), not something cuento derives. A balance held in a
+currency that equals its holding subsidiary's functional currency carries no FX
+exposure; a balance in a different currency is a foreign-currency item, and cuento
+handles it under two distinct GAAP mechanisms.
+
+**Remeasurement to income (ASC 830-20).** A foreign-currency *monetary* balance —
+cash, receivables, or payables — held in a subsidiary whose functional currency
+differs is remeasured to the functional currency at the closing rate on the report
+date, while the transactions that built it were measured at their transaction-date
+rates. The difference is a gain or loss recognized in the change in net assets,
+shown as an "FX remeasurement gain/(loss)" line on the converted statement of
+activities.
+
+**Translation to a CTA in equity (ASC 830-30).** Translating a foreign entity's
+functional-currency books to the reporting currency for consolidation produces a
+Cumulative Translation Adjustment within Net Assets — not income — which cuento
+already carries as the intercompany consolidation residual on the balance sheet.
+
+The discriminator between the two is the account's intercompany flag.
+Non-intercompany foreign monetary balances take the income path; intercompany
+balances stay on the translation (CTA) path, because their equal-and-opposite
+FX-Clearing leg is equity-class and recognizing their remeasurement in income
+would double-count against the CTA. Monetary classification is a documented
+whitelist: accounts flagged `current_cash` (cash) or `open_item` (receivables and
+payables).
+
+The FX gain or loss is a report-time computation, not a posted journal entry.
+cuento stores amounts natively and converts at report time, so the functional-
+currency value of a foreign balance only exists at report time. A Lempira-bank
+expense in a USD-functional subsidiary is a single-currency HNL transaction (DR
+expense HNL / CR HNL bank HNL) and does not run through FX Clearing — that account
+is only for value moved between two currencies. The remeasurement on the residual
+HNL bank balance is computed at report time from its closing-rate value versus its
+transaction-date basis. Because that remeasurement now lands in income, the change
+in net assets articulates with the balance sheet's net-asset change; before it was
+recognized, the gap between the two was exactly the unrecognized remeasurement.
+
+The **FX conversion details** report is the reconciliation artifact: as of a date
+and scoped to a subsidiary, it lists each foreign-currency monetary item with its
+native balance, closing rate and rate date, transaction-date (historical) basis,
+remeasured-at-closing value, and FX gain/(loss), grouped by subsidiary, with a
+per-functional-currency total equal to the amount recognized in income.
+
+Boundaries and assumptions worth stating plainly: functional currency = base
+currency is a management setting, not derived; the monetary whitelist
+(`current_cash` plus `open_item`) does not pick up a foreign-currency debt
+carrying neither flag, which should carry `open_item`; non-monetary foreign
+balances correctly produce no remeasurement but currently convert at the closing
+rather than the historical rate (immaterial in practice, noted as a future
+refinement); the highly-inflationary-economy exception (ASC 830-10-45-11) is not
+automated; and functional-to-reporting translation of recognized income uses the
+period-end closing rate (an identity when functional equals reporting currency).
 
 ## The report catalog
 
@@ -83,6 +143,10 @@ underlying splits. Each report also exports to CSV.
 - **Activities by restriction** — a statement of activities with without- and
   with-donor-restrictions columns and a derived "net assets released from
   restrictions" line.
+- **FX conversion details** — as-of, per subsidiary: each foreign-currency
+  monetary item with native balance, closing rate and date, transaction-date
+  basis, remeasured-at-closing value, and FX gain/(loss), totaled per functional
+  currency (the ASC 830-20 amount recognized in income).
 - **Program statement** — revenue and expense by natural account per program,
   rolled up over the program tree; feeds 990 Part III.
 - **Form 990 package** — one page per part (Part VIII revenue, Part IX expenses,

@@ -32,6 +32,7 @@ func Default() *Registry {
 	reg := NewRegistry()
 	registerTrialBalance(reg)
 	registerBalanceSheet(reg)
+	registerFXDetail(reg)
 	registerIncomeStatement(reg)
 	registerAccountLedger(reg)
 	registerFunctionalExpenses(reg)

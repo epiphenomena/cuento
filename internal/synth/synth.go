@@ -130,6 +130,16 @@ type IDs struct {
 	Construction ids.AccountID // fixed-asset leaf under Fixed Assets
 	ConstrLoan   ids.AccountID // liability: a construction loan that financed a purchase
 
+	// --- FX remeasurement seam (ExtendFX, opt-in) ------------------------------
+	// Zero until ExtendFX is called. Banco Lempira is an HNL (Honduran Lempira)
+	// bank account held INSIDE the USD-functional US subsidiary -- a foreign-
+	// currency MONETARY item (current_cash). Its residual HNL balance remeasures to
+	// USD at the closing rate while the HNL flows that built it are measured at
+	// their transaction-date rates, so it produces a clean, NON-intercompany
+	// remeasurement FX gain/loss recognized in the change in net assets (ASC
+	// 830-20). This is the owner's Lempira example and Phase 31's income-path oracle.
+	BancoLempira ids.AccountID // HNL bank in the USD-functional US sub
+
 	// --- Sample budget-PLAN seam (ExtendSampleBudgetPlan, opt-in) --------------
 	// Zero until ExtendSampleBudgetPlan is called. A SAMPLE budget PLAN (the p27.2
 	// split-derived model: a plan + several PROJECTED, dated budget-splits across

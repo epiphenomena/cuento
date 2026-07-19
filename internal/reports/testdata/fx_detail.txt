@@ -1,0 +1,6 @@
+   Account                             Foreign currency   Native balance  Historical basis  Remeasured at closing  FX gain/(loss)          Closing rate  Rate date
+-  ----------------------------------  ----------------  ---------------  ----------------  ---------------------  --------------  --------------------  ----------
+   RV Estados Unidos                   functional                    USD
+   Banco Lempira                       HNL               HNL 150,000.00L     USD $6,298.32          USD $5,836.58    USD -$461.74  0.038910505836575876  2026-06-01
+#  Total FX gain/(loss)                                                                                              USD -$461.74
+=  Recognized in change in net assets                                                                                USD -$461.74

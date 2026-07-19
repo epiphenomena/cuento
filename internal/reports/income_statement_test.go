@@ -219,6 +219,52 @@ func TestIncomeStatementGolden(t *testing.T) {
 	checkGolden(t, "income_statement.csv", csvBuf.Bytes())
 }
 
+// TestIncomeStatementFXGolden is the p31.2 demonstration golden: the Statement of
+// Activities WITH the Lempira FX exposure (ExtendFX) grows an "FX remeasurement
+// gain/(loss)" line, and the "change in net assets" total = Total revenue − Total
+// expenses + that FX line. A single-column (GranNone) render keeps the golden compact and
+// puts the new line in plain view for review.
+func TestIncomeStatementFXGolden(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	f.ExtendFX(t)
+	ctx := context.Background()
+
+	rep := incomeStatementReport(t)
+	p := isGoldenParams(f)
+	p.Granularity = reports.GranNone
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run income statement (FX): %v", err)
+	}
+
+	// The FX line carries the −46,174 remeasurement loss.
+	fxLine, ok := isTotalFor(table, "reports.income_statement.fx_gain_loss")
+	if !ok {
+		t.Fatal("FX line missing from statement with exposure")
+	}
+	if fxLine != f.Expected.FX.RemeasurementUSDMinor {
+		t.Errorf("FX line = %d, want %d", fxLine, f.Expected.FX.RemeasurementUSDMinor)
+	}
+	// Change in net assets folds in the FX line: net == (revenue − expenses) + FX.
+	rev, _ := isTotalFor(table, "reports.income_statement.total.revenue")
+	exp, _ := isTotalFor(table, "reports.income_statement.total.expenses")
+	net, _ := isTotalFor(table, "reports.income_statement.net")
+	if net != rev-exp+fxLine {
+		t.Errorf("net %d != revenue − expenses + FX (%d − %d + %d = %d)",
+			net, rev, exp, fxLine, rev-exp+fxLine)
+	}
+
+	exps := goldenExps(t, f)
+	textDump := reports.DumpTable(table, goldenLocalize, exps)
+	var csvBuf bytes.Buffer
+	if err := reports.WriteCSV(&csvBuf, localizeLabels(table), goldenLocalize, exps); err != nil {
+		t.Fatalf("write csv: %v", err)
+	}
+	checkGolden(t, "income_statement_fx.txt", []byte(textDump))
+	checkGolden(t, "income_statement_fx.csv", csvBuf.Bytes())
+}
+
 // TestIncomeStatementGranNone exercises the DEFAULT (no-granularity) path: an absent
 // granularity param resolves to GranNone (web resolveParams), which the report renders as
 // a single "Period" column + the Total column (3 columns: Line, Period, Total). The

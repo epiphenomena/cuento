@@ -1191,6 +1191,36 @@ other = "Ajuste acumulado por conversion"
 [reports.balance_sheet.na.ic_reconciling]
 other = "Diferencia de conciliacion intercompania"
 
+# p31 detalle de conversion de divisas: remedicion ASC 830-20 de saldos monetarios en
+# moneda extranjera, a una fecha y por subsidiaria. Muestra el saldo nativo, la tasa de
+# cierre, la base historica, el valor remedido y la ganancia/(perdida) cambiaria reconocida.
+[reports.fx_detail.title]
+other = "Detalle de conversion de divisas"
+[reports.fx_detail.functional]
+other = "funcional"
+[reports.fx_detail.col.account]
+other = "Cuenta"
+[reports.fx_detail.col.currency]
+other = "Moneda extranjera"
+[reports.fx_detail.col.native]
+other = "Saldo nativo"
+[reports.fx_detail.col.historical]
+other = "Base historica"
+[reports.fx_detail.col.remeasured]
+other = "Remedido al cierre"
+[reports.fx_detail.col.gain_loss]
+other = "Ganancia/(perdida) cambiaria"
+[reports.fx_detail.col.rate]
+other = "Tasa de cierre"
+[reports.fx_detail.col.rate_date]
+other = "Fecha de la tasa"
+[reports.fx_detail.total.subsidiary]
+other = "Total ganancia/(perdida) cambiaria"
+[reports.fx_detail.total.recognized]
+other = "Reconocido en el cambio en activos netos"
+[reports.fx_detail.empty]
+other = "No hay saldos monetarios en moneda extranjera para remedir."
+
 # p15.5 estado de resultados: estado de actividades de un periodo (Ingresos - Gastos =
 # superavit/deficit neto), con columnas comparativas mensuales/trimestrales y conversion
 # a la tasa de la fecha de transaccion.
@@ -1210,6 +1240,8 @@ other = "Gastos"
 other = "Total ingresos"
 [reports.income_statement.total.expenses]
 other = "Total gastos"
+[reports.income_statement.fx_gain_loss]
+other = "Ganancia/(perdida) por remedicion cambiaria"
 [reports.income_statement.net]
 other = "Cambio en los activos netos"
 
@@ -2002,6 +2034,8 @@ other = "Respaldos, verificaciones de integridad y otras tareas de mantenimiento
 other = "Saldos deudores y acreedores de cada cuenta, comprobando que el libro cuadra en cero."
 [reports.balance_sheet.desc]
 other = "Activos, pasivos y activos netos en un momento dado."
+[reports.fx_detail.desc]
+other = "Remedicion ASC 830-20 de saldos monetarios en moneda extranjera y la ganancia/(perdida) cambiaria reconocida."
 [reports.income_statement.desc]
 other = "Ingresos y gastos de un período, por subsidiaria o consolidado."
 [reports.account_ledger.desc]

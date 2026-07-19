@@ -119,6 +119,14 @@ func BuildDemo(ctx context.Context, s *store.Store) (DemoIDs, error) {
 		return d, err
 	}
 
+	// FX remeasurement (the Lempira example): adds an HNL bank in the USD-functional US
+	// sub + single-currency HNL flows, so the demo demonstrates an ASC 830-20
+	// remeasurement gain/loss in income. Touches only Banco Lempira / Contributions /
+	// Food Purchases (never Checking US), so it is order-independent w.r.t. the recon.
+	if err := ExtendFX(ctx, s, &d.IDs); err != nil {
+		return d, err
+	}
+
 	// Capital campaign (posts new Checking US/MX splits) AFTER the recon is finalized.
 	if err := ExtendCapitalCampaign(ctx, s, &d.IDs); err != nil {
 		return d, err

@@ -85,6 +85,46 @@ func (s *Store) SubtreeBalancesAsOf(ctx context.Context, asof string, scopeSub i
 	return out, nil
 }
 
+// SubDatedActivity is one (subsidiary, account, currency, date) signed activity cell
+// (p31.1) -- the per-holding-subsidiary, per-transaction-date grain the FX toolkit
+// needs to remeasure foreign-currency monetary balances (ASC 830-20): the balance is
+// Σ Amount to the as-of date valued at the closing rate, while the historical basis is
+// Σ (Amount at Date) each valued at that date's transaction rate.
+type SubDatedActivity struct {
+	SubsidiaryID ids.SubsidiaryID
+	AccountID    ids.AccountID
+	Currency     string
+	Date         string
+	Amount       int64 // signed minor units (net-debit, D2)
+}
+
+// SubDatedBalancesAsOf returns, per (subsidiary, account, currency, date), the signed
+// net-debit activity on that date for every non-deleted transaction dated <= asof whose
+// subsidiary is in scopeSub's descendant closure (D18). It preserves the HOLDING
+// subsidiary (so the caller knows each balance's functional currency = base_currency)
+// and the transaction DATE (so the caller can value each dated flow at its own
+// transaction-date rate). Rows are ordered (sub, account, currency, date). p31.1.
+func (s *Store) SubDatedBalancesAsOf(ctx context.Context, asof string, scopeSub ids.SubsidiaryID) ([]SubDatedActivity, error) {
+	rows, err := s.q.SubDatedBalancesAsOf(ctx, sqlc.SubDatedBalancesAsOfParams{
+		ID:   int64(scopeSub),
+		Date: asof,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store: sub dated balances as of %s (scope %d): %w", asof, scopeSub, err)
+	}
+	out := make([]SubDatedActivity, len(rows))
+	for i, r := range rows {
+		out[i] = SubDatedActivity{
+			SubsidiaryID: r.SubsidiaryID,
+			AccountID:    r.AccountID,
+			Currency:     r.Currency,
+			Date:         r.Date,
+			Amount:       r.Activity,
+		}
+	}
+	return out, nil
+}
+
 // PeriodActivity returns, per (account, currency), the signed activity over the
 // closed interval from <= date <= to in scopeSub's descendant closure.
 func (s *Store) PeriodActivity(ctx context.Context, from, to string, scopeSub ids.SubsidiaryID) ([]AccountCurrencyAmount, error) {

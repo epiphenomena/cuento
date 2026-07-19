@@ -154,14 +154,40 @@ func runIncomeStatement(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 	expNet := b.section(tree, "expense", "reports.income_statement.section.expenses",
 		"reports.income_statement.total.expenses", +1)
 
-	// --- Net surplus/deficit = Revenue - Expense, per column. Revenue activity is
-	// net-debit NEGATIVE (a credit); expense POSITIVE. Presented the way a statement of
-	// activities reads: a SURPLUS is positive. Revenue shown positive = -revNet; net
-	// surplus = (-revNet) - expNet = -(revNet + expNet). revNet/expNet are the raw
-	// net-debit column sums, so surplus[i] = -(revNet[i] + expNet[i]).
+	// --- FX remeasurement gain/loss (p31.2, ASC 830-20). At report time the FX
+	// gain/loss on foreign-currency MONETARY balances is recognized in the change in net
+	// assets so the statement ARTICULATES with the balance sheet (which already carries
+	// the effect at the closing rate). One figure per column = the remeasurement
+	// recognized IN that sub-period (a period difference of two as-of snapshots, so the
+	// columns foot to the total exactly). The line is SUPPRESSED entirely when the whole
+	// statement has no FX exposure, so a functional-currency-only org's statement is
+	// byte-identical to before. The net line below includes it when shown.
+	fxCol := make([]int64, len(periods)+1)
+	var fxAny bool
+	for i, pr := range periods {
+		v, err := tk.FXRemeasurementPeriodTarget(ctx, Scope{Sub: p.Scope}, pr.from, pr.to, target)
+		if err != nil {
+			return Table{}, err
+		}
+		fxCol[i] = v
+		fxCol[len(periods)] += v // Total column = sum of period columns (footing rule)
+		if v != 0 {
+			fxAny = true
+		}
+	}
+	if fxAny {
+		b.fxLine("reports.income_statement.fx_gain_loss", fxCol)
+	}
+
+	// --- Change in net assets = Revenue - Expense (+ FX remeasurement), per column.
+	// Revenue activity is net-debit NEGATIVE (a credit); expense POSITIVE. Presented the
+	// way a statement of activities reads: a SURPLUS is positive. Revenue shown positive =
+	// -revNet; the operating surplus = (-revNet) - expNet = -(revNet + expNet). The FX
+	// gain/loss (already signed: a loss is negative) is ADDED so the total reconciles to
+	// the balance sheet's net-asset change (p31.2 articulation invariant).
 	surplus := make([]int64, len(periods)+1)
 	for i := range surplus {
-		surplus[i] = -(revNet[i] + expNet[i])
+		surplus[i] = -(revNet[i] + expNet[i]) + fxCol[i]
 	}
 	b.netLine("reports.income_statement.net", surplus)
 
@@ -396,6 +422,20 @@ func (b *isBuilder) amountRow(nameCell Cell, cols []int64, indent int, kind RowK
 // rows and BELOW the grand-total "Change in net assets" (RowTotal) — three distinct
 // tiers, so a single-parent section's total no longer reads identically to its parent.
 func (b *isBuilder) totalRow(key string, cols []int64) {
+	cells := make([]Cell, 0, len(cols)+1)
+	cells = append(cells, LabelCell(key))
+	for _, v := range cols {
+		cells = append(cells, MoneyCell(v, b.target))
+	}
+	b.rows = append(b.rows, Row{Cells: cells, Indent: 0, Kind: RowSectionTotal})
+}
+
+// fxLine appends the FX remeasurement gain/loss row (p31.2): a labeled line item, at the
+// same tier as the section totals, carrying one figure per column. It sits between the
+// expense total and the change-in-net-assets total, of which it is a component. A loss is
+// negative (the money formatter renders the sign); it is only ever emitted when nonzero
+// somewhere, so a functional-currency-only statement never shows it.
+func (b *isBuilder) fxLine(key string, cols []int64) {
 	cells := make([]Cell, 0, len(cols)+1)
 	cells = append(cells, LabelCell(key))
 	for _, v := range cols {

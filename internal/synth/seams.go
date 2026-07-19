@@ -117,6 +117,119 @@ func ExtendReconciliation(ctx context.Context, s *store.Store, ids *IDs) (cleare
 	return len(toClear), nil
 }
 
+// --- ExtendFX: the Phase 31 remeasurement (income-path) seam -----------------
+//
+// The base fixture's only cross-functional-currency item is the intercompany USD
+// payable in the MXN sub (Due to RV Internacional), whose two legs are BOTH USD and
+// therefore net to ZERO remeasurement -- so the base fixture cannot demonstrate an
+// ASC 830-20 remeasurement gain/loss recognized in income. ExtendFX adds the owner's
+// Lempira example: an HNL (Honduran Lempira) bank held INSIDE the USD-functional US
+// subsidiary. Both HNL transactions are single-currency (they never touch FX
+// Clearing -- that account is only for value MOVED between currencies, D3); the
+// residual HNL monetary balance simply remeasures to USD at the report-date rate
+// while the flows that built it are measured at their transaction-date rates. The
+// difference is a clean, NON-intercompany remeasurement FX loss recognized in the
+// change in net assets. It is OPT-IN: Build does not call it.
+
+// HNL rate-schedule constants: 18 monthly USD->HNL points spanning 2025-01 .. 2026-06
+// (same span as the MXN schedule), first 2025-01-01 @ 24.00, last 2026-06-01 @ 25.70
+// -- the Lempira weakens against the dollar over the period, so an HNL asset acquired
+// early is worth fewer dollars at the closing date (a remeasurement LOSS). Deterministic
+// linear interpolation, no clock/network, mirroring RateSchedule.
+const (
+	HNLRateMonths = 18
+	HNLFirstRate  = 24.00
+	HNLLastRate   = 25.70
+)
+
+// Hand-computed Phase 31 oracle for the ExtendFX Lempira item (exponent-2 minor units,
+// closing date 2026-06-30). These are derived INDEPENDENTLY of the report code (from the
+// deterministic HNL schedule above) so a golden cannot silently validate itself:
+//
+//	Banco Lempira residual  = 250,000.00 - 100,000.00 = 150,000.00 HNL  (FXBancoLempiraNativeHNL)
+//	contribution @ 2025-03 rate 24.20  = 25,000,000 / 24.20 = 1,033,058 USD minor (revenue in)
+//	food expense @ 2025-09 rate 24.80  = 10,000,000 / 24.80 =   403,226 USD minor (expense out)
+//	ending balance @ 2026-06 rate 25.70 = 15,000,000 / 25.70 =   583,658 USD minor (closing)
+//	remeasurement G/L = 583,658 - (1,033,058 - 403,226) = -46,174 USD minor  (a LOSS of $461.74)
+const (
+	FXBancoLempiraNativeHNL int64 = 15_000_000 // 150,000.00 HNL residual monetary balance
+	FXContributionHNL       int64 = 25_000_000 // 250,000.00 HNL funded into the account
+	FXFoodExpenseHNL        int64 = 10_000_000 // 100,000.00 HNL paid out of the account
+	FXRemeasurementUSDMinor int64 = -46_174    // remeasurement FX loss recognized in income (USD minor)
+	FXEndingBalanceUSDMinor int64 = 583_658    // ending HNL balance converted at the closing rate (USD minor)
+)
+
+// HNLRateSchedule returns the deterministic monthly USD->HNL rate rows (18 points, one
+// per month 2025-01 .. 2026-06). Same shape/derivation as RateSchedule; exported so the
+// fixture oracle and any auditor tooling derive from the same source of truth.
+func HNLRateSchedule() []store.Rate {
+	rates := make([]store.Rate, 0, HNLRateMonths)
+	y, m := 2025, 1
+	for i := 0; i < HNLRateMonths; i++ {
+		date := fmt.Sprintf("%04d-%02d-01", y, m)
+		val := HNLFirstRate + float64(i)*(HNLLastRate-HNLFirstRate)/float64(HNLRateMonths-1)
+		rates = append(rates, store.Rate{
+			RateDate: date,
+			Base:     "USD",
+			Quote:    "HNL",
+			Value:    val,
+			Source:   RatesSource,
+		})
+		if m == 12 {
+			y, m = y+1, 1
+		} else {
+			m++
+		}
+	}
+	return rates
+}
+
+// ExtendFX loads the USD->HNL rate schedule and posts the Lempira remeasurement
+// scenario: it creates Banco Lempira (an HNL current_cash asset in the USD-functional
+// US sub), funds it with a 250,000.00 HNL contribution (2025-03-15), then pays a
+// 100,000.00 HNL Food Purchases expense out of it (2025-09-20). Both transactions are
+// single-currency HNL (balanced in HNL; they never touch FX Clearing). It captures
+// ids.BancoLempira. It is OPT-IN: Build does not call it.
+func ExtendFX(ctx context.Context, s *store.Store, ids *IDs) error {
+	if err := s.PutRates(ctx, HNLRateSchedule()); err != nil {
+		return fmt.Errorf("ExtendFX PutRates(HNL): %w", err)
+	}
+
+	bank, err := s.CreateAccount(ctx, store.CreateAccountInput{
+		Type:            "asset",
+		DefaultCurrency: "HNL",
+		Names:           map[string]string{"en": "Banco Lempira", "es": "Banco Lempira"},
+		Subsidiaries:    []entids.SubsidiaryID{ids.US},
+		CurrentCash:     true,
+		Notes:           ptr("HNL bank held in the USD-functional US subsidiary; a foreign-currency monetary item remeasured to USD at each report date (ASC 830-20)."),
+	})
+	if err != nil {
+		return fmt.Errorf("ExtendFX create Banco Lempira: %w", err)
+	}
+	ids.BancoLempira = bank
+
+	// Fund the Lempira account with an HNL contribution (unrestricted). Single-currency
+	// HNL: DR Banco Lempira / CR Contributions, both HNL -- no FX Clearing.
+	if _, err := post(
+		ctx, s, "2025-03-15", ids.US, "HNL", "Lempira contribution",
+		sp{acct: bank, amount: FXContributionHNL, desc: "Lempira gift received"},
+		sp{acct: ids.Contributions, amount: -FXContributionHNL},
+	); err != nil {
+		return err
+	}
+
+	// Pay an HNL Food Purchases expense out of the Lempira account (the owner's example).
+	// Single-currency HNL: DR Food Purchases / CR Banco Lempira.
+	if _, err := post(
+		ctx, s, "2025-09-20", ids.US, "HNL", "Lempira food purchase",
+		sp{acct: ids.FoodPurchases, amount: FXFoodExpenseHNL, prog: &ids.FoodPantry, desc: "Food bought with Lempira"},
+		sp{acct: bank, amount: -FXFoodExpenseHNL, desc: "Lempira payment"},
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
 // ExtendCapitalCampaign adds a restricted capital-campaign fund ("Restore the Way")
 // plus its capital accounts (a Fixed Assets placeholder parent with a Land leaf and
 // a Construction leaf) and posts a multi-quarter, multi-currency (USD + MXN) campaign

@@ -171,6 +171,27 @@ func (f *Fixture) ExtendRates(t *testing.T) {
 	}
 }
 
+// ExtendFX is the Phase 31 seam wrapper: it loads the USD->HNL schedule and posts the
+// Lempira remeasurement scenario (synth.ExtendFX), then records the hand-computed FX
+// oracle. It is OPT-IN: New does not call it. Callers that also want MXN conversion must
+// call ExtendRates too (the two rate schedules are independent).
+func (f *Fixture) ExtendFX(t *testing.T) {
+	t.Helper()
+	ctx := store.WithActor(context.Background(), synth.SystemActor)
+
+	if err := synth.ExtendFX(ctx, f.Store, &f.IDs); err != nil {
+		t.Fatalf("fixture: ExtendFX: %v", err)
+	}
+
+	f.Expected.FX = FXExpected{
+		Bank:                  f.IDs.BancoLempira,
+		AsOf:                  f.Expected.AsOf,
+		NativeHNL:             synth.FXBancoLempiraNativeHNL,
+		EndingUSDMinor:        synth.FXEndingBalanceUSDMinor,
+		RemeasurementUSDMinor: synth.FXRemeasurementUSDMinor,
+	}
+}
+
 // ExtendReconciliation is the p16 seam wrapper: it finalizes the 2026-05-31 Checking
 // US (USD) reconciliation (synth.ExtendReconciliation) over the account's restricted
 // AND unrestricted splits, leaving EXACTLY the two 2026-05-25 / 2026-06-10 items

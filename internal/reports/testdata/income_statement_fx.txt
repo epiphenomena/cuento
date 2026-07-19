@@ -1,0 +1,21 @@
+   Line                                  Period           Total
+-  ----------------------------  --------------  --------------
+   Revenue
+>  Revenue                       USD $75,096.52  USD $75,096.52
+   Contributions                 USD $63,080.58  USD $63,080.58
+   Government Grants              USD $7,815.94   USD $7,815.94
+   Program Service Fees           USD $1,200.00   USD $1,200.00
+   Event Income                   USD $3,000.00   USD $3,000.00
+#  Total revenue                 USD $75,096.52  USD $75,096.52
+   Expenses
+>  Expenses                      USD $27,803.14  USD $27,803.14
+   Salaries                      USD $16,500.00  USD $16,500.00
+   Program Supplies               USD $2,389.71   USD $2,389.71
+   Food Purchases                 USD $4,238.43   USD $4,238.43
+   Occupancy                      USD $3,050.00   USD $3,050.00
+   Insurance                        USD $600.00     USD $600.00
+   Bank Fees                         USD $25.00      USD $25.00
+   Event Costs                    USD $1,000.00   USD $1,000.00
+#  Total expenses                USD $27,803.14  USD $27,803.14
+#  FX remeasurement gain/(loss)    USD -$461.74    USD -$461.74
+=  Change in net assets          USD $46,831.64  USD $46,831.64
