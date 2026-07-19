@@ -350,11 +350,28 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .field select,
 select,
 input[type="text"],
-input[type="password"] {
+input[type="password"],
+/* p30.4: every textarea shares the themed text-input chrome (border/radius/surface/
+   padding) so it honours the light/dark tokens like input[type=text]. Per-textarea
+   SIZING (rows/min-height/max-width, e.g. .txn-notes, #sf-custom) is layered on top of
+   this by the individual rules; only the VISUAL theming lives here, once. */
+textarea {
   padding: var(--space-2) var(--space-3);
   border: var(--border);
   border-radius: var(--radius);
   background: var(--color-surface);
+}
+
+/* p30.4: theme native checkboxes app-wide (the Active-only filter, account/grant flag
+   checkboxes, everywhere). accent-color tints the box + check with the primary token,
+   which resolves per-theme via light-dark(). One global rule — not per page. The
+   `<label><input>…</label>` markup and the shared focus-visible ring (see :where(...)
+   above) are untouched, so keyboard operation and accessibility are preserved. */
+input[type="checkbox"] {
+  accent-color: var(--color-primary);
+  width: 1rem;
+  height: 1rem;
+  vertical-align: middle;
 }
 /* p26.87: the new-user password field + its Regenerate button on one row. The button
    is server-rendered `hidden` (no-JS fallback) and pwgen.js unhides it, so the wrap
@@ -1383,21 +1400,16 @@ input[aria-invalid="true"] {
    longer explanation than the short per-split memos. */
 .txn-notes-field { display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-4); }
 .txn-notes-field > label { font-weight: 600; font-size: 0.85rem; color: var(--color-text-muted); }
-/* p28: a proper notes area -- fitted to the theme input tokens (border/radius/surface/
-   padding), a taller ~5-line min-height, and a readable ~60ch max width so it reads as a
-   notes box, not a stray full-bleed textarea. */
+/* p28/p30.4: the notes area's bespoke SIZING only — a taller ~5-line min-height and a
+   readable ~60ch max width so it reads as a notes box, not a stray full-bleed textarea.
+   The VISUAL theming (border/radius/surface/padding) now comes from the shared `textarea`
+   rule so every textarea is consistent (p30.4). */
 .txn-notes {
   width: 100%;
   max-width: 60ch;
   min-height: 7.5rem;
   box-sizing: border-box;
   resize: vertical;
-  font: inherit;
-  padding: var(--space-2) var(--space-3);
-  color: var(--color-text);
-  background: var(--color-surface);
-  border: var(--border);
-  border-radius: var(--radius);
 }
 .txn-notes:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -1px; }
 
