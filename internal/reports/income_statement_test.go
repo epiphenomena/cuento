@@ -95,6 +95,18 @@ func isRowFor(t reports.Table, key string) ([]reports.Cell, bool) {
 	return nil, false
 }
 
+// isKindFor returns the RowKind of the row whose first-cell string equals key, and
+// whether found. Used to assert the p30.10 three-tier total distinction: placeholder
+// parents are RowSubtotal, section totals RowSectionTotal, the net RowTotal.
+func isKindFor(t reports.Table, key string) (reports.RowKind, bool) {
+	for _, row := range t.Rows {
+		if len(row.Cells) > 0 && row.Cells[0].Text == key {
+			return row.Kind, true
+		}
+	}
+	return 0, false
+}
+
 // TestIncomeStatementGolden runs the income statement over the fixture at the pinned
 // params, hand-verifies the R/E tree subtotals + the net surplus + txn-date conversion,
 // checks the comparative columns foot to the total column, and compares the rendered
@@ -151,6 +163,25 @@ func TestIncomeStatementGolden(t *testing.T) {
 	}
 	if got, ok := isTotalFor(table, "Expenses"); !ok || got != 2_377_087 {
 		t.Errorf("Expenses parent subtotal = %d/%v, want 2377087", got, ok)
+	}
+
+	// --- p30.10 THREE DISTINCT TOTAL TIERS. The "Total revenue"/"Total expenses" SECTION
+	// totals are RowSectionTotal (the middle tier — more emphasis than the placeholder
+	// parent, less than the grand total), the placeholder PARENTS stay RowSubtotal, and the
+	// grand "Change in net assets" stays RowTotal. This ranks the three tiers so a single-
+	// parent section's total no longer renders identically to its parent.
+	for _, key := range []string{"reports.income_statement.total.revenue", "reports.income_statement.total.expenses"} {
+		if k, ok := isKindFor(table, key); !ok || k != reports.RowSectionTotal {
+			t.Errorf("section total %q kind = %v/%v, want RowSectionTotal", key, k, ok)
+		}
+	}
+	for _, name := range []string{"Revenue", "Expenses"} {
+		if k, ok := isKindFor(table, name); !ok || k != reports.RowSubtotal {
+			t.Errorf("placeholder parent %q kind = %v/%v, want RowSubtotal", name, k, ok)
+		}
+	}
+	if k, ok := isKindFor(table, "reports.income_statement.net"); !ok || k != reports.RowTotal {
+		t.Errorf("net line kind = %v/%v, want RowTotal", k, ok)
 	}
 
 	// --- NET surplus = Revenue - Expense = 6,476,594 - 2,377,087 = 4,099,507 (the sum-

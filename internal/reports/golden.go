@@ -106,12 +106,17 @@ func DumpTable(t Table, localize func(key string) string, exps map[string]int) s
 }
 
 // kindMarker returns the leading marker for a row kind in the text dump: blank for a
-// data row, ">" for a subtotal, "=" for a grand total, "!" for a D19 warning — so a
-// reviewer reads the row kinds at a glance and a golden diff shows a kind change.
+// data row, ">" for a placeholder-parent subtotal, "#" for a SECTION total (p30.10;
+// the middle tier — "Total revenue"/"Total assets"), "=" for a grand total, "!" for a
+// D19 warning — so a reviewer reads the row kinds (and the three total tiers) at a
+// glance and a golden diff shows a kind change. Every marker is a SINGLE ASCII char so
+// the leading column stays one wide and money amounts never shift.
 func kindMarker(k RowKind) string {
 	switch k {
 	case RowSubtotal:
 		return ">"
+	case RowSectionTotal:
+		return "#"
 	case RowTotal:
 		return "="
 	case RowWarning:

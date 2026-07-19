@@ -783,11 +783,12 @@ type renderedColumn struct {
 }
 
 type renderedRow struct {
-	Cells    []renderedCell
-	Indent   int
-	Subtotal bool
-	Total    bool
-	Warning  bool
+	Cells        []renderedCell
+	Indent       int
+	Subtotal     bool
+	SectionTotal bool // p30.10: the middle total tier ("Total revenue"/"Total assets").
+	Total        bool
+	Warning      bool
 }
 
 type renderedCell struct {
@@ -836,10 +837,11 @@ func renderTable(t reports.Table, reportID, lang string, opts money.FormatOpts, 
 	}
 	for _, row := range t.Rows {
 		rr := renderedRow{
-			Indent:   row.Indent,
-			Subtotal: row.Kind == reports.RowSubtotal,
-			Total:    row.Kind == reports.RowTotal,
-			Warning:  row.Kind == reports.RowWarning,
+			Indent:       row.Indent,
+			Subtotal:     row.Kind == reports.RowSubtotal,
+			SectionTotal: row.Kind == reports.RowSectionTotal,
+			Total:        row.Kind == reports.RowTotal,
+			Warning:      row.Kind == reports.RowWarning,
 		}
 		for _, cell := range row.Cells {
 			rr.Cells = append(rr.Cells, renderCell(cell, reportID, lang, opts, df, exps))

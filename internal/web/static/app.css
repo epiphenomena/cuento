@@ -765,19 +765,33 @@ input[aria-invalid="true"] {
 .report-indent-1 td:first-child { padding-left: calc(var(--space-4) * 2.25); }
 .report-indent-2 td:first-child { padding-left: calc(var(--space-4) * 4.5); }
 .report-indent-3 td:first-child { padding-left: calc(var(--space-4) * 6.75); }
-/* p28.24 / p30.6: accounting rules for the report's KEY TOTALS. A subtotal (a
-   section total like Total Revenue / Total Expense = RowSubtotal) gets a heavier
-   rule above the row PLUS a subtle surface tint so it lifts clearly off the data
-   rows; a grand total (Change in Net Assets = RowTotal) gets that same tint but a
-   DOUBLE rule above and the accounting double-underline below, with the strongest
-   weight — so the three headline lines (Total revenue, Total expenses, Change in
-   net assets) read as the statement's anchors. Uses the theme tokens (border +
-   surface-alt) so it stays legible in both themes; @media print forces the light
-   tokens and browsers strip the fill, leaving the borders + weight to carry the
-   emphasis on paper (verified: the rules rest on borders/font-weight, not the fill). */
+/* p28.24 / p30.6 / p30.10: accounting rules for the report's KEY TOTALS, in THREE
+   visually distinct, clearly RANKED tiers so a reviewer reads the hierarchy at a glance:
+     1. .report-subtotal — a placeholder-PARENT roll-up (Revenue/Expenses and nested
+        parents, Total assets' sub-parents) = the LIGHTEST emphasis: 600 weight, a light
+        2px rule above, a subtle surface tint.
+     2. .report-section-total — the SECTION total ("Total revenue"/"Total expenses",
+        "Total assets"/"Total liabilities"/"Total net assets", the program statement's
+        per-currency section totals) = MORE emphasis than the parent (it is the definitive
+        section figure): 700 weight, a HEAVIER (darker + thicker) rule above AND a thin
+        rule below, same tint — so in a single-parent section "Total revenue" no longer
+        reads identically to its "Revenue" parent.
+     3. .report-total — the GRAND total (Change in Net Assets, Total liabilities and net
+        assets) = the STRONGEST: 700 weight and the accounting DOUBLE rule above + below.
+   The tiers are ordered by border WEIGHT/DARKNESS and font-weight, not by the fill, so
+   they survive @media print (which forces the light tokens and lets browsers strip the
+   background): a light single rule < a heavy single rule < a double rule carries the rank
+   on paper. Uses theme tokens (border / text-muted / surface-alt) so it stays legible in
+   both themes. */
 .report-subtotal {
   font-weight: 600;
   border-top: 2px solid var(--color-border);
+  background: var(--color-surface-alt);
+}
+.report-section-total {
+  font-weight: 700;
+  border-top: 2px solid var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
   background: var(--color-surface-alt);
 }
 .report-total {
@@ -846,15 +860,15 @@ input[aria-invalid="true"] {
   /* The top-left corner is BOTH a sticky header and the sticky first column -- keep it
      above both so neither the scrolling body nor a scrolling header slides under it. */
   .report-scroll .report-table thead th:first-child { z-index: 3; }
-  /* Subtotal/total/warning rows carry their own emphasis background; give their sticky
-     first cell the matching surface so the frozen column matches the row it belongs to.
-     p30.6: the section-total (subtotal) and grand-total rows now tint to surface-alt,
-     so their frozen first cell must pick up the same tint (else it masks with the plain
-     surface). */
+  /* Subtotal/section-total/total/warning rows carry their own emphasis background; give
+     their sticky first cell the matching surface so the frozen column matches the row it
+     belongs to. p30.6/p30.10: all three total tiers tint to surface-alt, so their frozen
+     first cell must pick up the same tint (else it masks with the plain surface). */
   .report-scroll .report-table tr.report-warning td:first-child {
     background: var(--color-danger-bg);
   }
   .report-scroll .report-table tr.report-subtotal td:first-child,
+  .report-scroll .report-table tr.report-section-total td:first-child,
   .report-scroll .report-table tr.report-total td:first-child {
     background: var(--color-surface-alt);
   }
@@ -939,8 +953,10 @@ input[aria-invalid="true"] {
   .report-table thead { display: table-header-group; }
   .report-table tr,
   .report-subtotal,
+  .report-section-total,
   .report-total { break-inside: avoid; }
   .report-subtotal,
+  .report-section-total,
   .report-total { break-before: avoid; }
 
   /* 3e. WIDE COMPARATIVE STATEMENTS (many period/program columns) can exceed portrait

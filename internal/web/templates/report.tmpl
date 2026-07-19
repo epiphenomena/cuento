@@ -279,7 +279,7 @@
     </thead>
     <tbody>
       {{- range .Table.Rows}}
-      <tr class="report-row report-indent-{{.Indent}}{{if .Subtotal}} report-subtotal{{end}}{{if .Total}} report-total{{end}}{{if .Warning}} report-warning{{end}}"{{if $.Tree}} data-depth="{{.Indent}}"{{end}}{{if .Warning}} role="alert"{{end}}>
+      <tr class="report-row report-indent-{{.Indent}}{{if .Subtotal}} report-subtotal{{end}}{{if .SectionTotal}} report-section-total{{end}}{{if .Total}} report-total{{end}}{{if .Warning}} report-warning{{end}}"{{if $.Tree}} data-depth="{{.Indent}}"{{end}}{{if .Warning}} role="alert"{{end}}>
         {{- range .Cells}}
         {{- if .Measures}}
         {{/* p30.9: a budget-variance grid cell folds all three measures into three spans;

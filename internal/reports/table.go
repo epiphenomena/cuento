@@ -53,9 +53,18 @@ type RowKind int
 const (
 	// RowData is an ordinary data row.
 	RowData RowKind = iota
-	// RowSubtotal is a subtotal row (a subtree's aggregate); emphasized.
+	// RowSubtotal is a placeholder-parent roll-up row (a subtree's aggregate);
+	// emphasized — the LIGHTEST of the three total tiers.
 	RowSubtotal
-	// RowTotal is a grand-total row; emphasized more strongly.
+	// RowSectionTotal is a SECTION total row (p30.10): the definitive figure for a
+	// whole section — "Total revenue"/"Total expenses" on the statement of activities,
+	// "Total assets"/"Total liabilities"/"Total net assets" on the balance sheet, the
+	// per-currency section totals on the program statement. It ranks BETWEEN the
+	// placeholder-parent RowSubtotal (lighter) and the grand-total RowTotal (strongest,
+	// double rule), so a single-parent section's "Total revenue" no longer looks
+	// identical to its "Revenue" parent.
+	RowSectionTotal
+	// RowTotal is a grand-total row; emphasized most strongly (double rule).
 	RowTotal
 	// RowWarning is the D19 intercompany warning row: a nonzero net after
 	// collapsing flagged accounts, surfaced as a visible warning per rule (D19).

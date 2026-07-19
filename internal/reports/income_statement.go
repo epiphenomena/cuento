@@ -391,14 +391,17 @@ func (b *isBuilder) amountRow(nameCell Cell, cols []int64, indent int, kind RowK
 }
 
 // totalRow appends a section total row from a per-column value slice (already sign-
-// flipped to positive).
+// flipped to positive). It is a RowSectionTotal (p30.10): the definitive section figure
+// ("Total revenue"/"Total expenses"), ranked ABOVE the placeholder-parent RowSubtotal
+// rows and BELOW the grand-total "Change in net assets" (RowTotal) — three distinct
+// tiers, so a single-parent section's total no longer reads identically to its parent.
 func (b *isBuilder) totalRow(key string, cols []int64) {
 	cells := make([]Cell, 0, len(cols)+1)
 	cells = append(cells, LabelCell(key))
 	for _, v := range cols {
 		cells = append(cells, MoneyCell(v, b.target))
 	}
-	b.rows = append(b.rows, Row{Cells: cells, Indent: 0, Kind: RowSubtotal})
+	b.rows = append(b.rows, Row{Cells: cells, Indent: 0, Kind: RowSectionTotal})
 }
 
 // netLine appends the grand net surplus/deficit row (Revenue - Expense) per column.

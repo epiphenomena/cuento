@@ -600,9 +600,13 @@ func (b *bsBuilder) syntheticLine(key string, byCcy map[string]int64, ofWhich bo
 	}
 }
 
-// totalLine appends a section subtotal row (converted total; per-currency in detail).
+// totalLine appends a SECTION total row (converted total; per-currency in detail):
+// "Total assets"/"Total liabilities"/"Total net assets". A RowSectionTotal (p30.10) —
+// the definitive section figure, ranked ABOVE the placeholder-parent RowSubtotal rollups
+// and BELOW the grand-total "Total liabilities and net assets" (RowTotal), so the three
+// total tiers read distinctly (matching the statement of activities).
 func (b *bsBuilder) totalLine(key string, byCcy map[string]int64) {
-	b.emphasized(key, byCcy, RowSubtotal, 0)
+	b.emphasized(key, byCcy, RowSectionTotal, 0)
 }
 
 // grandTotalLine appends the identity's right-hand grand total (L + NA).

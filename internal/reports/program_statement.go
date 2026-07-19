@@ -447,13 +447,16 @@ func (b *psBuilder) headerRow(ccy, key string) {
 	b.rows = append(b.rows, Row{Cells: cells, Kind: RowData})
 }
 
-// totalRow appends a section-total row with the section's per-column leaf sums (signed).
+// totalRow appends a SECTION-total row with the section's per-column leaf sums (signed):
+// a RowSectionTotal (p30.10), ranked ABOVE the placeholder-parent RowSubtotal rollups and
+// BELOW the per-currency net (RowTotal), so the three total tiers read distinctly (as on
+// the statement of activities and balance sheet).
 func (b *psBuilder) totalRow(ccy, key string, cols []int64) {
 	cells := b.leadCells(LabelCell(key), ccy)
 	for _, v := range cols {
 		cells = append(cells, MoneyCell(v, b.moneyCcy(ccy)))
 	}
-	b.rows = append(b.rows, Row{Cells: cells, Kind: RowSubtotal})
+	b.rows = append(b.rows, Row{Cells: cells, Kind: RowSectionTotal})
 }
 
 // netLine appends the net-per-program row for this currency block: net = revenue −
