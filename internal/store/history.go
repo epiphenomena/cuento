@@ -130,7 +130,7 @@ type HistVersionState struct {
 // account-merge repoint) carries op="update" with no header diffs.
 type HistoryEntry struct {
 	ChangeID    ids.ChangeID
-	ActorID     int64
+	ActorID     ids.UserID
 	ActorName   string
 	At          string // RFC3339Nano (== changes.at); the web layer formats the date
 	Op          string
@@ -164,7 +164,7 @@ func (s *Store) TransactionHistory(ctx context.Context, id ids.TransactionID) ([
 	// account-merge repoint versions a split with NO transactions_versions row): such a
 	// change is placed by its own change_id, not appended after all header changes.
 	entries := make(map[ids.ChangeID]*HistoryEntry, len(hdrRows))
-	ensure := func(changeID ids.ChangeID, actorID int64, actorName, at string) *HistoryEntry {
+	ensure := func(changeID ids.ChangeID, actorID ids.UserID, actorName, at string) *HistoryEntry {
 		e, ok := entries[changeID]
 		if !ok {
 			e = &HistoryEntry{

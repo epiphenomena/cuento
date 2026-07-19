@@ -49,7 +49,7 @@ RETURNING id
 `
 
 type InsertChangeParams struct {
-	ActorID int64
+	ActorID ids.UserID
 	At      string
 	Kind    string
 	Note    sql.NullString

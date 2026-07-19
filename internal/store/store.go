@@ -137,7 +137,7 @@ func (s *Store) write(
 	q := s.q.WithTx(tx)
 
 	changeID, err := q.InsertChange(ctx, sqlc.InsertChangeParams{
-		ActorID: int64(actor.ID),
+		ActorID: actor.ID,
 		At:      s.now().Format(time.RFC3339Nano),
 		Kind:    kind,
 		Note:    nullString(note),

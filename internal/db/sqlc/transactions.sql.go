@@ -497,7 +497,7 @@ type SplitVersionHistoryRow struct {
 	Memo            string
 	Description     string
 	Position        int64
-	ActorID         int64
+	ActorID         ids.UserID
 	ActorName       string
 	At              string
 }
@@ -814,7 +814,7 @@ type TransactionVersionHistoryRow struct {
 	Notes        string
 	Currency     string
 	Deleted      int64
-	ActorID      int64
+	ActorID      ids.UserID
 	ActorName    string
 	At           string
 }

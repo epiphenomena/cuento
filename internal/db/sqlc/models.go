@@ -133,7 +133,7 @@ type BudgetSplitsVersion struct {
 
 type Change struct {
 	ID      ids.ChangeID
-	ActorID int64
+	ActorID ids.UserID
 	At      string
 	Kind    string
 	Note    sql.NullString
