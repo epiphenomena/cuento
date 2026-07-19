@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"cuento/internal/i18n"
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/reports"
 	"cuento/internal/store"
@@ -225,11 +226,11 @@ func (s *server) resolveParams(
 		}
 		if v := first(q, "budget"); v != "" {
 			if id := parseID(v); id != 0 && budgetExists(plans, id) {
-				p.Budget = id
+				p.Budget = reports.BudgetPlanID(id)
 			}
 		}
 		if p.Budget != 0 && rep.ParamsSpec.Period {
-			from, to, err := s.planDateSpan(ctx, p.Budget)
+			from, to, err := s.planDateSpan(ctx, ids.BudgetPlanID(p.Budget))
 			if err != nil {
 				return reports.Params{}, paramsForm{}, err
 			}
@@ -503,7 +504,7 @@ func (s *server) budgetReportOptions(ctx context.Context) ([]budgetOption, error
 	}
 	out := make([]budgetOption, 0, len(ps))
 	for _, p := range ps {
-		out = append(out, budgetOption{ID: p.ID, Label: p.Name})
+		out = append(out, budgetOption{ID: int64(p.ID), Label: p.Name})
 	}
 	return out, nil
 }
@@ -523,7 +524,7 @@ func budgetExists(plans []budgetOption, id int64) bool {
 // report window, since a plan carries no stored period -- p27.3). Empty strings when
 // the plan has no splits. BudgetSplits is date-ordered, so the first and last rows
 // bound the span.
-func (s *server) planDateSpan(ctx context.Context, planID int64) (from, to string, err error) {
+func (s *server) planDateSpan(ctx context.Context, planID ids.BudgetPlanID) (from, to string, err error) {
 	splits, err := s.store.BudgetSplits(ctx, planID)
 	if err != nil {
 		return "", "", err
@@ -653,7 +654,7 @@ func (s *server) buildParamsForm(
 		Fund:            int64(p.Fund),
 		Program:         int64(p.Program),
 		Recon:           int64(p.Reconciliation),
-		Budget:          p.Budget,
+		Budget:          int64(p.Budget),
 	}
 	for _, sub := range subs {
 		f.Scopes = append(f.Scopes, scopeOption{

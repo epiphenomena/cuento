@@ -39,6 +39,7 @@ type (
 	ProgramID        = ids.ProgramID
 	SubsidiaryID     = ids.SubsidiaryID
 	ReconciliationID = ids.ReconciliationID
+	BudgetPlanID     = ids.BudgetPlanID
 )
 
 // Scope is a report scope: a subsidiary consolidated with ALL its descendants

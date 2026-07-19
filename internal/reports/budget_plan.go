@@ -91,7 +91,7 @@ type budgetSplitResolved struct {
 // error on a bad id) and resolves each split's account type + open_item flag from
 // the account tree, once per run. It is the shared front-half of both budget-plan
 // report methods.
-func (tk *Toolkit) planSplitsResolved(ctx context.Context, planID int64) ([]budgetSplitResolved, error) {
+func (tk *Toolkit) planSplitsResolved(ctx context.Context, planID BudgetPlanID) ([]budgetSplitResolved, error) {
 	if _, err := tk.store.GetBudgetPlan(ctx, planID); err != nil {
 		return nil, fmt.Errorf("budget report: load plan %d: %w", planID, err)
 	}
@@ -189,7 +189,7 @@ func netDebitSign(acctType string) int64 {
 // FORWARD through the projected inflows/outflows (classified by account type) to
 // period end. Per fund and per currency (restricted vs unrestricted tracked
 // separately, D20). Native currency (no conversion).
-func (tk *Toolkit) CashflowProjectionPlan(ctx context.Context, s Scope, planID int64, from, to string) (map[FundCurrency]ProjectionSeries, error) {
+func (tk *Toolkit) CashflowProjectionPlan(ctx context.Context, s Scope, planID BudgetPlanID, from, to string) (map[FundCurrency]ProjectionSeries, error) {
 	splits, err := tk.planSplitsResolved(ctx, planID)
 	if err != nil {
 		return nil, err
@@ -266,7 +266,7 @@ func (tk *Toolkit) CashflowProjectionPlan(ctx context.Context, s Scope, planID i
 // Only R/E splits participate: BudgetKeyActivity returns only program-carrying R/E
 // actuals, so an open_item A/L budget-split has no comparable actual (DECISIONS
 // tension 2 -- A/R-A/P variance is a period-net concern out of this report's scope).
-func (tk *Toolkit) BudgetVariancePlan(ctx context.Context, s Scope, planID int64, from, to string, g Granularity) ([]BudgetVsActualCell, error) {
+func (tk *Toolkit) BudgetVariancePlan(ctx context.Context, s Scope, planID BudgetPlanID, from, to string, g Granularity) ([]BudgetVsActualCell, error) {
 	splits, err := tk.planSplitsResolved(ctx, planID)
 	if err != nil {
 		return nil, err

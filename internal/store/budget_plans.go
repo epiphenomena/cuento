@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // Budget-PLAN + budget-SPLIT operations (p27.2) -- the NEW split-derived budget
@@ -72,8 +73,8 @@ type BudgetPlanInput struct {
 }
 
 // CreateBudgetPlan creates a plan under one change and returns the new id.
-func (s *Store) CreateBudgetPlan(ctx context.Context, in BudgetPlanInput) (int64, error) {
-	var newID int64
+func (s *Store) CreateBudgetPlan(ctx context.Context, in BudgetPlanInput) (ids.BudgetPlanID, error) {
+	var newID ids.BudgetPlanID
 	_, err := s.write(ctx, "budget_plan.create", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			if _, err := q.GetSubsidiary(ctx, in.SubsidiaryID); err != nil {
@@ -100,7 +101,7 @@ func (s *Store) CreateBudgetPlan(ctx context.Context, in BudgetPlanInput) (int64
 }
 
 // UpdateBudgetPlan replaces a plan's fields under one change.
-func (s *Store) UpdateBudgetPlan(ctx context.Context, id int64, in BudgetPlanInput) error {
+func (s *Store) UpdateBudgetPlan(ctx context.Context, id ids.BudgetPlanID, in BudgetPlanInput) error {
 	_, err := s.write(ctx, "budget_plan.update", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			if _, err := q.GetBudgetPlan(ctx, id); err != nil {
@@ -136,7 +137,7 @@ func (s *Store) UpdateBudgetPlan(ctx context.Context, id int64, in BudgetPlanInp
 // (snapshot-before-delete, rule 14), then removes the splits and the plan inside the
 // same write funnel transaction -- so a failure rolls the WHOLE cascade back and the
 // audit trail is complete (a delete version exists for each removed row).
-func (s *Store) DeleteBudgetPlan(ctx context.Context, id int64) error {
+func (s *Store) DeleteBudgetPlan(ctx context.Context, id ids.BudgetPlanID) error {
 	_, err := s.write(ctx, "budget_plan.delete", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			if _, err := q.GetBudgetPlan(ctx, id); err != nil {
@@ -172,7 +173,7 @@ func (s *Store) DeleteBudgetPlan(ctx context.Context, id int64) error {
 }
 
 // GetBudgetPlan returns a plan's current live row (read; sqlc).
-func (s *Store) GetBudgetPlan(ctx context.Context, id int64) (sqlc.BudgetPlan, error) {
+func (s *Store) GetBudgetPlan(ctx context.Context, id ids.BudgetPlanID) (sqlc.BudgetPlan, error) {
 	row, err := s.q.GetBudgetPlan(ctx, id)
 	if err != nil {
 		return sqlc.BudgetPlan{}, fmt.Errorf("store: get budget plan %d: %w", id, err)
@@ -209,8 +210,8 @@ type BudgetSplitInput struct {
 // A/L), the fund/program refs+scope, and the program-required/forbidden rule inside
 // fn (all roll the change back on rejection). The resolved program (prefilled from
 // the account default on R/E) is what gets stored.
-func (s *Store) CreateBudgetSplit(ctx context.Context, planID int64, in BudgetSplitInput) (int64, error) {
-	var newID int64
+func (s *Store) CreateBudgetSplit(ctx context.Context, planID ids.BudgetPlanID, in BudgetSplitInput) (ids.BudgetSplitID, error) {
+	var newID ids.BudgetSplitID
 	_, err := s.write(ctx, "budget_split.create", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			resolved, err := resolveBudgetSplit(ctx, q, planID, in)
@@ -241,7 +242,7 @@ func (s *Store) CreateBudgetSplit(ctx context.Context, planID int64, in BudgetSp
 
 // UpdateBudgetSplit replaces a split's fields under one change (same validation and
 // program defaulting as create). The plan is fixed (a split belongs to its plan).
-func (s *Store) UpdateBudgetSplit(ctx context.Context, id int64, in BudgetSplitInput) error {
+func (s *Store) UpdateBudgetSplit(ctx context.Context, id ids.BudgetSplitID, in BudgetSplitInput) error {
 	_, err := s.write(ctx, "budget_split.update", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			cur, err := q.GetBudgetSplit(ctx, id)
@@ -277,7 +278,7 @@ func (s *Store) UpdateBudgetSplit(ctx context.Context, id int64, in BudgetSplitI
 
 // DeleteBudgetSplit HARD-deletes a split under one change, appending an op='delete'
 // version FIRST (snapshot-before-delete, rule 14).
-func (s *Store) DeleteBudgetSplit(ctx context.Context, id int64) error {
+func (s *Store) DeleteBudgetSplit(ctx context.Context, id ids.BudgetSplitID) error {
 	_, err := s.write(ctx, "budget_split.delete", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			if _, err := q.GetBudgetSplit(ctx, id); err != nil {
@@ -311,7 +312,7 @@ func (s *Store) DeleteBudgetSplit(ctx context.Context, id int64) error {
 // index is -1 for a non-row error (a bad plan id). This is the MIRROR of
 // ReplaceExpenseReportLines, minus the by-id diff (a budget-split grid has no per-row
 // id round-trip -- the whole set is replaced).
-func (s *Store) ReplaceBudgetSplits(ctx context.Context, planID int64, desired []BudgetSplitInput) (int, error) {
+func (s *Store) ReplaceBudgetSplits(ctx context.Context, planID ids.BudgetPlanID, desired []BudgetSplitInput) (int, error) {
 	failedIdx := -1
 	_, err := s.write(ctx, "budget_plan.replace_splits", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
@@ -376,7 +377,7 @@ func (s *Store) ReplaceBudgetSplits(ctx context.Context, planID int64, desired [
 // mid-batch failure never leaves a partial append that a retry would then duplicate).
 // On a rejection it returns the FAILING desired index (0-based) so the handler can name
 // the offending CSV row; -1 for a non-row error.
-func (s *Store) AppendBudgetSplits(ctx context.Context, planID int64, splits []BudgetSplitInput) (int, error) {
+func (s *Store) AppendBudgetSplits(ctx context.Context, planID ids.BudgetPlanID, splits []BudgetSplitInput) (int, error) {
 	failedIdx := -1
 	_, err := s.write(ctx, "budget_plan.append_splits", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
@@ -419,7 +420,7 @@ func (s *Store) AppendBudgetSplits(ctx context.Context, planID int64, splits []B
 }
 
 // GetBudgetSplit returns a split's current live row (read; sqlc).
-func (s *Store) GetBudgetSplit(ctx context.Context, id int64) (sqlc.BudgetSplit, error) {
+func (s *Store) GetBudgetSplit(ctx context.Context, id ids.BudgetSplitID) (sqlc.BudgetSplit, error) {
 	row, err := s.q.GetBudgetSplit(ctx, id)
 	if err != nil {
 		return sqlc.BudgetSplit{}, fmt.Errorf("store: get budget split %d: %w", id, err)
@@ -428,7 +429,7 @@ func (s *Store) GetBudgetSplit(ctx context.Context, id int64) (sqlc.BudgetSplit,
 }
 
 // BudgetSplits returns a plan's splits, date-then-id-ordered (read; sqlc).
-func (s *Store) BudgetSplits(ctx context.Context, planID int64) ([]sqlc.BudgetSplit, error) {
+func (s *Store) BudgetSplits(ctx context.Context, planID ids.BudgetPlanID) ([]sqlc.BudgetSplit, error) {
 	rows, err := s.q.ListBudgetSplits(ctx, planID)
 	if err != nil {
 		return nil, fmt.Errorf("store: budget plan %d splits: %w", planID, err)
@@ -452,7 +453,7 @@ type resolvedBudgetSplit struct {
 // ProgramSubtreeIDs) so budget-splits obey D18/D20 exactly as real splits do, minus
 // the zero-sum/currency invariants (a budget-split is single-legged). Runs inside fn
 // so a rejection rolls the change back.
-func resolveBudgetSplit(ctx context.Context, q *sqlc.Queries, planID int64, in BudgetSplitInput) (resolvedBudgetSplit, error) {
+func resolveBudgetSplit(ctx context.Context, q *sqlc.Queries, planID ids.BudgetPlanID, in BudgetSplitInput) (resolvedBudgetSplit, error) {
 	plan, err := q.GetBudgetPlan(ctx, planID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -552,12 +553,12 @@ func resolveBudgetSplit(ctx context.Context, q *sqlc.Queries, planID int64, in B
 		// Fund-program scope (R/E only): the resolved program must be inside the
 		// fund's program subtree if the fund has one (D20).
 		if fund != nil && fund.ProgramID.Valid {
-			ids, err := q.ProgramSubtreeIDs(ctx, fund.ProgramID.Int64)
+			subtree, err := q.ProgramSubtreeIDs(ctx, fund.ProgramID.Int64)
 			if err != nil {
 				return resolvedBudgetSplit{}, fmt.Errorf("budget split fund program subtree %d: %w", fund.ProgramID.Int64, err)
 			}
 			inScope := false
-			for _, sid := range ids {
+			for _, sid := range subtree {
 				if sid == pid {
 					inScope = true
 					break
@@ -576,7 +577,7 @@ func resolveBudgetSplit(ctx context.Context, q *sqlc.Queries, planID int64, in B
 }
 
 // insertBudgetPlanVersion appends the budget_plans snapshot-from-live version row.
-func insertBudgetPlanVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID int64) error {
+func insertBudgetPlanVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.BudgetPlanID) error {
 	if err := q.InsertBudgetPlanVersion(ctx, sqlc.InsertBudgetPlanVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append budget plan version (entity %d, op %s): %w", entityID, op, err)
 	}
@@ -585,7 +586,7 @@ func insertBudgetPlanVersion(ctx context.Context, q *sqlc.Queries, changeID int6
 
 // insertBudgetSplitVersion appends the budget_splits snapshot-from-live version row.
 // For op='delete' it MUST run BEFORE the live delete (see DeleteBudgetSplit).
-func insertBudgetSplitVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID int64) error {
+func insertBudgetSplitVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.BudgetSplitID) error {
 	if err := q.InsertBudgetSplitVersion(ctx, sqlc.InsertBudgetSplitVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append budget split version (entity %d, op %s): %w", entityID, op, err)
 	}

@@ -136,7 +136,7 @@ type IDs struct {
 	// >=2 programs, incl. R/E legs AND an open_item A/R leg, on varied dates) so the
 	// p27.3 cash-flow / variance reports have something to show. (The old schedule-
 	// based sample budget was retired in p27.3.)
-	SampleBudgetPlan int64 // the sample budget plan
+	SampleBudgetPlan ids.BudgetPlanID // the sample budget plan
 }
 
 // ptr returns a pointer to v (concise optional-field construction).

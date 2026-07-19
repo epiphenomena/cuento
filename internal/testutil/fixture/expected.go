@@ -97,7 +97,7 @@ type Expected struct {
 // plan's split dates). Amounts are SYNTHETIC (rule 11) and asserted off the emitted
 // report cells / reviewed goldens rather than pinned here.
 type SampleBudgetPlanExpected struct {
-	Plan   int64
+	Plan   ids.BudgetPlanID
 	From   string // earliest split date (the reports' default window start)
 	To     string // latest split date (the reports' default window end)
 	Splits int    // number of budget-splits the seam created

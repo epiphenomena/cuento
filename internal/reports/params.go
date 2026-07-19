@@ -110,7 +110,7 @@ type Params struct {
 	// report-specific param the web layer parses only for a report whose spec declares
 	// it, validated against the real budget set. When a budget IS chosen the web layer
 	// also defaults From/To to the budget's own period (p19.4).
-	Budget int64
+	Budget BudgetPlanID
 }
 
 // InProgramScope reports whether program id is visible under the grant's

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/testutil"
 )
 
@@ -19,7 +20,8 @@ import (
 // plan on it, an R/E (expense) account mapped to it, a revenue account, an
 // open_item receivable account, a program, and a fund scoped to the sub.
 type splitSetup struct {
-	sub, plan, expense, revenue, receivable, prog, fund int64
+	sub, expense, revenue, receivable, prog, fund int64
+	plan                                          ids.BudgetPlanID
 }
 
 func mkSplitSetup(t *testing.T, s *Store) splitSetup {
@@ -82,8 +84,8 @@ func TestDeleteBudgetPlanCascade(t *testing.T) {
 		t.Fatalf("delete plan: %v", err)
 	}
 	// The plan and its split are gone; both carry a 'delete' version (audit intact).
-	testutil.AssertVersioned(t, d, "budget_plans", st.plan, "delete")
-	testutil.AssertVersioned(t, d, "budget_splits", sp1, "delete")
+	testutil.AssertVersioned(t, d, "budget_plans", int64(st.plan), "delete")
+	testutil.AssertVersioned(t, d, "budget_splits", int64(sp1), "delete")
 	if _, err := s.GetBudgetPlan(mutCtx(), st.plan); err == nil {
 		t.Errorf("plan still exists after delete")
 	}
@@ -107,11 +109,11 @@ func TestCreateBudgetPlanVersioned(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create plan: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "budget_plans", id, "create")
+	testutil.AssertVersioned(t, d, "budget_plans", int64(id), "create")
 	if err := s.UpdateBudgetPlan(mutCtx(), id, BudgetPlanInput{Name: "FY26b", SubsidiaryID: sub}); err != nil {
 		t.Fatalf("update plan: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "budget_plans", id, "update")
+	testutil.AssertVersioned(t, d, "budget_plans", int64(id), "update")
 	got, err := s.GetBudgetPlan(mutCtx(), id)
 	if err != nil {
 		t.Fatalf("get plan: %v", err)
@@ -140,7 +142,7 @@ func TestCreateBudgetSplitRE(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create R/E split: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "budget_splits", id, "create")
+	testutil.AssertVersioned(t, d, "budget_splits", int64(id), "create")
 	got, err := s.GetBudgetSplit(mutCtx(), id)
 	if err != nil {
 		t.Fatalf("get split: %v", err)
@@ -365,7 +367,7 @@ func TestUpdateDeleteBudgetSplit(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("update: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "budget_splits", id, "update")
+	testutil.AssertVersioned(t, d, "budget_splits", int64(id), "update")
 	got, _ := s.GetBudgetSplit(mutCtx(), id)
 	if got.Amount != 200 || got.Date != "2026-03-16" {
 		t.Errorf("after update amount=%d date=%q, want 200/2026-03-16", got.Amount, got.Date)
@@ -373,7 +375,7 @@ func TestUpdateDeleteBudgetSplit(t *testing.T) {
 	if err := s.DeleteBudgetSplit(mutCtx(), id); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "budget_splits", id, "delete")
+	testutil.AssertVersioned(t, d, "budget_splits", int64(id), "delete")
 	splits, _ := s.BudgetSplits(mutCtx(), st.plan)
 	if len(splits) != 0 {
 		t.Errorf("after delete, plan has %d splits, want 0", len(splits))

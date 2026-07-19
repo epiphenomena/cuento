@@ -12,6 +12,7 @@ import (
 
 	"cuento/internal/db/sqlc"
 	"cuento/internal/i18n"
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -85,7 +86,7 @@ func (s *server) budgetPlansPage(w http.ResponseWriter, r *http.Request) {
 	}
 	model := budgetPlansPageModel{}
 	for _, p := range plans {
-		model.Rows = append(model.Rows, budgetPlanRow{ID: p.ID, Name: p.Name, SubName: subNames[p.SubsidiaryID]})
+		model.Rows = append(model.Rows, budgetPlanRow{ID: int64(p.ID), Name: p.Name, SubName: subNames[p.SubsidiaryID]})
 	}
 	s.render(w, r, http.StatusOK, "budget_plans.tmpl", s.newShellPage(r, model))
 }
@@ -143,7 +144,7 @@ func (s *server) budgetPlanCreate(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	redirectAfterForm(w, r, "/budget-plans/"+strconv.FormatInt(id, 10))
+	redirectAfterForm(w, r, "/budget-plans/"+strconv.FormatInt(int64(id), 10))
 }
 
 // renderBudgetPlanFormError re-renders the new-plan form at 422 with a field error.
@@ -169,7 +170,7 @@ func (s *server) renderBudgetPlanFormError(w http.ResponseWriter, r *http.Reques
 func (s *server) budgetPlanUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := parseID(r.PathValue("id"))
-	plan, err := s.store.GetBudgetPlan(ctx, id)
+	plan, err := s.store.GetBudgetPlan(ctx, ids.BudgetPlanID(id))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -184,7 +185,7 @@ func (s *server) budgetPlanUpdate(w http.ResponseWriter, r *http.Request) {
 		s.renderBudgetPlanDetailError(w, r, plan, i18n.T(langOf(ctx), "error.budget_plan.name"))
 		return
 	}
-	if err := s.store.UpdateBudgetPlan(s.actorCtx(ctx), id, store.BudgetPlanInput{
+	if err := s.store.UpdateBudgetPlan(s.actorCtx(ctx), ids.BudgetPlanID(id), store.BudgetPlanInput{
 		Name: name, SubsidiaryID: plan.SubsidiaryID, Notes: notes,
 	}); err != nil {
 		s.serverError(w)
@@ -198,7 +199,7 @@ func (s *server) budgetPlanUpdate(w http.ResponseWriter, r *http.Request) {
 func (s *server) budgetPlanDelete(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := parseID(r.PathValue("id"))
-	if err := s.store.DeleteBudgetPlan(s.actorCtx(ctx), id); err != nil {
+	if err := s.store.DeleteBudgetPlan(s.actorCtx(ctx), ids.BudgetPlanID(id)); err != nil {
 		if errors.Is(err, store.ErrBudgetPlanNotFound) {
 			http.NotFound(w, r)
 			return
@@ -272,7 +273,7 @@ var cadenceIntervals = []cadenceIntervalOption{
 // budgetPlanDetail handles GET /budget-plans/{id} (TxnRead): the plan editor.
 func (s *server) budgetPlanDetail(w http.ResponseWriter, r *http.Request) {
 	id := parseID(r.PathValue("id"))
-	plan, err := s.store.GetBudgetPlan(r.Context(), id)
+	plan, err := s.store.GetBudgetPlan(r.Context(), ids.BudgetPlanID(id))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -319,7 +320,7 @@ func (s *server) buildBudgetPlanDetailModel(w http.ResponseWriter, r *http.Reque
 	exp := s.subsidiaryExponent(ctx, plan.SubsidiaryID)
 
 	model := budgetPlanDetailModel{
-		ID:        plan.ID,
+		ID:        int64(plan.ID),
 		Name:      plan.Name,
 		Notes:     plan.Notes,
 		SubName:   subNames[plan.SubsidiaryID],
@@ -331,7 +332,7 @@ func (s *server) buildBudgetPlanDetailModel(w http.ResponseWriter, r *http.Reque
 	}
 	for _, sp := range splits {
 		row := budgetSplitRow{
-			ID:          sp.ID,
+			ID:          int64(sp.ID),
 			Description: sp.Description,
 			DateInput:   money.FormatDate(parseISOForDisplay(sp.Date), df),
 			AccountID:   sp.AccountID,
@@ -425,7 +426,7 @@ func (s *server) budgetSplitsSave(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(ctx)
 	id := parseID(r.PathValue("id"))
-	plan, err := s.store.GetBudgetPlan(ctx, id)
+	plan, err := s.store.GetBudgetPlan(ctx, ids.BudgetPlanID(id))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -595,7 +596,7 @@ func (s *server) budgetPlanImport(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(ctx)
 	id := parseID(r.PathValue("id"))
-	plan, err := s.store.GetBudgetPlan(ctx, id)
+	plan, err := s.store.GetBudgetPlan(ctx, ids.BudgetPlanID(id))
 	if err != nil {
 		http.NotFound(w, r)
 		return

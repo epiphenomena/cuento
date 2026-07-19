@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 const deleteBudgetPlan = `-- name: DeleteBudgetPlan :exec
@@ -17,7 +19,7 @@ WHERE id = ?
 
 // Hard delete of a budget plan. For op=delete the version row is captured BEFORE
 // this runs (rule 14: the live row must still exist to snapshot).
-func (q *Queries) DeleteBudgetPlan(ctx context.Context, id int64) error {
+func (q *Queries) DeleteBudgetPlan(ctx context.Context, id ids.BudgetPlanID) error {
 	_, err := q.db.ExecContext(ctx, deleteBudgetPlan, id)
 	return err
 }
@@ -29,7 +31,7 @@ WHERE id = ?
 
 // Hard delete of a budget split. For op=delete the version row is captured BEFORE
 // this runs (rule 14: the live row must still exist to snapshot).
-func (q *Queries) DeleteBudgetSplit(ctx context.Context, id int64) error {
+func (q *Queries) DeleteBudgetSplit(ctx context.Context, id ids.BudgetSplitID) error {
 	_, err := q.db.ExecContext(ctx, deleteBudgetSplit, id)
 	return err
 }
@@ -40,7 +42,7 @@ FROM budget_plans
 WHERE id = ?
 `
 
-func (q *Queries) GetBudgetPlan(ctx context.Context, id int64) (BudgetPlan, error) {
+func (q *Queries) GetBudgetPlan(ctx context.Context, id ids.BudgetPlanID) (BudgetPlan, error) {
 	row := q.db.QueryRowContext(ctx, getBudgetPlan, id)
 	var i BudgetPlan
 	err := row.Scan(
@@ -58,7 +60,7 @@ FROM budget_splits
 WHERE id = ?
 `
 
-func (q *Queries) GetBudgetSplit(ctx context.Context, id int64) (BudgetSplit, error) {
+func (q *Queries) GetBudgetSplit(ctx context.Context, id ids.BudgetSplitID) (BudgetSplit, error) {
 	row := q.db.QueryRowContext(ctx, getBudgetSplit, id)
 	var i BudgetSplit
 	err := row.Scan(
@@ -92,9 +94,9 @@ type InsertBudgetPlanParams struct {
 // budget_plans
 // ===========================================================================
 // Live insert of a budget plan. Returns the new id for the store to snapshot.
-func (q *Queries) InsertBudgetPlan(ctx context.Context, arg InsertBudgetPlanParams) (int64, error) {
+func (q *Queries) InsertBudgetPlan(ctx context.Context, arg InsertBudgetPlanParams) (ids.BudgetPlanID, error) {
 	row := q.db.QueryRowContext(ctx, insertBudgetPlan, arg.Name, arg.SubsidiaryID, arg.Notes)
-	var id int64
+	var id ids.BudgetPlanID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -109,8 +111,8 @@ WHERE c.id = ? AND bp.id = ?
 
 type InsertBudgetPlanVersionParams struct {
 	Op   string
-	ID   int64
-	ID_2 int64
+	ID   int64            // change_id
+	ID_2 ids.BudgetPlanID // entity_id (budget_plans.id)
 }
 
 // Snapshot-from-live version append for budget_plans (single-column entity). For
@@ -130,7 +132,7 @@ RETURNING id
 `
 
 type InsertBudgetSplitParams struct {
-	PlanID      int64
+	PlanID      ids.BudgetPlanID
 	Description string
 	Date        string
 	AccountID   int64
@@ -147,7 +149,7 @@ type InsertBudgetSplitParams struct {
 // may be NULL (unrestricted); program_id is NULL only on A/L legs. The store
 // validates the account (leaf in the plan's subsidiary; R/E or open_item A/L), the
 // fund/program refs+scope, and the program-required/forbidden rule. Returns the id.
-func (q *Queries) InsertBudgetSplit(ctx context.Context, arg InsertBudgetSplitParams) (int64, error) {
+func (q *Queries) InsertBudgetSplit(ctx context.Context, arg InsertBudgetSplitParams) (ids.BudgetSplitID, error) {
 	row := q.db.QueryRowContext(ctx, insertBudgetSplit,
 		arg.PlanID,
 		arg.Description,
@@ -158,7 +160,7 @@ func (q *Queries) InsertBudgetSplit(ctx context.Context, arg InsertBudgetSplitPa
 		arg.Amount,
 		arg.Currency,
 	)
-	var id int64
+	var id ids.BudgetSplitID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -175,8 +177,8 @@ WHERE c.id = ? AND bs.id = ?
 
 type InsertBudgetSplitVersionParams struct {
 	Op   string
-	ID   int64
-	ID_2 int64
+	ID   int64             // change_id
+	ID_2 ids.BudgetSplitID // entity_id (budget_splits.id)
 }
 
 // Snapshot-from-live version append for budget_splits (single-column entity). For
@@ -230,7 +232,7 @@ ORDER BY date, id
 
 // The splits of one plan, date-then-id-ordered (the plan editor + p27.3 report
 // source).
-func (q *Queries) ListBudgetSplits(ctx context.Context, planID int64) ([]BudgetSplit, error) {
+func (q *Queries) ListBudgetSplits(ctx context.Context, planID ids.BudgetPlanID) ([]BudgetSplit, error) {
 	rows, err := q.db.QueryContext(ctx, listBudgetSplits, planID)
 	if err != nil {
 		return nil, err
@@ -273,7 +275,7 @@ type UpdateBudgetPlanParams struct {
 	Name         string
 	SubsidiaryID int64
 	Notes        string
-	ID           int64
+	ID           ids.BudgetPlanID
 }
 
 func (q *Queries) UpdateBudgetPlan(ctx context.Context, arg UpdateBudgetPlanParams) error {
@@ -301,7 +303,7 @@ type UpdateBudgetSplitParams struct {
 	ProgramID   sql.NullInt64
 	Amount      int64
 	Currency    string
-	ID          int64
+	ID          ids.BudgetSplitID
 }
 
 func (q *Queries) UpdateBudgetSplit(ctx context.Context, arg UpdateBudgetSplitParams) error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/ledger"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
@@ -31,7 +32,7 @@ func TestSeedSampleBudgetPlan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list budget plans: %v", err)
 	}
-	var planID int64
+	var planID ids.BudgetPlanID
 	for _, p := range plans {
 		if p.Name == devseedBudgetName {
 			planID = p.ID
@@ -40,7 +41,7 @@ func TestSeedSampleBudgetPlan(t *testing.T) {
 	if planID == 0 {
 		t.Fatalf("sample budget plan %q not created", devseedBudgetName)
 	}
-	testutil.AssertVersioned(t, f.DB, "budget_plans", planID, "create")
+	testutil.AssertVersioned(t, f.DB, "budget_plans", int64(planID), "create")
 
 	splits, err := f.Store.BudgetSplits(ctx, planID)
 	if err != nil {
@@ -50,7 +51,7 @@ func TestSeedSampleBudgetPlan(t *testing.T) {
 		t.Fatalf("sample budget plan has no splits")
 	}
 	for _, sp := range splits {
-		testutil.AssertVersioned(t, f.DB, "budget_splits", sp.ID, "create")
+		testutil.AssertVersioned(t, f.DB, "budget_splits", int64(sp.ID), "create")
 	}
 
 	// Ledger stays clean (a budget plan is not a transaction); only the baseline Z19.
