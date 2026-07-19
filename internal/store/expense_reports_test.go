@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/testutil"
 )
 
@@ -51,26 +52,26 @@ func TestExpenseReportLifecycleVersioned(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateExpenseReport: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "expense_reports", reportID, "create")
+	testutil.AssertVersioned(t, d, "expense_reports", int64(reportID), "create")
 
 	// add a line -> versioned op='create' on the line
 	lineID, err := s.AddExpenseReportLine(ctx, reportID, ExpenseReportLineInput{AccountID: acctID, Amount: -1500, Memo: "taxi"})
 	if err != nil {
 		t.Fatalf("AddExpenseReportLine: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "expense_report_lines", lineID, "create")
+	testutil.AssertVersioned(t, d, "expense_report_lines", int64(lineID), "create")
 
 	// edit the line -> op='update'
 	if err := s.UpdateExpenseReportLine(ctx, lineID, ExpenseReportLineInput{AccountID: acctID, Amount: -2000, Memo: "taxi + tip"}); err != nil {
 		t.Fatalf("UpdateExpenseReportLine: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "expense_report_lines", lineID, "update")
+	testutil.AssertVersioned(t, d, "expense_report_lines", int64(lineID), "update")
 
 	// submit (draft -> submitted) -> op='update' on the report
 	if err := s.SubmitExpenseReport(ctx, reportID); err != nil {
 		t.Fatalf("SubmitExpenseReport: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "expense_reports", reportID, "update")
+	testutil.AssertVersioned(t, d, "expense_reports", int64(reportID), "update")
 	if got := expenseReportStatus(t, d, reportID); got != "submitted" {
 		t.Fatalf("status after submit = %q, want submitted", got)
 	}
@@ -82,7 +83,7 @@ func TestExpenseReportLifecycleVersioned(t *testing.T) {
 	if err := s.RejectExpenseReport(ctx, reportID, "missing receipt"); err != nil {
 		t.Fatalf("RejectExpenseReport: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "expense_reports", reportID, "update")
+	testutil.AssertVersioned(t, d, "expense_reports", int64(reportID), "update")
 	if got := expenseReportStatus(t, d, reportID); got != "rejected" {
 		t.Fatalf("status after reject = %q, want rejected", got)
 	}
@@ -100,7 +101,7 @@ func TestExpenseReportLifecycleVersioned(t *testing.T) {
 	if err := s.ResubmitExpenseReport(ctx, reportID); err != nil {
 		t.Fatalf("ResubmitExpenseReport: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "expense_reports", reportID, "update")
+	testutil.AssertVersioned(t, d, "expense_reports", int64(reportID), "update")
 	if got := expenseReportStatus(t, d, reportID); got != "submitted" {
 		t.Fatalf("status after resubmit = %q, want submitted", got)
 	}
@@ -113,7 +114,7 @@ func TestExpenseReportLifecycleVersioned(t *testing.T) {
 	if err := s.ConvertExpenseReport(ctx, reportID, txnID); err != nil {
 		t.Fatalf("ConvertExpenseReport: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "expense_reports", reportID, "update")
+	testutil.AssertVersioned(t, d, "expense_reports", int64(reportID), "update")
 	if got := expenseReportStatus(t, d, reportID); got != "converted" {
 		t.Fatalf("status after convert = %q, want converted", got)
 	}
@@ -150,7 +151,7 @@ func TestRemoveExpenseReportLineVersioned(t *testing.T) {
 	if err := s.RemoveExpenseReportLine(ctx, lineID); err != nil {
 		t.Fatalf("RemoveExpenseReportLine: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "expense_report_lines", lineID, "delete")
+	testutil.AssertVersioned(t, d, "expense_report_lines", int64(lineID), "delete")
 	var live int
 	if err := d.QueryRow(`SELECT COUNT(*) FROM expense_report_lines WHERE id = ?`, lineID).Scan(&live); err != nil {
 		t.Fatalf("count live line: %v", err)
@@ -209,8 +210,8 @@ func TestReplaceExpenseReportLines(t *testing.T) {
 		t.Fatalf("live lines after initial replace = %d, want 2", len(lines))
 	}
 	lineA, lineB := lines[0].ID, lines[1].ID
-	testutil.AssertVersioned(t, d, "expense_report_lines", lineA, "create")
-	testutil.AssertVersioned(t, d, "expense_report_lines", lineB, "create")
+	testutil.AssertVersioned(t, d, "expense_report_lines", int64(lineA), "create")
+	testutil.AssertVersioned(t, d, "expense_report_lines", int64(lineB), "create")
 
 	// Replace again: KEEP A (updated memo), DROP B, ADD a new line C. The final live
 	// set is {A(updated), C}; B is gone with a 'delete' version; A has an 'update'.
@@ -227,7 +228,7 @@ func TestReplaceExpenseReportLines(t *testing.T) {
 	if len(lines) != 2 {
 		t.Fatalf("live lines after diff replace = %d, want 2", len(lines))
 	}
-	byID := map[int64]sqlcExpenseLine{}
+	byID := map[ids.ExpenseReportLineID]sqlcExpenseLine{}
 	for _, l := range lines {
 		byID[l.ID] = sqlcExpenseLine{Amount: l.Amount, Memo: l.Memo}
 	}
@@ -241,8 +242,8 @@ func TestReplaceExpenseReportLines(t *testing.T) {
 	if _, gone := byID[lineB]; gone {
 		t.Fatalf("line B (%d) still live, want deleted", lineB)
 	}
-	testutil.AssertVersioned(t, d, "expense_report_lines", lineA, "update")
-	testutil.AssertVersioned(t, d, "expense_report_lines", lineB, "delete")
+	testutil.AssertVersioned(t, d, "expense_report_lines", int64(lineA), "update")
+	testutil.AssertVersioned(t, d, "expense_report_lines", int64(lineB), "delete")
 
 	// Once submitted, the bulk replace is refused (requireEditable's submitted branch).
 	if err := s.SubmitExpenseReport(ctx, reportID); err != nil {
@@ -295,7 +296,7 @@ func TestExpenseReportLineDescriptionRoundTrip(t *testing.T) {
 	lineID := lines[0].ID
 
 	// The versions snapshot carries the description (rule 5).
-	testutil.AssertVersioned(t, d, "expense_report_lines", lineID, "create")
+	testutil.AssertVersioned(t, d, "expense_report_lines", int64(lineID), "create")
 	var snapDesc string
 	if err := d.QueryRow(
 		`SELECT description FROM expense_report_lines_versions WHERE entity_id = ? ORDER BY id DESC LIMIT 1`,
@@ -320,7 +321,7 @@ func TestExpenseReportLineDescriptionRoundTrip(t *testing.T) {
 	if lines2[0].Description != "Airport transfer, corrected" {
 		t.Errorf("edited line description = %q, want %q", lines2[0].Description, "Airport transfer, corrected")
 	}
-	testutil.AssertVersioned(t, d, "expense_report_lines", lineID, "update")
+	testutil.AssertVersioned(t, d, "expense_report_lines", int64(lineID), "update")
 }
 
 // TestUpdateExpenseReportSubsidiary (p25.3): the subsidiary is editable on a draft
@@ -343,7 +344,7 @@ func TestUpdateExpenseReportSubsidiary(t *testing.T) {
 	if err := s.UpdateExpenseReportSubsidiary(ctx, reportID, sub2); err != nil {
 		t.Fatalf("UpdateExpenseReportSubsidiary (draft, no lines): %v", err)
 	}
-	testutil.AssertVersioned(t, d, "expense_reports", reportID, "update")
+	testutil.AssertVersioned(t, d, "expense_reports", int64(reportID), "update")
 	if rep, _ := s.GetExpenseReport(context.Background(), reportID); rep.SubsidiaryID != sub2 {
 		t.Errorf("subsidiary = %d, want %d", rep.SubsidiaryID, sub2)
 	}
@@ -389,8 +390,8 @@ func TestDiscardExpenseReport(t *testing.T) {
 		t.Fatalf("DiscardExpenseReport: %v", err)
 	}
 	// The report + its line have op='delete' version snapshots and no live rows.
-	testutil.AssertVersioned(t, d, "expense_reports", reportID, "delete")
-	testutil.AssertVersioned(t, d, "expense_report_lines", lineID, "delete")
+	testutil.AssertVersioned(t, d, "expense_reports", int64(reportID), "delete")
+	testutil.AssertVersioned(t, d, "expense_report_lines", int64(lineID), "delete")
 	var nRep, nLine int
 	_ = d.QueryRow(`SELECT COUNT(*) FROM expense_reports WHERE id=?`, reportID).Scan(&nRep)
 	_ = d.QueryRow(`SELECT COUNT(*) FROM expense_report_lines WHERE id=?`, lineID).Scan(&nLine)
@@ -549,7 +550,7 @@ func TestPostAndConvertExpenseReport(t *testing.T) {
 	}
 	// The report convert is versioned op='update'; the created txn is a real versioned
 	// ledger entry.
-	testutil.AssertVersioned(t, d, "expense_reports", reportID, "update")
+	testutil.AssertVersioned(t, d, "expense_reports", int64(reportID), "update")
 	testutil.AssertVersioned(t, d, "transactions", txnID, "create")
 
 	// Terminal: a converted report cannot be re-posted.
@@ -602,7 +603,7 @@ func TestCanSubmitExpensesVersioned(t *testing.T) {
 
 // --- test helpers ----------------------------------------------------------
 
-func expenseReportStatus(t *testing.T, d *sql.DB, id int64) string {
+func expenseReportStatus(t *testing.T, d *sql.DB, id ids.ExpenseReportID) string {
 	t.Helper()
 	var status string
 	if err := d.QueryRow(`SELECT status FROM expense_reports WHERE id = ?`, id).Scan(&status); err != nil {
@@ -611,7 +612,7 @@ func expenseReportStatus(t *testing.T, d *sql.DB, id int64) string {
 	return status
 }
 
-func reviewNotes(t *testing.T, d *sql.DB, id int64) string {
+func reviewNotes(t *testing.T, d *sql.DB, id ids.ExpenseReportID) string {
 	t.Helper()
 	var notes string
 	if err := d.QueryRow(`SELECT review_notes FROM expense_reports WHERE id = ?`, id).Scan(&notes); err != nil {
@@ -620,7 +621,7 @@ func reviewNotes(t *testing.T, d *sql.DB, id int64) string {
 	return notes
 }
 
-func postedTxnID(t *testing.T, d *sql.DB, id int64) sql.NullInt64 {
+func postedTxnID(t *testing.T, d *sql.DB, id ids.ExpenseReportID) sql.NullInt64 {
 	t.Helper()
 	var pt sql.NullInt64
 	if err := d.QueryRow(`SELECT posted_transaction_id FROM expense_reports WHERE id = ?`, id).Scan(&pt); err != nil {

@@ -9,6 +9,7 @@ import (
 
 	"cuento/internal/db/sqlc"
 	"cuento/internal/i18n"
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -85,7 +86,7 @@ func (s *server) expensesPage(w http.ResponseWriter, r *http.Request) {
 	model := expensesPageModel{}
 	for _, rep := range reports {
 		row := expenseReportRow{
-			ID:        rep.ID,
+			ID:        int64(rep.ID),
 			SubName:   subNames[rep.SubsidiaryID],
 			StatusKey: "expense.status." + rep.Status,
 			Draft:     rep.Status == "draft",
@@ -124,7 +125,7 @@ func (s *server) expenseCreate(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	redirectAfterForm(w, r, "/expenses/"+strconv.FormatInt(id, 10))
+	redirectAfterForm(w, r, "/expenses/"+strconv.FormatInt(int64(id), 10))
 }
 
 // expenseSetSubsidiary handles POST /expenses/{id}/subsidiary (ExpenseSubmit, p25.3):
@@ -145,7 +146,7 @@ func (s *server) expenseSetSubsidiary(w http.ResponseWriter, r *http.Request) {
 	}
 	sub := parseID(r.PostFormValue("subsidiary_id"))
 	if sub != 0 && sub != rep.SubsidiaryID {
-		if err := s.store.UpdateExpenseReportSubsidiary(s.actorCtx(ctx), id, sub); err != nil {
+		if err := s.store.UpdateExpenseReportSubsidiary(s.actorCtx(ctx), ids.ExpenseReportID(id), sub); err != nil {
 			// Expected guards (locked/bad sub) just no-op back to the page; anything else
 			// is a real fault.
 			if !errors.Is(err, store.ErrExpenseReportHasLines) &&
@@ -170,7 +171,7 @@ func (s *server) expenseDiscard(w http.ResponseWriter, r *http.Request) {
 	if _, ok := s.loadOwnedReport(w, r, id); !ok {
 		return
 	}
-	if err := s.store.DiscardExpenseReport(s.actorCtx(ctx), id); err != nil {
+	if err := s.store.DiscardExpenseReport(s.actorCtx(ctx), ids.ExpenseReportID(id)); err != nil {
 		if errors.Is(err, store.ErrExpenseReportState) {
 			redirectAfterForm(w, r, "/expenses")
 			return
@@ -327,7 +328,7 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 	ccy := s.reportCurrency(ctx, rep)
 
 	model := expenseDetailModel{
-		ID:        id,
+		ID:        int64(id),
 		SubName:   subNames[rep.SubsidiaryID],
 		SubID:     rep.SubsidiaryID,
 		Status:    rep.Status,
@@ -382,7 +383,7 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 	}
 	for _, l := range lines {
 		row := expenseLineRow{
-			ID:          l.ID,
+			ID:          int64(l.ID),
 			AccountID:   l.AccountID,
 			AcctName:    acctNames[l.AccountID],
 			AmountFmt:   money.FormatMoney(displayAmount(l.Amount), ccy, exp, opts),
@@ -599,7 +600,7 @@ func (s *server) expenseLinesSave(w http.ResponseWriter, r *http.Request) {
 			amount = -mag
 		}
 		d := store.ExpenseReportLineDesired{
-			ID: lineID,
+			ID: ids.ExpenseReportLineID(lineID),
 			ExpenseReportLineInput: store.ExpenseReportLineInput{
 				AccountID:   acct,
 				Amount:      amount,
@@ -623,7 +624,7 @@ func (s *server) expenseLinesSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.ReplaceExpenseReportLines(s.actorCtx(ctx), id, desired); err != nil {
+	if err := s.store.ReplaceExpenseReportLines(s.actorCtx(ctx), ids.ExpenseReportID(id), desired); err != nil {
 		switch {
 		case errors.Is(err, store.ErrExpenseReportState),
 			errors.Is(err, store.ErrExpenseReportImmutable):
@@ -698,9 +699,9 @@ func (s *server) transitionReport(w http.ResponseWriter, r *http.Request, resubm
 	}
 	var err error
 	if resubmit {
-		err = s.store.ResubmitExpenseReport(s.actorCtx(ctx), id)
+		err = s.store.ResubmitExpenseReport(s.actorCtx(ctx), ids.ExpenseReportID(id))
 	} else {
-		err = s.store.SubmitExpenseReport(s.actorCtx(ctx), id)
+		err = s.store.SubmitExpenseReport(s.actorCtx(ctx), ids.ExpenseReportID(id))
 	}
 	if err != nil {
 		if errors.Is(err, store.ErrExpenseReportEmpty) {
@@ -744,7 +745,7 @@ func (s *server) renderReportError(w http.ResponseWriter, r *http.Request, rep s
 func (s *server) loadOwnedReport(w http.ResponseWriter, r *http.Request, id int64) (sqlc.ExpenseReport, bool) {
 	ctx := r.Context()
 	u := currentUser(ctx)
-	rep, err := s.store.GetExpenseReport(ctx, id)
+	rep, err := s.store.GetExpenseReport(ctx, ids.ExpenseReportID(id))
 	if err != nil {
 		if errors.Is(err, store.ErrExpenseReportNotFound) {
 			http.NotFound(w, r)

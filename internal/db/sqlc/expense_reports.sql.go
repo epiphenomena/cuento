@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 const countExpenseReportLines = `-- name: CountExpenseReportLines :one
@@ -15,7 +17,7 @@ SELECT COUNT(*) FROM expense_report_lines WHERE report_id = ?
 `
 
 // Count of a report's lines (the submit guard requires >= 1 line).
-func (q *Queries) CountExpenseReportLines(ctx context.Context, reportID int64) (int64, error) {
+func (q *Queries) CountExpenseReportLines(ctx context.Context, reportID ids.ExpenseReportID) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countExpenseReportLines, reportID)
 	var count int64
 	err := row.Scan(&count)
@@ -30,7 +32,7 @@ WHERE id = ?
 // Hard delete of a DRAFT report (p25.3 discard). Its lines are deleted first (each with
 // an op=delete version); for op=delete the report's own version row is captured BEFORE
 // this runs (rule 14: the live row must still exist to snapshot).
-func (q *Queries) DeleteExpenseReport(ctx context.Context, id int64) error {
+func (q *Queries) DeleteExpenseReport(ctx context.Context, id ids.ExpenseReportID) error {
 	_, err := q.db.ExecContext(ctx, deleteExpenseReport, id)
 	return err
 }
@@ -43,7 +45,7 @@ WHERE id = ?
 // Hard delete of a report line. For op=delete the version row is captured BEFORE
 // this runs (rule 14: everything but transactions hard-deletes with an audit
 // version; the live row must still exist to snapshot).
-func (q *Queries) DeleteExpenseReportLine(ctx context.Context, id int64) error {
+func (q *Queries) DeleteExpenseReportLine(ctx context.Context, id ids.ExpenseReportLineID) error {
 	_, err := q.db.ExecContext(ctx, deleteExpenseReportLine, id)
 	return err
 }
@@ -55,7 +57,7 @@ FROM expense_reports
 WHERE id = ?
 `
 
-func (q *Queries) GetExpenseReport(ctx context.Context, id int64) (ExpenseReport, error) {
+func (q *Queries) GetExpenseReport(ctx context.Context, id ids.ExpenseReportID) (ExpenseReport, error) {
 	row := q.db.QueryRowContext(ctx, getExpenseReport, id)
 	var i ExpenseReport
 	err := row.Scan(
@@ -76,7 +78,7 @@ FROM expense_report_lines
 WHERE id = ?
 `
 
-func (q *Queries) GetExpenseReportLine(ctx context.Context, id int64) (ExpenseReportLine, error) {
+func (q *Queries) GetExpenseReportLine(ctx context.Context, id ids.ExpenseReportLineID) (ExpenseReportLine, error) {
 	row := q.db.QueryRowContext(ctx, getExpenseReportLine, id)
 	var i ExpenseReportLine
 	err := row.Scan(
@@ -126,9 +128,9 @@ type InsertExpenseReportParams struct {
 // Live insert of a report header (status defaults to 'draft'). created_at is the
 // store's clock. posted_transaction_id starts NULL (set only on convert). Returns
 // the new id for the store to snapshot + return.
-func (q *Queries) InsertExpenseReport(ctx context.Context, arg InsertExpenseReportParams) (int64, error) {
+func (q *Queries) InsertExpenseReport(ctx context.Context, arg InsertExpenseReportParams) (ids.ExpenseReportID, error) {
 	row := q.db.QueryRowContext(ctx, insertExpenseReport, arg.SubmitterID, arg.SubsidiaryID, arg.CreatedAt)
-	var id int64
+	var id ids.ExpenseReportID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -141,7 +143,7 @@ RETURNING id
 `
 
 type InsertExpenseReportLineParams struct {
-	ReportID    int64
+	ReportID    ids.ExpenseReportID
 	AccountID   int64
 	Amount      int64
 	FundID      sql.NullInt64
@@ -156,7 +158,7 @@ type InsertExpenseReportLineParams struct {
 // Live insert of a report line. amount is minor units, SIGNED (rule 3; the report
 // need not balance). fund_id/program_id may be NULL (the reviewer resolves them at
 // convert). Returns the new id.
-func (q *Queries) InsertExpenseReportLine(ctx context.Context, arg InsertExpenseReportLineParams) (int64, error) {
+func (q *Queries) InsertExpenseReportLine(ctx context.Context, arg InsertExpenseReportLineParams) (ids.ExpenseReportLineID, error) {
 	row := q.db.QueryRowContext(ctx, insertExpenseReportLine,
 		arg.ReportID,
 		arg.AccountID,
@@ -166,7 +168,7 @@ func (q *Queries) InsertExpenseReportLine(ctx context.Context, arg InsertExpense
 		arg.Memo,
 		arg.Description,
 	)
-	var id int64
+	var id ids.ExpenseReportLineID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -184,7 +186,7 @@ WHERE c.id = ? AND erl.id = ?
 type InsertExpenseReportLineVersionParams struct {
 	Op   string
 	ID   int64
-	ID_2 int64
+	ID_2 ids.ExpenseReportLineID
 }
 
 // Snapshot-from-live version append for expense_report_lines (single-column
@@ -208,7 +210,7 @@ WHERE c.id = ? AND er.id = ?
 type InsertExpenseReportVersionParams struct {
 	Op   string
 	ID   int64
-	ID_2 int64
+	ID_2 ids.ExpenseReportID
 }
 
 // Snapshot-from-live version append for expense_reports (STANDARD single-column
@@ -229,7 +231,7 @@ ORDER BY id
 `
 
 // The lines of one report, id-ordered (the editor + the p20.3 convert prefill).
-func (q *Queries) ListExpenseReportLines(ctx context.Context, reportID int64) ([]ExpenseReportLine, error) {
+func (q *Queries) ListExpenseReportLines(ctx context.Context, reportID ids.ExpenseReportID) ([]ExpenseReportLine, error) {
 	rows, err := q.db.QueryContext(ctx, listExpenseReportLines, reportID)
 	if err != nil {
 		return nil, err
@@ -349,7 +351,7 @@ WHERE id = ?
 
 type SetExpenseReportConvertedParams struct {
 	PostedTransactionID sql.NullInt64
-	ID                  int64
+	ID                  ids.ExpenseReportID
 }
 
 // Live update flipping a report to 'converted' and LINKING the posted transaction.
@@ -369,7 +371,7 @@ WHERE id = ?
 type SetExpenseReportStatusParams struct {
 	Status      string
 	ReviewNotes string
-	ID          int64
+	ID          ids.ExpenseReportID
 }
 
 // Live update of a report's status + review_notes (the state-machine transition).
@@ -389,7 +391,7 @@ WHERE id = ?
 
 type SetExpenseReportSubsidiaryParams struct {
 	SubsidiaryID int64
-	ID           int64
+	ID           ids.ExpenseReportID
 }
 
 // Live update of a draft report's subsidiary (p25.3: the submitter picks the sub on
@@ -413,7 +415,7 @@ type UpdateExpenseReportLineParams struct {
 	ProgramID   sql.NullInt64
 	Memo        string
 	Description string
-	ID          int64
+	ID          ids.ExpenseReportLineID
 }
 
 func (q *Queries) UpdateExpenseReportLine(ctx context.Context, arg UpdateExpenseReportLineParams) error {

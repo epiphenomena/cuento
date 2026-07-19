@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"syscall"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -79,7 +80,7 @@ func expenseReportRejectCmd(ctx context.Context, args []string) error {
 	}
 	defer closeStore()
 
-	if err := st.RejectExpenseReport(store.WithActor(ctx, systemActor), id, *reason); err != nil {
+	if err := st.RejectExpenseReport(store.WithActor(ctx, systemActor), ids.ExpenseReportID(id), *reason); err != nil {
 		return fmt.Errorf("expense-report reject %d: %w", id, err)
 	}
 	_, _ = fmt.Fprintf(stdout, "expense report %d rejected\n", id)

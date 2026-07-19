@@ -122,7 +122,7 @@ func TestSeedSampleExpenseReport(t *testing.T) {
 	reportID := submitted[0].ID
 	// The report went through the write funnel: created, then the submit appended an
 	// 'update' version (draft -> submitted), which is the latest op (rule 5).
-	testutil.AssertVersioned(t, f.DB, "expense_reports", reportID, "update")
+	testutil.AssertVersioned(t, f.DB, "expense_reports", int64(reportID), "update")
 
 	lines, err := f.Store.ExpenseReportLines(ctx, reportID)
 	if err != nil {

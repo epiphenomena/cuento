@@ -68,9 +68,9 @@ type DemoIDs struct {
 	ViewerUser       int64
 	CampDirectorUser int64
 
-	DraftReport     int64
-	SubmittedReport int64
-	PostedReport    int64
+	DraftReport     ids.ExpenseReportID
+	SubmittedReport ids.ExpenseReportID
+	PostedReport    ids.ExpenseReportID
 
 	OpenRecon ids.ReconciliationID // an in-progress (unfinalized) reconciliation on Checking MX
 

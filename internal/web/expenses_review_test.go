@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -59,13 +60,13 @@ func seedSubmittedReport(t *testing.T, st *store.Store, amount int64) reviewRepo
 	if err != nil {
 		t.Fatalf("create report: %v", err)
 	}
-	if _, err := st.AddExpenseReportLine(subCtx, reportID, store.ExpenseReportLineInput{AccountID: expense, Amount: amount, Memo: "taxi"}); err != nil {
+	if _, err := st.AddExpenseReportLine(subCtx, ids.ExpenseReportID(reportID), store.ExpenseReportLineInput{AccountID: expense, Amount: amount, Memo: "taxi"}); err != nil {
 		t.Fatalf("add line: %v", err)
 	}
-	if err := st.SubmitExpenseReport(subCtx, reportID); err != nil {
+	if err := st.SubmitExpenseReport(subCtx, ids.ExpenseReportID(reportID)); err != nil {
 		t.Fatalf("submit report: %v", err)
 	}
-	return reviewReportEnv{reportID: reportID, expense: expense, cash: cash, submitter: submitter}
+	return reviewReportEnv{reportID: int64(reportID), expense: expense, cash: cash, submitter: submitter}
 }
 
 // TestReviewPostCreatesBalancedTxnAndConverts: a TxnWrite reviewer opens a submitted
@@ -112,7 +113,7 @@ func TestReviewPostCreatesBalancedTxnAndConverts(t *testing.T) {
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("unbalanced post = %d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
-	rep, _ := st.GetExpenseReport(context.Background(), env.reportID)
+	rep, _ := st.GetExpenseReport(context.Background(), ids.ExpenseReportID(env.reportID))
 	if rep.Status != "submitted" {
 		t.Fatalf("status after unbalanced post = %q, want submitted", rep.Status)
 	}
@@ -135,7 +136,7 @@ func TestReviewPostCreatesBalancedTxnAndConverts(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("balanced post = %d, want 303; body: %s", rec.Code, rec.Body.String())
 	}
-	rep, _ = st.GetExpenseReport(context.Background(), env.reportID)
+	rep, _ = st.GetExpenseReport(context.Background(), ids.ExpenseReportID(env.reportID))
 	if rep.Status != "converted" {
 		t.Fatalf("status after balanced post = %q, want converted", rep.Status)
 	}
@@ -190,7 +191,7 @@ func TestReviewPostImmutableConverted(t *testing.T) {
 		asUser(t, h, sm, book, http.MethodPost, "/expenses/review/post/"+itoa(env.reportID), form)
 	}
 	post() // converts
-	rep, _ := st.GetExpenseReport(context.Background(), env.reportID)
+	rep, _ := st.GetExpenseReport(context.Background(), ids.ExpenseReportID(env.reportID))
 	firstTxn := rep.PostedTransactionID.Int64
 
 	// A GET of the review form for a converted report redirects to the queue.
@@ -201,7 +202,7 @@ func TestReviewPostImmutableConverted(t *testing.T) {
 
 	// A re-post leaves the SAME txn linked (no double post).
 	post()
-	rep, _ = st.GetExpenseReport(context.Background(), env.reportID)
+	rep, _ = st.GetExpenseReport(context.Background(), ids.ExpenseReportID(env.reportID))
 	if rep.Status != "converted" || rep.PostedTransactionID.Int64 != firstTxn {
 		t.Errorf("re-post changed the linked txn: status=%q txn=%d, want converted/%d", rep.Status, rep.PostedTransactionID.Int64, firstTxn)
 	}
@@ -236,7 +237,7 @@ func TestReviewRejectRoutesBack(t *testing.T) {
 	if !strings.Contains(body, "expreview-reject-error") {
 		t.Errorf("blank-reason reject 422 missing the reject-reason error slot; body: %s", body)
 	}
-	rep, _ := st.GetExpenseReport(context.Background(), env.reportID)
+	rep, _ := st.GetExpenseReport(context.Background(), ids.ExpenseReportID(env.reportID))
 	if rep.Status != "submitted" {
 		t.Fatalf("status after blank-reason reject = %q, want submitted", rep.Status)
 	}
@@ -249,7 +250,7 @@ func TestReviewRejectRoutesBack(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("reject-with-reason = %d, want 303; body: %s", rec.Code, rec.Body.String())
 	}
-	rep, _ = st.GetExpenseReport(context.Background(), env.reportID)
+	rep, _ = st.GetExpenseReport(context.Background(), ids.ExpenseReportID(env.reportID))
 	if rep.Status != "rejected" {
 		t.Errorf("status after reject = %q, want rejected", rep.Status)
 	}

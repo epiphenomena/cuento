@@ -157,7 +157,7 @@ type ExchangeRate struct {
 }
 
 type ExpenseReport struct {
-	ID                  int64
+	ID                  ids.ExpenseReportID
 	SubmitterID         int64
 	SubsidiaryID        int64
 	Status              string
@@ -167,8 +167,8 @@ type ExpenseReport struct {
 }
 
 type ExpenseReportLine struct {
-	ID          int64
-	ReportID    int64
+	ID          ids.ExpenseReportLineID
+	ReportID    ids.ExpenseReportID
 	AccountID   int64
 	Amount      int64
 	FundID      sql.NullInt64
@@ -179,11 +179,11 @@ type ExpenseReportLine struct {
 
 type ExpenseReportLinesVersion struct {
 	ID          int64
-	EntityID    int64
+	EntityID    ids.ExpenseReportLineID
 	ChangeID    int64
 	ValidFrom   string
 	Op          string
-	ReportID    int64
+	ReportID    ids.ExpenseReportID
 	AccountID   int64
 	Amount      int64
 	FundID      sql.NullInt64
@@ -194,7 +194,7 @@ type ExpenseReportLinesVersion struct {
 
 type ExpenseReportsVersion struct {
 	ID                  int64
-	EntityID            int64
+	EntityID            ids.ExpenseReportID
 	ChangeID            int64
 	ValidFrom           string
 	Op                  string

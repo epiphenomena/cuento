@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -162,7 +163,7 @@ func (s *server) buildReviewRow(ctx context.Context, rep sqlc.ExpenseReport, sub
 	}
 	exp := s.reportExponent(ctx, rep)
 	row := reviewQueueRow{
-		ID:        rep.ID,
+		ID:        int64(rep.ID),
 		Submitter: userNames[rep.SubmitterID],
 		SubName:   subNames[rep.SubsidiaryID],
 		LineCount: len(lines),
@@ -195,7 +196,7 @@ func (s *server) expenseReviewForm(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(ctx)
 	id := parseID(r.PathValue("id"))
 
-	rep, err := s.store.GetExpenseReport(ctx, id)
+	rep, err := s.store.GetExpenseReport(ctx, ids.ExpenseReportID(id))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -230,7 +231,7 @@ func (s *server) buildReviewEditorModel(w http.ResponseWriter, r *http.Request, 
 		s.serverError(w)
 		return txnEditorModel{}, false
 	}
-	model.ExpenseReportID = rep.ID
+	model.ExpenseReportID = int64(rep.ID)
 	model.FirstErrorRow = -1
 	model.Date = money.FormatDate(s.now(), dateFormatFor(u))
 	model.Rows = s.prefillExpenseRows(r, model, rep, lines)
@@ -324,7 +325,7 @@ func (s *server) expenseReviewPost(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(ctx)
 	id := parseID(r.PathValue("id"))
 
-	rep, err := s.store.GetExpenseReport(ctx, id)
+	rep, err := s.store.GetExpenseReport(ctx, ids.ExpenseReportID(id))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -371,7 +372,7 @@ func (s *server) expenseReviewPost(w http.ResponseWriter, r *http.Request) {
 		Splits:       splits,
 	}
 
-	txnID, err := s.store.PostAndConvertExpenseReport(s.actorCtx(ctx), id, in)
+	txnID, err := s.store.PostAndConvertExpenseReport(s.actorCtx(ctx), ids.ExpenseReportID(id), in)
 	if err != nil {
 		if errors.Is(err, store.ErrExpenseReportState) || errors.Is(err, store.ErrExpenseReportImmutable) {
 			// The report left the submitted state (a race, or a converted report) -> back
@@ -406,7 +407,7 @@ func (s *server) expenseReviewReject(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(ctx)
 	id := parseID(r.PathValue("id"))
 
-	rep, err := s.store.GetExpenseReport(ctx, id)
+	rep, err := s.store.GetExpenseReport(ctx, ids.ExpenseReportID(id))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -425,7 +426,7 @@ func (s *server) expenseReviewReject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.RejectExpenseReport(s.actorCtx(ctx), id, reason); err != nil {
+	if err := s.store.RejectExpenseReport(s.actorCtx(ctx), ids.ExpenseReportID(id), reason); err != nil {
 		if errors.Is(err, store.ErrExpenseReportState) || errors.Is(err, store.ErrExpenseReportImmutable) {
 			s.redirectReview(w, r, "/expenses/review")
 			return

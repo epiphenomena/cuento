@@ -11,6 +11,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -90,7 +91,7 @@ func TestExpenseSubsidiaryAndDiscard(t *testing.T) {
 
 	// Change the subsidiary in-page.
 	asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+itoa(repID)+"/subsidiary", url.Values{"subsidiary_id": {itoa(sub2)}})
-	if rep, _ := st.GetExpenseReport(context.Background(), repID); rep.SubsidiaryID != sub2 {
+	if rep, _ := st.GetExpenseReport(context.Background(), ids.ExpenseReportID(repID)); rep.SubsidiaryID != sub2 {
 		t.Fatalf("subsidiary after change = %d, want %d", rep.SubsidiaryID, sub2)
 	}
 
@@ -106,7 +107,7 @@ func TestExpenseSubsidiaryAndDiscard(t *testing.T) {
 	if rec.Code != http.StatusSeeOther || rec.Header().Get("Location") != "/expenses" {
 		t.Fatalf("discard = %d -> %q, want 303 -> /expenses", rec.Code, rec.Header().Get("Location"))
 	}
-	if _, err := st.GetExpenseReport(context.Background(), repID); err == nil {
+	if _, err := st.GetExpenseReport(context.Background(), ids.ExpenseReportID(repID)); err == nil {
 		t.Errorf("report still exists after discard (want deleted)")
 	}
 }
@@ -130,7 +131,7 @@ func TestExpenseUnbalancedSubmitOK(t *testing.T) {
 	addLine(t, h, st, sm, sub, repID, exp, "30.00")
 
 	// Confirm the store sees an unbalanced set (sanity: the sum is non-zero).
-	lines, err := st.ExpenseReportLines(context.Background(), repID)
+	lines, err := st.ExpenseReportLines(context.Background(), ids.ExpenseReportID(repID))
 	if err != nil {
 		t.Fatalf("lines: %v", err)
 	}
@@ -150,7 +151,7 @@ func TestExpenseUnbalancedSubmitOK(t *testing.T) {
 	if rec.Code == http.StatusUnprocessableEntity || rec.Code >= 500 {
 		t.Fatalf("unbalanced submit failed: status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	rep, err := st.GetExpenseReport(context.Background(), repID)
+	rep, err := st.GetExpenseReport(context.Background(), ids.ExpenseReportID(repID))
 	if err != nil {
 		t.Fatalf("get report: %v", err)
 	}
@@ -187,7 +188,7 @@ func TestExpenseRejectShowsReasonAndResubmit(t *testing.T) {
 
 	// The reviewer rejects with a reason (via the store, as p20.3 will).
 	const reason = "Please attach the receipt."
-	if err := st.RejectExpenseReport(ctx, repID, reason); err != nil {
+	if err := st.RejectExpenseReport(ctx, ids.ExpenseReportID(repID), reason); err != nil {
 		t.Fatalf("reject: %v", err)
 	}
 
@@ -206,7 +207,7 @@ func TestExpenseRejectShowsReasonAndResubmit(t *testing.T) {
 	if rec.Code >= 400 {
 		t.Fatalf("resubmit: status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	rep, err := st.GetExpenseReport(ctx, repID)
+	rep, err := st.GetExpenseReport(ctx, ids.ExpenseReportID(repID))
 	if err != nil {
 		t.Fatalf("get report: %v", err)
 	}
@@ -311,7 +312,7 @@ func TestExpenseZeroLineSubmit422(t *testing.T) {
 		t.Errorf("raw i18n key leaked (not localized): %s", rec.Body.String())
 	}
 	// The report stays a draft.
-	rep, _ := st.GetExpenseReport(context.Background(), repID)
+	rep, _ := st.GetExpenseReport(context.Background(), ids.ExpenseReportID(repID))
 	if rep.Status != "draft" {
 		t.Errorf("status after failed submit = %q, want draft", rep.Status)
 	}
@@ -446,14 +447,14 @@ func addLine(t *testing.T, h http.Handler, st *store.Store, sm *scs.SessionManag
 // existing count (callers bump it when appending).
 func gridFormFromLines(t *testing.T, st *store.Store, reportID int64) url.Values {
 	t.Helper()
-	lines, err := st.ExpenseReportLines(context.Background(), reportID)
+	lines, err := st.ExpenseReportLines(context.Background(), ids.ExpenseReportID(reportID))
 	if err != nil {
 		t.Fatalf("gridFormFromLines: %v", err)
 	}
 	form := url.Values{}
 	for i, l := range lines {
 		si := itoa64(int64(i))
-		form.Set("line_id_"+si, itoa64(l.ID))
+		form.Set("line_id_"+si, itoa64(int64(l.ID)))
 		form.Set("account_"+si, itoa64(l.AccountID))
 		mag := l.Amount
 		if mag < 0 {
@@ -475,7 +476,7 @@ func gridFormFromLines(t *testing.T, st *store.Store, reportID int64) url.Values
 
 func existingRowCount(t *testing.T, st *store.Store, reportID int64) int64 {
 	t.Helper()
-	lines, err := st.ExpenseReportLines(context.Background(), reportID)
+	lines, err := st.ExpenseReportLines(context.Background(), ids.ExpenseReportID(reportID))
 	if err != nil {
 		t.Fatalf("existingRowCount: %v", err)
 	}
