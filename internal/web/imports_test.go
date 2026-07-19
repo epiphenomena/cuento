@@ -212,7 +212,7 @@ func TestImportProfileReuse(t *testing.T) {
 	// but SELECT the good profile -> the profile's config wins and the parse succeeds.
 	fields := importFields(acct, 1)
 	fields["amount_col"] = "2" // wrong on purpose
-	fields["profile_id"] = strconv.FormatInt(pid, 10)
+	fields["profile_id"] = strconv.FormatInt(int64(pid), 10)
 
 	csv := "date,amount,payee,memo\n2025-01-15,100.00,Acme,Invoice\n"
 	rec := uploadImportCSV(t, h, sm, book, csv, fields)
@@ -247,12 +247,12 @@ func TestImportProfileDelete(t *testing.T) {
 	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "deletable") {
 		t.Fatalf("upload page missing the saved profile; code=%d", page.Code)
 	}
-	if !strings.Contains(page.Body.String(), "/import/profiles/"+strconv.FormatInt(pid, 10)+"/delete") {
+	if !strings.Contains(page.Body.String(), "/import/profiles/"+strconv.FormatInt(int64(pid), 10)+"/delete") {
 		t.Fatalf("upload page missing the delete control for profile %d", pid)
 	}
 
 	// Delete it: NO-JS form POST -> 303 back to /import.
-	del := asUser(t, h, sm, book, http.MethodPost, "/import/profiles/"+strconv.FormatInt(pid, 10)+"/delete", url.Values{})
+	del := asUser(t, h, sm, book, http.MethodPost, "/import/profiles/"+strconv.FormatInt(int64(pid), 10)+"/delete", url.Values{})
 	if del.Code != http.StatusSeeOther {
 		t.Fatalf("delete = %d, want 303; body: %s", del.Code, del.Body.String())
 	}
@@ -264,7 +264,7 @@ func TestImportProfileDelete(t *testing.T) {
 	}
 
 	// A missing/already-gone id is a clean 404.
-	miss := asUser(t, h, sm, book, http.MethodPost, "/import/profiles/"+strconv.FormatInt(pid, 10)+"/delete", url.Values{})
+	miss := asUser(t, h, sm, book, http.MethodPost, "/import/profiles/"+strconv.FormatInt(int64(pid), 10)+"/delete", url.Values{})
 	if miss.Code != http.StatusNotFound {
 		t.Fatalf("re-delete = %d, want 404", miss.Code)
 	}

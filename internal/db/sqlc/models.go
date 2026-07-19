@@ -264,7 +264,7 @@ type ImportBatch struct {
 	Filename     string
 	AccountID    int64
 	SubsidiaryID int64
-	ProfileID    int64
+	ProfileID    ids.MappingProfileID
 	UploadedBy   int64
 	UploadedAt   string
 }
@@ -284,7 +284,7 @@ type ImportRow struct {
 }
 
 type MappingProfile struct {
-	ID     int64
+	ID     ids.MappingProfileID
 	Name   string
 	Config string
 }

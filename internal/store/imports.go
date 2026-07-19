@@ -46,12 +46,12 @@ var (
 // CreateMappingProfile saves a reusable CSV column-mapping and returns its id. The
 // bankimport.Config is JSON-encoded into mapping_profiles.config (the store owns the
 // shape; the schema stores opaque TEXT). Non-versioned: funnel, no version append.
-func (s *Store) CreateMappingProfile(ctx context.Context, name string, cfg bankimport.Config) (int64, error) {
+func (s *Store) CreateMappingProfile(ctx context.Context, name string, cfg bankimport.Config) (ids.MappingProfileID, error) {
 	blob, err := json.Marshal(cfg)
 	if err != nil {
 		return 0, fmt.Errorf("store: marshal mapping config: %w", err)
 	}
-	var newID int64
+	var newID ids.MappingProfileID
 	_, err = s.write(ctx, "import.profile.create", "",
 		func(ctx context.Context, q *sqlc.Queries, _ int64) error {
 			id, err := q.InsertMappingProfile(ctx, sqlc.InsertMappingProfileParams{
@@ -73,7 +73,7 @@ func (s *Store) CreateMappingProfile(ctx context.Context, name string, cfg banki
 // MappingProfile is one saved profile: its id, name, and decoded Config. The web
 // layer offers these for reuse in the mapping UI.
 type MappingProfile struct {
-	ID     int64
+	ID     ids.MappingProfileID
 	Name   string
 	Config bankimport.Config
 }
@@ -98,7 +98,7 @@ func (s *Store) ListMappingProfiles(ctx context.Context) ([]MappingProfile, erro
 }
 
 // GetMappingProfile returns one saved profile with its config decoded.
-func (s *Store) GetMappingProfile(ctx context.Context, id int64) (MappingProfile, error) {
+func (s *Store) GetMappingProfile(ctx context.Context, id ids.MappingProfileID) (MappingProfile, error) {
 	row, err := s.q.GetMappingProfile(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -119,7 +119,7 @@ func (s *Store) GetMappingProfile(ctx context.Context, id int64) (MappingProfile
 // references a profile at birth (rule 14 spirit: the mapping that produced a batch is
 // its audit and must survive). A missing or already-deactivated id is
 // ErrMappingProfileNotFound. Non-versioned: funnel, no version append.
-func (s *Store) DeactivateMappingProfile(ctx context.Context, id int64) error {
+func (s *Store) DeactivateMappingProfile(ctx context.Context, id ids.MappingProfileID) error {
 	_, err := s.write(ctx, "import.profile.deactivate", "",
 		func(ctx context.Context, q *sqlc.Queries, _ int64) error {
 			n, err := q.DeactivateMappingProfile(ctx, id)
@@ -143,7 +143,7 @@ func (s *Store) DeactivateMappingProfile(ctx context.Context, id int64) error {
 // (ErrBatchSubsidiaryMismatch, TestBatchSubValidated) inside the funnel fn so a
 // rejection rolls the change row back and leaves no audit trace. Non-versioned:
 // funnel, no version append. uploadedAt is an RFC3339 timestamp string.
-func (s *Store) CreateImportBatch(ctx context.Context, filename string, accountID, subsidiaryID, profileID int64, uploadedAt string) (ids.ImportBatchID, error) {
+func (s *Store) CreateImportBatch(ctx context.Context, filename string, accountID, subsidiaryID int64, profileID ids.MappingProfileID, uploadedAt string) (ids.ImportBatchID, error) {
 	actor, ok := ActorFrom(ctx)
 	if !ok {
 		return 0, ErrNoActor

@@ -74,7 +74,7 @@ type DemoIDs struct {
 
 	OpenRecon ids.ReconciliationID // an in-progress (unfinalized) reconciliation on Checking MX
 
-	MappingProfile int64
+	MappingProfile ids.MappingProfileID
 	ImportBatch    ids.ImportBatchID // a staged (unposted) import batch on Checking US
 }
 

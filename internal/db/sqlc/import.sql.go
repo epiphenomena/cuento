@@ -83,7 +83,7 @@ const getMappingProfile = `-- name: GetMappingProfile :one
 SELECT id, name, config FROM mapping_profiles WHERE id = ?
 `
 
-func (q *Queries) GetMappingProfile(ctx context.Context, id int64) (MappingProfile, error) {
+func (q *Queries) GetMappingProfile(ctx context.Context, id ids.MappingProfileID) (MappingProfile, error) {
 	row := q.db.QueryRowContext(ctx, getMappingProfile, id)
 	var i MappingProfile
 	err := row.Scan(&i.ID, &i.Name, &i.Config)
@@ -144,7 +144,7 @@ type InsertImportBatchParams struct {
 	Filename     string
 	AccountID    int64
 	SubsidiaryID int64
-	ProfileID    int64
+	ProfileID    ids.MappingProfileID
 	UploadedBy   int64
 	UploadedAt   string
 }
@@ -229,9 +229,9 @@ type InsertMappingProfileParams struct {
 // hash).
 // Save a reusable CSV column-mapping. config is the opaque JSON blob the store
 // encodes with encoding/json (the store owns the shape; the schema stores TEXT).
-func (q *Queries) InsertMappingProfile(ctx context.Context, arg InsertMappingProfileParams) (int64, error) {
+func (q *Queries) InsertMappingProfile(ctx context.Context, arg InsertMappingProfileParams) (ids.MappingProfileID, error) {
 	row := q.db.QueryRowContext(ctx, insertMappingProfile, arg.Name, arg.Config)
-	var id int64
+	var id ids.MappingProfileID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -299,7 +299,7 @@ UPDATE mapping_profiles SET active = 0 WHERE id = ? AND active = 1
 // Soft-delete a saved profile: flip active to 0 so it drops out of the load list.
 // No row is deleted (import_batches.profile_id keeps referencing it). Returns the
 // affected row count so the store can distinguish a missing/already-gone profile.
-func (q *Queries) DeactivateMappingProfile(ctx context.Context, id int64) (int64, error) {
+func (q *Queries) DeactivateMappingProfile(ctx context.Context, id ids.MappingProfileID) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deactivateMappingProfile, id)
 	if err != nil {
 		return 0, err

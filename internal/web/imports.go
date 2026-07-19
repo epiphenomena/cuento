@@ -11,6 +11,7 @@ import (
 
 	"cuento/internal/bankimport"
 	"cuento/internal/i18n"
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -272,7 +273,7 @@ func (s *server) buildImportUpload(r *http.Request) (importUploadModel, error) {
 		return importUploadModel{}, err
 	}
 	for _, p := range profiles {
-		model.Profiles = append(model.Profiles, importProfileOption{ID: p.ID, Name: p.Name})
+		model.Profiles = append(model.Profiles, importProfileOption{ID: int64(p.ID), Name: p.Name})
 	}
 	return model, nil
 }
@@ -284,7 +285,7 @@ func (s *server) buildImportUpload(r *http.Request) (importUploadModel, error) {
 // the SAME concrete field values (profile_id is not re-consulted on confirm --
 // preview already flattened the profile into the carried fields).
 func (s *server) mappingFrom(r *http.Request) bankimport.Config {
-	if pid := parseID(r.FormValue("profile_id")); pid > 0 {
+	if pid := ids.MappingProfileID(parseID(r.FormValue("profile_id"))); pid > 0 {
 		if prof, err := s.store.GetMappingProfile(r.Context(), pid); err == nil {
 			return prof.Config
 		}
@@ -508,7 +509,7 @@ func (s *server) rolesForColumns(r *http.Request, cols []bankimport.ColumnInfo) 
 		return roles
 	}
 	// No per-column picks: a loaded profile pre-selects the roles (reverse map).
-	if pid := parseID(r.FormValue("profile_id")); pid > 0 {
+	if pid := ids.MappingProfileID(parseID(r.FormValue("profile_id"))); pid > 0 {
 		if prof, err := s.store.GetMappingProfile(r.Context(), pid); err == nil {
 			return bankimport.RolesFromConfig(prof.Config, len(cols))
 		}
@@ -710,7 +711,7 @@ func (s *server) renderImportError(w http.ResponseWriter, r *http.Request, key, 
 // redirects back to the upload page (HX-Redirect for the htmx delete control, a plain
 // 303 for the NO-JS form). A missing/already-gone profile is a clean 404.
 func (s *server) importProfileDelete(w http.ResponseWriter, r *http.Request) {
-	id := parseID(r.PathValue("id"))
+	id := ids.MappingProfileID(parseID(r.PathValue("id")))
 	if err := s.store.DeactivateMappingProfile(s.actorCtx(r.Context()), id); err != nil {
 		if errors.Is(err, store.ErrMappingProfileNotFound) {
 			http.NotFound(w, r)

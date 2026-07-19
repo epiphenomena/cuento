@@ -288,7 +288,7 @@ type importEnv struct {
 	subOther int64
 	checking int64
 	equity   int64
-	profile  int64
+	profile  ids.MappingProfileID
 }
 
 func newImportEnv(t *testing.T) importEnv {
