@@ -359,6 +359,15 @@ function enhance(input) {
 // the init block) that closes any open date popover when the click lands outside its
 // wrapper — replacing the per-field listener that would leak on every htmx swap.
 function closeOnOutsideClick(evt) {
+  // p29.1: an in-popover control that RE-RENDERS the popover (‹/› month nav, the
+  // p29.2 month/year title) empties `pop` (render() does `pop.textContent = ''`),
+  // detaching the very button that was clicked BEFORE this bubbled listener runs.
+  // Its `evt.target` is then a disconnected node, so `!wrap.contains(evt.target)`
+  // would wrongly read as an outside click and close the popover (the month-nav
+  // bug: the month re-rendered and instantly closed). A click whose target has left
+  // the document was consumed by such a control — treat it as in-popover, not
+  // outside, and do NOT close. One guard covers every re-rendering control.
+  if (evt.target && !evt.target.isConnected) return;
   document.querySelectorAll('.datefield-popover:not([hidden])').forEach((pop) => {
     const wrap = pop.closest('.datefield-wrap');
     if (wrap && !wrap.contains(evt.target)) {
