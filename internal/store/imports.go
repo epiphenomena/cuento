@@ -10,6 +10,7 @@ import (
 
 	"cuento/internal/bankimport"
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // Bank-CSV-import store operations (p17.2): saving a reusable column-mapping
@@ -142,12 +143,12 @@ func (s *Store) DeactivateMappingProfile(ctx context.Context, id int64) error {
 // (ErrBatchSubsidiaryMismatch, TestBatchSubValidated) inside the funnel fn so a
 // rejection rolls the change row back and leaves no audit trace. Non-versioned:
 // funnel, no version append. uploadedAt is an RFC3339 timestamp string.
-func (s *Store) CreateImportBatch(ctx context.Context, filename string, accountID, subsidiaryID, profileID int64, uploadedAt string) (int64, error) {
+func (s *Store) CreateImportBatch(ctx context.Context, filename string, accountID, subsidiaryID, profileID int64, uploadedAt string) (ids.ImportBatchID, error) {
 	actor, ok := ActorFrom(ctx)
 	if !ok {
 		return 0, ErrNoActor
 	}
-	var newID int64
+	var newID ids.ImportBatchID
 	_, err := s.write(ctx, "import.batch.create", "",
 		func(ctx context.Context, q *sqlc.Queries, _ int64) error {
 			maps, err := q.HasAccountSubsidiaryMap(ctx, sqlc.HasAccountSubsidiaryMapParams{
@@ -186,7 +187,7 @@ func (s *Store) CreateImportBatch(ctx context.Context, filename string, accountI
 // existing pending/posted import row OR an already-posted ledger split on the
 // account.
 type StagedRow struct {
-	ID          int64
+	ID          ids.ImportRowID
 	Duplicate   bool
 	DedupeHash  string
 	AmountMinor int64
@@ -207,7 +208,7 @@ type StagedRow struct {
 // rows are the bankimport.ParsedRow values from a SUCCESSFUL parse -- callers reject
 // the whole upload upstream if ANY row has a parse error (there is no 'error' status
 // in the schema; a staged row always carries a parsed date+amount).
-func (s *Store) StageImportRows(ctx context.Context, batchID, accountID int64, rows []bankimport.ParsedRow) ([]StagedRow, error) {
+func (s *Store) StageImportRows(ctx context.Context, batchID ids.ImportBatchID, accountID int64, rows []bankimport.ParsedRow) ([]StagedRow, error) {
 	// Build the two duplicate-lookup sets ONCE, outside the write (reads).
 	existing, err := s.existingDedupeSet(ctx, accountID)
 	if err != nil {
@@ -295,7 +296,7 @@ func (s *Store) existingDedupeSet(ctx context.Context, accountID int64) (map[str
 // ImportBatchRow is one persisted staged row as read back for the batch review
 // (p17.2 preview-after-stage / p17.3 queue). RAW values; the web layer formats them.
 type ImportBatchRow struct {
-	ID          int64
+	ID          ids.ImportRowID
 	AmountMinor *int64
 	Date        string
 	Description string // bank line descriptive text (was payee); parsed_payee column
@@ -309,7 +310,7 @@ type ImportBatchRow struct {
 // ImportRowsForBatch returns every staged row of a batch in stage order. Duplicate
 // is NOT set here (it is a cross-account/cross-batch derivation the staging pass
 // computed); callers that need it recompute against existingDedupeSet.
-func (s *Store) ImportRowsForBatch(ctx context.Context, batchID int64) ([]ImportBatchRow, error) {
+func (s *Store) ImportRowsForBatch(ctx context.Context, batchID ids.ImportBatchID) ([]ImportBatchRow, error) {
 	rows, err := s.q.ImportRowsByBatch(ctx, batchID)
 	if err != nil {
 		return nil, fmt.Errorf("store: import rows for batch %d: %w", batchID, err)
@@ -332,7 +333,7 @@ func (s *Store) ImportRowsForBatch(ctx context.Context, batchID int64) ([]Import
 
 // ImportBatch is one upload batch, read for the review queue header (p17.3).
 type ImportBatch struct {
-	ID           int64
+	ID           ids.ImportBatchID
 	Filename     string
 	AccountID    int64
 	SubsidiaryID int64
@@ -340,7 +341,7 @@ type ImportBatch struct {
 
 // GetImportBatch returns one batch. ErrImportRowNotFound is reused for a missing
 // batch (the review queue 404s either way).
-func (s *Store) GetImportBatch(ctx context.Context, batchID int64) (ImportBatch, error) {
+func (s *Store) GetImportBatch(ctx context.Context, batchID ids.ImportBatchID) (ImportBatch, error) {
 	b, err := s.q.GetImportBatch(ctx, batchID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -359,7 +360,7 @@ func (s *Store) GetImportBatch(ctx context.Context, batchID int64) (ImportBatch,
 // posted ledger split -- so a re-uploaded duplicate keeps showing flagged in the
 // queue even though the flag was not persisted at stage time. Posted/discarded rows
 // are never flagged (their status is decided).
-func (s *Store) ImportRowsForBatchFlagged(ctx context.Context, batchID int64) ([]ImportBatchRow, error) {
+func (s *Store) ImportRowsForBatchFlagged(ctx context.Context, batchID ids.ImportBatchID) ([]ImportBatchRow, error) {
 	rows, err := s.ImportRowsForBatch(ctx, batchID)
 	if err != nil {
 		return nil, err
@@ -414,8 +415,8 @@ func (s *Store) ImportRowsForBatchFlagged(ctx context.Context, batchID int64) ([
 // batch's subsidiary (the sub the edit&post editor LOCKS) alongside the row's own
 // fields. RAW values; the web layer formats them.
 type ImportRow struct {
-	ID           int64
-	BatchID      int64
+	ID           ids.ImportRowID
+	BatchID      ids.ImportBatchID
 	AccountID    int64
 	SubsidiaryID int64 // the batch's subsidiary (locked in the editor)
 	AmountMinor  int64
@@ -428,7 +429,7 @@ type ImportRow struct {
 
 // GetImportRow returns one staged row joined to its batch (for the batch subsidiary +
 // account). ErrImportRowNotFound when the row does not exist.
-func (s *Store) GetImportRow(ctx context.Context, rowID int64) (ImportRow, error) {
+func (s *Store) GetImportRow(ctx context.Context, rowID ids.ImportRowID) (ImportRow, error) {
 	r, err := s.q.GetImportRow(ctx, rowID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -461,7 +462,7 @@ func (s *Store) GetImportRow(ctx context.Context, rowID int64) (ImportRow, error
 // sole validator). The row is re-read on the tx-bound q and must still be 'pending'
 // (ErrImportRowNotPending) -- this, not atomicity alone, is what stops a double-submit
 // double-posting. Returns the created transaction id.
-func (s *Store) PostImportRow(ctx context.Context, rowID int64, in PostTransactionInput) (int64, error) {
+func (s *Store) PostImportRow(ctx context.Context, rowID ids.ImportRowID, in PostTransactionInput) (int64, error) {
 	var txnID int64
 	_, err := s.write(ctx, "import.row.post", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
@@ -499,7 +500,7 @@ func (s *Store) PostImportRow(ctx context.Context, rowID int64, in PostTransacti
 // discard_reason column). An empty reason is rejected before the funnel opens
 // (ErrDiscardReasonRequired: nothing written). The row is re-read on the tx-bound q
 // and must still be 'pending' (ErrImportRowNotPending).
-func (s *Store) DiscardImportRow(ctx context.Context, rowID int64, reason string) error {
+func (s *Store) DiscardImportRow(ctx context.Context, rowID ids.ImportRowID, reason string) error {
 	if strings.TrimSpace(reason) == "" {
 		return ErrDiscardReasonRequired
 	}

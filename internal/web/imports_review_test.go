@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"cuento/internal/bankimport"
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -23,8 +24,8 @@ import (
 // on checking, and returns the store, the row id, the batch id, and the account ids.
 type reviewEnv struct {
 	st       *store.Store
-	rowID    int64
-	batchID  int64
+	rowID    ids.ImportRowID
+	batchID  ids.ImportBatchID
 	checking int64
 	expense  int64
 }
@@ -79,14 +80,14 @@ func TestImportEditPostPrefillLocksSubsidiary(t *testing.T) {
 	book := mkUser(t, st, "book", "write", false)
 	env := stageReviewBatch(t, st, "Acme", "Invoice")
 
-	rec := asUser(t, h, sm, book, http.MethodGet, "/import/rows/"+strconv.FormatInt(env.rowID, 10)+"/edit", nil)
+	rec := asUser(t, h, sm, book, http.MethodGet, "/import/rows/"+strconv.FormatInt(int64(env.rowID), 10)+"/edit", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET edit = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
 
 	// The form posts to the import-post route (edit&post mode).
-	if !strings.Contains(body, `action="/import/rows/`+strconv.FormatInt(env.rowID, 10)+`/post"`) {
+	if !strings.Contains(body, `action="/import/rows/`+strconv.FormatInt(int64(env.rowID), 10)+`/post"`) {
 		t.Error("form action is not the import-post route")
 	}
 	// The subsidiary select is LOCKED (disabled) with a hidden carrier.
@@ -112,7 +113,7 @@ func TestImportEditPostSeedsBankLineDescription(t *testing.T) {
 	book := mkUser(t, st, "book", "write", false)
 	env := stageReviewBatch(t, st, "Acme Supplies Co", "Invoice")
 
-	rec := asUser(t, h, sm, book, http.MethodGet, "/import/rows/"+strconv.FormatInt(env.rowID, 10)+"/edit", nil)
+	rec := asUser(t, h, sm, book, http.MethodGet, "/import/rows/"+strconv.FormatInt(int64(env.rowID), 10)+"/edit", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET edit = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
@@ -144,11 +145,11 @@ func TestImportRowPostCreatesTxnAndLinks(t *testing.T) {
 	form.Set("amount_1", "42.00")
 	form.Set("progclass_1", "p:1") // p26.41 combined control: program node (root) -> class program on expense
 
-	rec := asUser(t, h, sm, book, http.MethodPost, "/import/rows/"+strconv.FormatInt(env.rowID, 10)+"/post", form)
+	rec := asUser(t, h, sm, book, http.MethodPost, "/import/rows/"+strconv.FormatInt(int64(env.rowID), 10)+"/post", form)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("POST post = %d, want 303; body: %s", rec.Code, rec.Body.String())
 	}
-	if loc := rec.Header().Get("Location"); loc != "/import/batches/"+strconv.FormatInt(env.batchID, 10) {
+	if loc := rec.Header().Get("Location"); loc != "/import/batches/"+strconv.FormatInt(int64(env.batchID), 10) {
 		t.Errorf("redirect Location = %q, want the batch queue", loc)
 	}
 
@@ -177,7 +178,7 @@ func TestImportRowPostCreatesTxnAndLinks(t *testing.T) {
 	}
 
 	// The batch queue shows the row posted.
-	q := asUser(t, h, sm, book, http.MethodGet, "/import/batches/"+strconv.FormatInt(env.batchID, 10), nil)
+	q := asUser(t, h, sm, book, http.MethodGet, "/import/batches/"+strconv.FormatInt(int64(env.batchID), 10), nil)
 	if q.Code != http.StatusOK {
 		t.Fatalf("GET queue = %d, want 200", q.Code)
 	}
@@ -203,7 +204,7 @@ func TestImportRowPostUnbalancedRerenders422(t *testing.T) {
 	form.Set("amount_1", "40.00")  // does not balance
 	form.Set("progclass_1", "p:1") // p26.41 combined control: program node (root) -> class program on expense
 
-	rec := asUser(t, h, sm, book, http.MethodPost, "/import/rows/"+strconv.FormatInt(env.rowID, 10)+"/post", form)
+	rec := asUser(t, h, sm, book, http.MethodPost, "/import/rows/"+strconv.FormatInt(int64(env.rowID), 10)+"/post", form)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("unbalanced POST = %d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
@@ -224,7 +225,7 @@ func TestImportDiscardRequiresReason(t *testing.T) {
 	// Empty reason -> 422, row still pending.
 	empty := url.Values{}
 	empty.Set("reason", "  ")
-	rec := asUser(t, h, sm, book, http.MethodPost, "/import/rows/"+strconv.FormatInt(env.rowID, 10)+"/discard", empty)
+	rec := asUser(t, h, sm, book, http.MethodPost, "/import/rows/"+strconv.FormatInt(int64(env.rowID), 10)+"/discard", empty)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("empty-reason discard = %d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
@@ -240,7 +241,7 @@ func TestImportDiscardRequiresReason(t *testing.T) {
 	// With a reason -> discarded.
 	ok := url.Values{}
 	ok.Set("reason", "not our account")
-	rec = asUser(t, h, sm, book, http.MethodPost, "/import/rows/"+strconv.FormatInt(env.rowID, 10)+"/discard", ok)
+	rec = asUser(t, h, sm, book, http.MethodPost, "/import/rows/"+strconv.FormatInt(int64(env.rowID), 10)+"/discard", ok)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("discard-with-reason = %d, want 303; body: %s", rec.Code, rec.Body.String())
 	}
@@ -258,8 +259,8 @@ func TestImportReviewPermTxnReadForbidden(t *testing.T) {
 	writer := mkUser(t, st, "writer", "write", false)
 	env := stageReviewBatch(t, st, "Acme", "Invoice")
 
-	rowPath := "/import/rows/" + strconv.FormatInt(env.rowID, 10)
-	batchPath := "/import/batches/" + strconv.FormatInt(env.batchID, 10)
+	rowPath := "/import/rows/" + strconv.FormatInt(int64(env.rowID), 10)
+	batchPath := "/import/batches/" + strconv.FormatInt(int64(env.batchID), 10)
 
 	for _, tc := range []struct {
 		method, path string

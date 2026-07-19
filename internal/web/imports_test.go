@@ -16,6 +16,7 @@ import (
 	"github.com/alexedwards/scs/v2"
 
 	"cuento/internal/bankimport"
+	"cuento/internal/ids"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
 )
@@ -145,7 +146,7 @@ func TestImportPreviewCapsAt20AndStagesAll(t *testing.T) {
 	}
 
 	// A batch exists and holds ALL 25 rows.
-	var batchID int64
+	var batchID ids.ImportBatchID
 	if err := db.QueryRow(`SELECT id FROM import_batches ORDER BY id DESC LIMIT 1`).Scan(&batchID); err != nil {
 		t.Fatalf("find batch: %v", err)
 	}

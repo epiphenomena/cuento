@@ -667,7 +667,7 @@ func (s *server) importConfirm(w http.ResponseWriter, r *http.Request) {
 	// The result is swapped into #import-workspace via htmx innerHTML (replacing the
 	// preview), so render JUST the fragment (no shell).
 	s.render(w, r, http.StatusOK, "import-result",
-		s.buildImportResult(r, batchID, filename, acct.DefaultCurrency, exp, staged))
+		s.buildImportResult(r, int64(batchID), filename, acct.DefaultCurrency, exp, staged))
 }
 
 // buildImportResult formats the staged-row result for the confirm page.

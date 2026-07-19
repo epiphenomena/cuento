@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 const getImportBatch = `-- name: GetImportBatch :one
@@ -15,7 +17,7 @@ SELECT id, filename, account_id, subsidiary_id, profile_id, uploaded_by, uploade
 FROM import_batches WHERE id = ?
 `
 
-func (q *Queries) GetImportBatch(ctx context.Context, id int64) (ImportBatch, error) {
+func (q *Queries) GetImportBatch(ctx context.Context, id ids.ImportBatchID) (ImportBatch, error) {
 	row := q.db.QueryRowContext(ctx, getImportBatch, id)
 	var i ImportBatch
 	err := row.Scan(
@@ -40,8 +42,8 @@ WHERE r.id = ?
 `
 
 type GetImportRowRow struct {
-	ID                  int64
-	BatchID             int64
+	ID                  ids.ImportRowID
+	BatchID             ids.ImportBatchID
 	AccountID           int64
 	RawJson             string
 	ParsedDate          sql.NullString
@@ -57,7 +59,7 @@ type GetImportRowRow struct {
 // One staged row joined to its batch, for the p17.3 review queue (edit&post /
 // discard). It carries the batch's subsidiary_id (the SUB the edit&post editor LOCKS)
 // and the row's own account_id (denormalized from the batch = the bank side).
-func (q *Queries) GetImportRow(ctx context.Context, id int64) (GetImportRowRow, error) {
+func (q *Queries) GetImportRow(ctx context.Context, id ids.ImportRowID) (GetImportRowRow, error) {
 	row := q.db.QueryRowContext(ctx, getImportRow, id)
 	var i GetImportRowRow
 	err := row.Scan(
@@ -97,7 +99,7 @@ ORDER BY id
 `
 
 // Every staged row of a batch, in stage order -- the batch review list source.
-func (q *Queries) ImportRowsByBatch(ctx context.Context, batchID int64) ([]ImportRow, error) {
+func (q *Queries) ImportRowsByBatch(ctx context.Context, batchID ids.ImportBatchID) ([]ImportRow, error) {
 	rows, err := q.db.QueryContext(ctx, importRowsByBatch, batchID)
 	if err != nil {
 		return nil, err
@@ -149,7 +151,7 @@ type InsertImportBatchParams struct {
 
 // One upload, binding ONE account AND ONE subsidiary (the account-maps-to-subsidiary
 // check is done in the store via HasAccountSubsidiaryMap before this runs).
-func (q *Queries) InsertImportBatch(ctx context.Context, arg InsertImportBatchParams) (int64, error) {
+func (q *Queries) InsertImportBatch(ctx context.Context, arg InsertImportBatchParams) (ids.ImportBatchID, error) {
 	row := q.db.QueryRowContext(ctx, insertImportBatch,
 		arg.Filename,
 		arg.AccountID,
@@ -158,7 +160,7 @@ func (q *Queries) InsertImportBatch(ctx context.Context, arg InsertImportBatchPa
 		arg.UploadedBy,
 		arg.UploadedAt,
 	)
-	var id int64
+	var id ids.ImportBatchID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -171,7 +173,7 @@ RETURNING id
 `
 
 type InsertImportRowParams struct {
-	BatchID      int64
+	BatchID      ids.ImportBatchID
 	AccountID    int64
 	RawJson      string
 	ParsedDate   sql.NullString
@@ -183,7 +185,7 @@ type InsertImportRowParams struct {
 
 // Stage one parsed row. account_id is denormalized from the batch (the dedupe
 // scope, DECISIONS p17.1). status is 'pending'; dedupe_hash is precomputed in Go.
-func (q *Queries) InsertImportRow(ctx context.Context, arg InsertImportRowParams) (int64, error) {
+func (q *Queries) InsertImportRow(ctx context.Context, arg InsertImportRowParams) (ids.ImportRowID, error) {
 	row := q.db.QueryRowContext(ctx, insertImportRow,
 		arg.BatchID,
 		arg.AccountID,
@@ -194,7 +196,7 @@ func (q *Queries) InsertImportRow(ctx context.Context, arg InsertImportRowParams
 		arg.ParsedMemo,
 		arg.DedupeHash,
 	)
-	var id int64
+	var id ids.ImportRowID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -344,7 +346,7 @@ WHERE id = ? AND status = 'pending'
 // p17.3: mark a staged row discarded (status=discarded). The DISCARD REASON is the
 // `changes` row's note (DECISIONS p17.1: a discarded row's audit is that change);
 // there is no discard_reason column by design. Guarded to status='pending'.
-func (q *Queries) MarkImportRowDiscarded(ctx context.Context, id int64) error {
+func (q *Queries) MarkImportRowDiscarded(ctx context.Context, id ids.ImportRowID) error {
 	_, err := q.db.ExecContext(ctx, markImportRowDiscarded, id)
 	return err
 }
@@ -357,7 +359,7 @@ WHERE id = ? AND status = 'pending'
 
 type MarkImportRowPostedParams struct {
 	PostedTransactionID sql.NullInt64
-	ID                  int64
+	ID                  ids.ImportRowID
 }
 
 // p17.3: LINK a staged row to the ledger transaction that posted it (status=posted,

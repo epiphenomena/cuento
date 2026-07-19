@@ -260,7 +260,7 @@ type FundsVersion struct {
 }
 
 type ImportBatch struct {
-	ID           int64
+	ID           ids.ImportBatchID
 	Filename     string
 	AccountID    int64
 	SubsidiaryID int64
@@ -270,8 +270,8 @@ type ImportBatch struct {
 }
 
 type ImportRow struct {
-	ID                  int64
-	BatchID             int64
+	ID                  ids.ImportRowID
+	BatchID             ids.ImportBatchID
 	AccountID           int64
 	RawJson             string
 	ParsedDate          sql.NullString

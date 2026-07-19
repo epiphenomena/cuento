@@ -75,7 +75,7 @@ type DemoIDs struct {
 	OpenRecon ids.ReconciliationID // an in-progress (unfinalized) reconciliation on Checking MX
 
 	MappingProfile int64
-	ImportBatch    int64 // a staged (unposted) import batch on Checking US
+	ImportBatch    ids.ImportBatchID // a staged (unposted) import batch on Checking US
 }
 
 // BuildDemo builds the FULL demo dataset into the store: the canonical synthetic org

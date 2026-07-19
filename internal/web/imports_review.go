@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -64,7 +65,7 @@ type importQueueRow struct {
 
 // importBatchQueue handles GET /import/batches/{id} (TxnWrite): the review queue.
 func (s *server) importBatchQueue(w http.ResponseWriter, r *http.Request) {
-	batchID := parseID(r.PathValue("id"))
+	batchID := ids.ImportBatchID(parseID(r.PathValue("id")))
 	model, err := s.buildImportQueue(r, batchID, "", "")
 	if err != nil {
 		http.NotFound(w, r)
@@ -77,7 +78,7 @@ func (s *server) importBatchQueue(w http.ResponseWriter, r *http.Request) {
 // (computed in Go from the rows -- batches are tiny), and the row list with the
 // duplicate flag recomputed against the account's existing-dedupe set (the same
 // advisory flagging the staging pass used, so a re-uploaded duplicate keeps showing).
-func (s *server) buildImportQueue(r *http.Request, batchID int64, errKey, errArg string) (importQueueModel, error) {
+func (s *server) buildImportQueue(r *http.Request, batchID ids.ImportBatchID, errKey, errArg string) (importQueueModel, error) {
 	ctx := r.Context()
 	u := currentUser(ctx)
 	lang := langOf(ctx)
@@ -97,7 +98,7 @@ func (s *server) buildImportQueue(r *http.Request, batchID int64, errKey, errArg
 	df := dateFormatFor(u)
 
 	model := importQueueModel{
-		BatchID:  batchID,
+		BatchID:  int64(batchID),
 		Filename: batch.Filename,
 		Account:  s.accountName(ctx, batch.AccountID, lang),
 		Sub:      s.subsidiaryName(ctx, batch.SubsidiaryID),
@@ -119,7 +120,7 @@ func (s *server) buildImportQueue(r *http.Request, batchID int64, errKey, errArg
 			amt = *row.AmountMinor
 		}
 		qr := importQueueRow{
-			ID:          row.ID,
+			ID:          int64(row.ID),
 			Date:        money.FormatDate(parseISOForDisplay(row.Date), df),
 			AmountFmt:   money.FormatMoney(amt, currency, exp, opts),
 			Description: row.Description,
@@ -144,7 +145,7 @@ func (s *server) buildImportQueue(r *http.Request, batchID int64, errKey, errArg
 func (s *server) importRowEditForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(ctx)
-	rowID := parseID(r.PathValue("id"))
+	rowID := ids.ImportRowID(parseID(r.PathValue("id")))
 
 	row, err := s.store.GetImportRow(ctx, rowID)
 	if err != nil {
@@ -153,7 +154,7 @@ func (s *server) importRowEditForm(w http.ResponseWriter, r *http.Request) {
 	}
 	if row.Status != "pending" {
 		// Already posted/discarded: nothing to edit -- back to the queue.
-		http.Redirect(w, r, "/import/batches/"+strconv.FormatInt(row.BatchID, 10), http.StatusSeeOther)
+		http.Redirect(w, r, "/import/batches/"+strconv.FormatInt(int64(row.BatchID), 10), http.StatusSeeOther)
 		return
 	}
 
@@ -162,8 +163,8 @@ func (s *server) importRowEditForm(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	model.ImportRowID = rowID
-	model.ImportBatchID = row.BatchID
+	model.ImportRowID = int64(rowID)
+	model.ImportBatchID = int64(row.BatchID)
 	model.FirstErrorRow = -1
 	model.Date = money.FormatDate(parseISOForDisplay(row.Date), dateFormatFor(u))
 	model.Memo = row.Memo
@@ -213,7 +214,7 @@ func (s *server) prefillImportRows(ctx context.Context, u *store.CurrentUser, mo
 func (s *server) importRowPost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(ctx)
-	rowID := parseID(r.PathValue("id"))
+	rowID := ids.ImportRowID(parseID(r.PathValue("id")))
 
 	row, err := s.store.GetImportRow(ctx, rowID)
 	if err != nil {
@@ -234,8 +235,8 @@ func (s *server) importRowPost(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	model.ImportRowID = rowID
-	model.ImportBatchID = row.BatchID
+	model.ImportRowID = int64(rowID)
+	model.ImportBatchID = int64(row.BatchID)
 	model.Currency = currency
 	model.Memo = r.FormValue("memo")
 	model.Notes = r.FormValue("notes")
@@ -266,7 +267,7 @@ func (s *server) importRowPost(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.store.PostImportRow(s.actorCtx(ctx), rowID, in); err != nil {
 		if errors.Is(err, store.ErrImportRowNotPending) {
 			// Someone posted/discarded it meanwhile: send them back to the queue.
-			dest := "/import/batches/" + strconv.FormatInt(row.BatchID, 10)
+			dest := "/import/batches/" + strconv.FormatInt(int64(row.BatchID), 10)
 			if r.Header.Get("HX-Request") == "true" {
 				w.Header().Set("HX-Redirect", dest)
 				w.WriteHeader(http.StatusOK)
@@ -280,7 +281,7 @@ func (s *server) importRowPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dest := "/import/batches/" + strconv.FormatInt(row.BatchID, 10)
+	dest := "/import/batches/" + strconv.FormatInt(int64(row.BatchID), 10)
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Redirect", dest)
 		w.WriteHeader(http.StatusOK)
@@ -294,7 +295,7 @@ func (s *server) importRowPost(w http.ResponseWriter, r *http.Request) {
 // note). A missing reason re-renders the queue at 422 with the discard-reason error.
 func (s *server) importRowDiscard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	rowID := parseID(r.PathValue("id"))
+	rowID := ids.ImportRowID(parseID(r.PathValue("id")))
 
 	row, err := s.store.GetImportRow(ctx, rowID)
 	if err != nil {
@@ -318,14 +319,14 @@ func (s *server) importRowDiscard(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, store.ErrImportRowNotPending) {
-			http.Redirect(w, r, "/import/batches/"+strconv.FormatInt(row.BatchID, 10), http.StatusSeeOther)
+			http.Redirect(w, r, "/import/batches/"+strconv.FormatInt(int64(row.BatchID), 10), http.StatusSeeOther)
 			return
 		}
 		s.serverError(w)
 		return
 	}
 
-	dest := "/import/batches/" + strconv.FormatInt(row.BatchID, 10)
+	dest := "/import/batches/" + strconv.FormatInt(int64(row.BatchID), 10)
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Redirect", dest)
 		w.WriteHeader(http.StatusOK)

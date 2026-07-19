@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"cuento/internal/bankimport"
+	"cuento/internal/ids"
 	"cuento/internal/testutil"
 )
 
@@ -15,7 +16,7 @@ import (
 // row as a duplicate (idempotent -- no double post).
 
 // stageOnePending stages a single pending row on env.checking and returns its id.
-func stageOnePending(t *testing.T, env importEnv, date string, amount int64, description, memo string) int64 {
+func stageOnePending(t *testing.T, env importEnv, date string, amount int64, description, memo string) ids.ImportRowID {
 	t.Helper()
 	batch, err := env.s.CreateImportBatch(mutCtx(), "queue.csv", env.checking, env.subUS, env.profile, "2025-02-01T00:00:00Z")
 	if err != nil {
