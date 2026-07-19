@@ -312,7 +312,7 @@ type RegisterCursor struct {
 // RegisterRow is one register line with its per-currency running balance.
 type RegisterRow struct {
 	SplitID         int64
-	TxnID           int64
+	TxnID           ids.TransactionID
 	Date            string
 	SubsidiaryID    ids.SubsidiaryID
 	Currency        string
@@ -450,7 +450,7 @@ func (s *Store) RegisterPage(
 // quantity FundBalancesAsOf reports. IsAsset marks the rows that MOVE the balance.
 type FundLedgerRow struct {
 	SplitID         int64
-	TxnID           int64
+	TxnID           ids.TransactionID
 	Date            string
 	SubsidiaryID    ids.SubsidiaryID
 	Currency        string
@@ -533,7 +533,7 @@ type DrillFilter struct {
 // (the p12.4 editor/history).
 type DrillRow struct {
 	SplitID         int64
-	TxnID           int64
+	TxnID           ids.TransactionID
 	Date            string
 	SubsidiaryID    ids.SubsidiaryID
 	Currency        string

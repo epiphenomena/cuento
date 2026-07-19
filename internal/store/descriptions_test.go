@@ -2,6 +2,8 @@ package store
 
 import (
 	"testing"
+
+	"cuento/internal/ids"
 )
 
 // p26.18 per-split description autocomplete + per-row prefill (step 4a of the
@@ -14,7 +16,7 @@ import (
 
 // postWithDesc posts a balanced 2-split txn on `date` whose salaries (debit) split
 // carries `desc` as its description, returning the new transaction id.
-func (e txnEnv) postWithDesc(t *testing.T, date, desc string, amount int64) int64 {
+func (e txnEnv) postWithDesc(t *testing.T, date, desc string, amount int64) ids.TransactionID {
 	t.Helper()
 	in := e.balancedInput(amount)
 	in.Date = date

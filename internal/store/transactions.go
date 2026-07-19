@@ -126,8 +126,8 @@ type resolvedSplit struct {
 // PostTransaction validates and inserts a transaction + its splits under ONE
 // change, returning the new transaction id. All validation runs inside fn on the
 // tx-bound q; a rejection rolls the change back (no audit trace).
-func (s *Store) PostTransaction(ctx context.Context, in PostTransactionInput) (int64, error) {
-	var newID int64
+func (s *Store) PostTransaction(ctx context.Context, in PostTransactionInput) (ids.TransactionID, error) {
+	var newID ids.TransactionID
 	_, err := s.write(ctx, "transaction.post", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			id, err := s.postTransactionTx(ctx, q, changeID, in)
@@ -151,7 +151,7 @@ func (s *Store) PostTransaction(ctx context.Context, in PostTransactionInput) (i
 // no window in which a posted txn exists with a still-pending import row (which would
 // double-post on retry). All validation runs on q, so a rejection rolls the caller's
 // change back.
-func (s *Store) postTransactionTx(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, in PostTransactionInput) (int64, error) {
+func (s *Store) postTransactionTx(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, in PostTransactionInput) (ids.TransactionID, error) {
 	resolved, err := s.validateAndResolve(ctx, q, in, nil)
 	if err != nil {
 		return 0, err
@@ -185,7 +185,7 @@ func (s *Store) postTransactionTx(ctx context.Context, q *sqlc.Queries, changeID
 // with no id is inserted + op='create'. The transaction header always gets an
 // op='update' version (the change row anchors the edit), keeping the header as-of
 // a clean LIMIT-1 lookup.
-func (s *Store) UpdateTransaction(ctx context.Context, id int64, in PostTransactionInput) error {
+func (s *Store) UpdateTransaction(ctx context.Context, id ids.TransactionID, in PostTransactionInput) error {
 	_, err := s.write(ctx, "transaction.update", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			cur, err := q.GetTransaction(ctx, id)
@@ -339,7 +339,7 @@ func (s *Store) UpdateTransaction(ctx context.Context, id int64, in PostTransact
 // DeleteTransaction soft-deletes a transaction (rule 14): set deleted=1 and append
 // ONE transactions_versions op='delete'. The splits are left untouched (no split
 // delete-versions) -- the as-of query excludes the txn by its own delete row.
-func (s *Store) DeleteTransaction(ctx context.Context, id int64) error {
+func (s *Store) DeleteTransaction(ctx context.Context, id ids.TransactionID) error {
 	_, err := s.write(ctx, "transaction.delete", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if _, err := q.GetTransaction(ctx, id); err != nil {
@@ -377,7 +377,7 @@ func (s *Store) DeleteTransaction(ctx context.Context, id int64) error {
 // edit form; a soft-deleted or missing transaction returns ErrTransactionNotFound so
 // the handler can 404. Unlike TransactionAsOf this is the denormalized latest state,
 // which is what the editor edits.
-func (s *Store) GetTransaction(ctx context.Context, id int64) (sqlc.Transaction, error) {
+func (s *Store) GetTransaction(ctx context.Context, id ids.TransactionID) (sqlc.Transaction, error) {
 	row, err := s.q.GetTransaction(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -427,7 +427,7 @@ func (s *Store) SubsidiaryTxnCount(ctx context.Context, subsidiaryID ids.Subsidi
 // splits filtered by transaction currency (e.g. the demo reconciliation seam).
 type AccountSplitRef struct {
 	ID            int64
-	TransactionID int64
+	TransactionID ids.TransactionID
 }
 
 // SplitsByAccountCurrency returns every live split on accountID whose transaction is
@@ -504,7 +504,7 @@ type SplitState struct {
 // splits_versions <= at, excluded if op='delete', for this transaction_id. The
 // per-entity latest is resolved in Go from an ordered fetch (like Effective990Codes)
 // to keep each SQL param single-use.
-func (s *Store) TransactionAsOf(ctx context.Context, id int64, at time.Time) (TransactionState, error) {
+func (s *Store) TransactionAsOf(ctx context.Context, id ids.TransactionID, at time.Time) (TransactionState, error) {
 	atStr := at.Format(time.RFC3339Nano)
 
 	hdr, err := s.q.TransactionVersionAsOf(ctx, sqlc.TransactionVersionAsOfParams{EntityID: id, ValidFrom: atStr})
@@ -827,7 +827,7 @@ func fundSplitInSubsidiary(ctx context.Context, q *sqlc.Queries, fundID ids.Fund
 // --- small helpers -------------------------------------------------------
 
 // insertSplit inserts one resolved split live then appends its op='create' version.
-func insertSplit(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, txnID int64, r resolvedSplit) error {
+func insertSplit(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, txnID ids.TransactionID, r resolvedSplit) error {
 	sid, err := q.InsertSplit(ctx, sqlc.InsertSplitParams{
 		TransactionID:   txnID,
 		AccountID:       r.accountID,
@@ -875,7 +875,7 @@ func nullStringEq(a, b sql.NullString) bool {
 
 // insertTransactionVersion appends the transactions snapshot-from-live version row,
 // hiding the generated positional-param names (ID=change_id, ID_2=entity_id).
-func insertTransactionVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID int64) error {
+func insertTransactionVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID ids.TransactionID) error {
 	if err := q.InsertTransactionVersion(ctx, sqlc.InsertTransactionVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append transaction version (entity %d, op %s): %w", entityID, op, err)
 	}

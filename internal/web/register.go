@@ -106,7 +106,7 @@ func registerRows(
 	// account, not the txn alone. For a leaf register the row account is constant, so
 	// this degrades to the previous per-txn behavior.
 	type counterKey struct {
-		txnID int64
+		txnID ids.TransactionID
 		acct  int64
 	}
 	counters := make(map[counterKey]counterAccount, len(page))
@@ -135,7 +135,7 @@ func registerRows(
 
 		rows = append(rows, regRow{
 			SplitID:           r.SplitID,
-			TxnID:             r.TxnID,
+			TxnID:             int64(r.TxnID),
 			DateISO:           r.Date,
 			Amount:            r.Amount,
 			RunningBalance:    r.RunningBalance,
@@ -170,7 +170,7 @@ type counterAccount struct {
 // whose non-self splits happen to share one account (common under D20 mixed-fund
 // splitting) still reads as "Split". A 1-split txn cannot exist (the store rejects
 // it).
-func resolveCounterAccount(ctx context.Context, st *store.Store, txnID, selfAccount int64, names map[int64]string) (counterAccount, error) {
+func resolveCounterAccount(ctx context.Context, st *store.Store, txnID ids.TransactionID, selfAccount int64, names map[int64]string) (counterAccount, error) {
 	splits, err := st.TransactionSplits(ctx, txnID)
 	if err != nil {
 		return counterAccount{}, err

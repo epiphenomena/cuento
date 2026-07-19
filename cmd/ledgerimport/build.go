@@ -42,7 +42,7 @@ type BuildResult struct {
 
 	// tidTxns records, per source tid, the transaction ids produced (one for a
 	// single-currency group, N for a decomposed multi-currency group).
-	tidTxns map[string][]int64
+	tidTxns map[string][]ids.TransactionID
 	// splitAccounts is the set of account ids that received at least one split.
 	splitAccounts map[int64]bool
 }
@@ -73,7 +73,7 @@ func newResult() *BuildResult {
 		ProgramIDs:    map[string]ids.ProgramID{},
 		FundIDs:       map[string]ids.FundID{},
 		AccountIDs:    map[string]int64{},
-		tidTxns:       map[string][]int64{},
+		tidTxns:       map[string][]ids.TransactionID{},
 		splitAccounts: map[int64]bool{},
 	}
 }

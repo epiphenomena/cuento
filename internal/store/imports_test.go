@@ -69,7 +69,7 @@ func TestPostImportRowCreatesBalancedTxnAndLinks(t *testing.T) {
 	}
 
 	// The txn is a real versioned ledger entry.
-	testutil.AssertVersioned(t, s.db, "transactions", txnID, "create")
+	testutil.AssertVersioned(t, s.db, "transactions", int64(txnID), "create")
 
 	// The row is LINKED: status=posted, posted_transaction_id = txnID.
 	row, err := s.GetImportRow(context.Background(), rowID)

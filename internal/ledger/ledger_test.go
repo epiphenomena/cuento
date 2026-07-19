@@ -49,8 +49,8 @@ type world struct {
 	dueTo      int64 // liability, intercompany, MX
 	checkingMX int64 // asset, MX
 
-	txPlain int64 // a simple balanced US txn (salaries/checking)
-	txFund  int64 // a restricted-fund receipt in US
+	txPlain ids.TransactionID // a simple balanced US txn (salaries/checking)
+	txFund  ids.TransactionID // a restricted-fund receipt in US
 }
 
 func newWorld(t *testing.T) *world {
@@ -186,7 +186,7 @@ func mkAcct(t *testing.T, s *store.Store, a acct) int64 {
 	return id
 }
 
-func post(t *testing.T, s *store.Store, in store.PostTransactionInput) int64 {
+func post(t *testing.T, s *store.Store, in store.PostTransactionInput) ids.TransactionID {
 	t.Helper()
 	id, err := s.PostTransaction(mutCtx(), in)
 	if err != nil {
@@ -300,7 +300,7 @@ func TestZ1Unbalanced(t *testing.T) {
 	w := newWorld(t)
 	// Tamper one split's amount directly, breaking the zero-sum, bypassing the
 	// store. Triggers don't guard amount-sum (cross-row), so a raw UPDATE sticks.
-	exec(t, w.d, `UPDATE splits SET amount = amount + 1 WHERE id = (SELECT MIN(id) FROM splits WHERE transaction_id = ?)`, w.txPlain)
+	exec(t, w.d, `UPDATE splits SET amount = amount + 1 WHERE id = (SELECT MIN(id) FROM splits WHERE transaction_id = ?)`, int64(w.txPlain))
 	assertFlags(t, w.d, "Z1")
 }
 
@@ -449,7 +449,7 @@ func TestZ8ClearedSplitAccountMismatch(t *testing.T) {
 	exec(t, w.d, `INSERT INTO reconciliations (account_id, statement_date, statement_balance, currency, status)
 		VALUES (?, '2025-03-31', 0, 'USD', 'open')`, w.checkingUS)
 	exec(t, w.d, `UPDATE splits SET reconciliation_id = (SELECT MAX(id) FROM reconciliations)
-		WHERE account_id = ? AND transaction_id = ?`, w.salaries, w.txPlain)
+		WHERE account_id = ? AND transaction_id = ?`, w.salaries, int64(w.txPlain))
 	assertFlags(t, w.d, "Z8")
 }
 
@@ -461,7 +461,7 @@ func TestZ8ClearedSplitCurrencyMismatch(t *testing.T) {
 	exec(t, w.d, `INSERT INTO reconciliations (account_id, statement_date, statement_balance, currency, status)
 		VALUES (?, '2025-03-31', 0, 'MXN', 'open')`, w.checkingUS)
 	exec(t, w.d, `UPDATE splits SET reconciliation_id = (SELECT MAX(id) FROM reconciliations)
-		WHERE account_id = ? AND transaction_id = ?`, w.checkingUS, w.txFund)
+		WHERE account_id = ? AND transaction_id = ?`, w.checkingUS, int64(w.txFund))
 	assertFlags(t, w.d, "Z8")
 }
 
@@ -600,7 +600,7 @@ func TestZ14FunctionMismatch(t *testing.T) {
 	// Null out an expense split's functional_class (bypassing the trigger by
 	// dropping it on the throwaway db).
 	dropTriggers(t, w.d, "trg_splits_function_matches_type_update")
-	exec(t, w.d, `UPDATE splits SET functional_class = NULL WHERE account_id = ? AND transaction_id = ?`, w.salaries, w.txPlain)
+	exec(t, w.d, `UPDATE splits SET functional_class = NULL WHERE account_id = ? AND transaction_id = ?`, w.salaries, int64(w.txPlain))
 	assertFlags(t, w.d, "Z14")
 }
 

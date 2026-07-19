@@ -155,7 +155,7 @@ func TestReviewPostCreatesBalancedTxnAndConverts(t *testing.T) {
 	}
 	seen := false
 	for _, e := range regRows {
-		if e.TxnID == txnID {
+		if int64(e.TxnID) == txnID {
 			seen = true
 		}
 	}

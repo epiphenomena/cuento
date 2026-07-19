@@ -18,7 +18,7 @@ func actorCtx(id ids.UserID) context.Context {
 
 // postHeaderTxn posts a balanced 2-split txn whose POSITION-0 (header) split is `header`
 // and body split is `body`, on `date`, as the given actor. Returns the transaction id.
-func (e txnEnv) postHeaderTxn(t *testing.T, actor ids.UserID, date string, header, body, amount int64) int64 {
+func (e txnEnv) postHeaderTxn(t *testing.T, actor ids.UserID, date string, header, body, amount int64) ids.TransactionID {
 	t.Helper()
 	in := PostTransactionInput{
 		Date: date, SubsidiaryID: e.subUS, Currency: "USD",

@@ -86,10 +86,10 @@ func mkAcct(t *testing.T, s *Store, typ, name string, subs []ids.SubsidiaryID, f
 }
 
 // txnSplits reads a transaction's live split rows for assertions.
-func txnSplits(t *testing.T, d *sql.DB, txnID int64) []SplitState {
+func txnSplits(t *testing.T, d *sql.DB, txnID ids.TransactionID) []SplitState {
 	t.Helper()
 	rows, err := d.Query(`SELECT id, account_id, amount, fund_id, program_id, functional_class, memo, position
-		FROM splits WHERE transaction_id = ? ORDER BY position, id`, txnID)
+		FROM splits WHERE transaction_id = ? ORDER BY position, id`, int64(txnID))
 	if err != nil {
 		t.Fatalf("txnSplits: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestPostBalanced(t *testing.T) {
 		t.Fatalf("changes = %d, want %d (one change for the post)", n, before+1)
 	}
 	// The txn and EVERY split are versioned op=create under that one change.
-	testutil.AssertVersioned(t, e.d, "transactions", id, "create")
+	testutil.AssertVersioned(t, e.d, "transactions", int64(id), "create")
 	sps := txnSplits(t, e.d, id)
 	if len(sps) != 2 {
 		t.Fatalf("live splits = %d, want 2", len(sps))
@@ -670,7 +670,7 @@ func TestUpdateDiffsSplits(t *testing.T) {
 		t.Errorf("new split versions = %d, want 1 (create)", c)
 	}
 	// The txn header got an op=update version (anchors the edit).
-	testutil.AssertVersioned(t, e.d, "transactions", id, "update")
+	testutil.AssertVersioned(t, e.d, "transactions", int64(id), "update")
 }
 
 // TestUpdateDuplicateExistingSplitIDRejected proves the worked audit case: an
@@ -791,7 +791,7 @@ func TestSplitsByAccountCurrency(t *testing.T) {
 		t.Errorf("splits not ordered by id ascending: %d then %d", refs[0].ID, refs[1].ID)
 	}
 	// Both belong to the two USD transactions (never the MXN one).
-	wantTxns := map[int64]bool{usd1: true, usd2: true}
+	wantTxns := map[ids.TransactionID]bool{usd1: true, usd2: true}
 	for _, r := range refs {
 		if !wantTxns[r.TransactionID] {
 			t.Errorf("split %d on unexpected txn %d (want a USD txn)", r.ID, r.TransactionID)
@@ -842,7 +842,7 @@ func TestUpdateKeepsInactiveAccountOnUnchangedSplit(t *testing.T) {
 	if err := e.s.UpdateTransaction(mutCtx(), id, upd); err != nil {
 		t.Fatalf("UpdateTransaction (memo only, inactive account unchanged) = %v, want nil", err)
 	}
-	testutil.AssertVersioned(t, e.d, "transactions", id, "update")
+	testutil.AssertVersioned(t, e.d, "transactions", int64(id), "update")
 
 	var memo string
 	if err := e.d.QueryRow(`SELECT memo FROM transactions WHERE id = ?`, id).Scan(&memo); err != nil {
@@ -961,7 +961,7 @@ func TestDeleteIsSoft(t *testing.T) {
 	if deleted != 1 {
 		t.Errorf("deleted = %d, want 1 (soft delete)", deleted)
 	}
-	testutil.AssertVersioned(t, e.d, "transactions", id, "delete")
+	testutil.AssertVersioned(t, e.d, "transactions", int64(id), "delete")
 	// Splits: untouched, no delete-version.
 	for _, sp := range sps {
 		if c := splitVersionCount(t, e.d, sp.ID); c != preCounts[sp.ID] {
@@ -981,7 +981,7 @@ func TestLedgerDateRange(t *testing.T) {
 		t.Fatalf("empty ledger: got ok=%v err=%v, want ok=false err=nil", ok, err)
 	}
 
-	post := func(date string) int64 {
+	post := func(date string) ids.TransactionID {
 		in := e.balancedInput(100)
 		in.Date = date
 		id, err := e.s.PostTransaction(mutCtx(), in)
@@ -1135,14 +1135,14 @@ func TestConcurrentPostsSerialize(t *testing.T) {
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	errs := make([]error, n)
-	ids := make([]int64, n)
+	txnIDs := make([]ids.TransactionID, n)
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
 			<-start // barrier: release all together for genuine overlap
 			id, err := e.s.PostTransaction(mutCtx(), e.balancedInput(int64(100+i)))
-			ids[i] = id
+			txnIDs[i] = id
 			errs[i] = err
 		}(i)
 	}
@@ -1154,7 +1154,7 @@ func TestConcurrentPostsSerialize(t *testing.T) {
 		if errs[i] != nil {
 			t.Fatalf("poster %d failed: %v", i, errs[i])
 		}
-		if ids[i] == 0 {
+		if txnIDs[i] == 0 {
 			t.Fatalf("poster %d got id 0", i)
 		}
 	}
@@ -1162,8 +1162,8 @@ func TestConcurrentPostsSerialize(t *testing.T) {
 	// txn's create version.
 	for i := 0; i < n; i++ {
 		var cid int64
-		if err := e.d.QueryRow(`SELECT change_id FROM transactions_versions WHERE entity_id = ? AND op = 'create'`, ids[i]).Scan(&cid); err != nil {
-			t.Fatalf("read change for txn %d: %v", ids[i], err)
+		if err := e.d.QueryRow(`SELECT change_id FROM transactions_versions WHERE entity_id = ? AND op = 'create'`, int64(txnIDs[i])).Scan(&cid); err != nil {
+			t.Fatalf("read change for txn %d: %v", txnIDs[i], err)
 		}
 		if seen[cid] {
 			t.Errorf("duplicate change id %d across concurrent posts", cid)

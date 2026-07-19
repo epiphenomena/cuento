@@ -40,6 +40,7 @@ type (
 	SubsidiaryID     = ids.SubsidiaryID
 	ReconciliationID = ids.ReconciliationID
 	BudgetPlanID     = ids.BudgetPlanID
+	TransactionID    = ids.TransactionID
 )
 
 // Scope is a report scope: a subsidiary consolidated with ALL its descendants
@@ -392,7 +393,7 @@ func (tk *Toolkit) FundPeriodStatement(ctx context.Context, s Scope, f FundID, f
 	// excluded from the spendable figure. Restricting PASS 1 to [from,to] would leave
 	// a pre-window capitalized asset classified as "cash", overstating spendable
 	// Opening (and thus Closing) for any window that starts after the capitalization.
-	revenueTxn := make(map[int64]bool) // txn id -> has a revenue split for this fund
+	revenueTxn := make(map[TransactionID]bool) // txn id -> has a revenue split for this fund
 	for _, r := range rows {
 		if acctType[AccountID(r.AccountID)] == "revenue" {
 			revenueTxn[r.TxnID] = true

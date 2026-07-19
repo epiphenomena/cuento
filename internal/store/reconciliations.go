@@ -432,7 +432,7 @@ type ReconciliationSummary struct {
 // formats them (rule 10) and resolves names.
 type ReconciliationWorkspaceSplit struct {
 	SplitID      int64
-	TxnID        int64
+	TxnID        ids.TransactionID
 	Amount       int64 // net-debit signed minor units (D2)
 	FundID       *ids.FundID
 	SubsidiaryID ids.SubsidiaryID
@@ -560,7 +560,7 @@ func (s *Store) ReconciliationsForAccount(ctx context.Context, accountID int64) 
 // (these are all cleared, by definition of the query).
 type ReconciliationStatementSplit struct {
 	SplitID      int64
-	TxnID        int64
+	TxnID        ids.TransactionID
 	Amount       int64 // net-debit signed minor units (D2)
 	FundID       *ids.FundID
 	SubsidiaryID ids.SubsidiaryID

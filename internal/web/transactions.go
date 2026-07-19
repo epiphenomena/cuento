@@ -344,7 +344,7 @@ func (s *server) echoRowsFromQuery(r *http.Request, model txnEditorModel) []txnR
 func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(ctx)
-	id := parseID(r.PathValue("id"))
+	id := ids.TransactionID(parseID(r.PathValue("id")))
 
 	hdr, err := s.store.GetTransaction(ctx, id)
 	if err != nil {
@@ -362,7 +362,7 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	model.TxnID = id
+	model.TxnID = int64(id)
 	model.IsEdit = true
 	model.Currency = hdr.Currency
 	model.Date = money.FormatDate(parseISOForDisplay(hdr.Date), dateFormatFor(u))
@@ -487,7 +487,7 @@ func (s *server) txnCreate(w http.ResponseWriter, r *http.Request) {
 
 // txnUpdate handles POST /transactions/{id}.
 func (s *server) txnUpdate(w http.ResponseWriter, r *http.Request) {
-	s.txnSubmit(w, r, parseID(r.PathValue("id")))
+	s.txnSubmit(w, r, ids.TransactionID(parseID(r.PathValue("id"))))
 }
 
 // txnSubmit is the shared create/update path. It parses the form into a
@@ -495,7 +495,7 @@ func (s *server) txnUpdate(w http.ResponseWriter, r *http.Request) {
 // field, trap 3), calls the store (the SOLE validator, trap 5), and on a typed error
 // re-renders the form region at 422 with the error routed to its slot. txnID == 0 is
 // a create; else an update.
-func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) {
+func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID ids.TransactionID) {
 	ctx := r.Context()
 	u := currentUser(ctx)
 	if err := r.ParseForm(); err != nil {
@@ -510,7 +510,7 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 		s.serverError(w)
 		return
 	}
-	model.TxnID = txnID
+	model.TxnID = int64(txnID)
 	model.IsEdit = txnID != 0
 	model.Currency = currency
 	model.Memo = r.FormValue("memo")

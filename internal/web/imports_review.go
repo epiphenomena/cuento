@@ -129,7 +129,7 @@ func (s *server) buildImportQueue(r *http.Request, batchID ids.ImportBatchID, er
 			Duplicate:   row.Duplicate,
 		}
 		if row.PostedTxnID != nil {
-			qr.PostedTxnID = *row.PostedTxnID
+			qr.PostedTxnID = int64(*row.PostedTxnID)
 		}
 		model.Rows = append(model.Rows, qr)
 	}

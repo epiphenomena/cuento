@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -18,7 +19,7 @@ import (
 // seedTxn posts a balanced 2-split expense txn (salaries debit / checking credit) in
 // sub1 and returns its id, using the store directly (the editor's create path is
 // p12.2's own tests). actor id 1.
-func seedTxn(t *testing.T, e *txnWebEnv) int64 {
+func seedTxn(t *testing.T, e *txnWebEnv) ids.TransactionID {
 	t.Helper()
 	// Attribute the write to the "txnbook" user so the timeline shows a real actor
 	// name (display_name == username).
@@ -68,7 +69,7 @@ func TestHistoryTimelineRendersDiffs(t *testing.T) {
 		t.Fatalf("edit: %v", err)
 	}
 
-	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(id)+"/history", nil)
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(int64(id))+"/history", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("history GET status=%d, body=%s", rec.Code, rec.Body.String())
 	}
@@ -129,7 +130,7 @@ func TestHistoryVisibleAfterVoid(t *testing.T) {
 		t.Fatalf("void: %v", err)
 	}
 
-	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(id)+"/history", nil)
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(int64(id))+"/history", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("history of voided txn status=%d, want 200 (must not 404)", rec.Code)
 	}
@@ -144,7 +145,7 @@ func TestHistoryTxnReadMayView(t *testing.T) {
 	ro := mkUser(t, e.st, "txnro_hist", "read", false)
 	id := seedTxn(t, e)
 
-	rec := asUser(t, e.h, e.sm, ro, http.MethodGet, "/transactions/"+itoa(id)+"/history", nil)
+	rec := asUser(t, e.h, e.sm, ro, http.MethodGet, "/transactions/"+itoa(int64(id))+"/history", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("TxnRead history GET status=%d, want 200", rec.Code)
 	}
@@ -159,13 +160,13 @@ func TestVoidRequiresConfirmAndTxnWrite(t *testing.T) {
 	id := seedTxn(t, e)
 
 	// TxnRead cannot reach the void review (GET) nor execute (POST) -- 403.
-	rec := asUser(t, e.h, e.sm, ro, http.MethodGet, "/transactions/"+itoa(id)+"/void", nil)
+	rec := asUser(t, e.h, e.sm, ro, http.MethodGet, "/transactions/"+itoa(int64(id))+"/void", nil)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("TxnRead GET void: status=%d, want 403", rec.Code)
 	}
 	f := url.Values{}
 	f.Set("confirm", "1")
-	rec = asUser(t, e.h, e.sm, ro, http.MethodPost, "/transactions/"+itoa(id)+"/void", f)
+	rec = asUser(t, e.h, e.sm, ro, http.MethodPost, "/transactions/"+itoa(int64(id))+"/void", f)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("TxnRead POST void: status=%d, want 403", rec.Code)
 	}
@@ -177,7 +178,7 @@ func TestVoidRequiresConfirmAndTxnWrite(t *testing.T) {
 	}
 
 	// A write user's confirm POST voids it (303 redirect).
-	rec = asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(id)+"/void", f)
+	rec = asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(int64(id))+"/void", f)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("write confirm void: status=%d, want 303, body=%s", rec.Code, rec.Body.String())
 	}
@@ -192,7 +193,7 @@ func TestVoidReviewIsReadOnly(t *testing.T) {
 	e := newTxnWebEnv(t)
 	id := seedTxn(t, e)
 
-	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(id)+"/void", nil)
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(int64(id))+"/void", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("void review GET: status=%d, want 200", rec.Code)
 	}
@@ -212,7 +213,7 @@ func TestVoidRequiresConfirm(t *testing.T) {
 	e := newTxnWebEnv(t)
 	id := seedTxn(t, e)
 
-	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(id)+"/void", url.Values{})
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(int64(id))+"/void", url.Values{})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("void POST without confirm: status=%d, want 200 (review re-render)", rec.Code)
 	}
@@ -230,7 +231,7 @@ func TestDuplicatePrefillsNewEntry(t *testing.T) {
 	e := newTxnWebEnv(t)
 	id := seedTxn(t, e)
 
-	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(id)+"/duplicate", nil)
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(int64(id))+"/duplicate", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("duplicate GET: status=%d, want 200", rec.Code)
 	}
@@ -255,7 +256,7 @@ func TestDuplicateTxnWrite(t *testing.T) {
 	e := newTxnWebEnv(t)
 	ro := mkUser(t, e.st, "txnro_dup", "read", false)
 	id := seedTxn(t, e)
-	rec := asUser(t, e.h, e.sm, ro, http.MethodGet, "/transactions/"+itoa(id)+"/duplicate", nil)
+	rec := asUser(t, e.h, e.sm, ro, http.MethodGet, "/transactions/"+itoa(int64(id))+"/duplicate", nil)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("TxnRead duplicate GET: status=%d, want 403", rec.Code)
 	}

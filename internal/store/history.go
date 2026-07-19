@@ -144,7 +144,7 @@ type HistoryEntry struct {
 // timestamp then change id (stable across same-instant edits). A transaction with
 // no version rows returns ErrTransactionNotFound. Diffs are structured; the web
 // layer renders them (rules 9/10).
-func (s *Store) TransactionHistory(ctx context.Context, id int64) ([]HistoryEntry, error) {
+func (s *Store) TransactionHistory(ctx context.Context, id ids.TransactionID) ([]HistoryEntry, error) {
 	hdrRows, err := s.q.TransactionVersionHistory(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("store: transaction %d header history: %w", id, err)

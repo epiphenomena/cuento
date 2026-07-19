@@ -432,7 +432,7 @@ func (s *server) buildWorkspace(ctx context.Context, reconID int64) (reconWorksp
 		}
 		model.Rows = append(model.Rows, reconSplitRow{
 			SplitID:     sp.SplitID,
-			TxnID:       sp.TxnID,
+			TxnID:       int64(sp.TxnID),
 			RowID:       reconRowID(sp.SplitID),
 			ToggleID:    reconToggleID(sp.SplitID),
 			Date:        money.FormatDate(parseISOForDisplay(sp.Date), df),

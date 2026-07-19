@@ -119,7 +119,7 @@ func TestExpenseReportLifecycleVersioned(t *testing.T) {
 		t.Fatalf("status after convert = %q, want converted", got)
 	}
 	pt := postedTxnID(t, d, reportID)
-	if !pt.Valid || pt.Int64 != txnID {
+	if !pt.Valid || pt.Int64 != int64(txnID) {
 		t.Fatalf("posted_transaction_id after convert = %v, want %d", pt, txnID)
 	}
 
@@ -545,13 +545,13 @@ func TestPostAndConvertExpenseReport(t *testing.T) {
 		t.Fatalf("status after balanced post = %q, want converted", got)
 	}
 	pt := postedTxnID(t, d, reportID)
-	if !pt.Valid || pt.Int64 != txnID {
+	if !pt.Valid || pt.Int64 != int64(txnID) {
 		t.Fatalf("posted_transaction_id = %v, want %d", pt, txnID)
 	}
 	// The report convert is versioned op='update'; the created txn is a real versioned
 	// ledger entry.
 	testutil.AssertVersioned(t, d, "expense_reports", int64(reportID), "update")
-	testutil.AssertVersioned(t, d, "transactions", txnID, "create")
+	testutil.AssertVersioned(t, d, "transactions", int64(txnID), "create")
 
 	// Terminal: a converted report cannot be re-posted.
 	if _, err := s.PostAndConvertExpenseReport(ctx, reportID, balanced); !errors.Is(err, ErrExpenseReportImmutable) {
@@ -646,7 +646,7 @@ func latestVersionCanSubmit(t *testing.T, d *sql.DB, userID ids.UserID) int64 {
 // seedPostedTxn posts a minimal balanced 2-split transaction and returns its id, so
 // ConvertExpenseReport has a real txn to link (the reviewer builds the real txn in
 // p20.3; here the store just links an EXISTING one).
-func seedPostedTxn(t *testing.T, s *Store, expenseAcct int64) int64 {
+func seedPostedTxn(t *testing.T, s *Store, expenseAcct int64) ids.TransactionID {
 	t.Helper()
 	sysCtx := WithActor(context.Background(), Actor{ID: 1})
 	cash, err := s.CreateAccount(sysCtx, CreateAccountInput{

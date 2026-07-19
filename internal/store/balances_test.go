@@ -133,14 +133,14 @@ type split struct {
 
 // post posts a transaction and returns (txnID, firstSplitID). Used when only the
 // first split id is captured; postN returns all split ids.
-func (e balEnv) post(t *testing.T, date string, sub ids.SubsidiaryID, ccy, memo string, sp ...split) (int64, int64) {
+func (e balEnv) post(t *testing.T, date string, sub ids.SubsidiaryID, ccy, memo string, sp ...split) (ids.TransactionID, int64) {
 	t.Helper()
-	id, ids := e.postN(t, date, sub, ccy, memo, sp...)
-	return id, ids[0]
+	id, sids := e.postN(t, date, sub, ccy, memo, sp...)
+	return id, sids[0]
 }
 
 // postN posts a transaction and returns (txnID, splitIDsInOrder).
-func (e balEnv) postN(t *testing.T, date string, sub ids.SubsidiaryID, ccy, memo string, sp ...split) (int64, []int64) {
+func (e balEnv) postN(t *testing.T, date string, sub ids.SubsidiaryID, ccy, memo string, sp ...split) (ids.TransactionID, []int64) {
 	t.Helper()
 	in := PostTransactionInput{Date: date, SubsidiaryID: sub, Currency: ccy, Memo: memo}
 	for i, s := range sp {
@@ -154,17 +154,17 @@ func (e balEnv) postN(t *testing.T, date string, sub ids.SubsidiaryID, ccy, memo
 	if err != nil {
 		t.Fatalf("PostTransaction(%s): %v", date, err)
 	}
-	ids := splitIDsInOrder(t, e.d, id)
-	if len(ids) != len(sp) {
-		t.Fatalf("post %s: got %d split ids, want %d", date, len(ids), len(sp))
+	sids := splitIDsInOrder(t, e.d, id)
+	if len(sids) != len(sp) {
+		t.Fatalf("post %s: got %d split ids, want %d", date, len(sids), len(sp))
 	}
-	return id, ids
+	return id, sids
 }
 
 // splitIDsInOrder returns a transaction's live split ids ordered by (position, id).
-func splitIDsInOrder(t *testing.T, d *sql.DB, txnID int64) []int64 {
+func splitIDsInOrder(t *testing.T, d *sql.DB, txnID ids.TransactionID) []int64 {
 	t.Helper()
-	rows, err := d.Query(`SELECT id FROM splits WHERE transaction_id = ? ORDER BY position, id`, txnID)
+	rows, err := d.Query(`SELECT id FROM splits WHERE transaction_id = ? ORDER BY position, id`, int64(txnID))
 	if err != nil {
 		t.Fatalf("splitIDsInOrder: %v", err)
 	}

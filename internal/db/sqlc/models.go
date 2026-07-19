@@ -351,7 +351,7 @@ type Session struct {
 
 type Split struct {
 	ID               int64
-	TransactionID    int64
+	TransactionID    ids.TransactionID
 	AccountID        int64
 	Amount           int64
 	FundID           sql.NullInt64
@@ -369,7 +369,7 @@ type SplitsVersion struct {
 	ChangeID        ids.ChangeID
 	ValidFrom       string
 	Op              string
-	TransactionID   int64
+	TransactionID   ids.TransactionID
 	AccountID       int64
 	Amount          int64
 	FundID          sql.NullInt64
@@ -403,7 +403,7 @@ type Subsidiary struct {
 }
 
 type Transaction struct {
-	ID           int64
+	ID           ids.TransactionID
 	Date         string
 	SubsidiaryID ids.SubsidiaryID
 	Memo         string
@@ -414,7 +414,7 @@ type Transaction struct {
 
 type TransactionsVersion struct {
 	ID           int64
-	EntityID     int64
+	EntityID     ids.TransactionID
 	ChangeID     ids.ChangeID
 	ValidFrom    string
 	Op           string

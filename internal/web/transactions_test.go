@@ -178,7 +178,7 @@ func TestTxnEditShowsInactiveSplitAccount(t *testing.T) {
 		t.Fatalf("DeactivateAccount: %v", err)
 	}
 
-	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(id)+"/edit", nil)
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(int64(id))+"/edit", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("edit GET: status=%d", rec.Code)
 	}
@@ -216,7 +216,7 @@ func TestTxnDuplicateShowsInactiveSplitAccount(t *testing.T) {
 		t.Fatalf("DeactivateAccount: %v", err)
 	}
 
-	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(id)+"/duplicate", nil)
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(int64(id))+"/duplicate", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("duplicate GET: status=%d", rec.Code)
 	}
@@ -249,7 +249,7 @@ func TestTxnNotesPersistsAndPrefills(t *testing.T) {
 	}
 
 	// The edit form prefills the notes textarea.
-	getRec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(id)+"/edit", nil)
+	getRec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(int64(id))+"/edit", nil)
 	if getRec.Code != http.StatusOK {
 		t.Fatalf("edit form: status=%d", getRec.Code)
 	}
@@ -322,7 +322,7 @@ func TestTxnEditSplitIDRoundTrip(t *testing.T) {
 	}
 	f.Set("rows", itoa(int64(len(rows))))
 
-	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(id), f)
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(int64(id)), f)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("edit: status=%d, body=%s", rec.Code, rec.Body.String())
 	}
@@ -827,7 +827,7 @@ func TestTxnEditPrefillNumberFormat(t *testing.T) {
 		t.Fatalf("set EU: %v", err)
 	}
 
-	rec := asUser(t, e.h, e.sm, eu, http.MethodGet, "/transactions/"+itoa(id)+"/edit", nil)
+	rec := asUser(t, e.h, e.sm, eu, http.MethodGet, "/transactions/"+itoa(int64(id))+"/edit", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("edit GET: %d", rec.Code)
 	}
@@ -938,7 +938,7 @@ func mainHeaderForm(sub ids.SubsidiaryID, main splitFull, body []splitFull) url.
 }
 
 // splitStatesByPosition returns the txn's splits as splitFull ordered by position.
-func splitStatesByPosition(t *testing.T, e *txnWebEnv, id int64) []splitFull {
+func splitStatesByPosition(t *testing.T, e *txnWebEnv, id ids.TransactionID) []splitFull {
 	t.Helper()
 	sp, err := e.st.TransactionSplits(context.Background(), id)
 	must(t, err, "splits")
@@ -992,7 +992,7 @@ func TestTxnMainHeaderSingleFundIdempotent(t *testing.T) {
 	// LOAD: GET /edit must DECOMPOSE the stored txn into header (split0) + body (rest),
 	// NOT leave split0 in the body too (which would double-count on save). Assert the
 	// header carries split0's id/account/program/class and the body carries ONLY split1.
-	editRec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(id)+"/edit", nil)
+	editRec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(int64(id))+"/edit", nil)
 	if editRec.Code != http.StatusOK {
 		t.Fatalf("edit GET: %d", editRec.Code)
 	}
@@ -1021,7 +1021,7 @@ func TestTxnMainHeaderSingleFundIdempotent(t *testing.T) {
 		f.Set("split_id_"+itoa(int64(i)), itoa(b.ID))
 	}
 
-	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(id), f)
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(int64(id)), f)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("save: status=%d, body=%s", rec.Code, rec.Body.String())
 	}
@@ -1136,7 +1136,7 @@ func TestTxnMultiFundReloadFlatFallback(t *testing.T) {
 	})
 	must(t, err, "seed multi-fund txn")
 
-	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(id)+"/edit", nil)
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(int64(id))+"/edit", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("edit GET: %d", rec.Code)
 	}
@@ -1183,7 +1183,7 @@ func TestTxnMultiFundReloadFlatFallback(t *testing.T) {
 		}
 	}
 	f.Set("rows", "4")
-	if rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(id), f); rec.Code != http.StatusSeeOther {
+	if rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(int64(id)), f); rec.Code != http.StatusSeeOther {
 		t.Fatalf("flat re-save: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	after := splitStatesByPosition(t, e, id)
@@ -1290,9 +1290,9 @@ func pad2(n int64) string {
 }
 
 // latestTxnID returns the highest live transaction id. Test-only read via raw SQL.
-func latestTxnID(t *testing.T, e *txnWebEnv) int64 {
+func latestTxnID(t *testing.T, e *txnWebEnv) ids.TransactionID {
 	t.Helper()
-	var id int64
+	var id ids.TransactionID
 	if err := e.db.QueryRow(`SELECT COALESCE(MAX(id),0) FROM transactions WHERE deleted = 0`).Scan(&id); err != nil {
 		t.Fatalf("latest txn id: %v", err)
 	}
@@ -1428,7 +1428,7 @@ func TestTxnProgClassNonRootIdempotent(t *testing.T) {
 	f.Set("amount_1", "-100.00")
 	f.Set("fund_1", "")
 
-	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(id), f)
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(int64(id)), f)
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("save: status=%d, body=%s", rec.Code, rec.Body.String())
 	}

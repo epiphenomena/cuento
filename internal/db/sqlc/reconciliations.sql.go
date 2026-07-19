@@ -44,7 +44,7 @@ WHERE s.transaction_id = ? AND r.status = 'finalized'
 // account/fund on a changed split, split deletion, header date/currency change)
 // BEFORE the split-lock trigger fires -- a clean typed error instead of a raw
 // ABORT. NULL reconciliation_id (uncleared) and open-recon splits are excluded.
-func (q *Queries) FinalizedReconciledSplitIDs(ctx context.Context, transactionID int64) ([]int64, error) {
+func (q *Queries) FinalizedReconciledSplitIDs(ctx context.Context, transactionID ids.TransactionID) ([]int64, error) {
 	rows, err := q.db.QueryContext(ctx, finalizedReconciledSplitIDs, transactionID)
 	if err != nil {
 		return nil, err
@@ -154,7 +154,7 @@ type GetSplitForReconcileRow struct {
 	ID               int64
 	AccountID        int64
 	ReconciliationID sql.NullInt64
-	TransactionID    int64
+	TransactionID    ids.TransactionID
 	Currency         string
 	Deleted          int64
 }
@@ -429,7 +429,7 @@ ORDER BY t.date, s.id
 
 type ReconciliationClearedSplitsRow struct {
 	ID            int64
-	TransactionID int64
+	TransactionID ids.TransactionID
 	Amount        int64
 	FundID        sql.NullInt64
 	Memo          string
@@ -595,7 +595,7 @@ type WorkspaceSplitsParams struct {
 
 type WorkspaceSplitsRow struct {
 	ID               int64
-	TransactionID    int64
+	TransactionID    ids.TransactionID
 	Amount           int64
 	FundID           sql.NullInt64
 	Memo             string

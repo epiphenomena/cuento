@@ -475,7 +475,7 @@ func (s *Store) RejectExpenseReport(ctx context.Context, reportID ids.ExpenseRep
 // validates it EXISTS (not that it balances / maps the report -- that is the
 // reviewer's job) and flips the status. After convert the report is TERMINAL/immutable.
 // Versioned op='update'.
-func (s *Store) ConvertExpenseReport(ctx context.Context, reportID ids.ExpenseReportID, postedTxnID int64) error {
+func (s *Store) ConvertExpenseReport(ctx context.Context, reportID ids.ExpenseReportID, postedTxnID ids.TransactionID) error {
 	_, err := s.write(ctx, "expense_report.convert", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			rep, err := loadExpenseReport(ctx, q, reportID)
@@ -494,7 +494,7 @@ func (s *Store) ConvertExpenseReport(ctx context.Context, reportID ids.ExpenseRe
 				return fmt.Errorf("load posted transaction %d: %w", postedTxnID, err)
 			}
 			if err := q.SetExpenseReportConverted(ctx, sqlc.SetExpenseReportConvertedParams{
-				PostedTransactionID: sql.NullInt64{Int64: postedTxnID, Valid: true},
+				PostedTransactionID: ids.Null(&postedTxnID),
 				ID:                  reportID,
 			}); err != nil {
 				return fmt.Errorf("set converted: %w", err)
@@ -521,8 +521,8 @@ func (s *Store) ConvertExpenseReport(ctx context.Context, reportID ids.ExpenseRe
 // Distinct from ConvertExpenseReport (which links an ALREADY-existing txn, p20.1): here
 // the txn is created in the same funnel call, so a converted report can never point at a
 // missing txn and vice versa.
-func (s *Store) PostAndConvertExpenseReport(ctx context.Context, reportID ids.ExpenseReportID, in PostTransactionInput) (int64, error) {
-	var txnID int64
+func (s *Store) PostAndConvertExpenseReport(ctx context.Context, reportID ids.ExpenseReportID, in PostTransactionInput) (ids.TransactionID, error) {
+	var txnID ids.TransactionID
 	_, err := s.write(ctx, "expense_report.post_convert", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			rep, err := loadExpenseReport(ctx, q, reportID)
@@ -541,7 +541,7 @@ func (s *Store) PostAndConvertExpenseReport(ctx context.Context, reportID ids.Ex
 			}
 			txnID = id
 			if err := q.SetExpenseReportConverted(ctx, sqlc.SetExpenseReportConvertedParams{
-				PostedTransactionID: sql.NullInt64{Int64: id, Valid: true},
+				PostedTransactionID: ids.Null(&id),
 				ID:                  reportID,
 			}); err != nil {
 				return fmt.Errorf("set converted: %w", err)

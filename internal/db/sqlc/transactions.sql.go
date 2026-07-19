@@ -81,7 +81,7 @@ WHERE id = ?
 
 // Column order matches the transactions table (ALTER appended notes LAST, p24.2) so
 // sqlc maps this to the shared sqlc.Transaction model rather than a bespoke row type.
-func (q *Queries) GetTransaction(ctx context.Context, id int64) (Transaction, error) {
+func (q *Queries) GetTransaction(ctx context.Context, id ids.TransactionID) (Transaction, error) {
 	row := q.db.QueryRowContext(ctx, getTransaction, id)
 	var i Transaction
 	err := row.Scan(
@@ -146,7 +146,7 @@ RETURNING id
 `
 
 type InsertSplitParams struct {
-	TransactionID   int64
+	TransactionID   ids.TransactionID
 	AccountID       int64
 	Amount          int64
 	FundID          sql.NullInt64
@@ -230,7 +230,7 @@ type InsertTransactionParams struct {
 // Live insert of the transaction header (D18: exactly one subsidiary; D3: single
 // currency). deleted defaults to 0. notes is the longer free-text explanation
 // (p24.2), distinct from the short per-split memo. Returns the new id.
-func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionParams) (int64, error) {
+func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionParams) (ids.TransactionID, error) {
 	row := q.db.QueryRowContext(
 		ctx, insertTransaction,
 		arg.Date,
@@ -239,7 +239,7 @@ func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionPa
 		arg.Notes,
 		arg.Currency,
 	)
-	var id int64
+	var id ids.TransactionID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -255,7 +255,7 @@ WHERE c.id = ? AND t.id = ?
 type InsertTransactionVersionParams struct {
 	Op   string
 	ID   ids.ChangeID
-	ID_2 int64
+	ID_2 ids.TransactionID
 }
 
 // Snapshot-from-live version append for transactions (STANDARD single-id entity).
@@ -378,7 +378,7 @@ UPDATE transactions SET deleted = 1 WHERE id = ?
 
 // Soft-delete (rule 14): flip the deleted flag. The row is never removed. The
 // store appends a transactions_versions op='delete' after this.
-func (q *Queries) SoftDeleteTransaction(ctx context.Context, id int64) error {
+func (q *Queries) SoftDeleteTransaction(ctx context.Context, id ids.TransactionID) error {
 	_, err := q.db.ExecContext(ctx, softDeleteTransaction, id)
 	return err
 }
@@ -506,7 +506,7 @@ type SplitVersionHistoryRow struct {
 // change actor + timestamp. entity_id (the split id) lets the store group a split's
 // consecutive snapshots to diff them; change_id groups a row into its timeline
 // entry. Params (positional): transaction_id.
-func (q *Queries) SplitVersionHistory(ctx context.Context, transactionID int64) ([]SplitVersionHistoryRow, error) {
+func (q *Queries) SplitVersionHistory(ctx context.Context, transactionID ids.TransactionID) ([]SplitVersionHistoryRow, error) {
 	rows, err := q.db.QueryContext(ctx, splitVersionHistory, transactionID)
 	if err != nil {
 		return nil, err
@@ -554,14 +554,14 @@ ORDER BY entity_id, valid_from DESC, id DESC
 `
 
 type SplitVersionsAsOfParams struct {
-	TransactionID int64
+	TransactionID ids.TransactionID
 	ValidFrom     string
 }
 
 type SplitVersionsAsOfRow struct {
 	EntityID        int64
 	Op              string
-	TransactionID   int64
+	TransactionID   ids.TransactionID
 	AccountID       int64
 	Amount          int64
 	FundID          sql.NullInt64
@@ -626,7 +626,7 @@ type SplitsByAccountCurrencyParams struct {
 
 type SplitsByAccountCurrencyRow struct {
 	ID            int64
-	TransactionID int64
+	TransactionID ids.TransactionID
 }
 
 // Every live split on an account whose transaction is in the given currency and NOT
@@ -668,7 +668,7 @@ ORDER BY position, id
 // The current live split set for one transaction, in display order. Selects the
 // full splits row (incl. reconciliation_id, added p16.1) so this maps to the
 // sqlc.Split model; consumers that ignore reconciliation_id are unaffected.
-func (q *Queries) SplitsByTransaction(ctx context.Context, transactionID int64) ([]Split, error) {
+func (q *Queries) SplitsByTransaction(ctx context.Context, transactionID ids.TransactionID) ([]Split, error) {
 	rows, err := q.db.QueryContext(ctx, splitsByTransaction, transactionID)
 	if err != nil {
 		return nil, err
@@ -756,7 +756,7 @@ LIMIT 1
 `
 
 type TransactionVersionAsOfParams struct {
-	EntityID  int64
+	EntityID  ids.TransactionID
 	ValidFrom string
 }
 
@@ -832,7 +832,7 @@ type TransactionVersionHistoryRow struct {
 // Every transactions_versions row for one transaction, oldest first, with the
 // change's actor id, actor display name, and timestamp. Includes op='delete' rows
 // (a voided txn's history must still render). Params (positional): entity_id.
-func (q *Queries) TransactionVersionHistory(ctx context.Context, entityID int64) ([]TransactionVersionHistoryRow, error) {
+func (q *Queries) TransactionVersionHistory(ctx context.Context, entityID ids.TransactionID) ([]TransactionVersionHistoryRow, error) {
 	rows, err := q.db.QueryContext(ctx, transactionVersionHistory, entityID)
 	if err != nil {
 		return nil, err
@@ -918,7 +918,7 @@ type UpdateTransactionParams struct {
 	Notes        string
 	Currency     string
 	Deleted      int64
-	ID           int64
+	ID           ids.TransactionID
 }
 
 // Live update of the header fields (date/memo/notes; subsidiary and currency may also

@@ -1,5 +1,7 @@
 package reports
 
+import "cuento/internal/ids"
+
 // Table is a report's rendered output as typed rows: the framework's single
 // output shape, rendered by the generic HTML template (web) and the CSV writer
 // (csv.go) alike, so p15.3–p15.11 add reports without touching either renderer.
@@ -131,7 +133,7 @@ type Cell struct {
 	// data-only and pure: the reports package never builds the URL (the web layer
 	// does, keeping URL construction out of reports), and the CSV/text renderers
 	// ignore it (the golden is unchanged). A cell carries at most one of Drill/TxnID.
-	TxnID int64
+	TxnID ids.TransactionID
 }
 
 // WithDrill returns a copy of c carrying the drill descriptor d, so a report builds
@@ -147,7 +149,7 @@ func (c Cell) WithDrill(d *Drill) Cell {
 // renders it as a link to the transaction editor/history (/transactions/{txnID}/edit).
 // Kept a method (not a MoneyCell/TextCell parameter) so the many non-linked call
 // sites stay unchanged and only a ledger LINE cell opts in.
-func (c Cell) WithTxn(txnID int64) Cell {
+func (c Cell) WithTxn(txnID ids.TransactionID) Cell {
 	c.TxnID = txnID
 	return c
 }

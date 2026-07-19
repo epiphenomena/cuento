@@ -538,7 +538,7 @@ func TestHistoryMissingTransaction(t *testing.T) {
 
 // post2 posts a balanced 2-split transaction and returns its id. debitAcct must
 // carry (or default) any required program/class -- newTxnEnv's salaries has both.
-func post2(t *testing.T, e txnEnv, sub ids.SubsidiaryID, debitAcct int64, debitAmt int64, creditAcct, creditAmt int64) int64 {
+func post2(t *testing.T, e txnEnv, sub ids.SubsidiaryID, debitAcct int64, debitAmt int64, creditAcct, creditAmt int64) ids.TransactionID {
 	t.Helper()
 	id, err := e.s.PostTransaction(mutCtx(), PostTransactionInput{
 		Date: "2025-03-01", SubsidiaryID: sub, Currency: "USD",

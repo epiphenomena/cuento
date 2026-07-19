@@ -31,6 +31,7 @@ import (
 	"testing"
 
 	"cuento/internal/db"
+	entids "cuento/internal/ids"
 	"cuento/internal/store"
 	"cuento/internal/synth"
 )
@@ -87,7 +88,7 @@ func New(t *testing.T) *Fixture {
 // twice-edited transaction's header -- the timestamp an as-of test uses to pick the
 // middle state. Header version rows are ordered create, update(edit1), update(edit2)
 // by append id; the first op='update' row is edit 1.
-func editOneValidFrom(t *testing.T, sqldb *sql.DB, txnID int64) string {
+func editOneValidFrom(t *testing.T, sqldb *sql.DB, txnID entids.TransactionID) string {
 	t.Helper()
 	var validFrom string
 	err := sqldb.QueryRow(
@@ -95,7 +96,7 @@ func editOneValidFrom(t *testing.T, sqldb *sql.DB, txnID int64) string {
 		   FROM transactions_versions
 		  WHERE entity_id = ? AND op = 'update'
 		  ORDER BY id ASC
-		  LIMIT 1`, txnID,
+		  LIMIT 1`, int64(txnID),
 	).Scan(&validFrom)
 	if err != nil {
 		t.Fatalf("fixture: middle-edit timestamp for txn %d: %v", txnID, err)
@@ -191,6 +192,6 @@ func (f *Fixture) ExtendReconciliation(t *testing.T) {
 		StatementBalance: synth.ReconStatementBalance,
 		Opening:          0,
 		ClearedCount:     cleared,
-		UnclearedTxns:    []int64{f.IDs.MayRentTxn, f.IDs.JuneDonationTxn},
+		UnclearedTxns:    []entids.TransactionID{f.IDs.MayRentTxn, f.IDs.JuneDonationTxn},
 	}
 }

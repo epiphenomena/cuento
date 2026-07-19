@@ -148,7 +148,7 @@ type ReconciliationExpected struct {
 	StatementBalance int64
 	Opening          int64
 	ClearedCount     int
-	UnclearedTxns    []int64
+	UnclearedTxns    []ids.TransactionID
 }
 
 // RatesExpected holds the p14 exchange-rate seam's expectations: the schedule

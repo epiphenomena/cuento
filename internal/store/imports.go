@@ -304,7 +304,7 @@ type ImportBatchRow struct {
 	Status      string
 	DedupeHash  string
 	Duplicate   bool // computed against the batch's account, filled by the caller
-	PostedTxnID *int64
+	PostedTxnID *ids.TransactionID
 }
 
 // ImportRowsForBatch returns every staged row of a batch in stage order. Duplicate
@@ -325,7 +325,7 @@ func (s *Store) ImportRowsForBatch(ctx context.Context, batchID ids.ImportBatchI
 			Memo:        r.ParsedMemo.String,
 			Status:      r.Status,
 			DedupeHash:  r.DedupeHash,
-			PostedTxnID: nullInt64ToPtr(r.PostedTransactionID),
+			PostedTxnID: ids.Ptr[ids.TransactionID](r.PostedTransactionID),
 		}
 	}
 	return out, nil
@@ -424,7 +424,7 @@ type ImportRow struct {
 	Description  string // bank line descriptive text (was payee); parsed_payee column
 	Memo         string
 	Status       string
-	PostedTxnID  *int64
+	PostedTxnID  *ids.TransactionID
 }
 
 // GetImportRow returns one staged row joined to its batch (for the batch subsidiary +
@@ -446,7 +446,7 @@ func (s *Store) GetImportRow(ctx context.Context, rowID ids.ImportRowID) (Import
 		Description:  r.ParsedPayee.String,
 		Memo:         r.ParsedMemo.String,
 		Status:       r.Status,
-		PostedTxnID:  nullInt64ToPtr(r.PostedTransactionID),
+		PostedTxnID:  ids.Ptr[ids.TransactionID](r.PostedTransactionID),
 	}
 	if r.ParsedAmount.Valid {
 		row.AmountMinor = r.ParsedAmount.Int64
@@ -462,8 +462,8 @@ func (s *Store) GetImportRow(ctx context.Context, rowID ids.ImportRowID) (Import
 // sole validator). The row is re-read on the tx-bound q and must still be 'pending'
 // (ErrImportRowNotPending) -- this, not atomicity alone, is what stops a double-submit
 // double-posting. Returns the created transaction id.
-func (s *Store) PostImportRow(ctx context.Context, rowID ids.ImportRowID, in PostTransactionInput) (int64, error) {
-	var txnID int64
+func (s *Store) PostImportRow(ctx context.Context, rowID ids.ImportRowID, in PostTransactionInput) (ids.TransactionID, error) {
+	var txnID ids.TransactionID
 	_, err := s.write(ctx, "import.row.post", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			row, err := q.GetImportRow(ctx, rowID)
@@ -482,7 +482,7 @@ func (s *Store) PostImportRow(ctx context.Context, rowID ids.ImportRowID, in Pos
 			}
 			txnID = id
 			if err := q.MarkImportRowPosted(ctx, sqlc.MarkImportRowPostedParams{
-				PostedTransactionID: sql.NullInt64{Int64: id, Valid: true},
+				PostedTransactionID: ids.Null(&id),
 				ID:                  rowID,
 			}); err != nil {
 				return fmt.Errorf("link import row %d: %w", rowID, err)

@@ -378,7 +378,7 @@ func (s *Store) AccountEditorOptionsWith(ctx context.Context, lang string, subID
 // order. The register (p12.1) uses it to resolve a row's COUNTER-ACCOUNT: for a
 // 2-split transaction the other split's account is the counter-account; for >2 the
 // UI shows "Split". A read via sqlc (rule 2).
-func (s *Store) TransactionSplits(ctx context.Context, txnID int64) ([]sqlc.Split, error) {
+func (s *Store) TransactionSplits(ctx context.Context, txnID ids.TransactionID) ([]sqlc.Split, error) {
 	rows, err := s.q.SplitsByTransaction(ctx, txnID)
 	if err != nil {
 		return nil, fmt.Errorf("store: splits for transaction %d: %w", txnID, err)

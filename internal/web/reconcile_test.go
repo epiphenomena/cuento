@@ -33,10 +33,10 @@ type reconWebEnv struct {
 	reader ids.UserID
 
 	checking int64
-	spDep    int64 // +250 checking split
-	spExp    int64 // -400 checking split
-	txnDep   int64 // the deposit transaction (owns spDep)
-	txnExp   int64 // the expense transaction (owns spExp)
+	spDep    int64             // +250 checking split
+	spExp    int64             // -400 checking split
+	txnDep   ids.TransactionID // the deposit transaction (owns spDep)
+	txnExp   ids.TransactionID // the expense transaction (owns spExp)
 }
 
 func newReconWebEnv(t *testing.T) reconWebEnv {
@@ -106,10 +106,10 @@ func newReconWebEnv(t *testing.T) reconWebEnv {
 
 // splitOnAccount returns the id of the split on `account` within `txn` (test helper,
 // direct SQL against the throwaway db).
-func splitOnAccount(t *testing.T, db *sql.DB, txn, account int64) int64 {
+func splitOnAccount(t *testing.T, db *sql.DB, txn ids.TransactionID, account int64) int64 {
 	t.Helper()
 	var id int64
-	if err := db.QueryRow(`SELECT id FROM splits WHERE transaction_id = ? AND account_id = ?`, txn, account).Scan(&id); err != nil {
+	if err := db.QueryRow(`SELECT id FROM splits WHERE transaction_id = ? AND account_id = ?`, int64(txn), account).Scan(&id); err != nil {
 		t.Fatalf("splitOnAccount(txn %d, acct %d): %v", txn, account, err)
 	}
 	return id
@@ -167,7 +167,7 @@ func TestReconWorkspaceRendersSplits(t *testing.T) {
 	}
 	// p26.50: each split row carries an Edit link to its transaction, carrying the same
 	// `from` origin. Assert the deposit split's transaction edit link is present.
-	wantEdit := `href="/transactions/` + strconv.FormatInt(e.txnDep, 10) + `/edit?from=/reconciliations/` + strconv.FormatInt(int64(id), 10) + `"`
+	wantEdit := `href="/transactions/` + strconv.FormatInt(int64(e.txnDep), 10) + `/edit?from=/reconciliations/` + strconv.FormatInt(int64(id), 10) + `"`
 	if !strings.Contains(body, wantEdit) {
 		t.Errorf("workspace missing per-row Edit link %q; body:\n%s", wantEdit, body)
 	}
@@ -327,7 +327,7 @@ func TestVoidReconciledTxnRejectedCleanly(t *testing.T) {
 	e := newReconWebEnv(t)
 	recon := e.finalizeRecon(t) // clears spDep + spExp, finalizes
 
-	voidPath := "/transactions/" + strconv.FormatInt(e.txnExp, 10) + "/void"
+	voidPath := "/transactions/" + strconv.FormatInt(int64(e.txnExp), 10) + "/void"
 	form := url.Values{}
 	form.Set("confirm", "1")
 

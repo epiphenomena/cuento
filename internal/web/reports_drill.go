@@ -265,7 +265,7 @@ func (s *server) renderDrillRows(
 	// is the drilled account -- take it from the split's account when known; but a
 	// DrillRow doesn't carry its own account id (the query filtered to it), so resolve
 	// the counter as "the OTHER split's account" via the split's transaction.
-	counters := make(map[int64]counterAccount)
+	counters := make(map[ids.TransactionID]counterAccount)
 
 	out := make([]drillRow, 0, len(rows))
 	var sum int64
@@ -293,7 +293,7 @@ func (s *server) renderDrillRows(
 
 		out = append(out, drillRow{
 			SplitID:        rw.SplitID,
-			TxnID:          rw.TxnID,
+			TxnID:          int64(rw.TxnID),
 			Amount:         rw.Amount,
 			Currency:       rw.Currency,
 			Date:           money.FormatDate(parseISOForDisplay(rw.Date), df),
@@ -314,7 +314,7 @@ func (s *server) renderDrillRows(
 // register's resolveCounterAccount (which knows the self account id), the drill query
 // filtered to one account so the self split is identified by its split id -- the
 // counter is the other split when the txn has exactly two.
-func resolveDrillCounter(ctx context.Context, st *store.Store, txnID, selfSplitID int64, names map[int64]string) (counterAccount, error) {
+func resolveDrillCounter(ctx context.Context, st *store.Store, txnID ids.TransactionID, selfSplitID int64, names map[int64]string) (counterAccount, error) {
 	splits, err := st.TransactionSplits(ctx, txnID)
 	if err != nil {
 		return counterAccount{}, err

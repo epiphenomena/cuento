@@ -69,10 +69,10 @@ func newReconEnv(t *testing.T) reconEnv {
 func strp(s string) *string { return &s }
 
 // checkingSplitID returns the id of the Checking split on a transaction.
-func checkingSplitID(t *testing.T, d *sql.DB, txnID, checking int64) int64 {
+func checkingSplitID(t *testing.T, d *sql.DB, txnID ids.TransactionID, checking int64) int64 {
 	t.Helper()
 	var id int64
-	if err := d.QueryRow(`SELECT id FROM splits WHERE transaction_id = ? AND account_id = ?`, txnID, checking).Scan(&id); err != nil {
+	if err := d.QueryRow(`SELECT id FROM splits WHERE transaction_id = ? AND account_id = ?`, int64(txnID), checking).Scan(&id); err != nil {
 		t.Fatalf("checkingSplitID(txn %d): %v", txnID, err)
 	}
 	return id
@@ -614,7 +614,7 @@ func TestReopenBlockedWhenLaterFinalizedExists(t *testing.T) {
 	ctx := mutCtx()
 
 	// txn1: Checking -1,000 (Jan). txn2: Checking -400 (Feb).
-	post := func(date string, amt int64) int64 {
+	post := func(date string, amt int64) ids.TransactionID {
 		id, err := e.s.PostTransaction(ctx, PostTransactionInput{
 			Date: date, SubsidiaryID: e.subUS, Currency: "USD",
 			Splits: []SplitInput{

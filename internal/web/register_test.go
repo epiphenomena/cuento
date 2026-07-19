@@ -109,7 +109,7 @@ const generalProgram ids.ProgramID = 1
 // post2 posts a simple balanced 2-split txn (debit `debit`, credit `credit`) in
 // USD on subA, with an optional fund on both splits and program on R/E splits. desc
 // (when non-empty) is set as the debit split's per-line description.
-func (e *regEnv) post2(t *testing.T, ctx context.Context, date string, amount int64, debit, credit int64, fund *ids.FundID, desc string) int64 {
+func (e *regEnv) post2(t *testing.T, ctx context.Context, date string, amount int64, debit, credit int64, fund *ids.FundID, desc string) ids.TransactionID {
 	t.Helper()
 	prog := func(acct int64) *ids.ProgramID {
 		if acct == e.expense || acct == e.otherExp || acct == e.revenue {

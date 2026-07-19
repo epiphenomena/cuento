@@ -50,7 +50,7 @@ func (s *server) voidReview(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(ctx)
 	lang := langOf(ctx)
-	id := parseID(r.PathValue("id"))
+	id := ids.TransactionID(parseID(r.PathValue("id")))
 
 	model, err := s.buildVoidReview(ctx, u, lang, id)
 	if err != nil {
@@ -67,7 +67,7 @@ func (s *server) void(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(ctx)
 	lang := langOf(ctx)
-	id := parseID(r.PathValue("id"))
+	id := ids.TransactionID(parseID(r.PathValue("id")))
 
 	if err := r.ParseForm(); err != nil {
 		s.serverError(w)
@@ -114,7 +114,7 @@ func (s *server) void(w http.ResponseWriter, r *http.Request) {
 // splits), formatting the date/amounts (rule 10) and resolving account/fund
 // names (rule 9). It returns an error (the handler 404s) for a missing or already-
 // voided transaction (GetTransaction).
-func (s *server) buildVoidReview(ctx context.Context, u *store.CurrentUser, lang string, id int64) (voidReviewModel, error) {
+func (s *server) buildVoidReview(ctx context.Context, u *store.CurrentUser, lang string, id ids.TransactionID) (voidReviewModel, error) {
 	hdr, err := s.store.GetTransaction(ctx, id)
 	if err != nil {
 		return voidReviewModel{}, err
@@ -137,7 +137,7 @@ func (s *server) buildVoidReview(ctx context.Context, u *store.CurrentUser, lang
 	opts := formatOptsFor(u)
 
 	model := voidReviewModel{
-		TxnID: id,
+		TxnID: int64(id),
 		Date:  money.FormatDate(parseISOForDisplay(hdr.Date), dateFormatFor(u)),
 		Memo:  hdr.Memo,
 	}
@@ -163,7 +163,7 @@ func (s *server) buildVoidReview(ctx context.Context, u *store.CurrentUser, lang
 func (s *server) txnDuplicate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(ctx)
-	id := parseID(r.PathValue("id"))
+	id := ids.TransactionID(parseID(r.PathValue("id")))
 
 	hdr, err := s.store.GetTransaction(ctx, id)
 	if err != nil {

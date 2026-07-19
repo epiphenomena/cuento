@@ -105,15 +105,15 @@ type IDs struct {
 	BuildingFund ids.FundID // purpose, subs {US}, no program
 
 	// Transactions of special interest to as-of / audit tests.
-	EditedTxn  int64 // edited twice
-	DeletedTxn int64 // soft-deleted
+	EditedTxn  ids.TransactionID // edited twice
+	DeletedTxn ids.TransactionID // soft-deleted
 
 	// The two Checking US (USD) transactions deliberately LEFT UNCLEARED by the
 	// ExtendReconciliation seam: the 2026-05-25 May rent and the 2026-06-10 June
 	// donation. Captured so the seam clears the complement deterministically (no
 	// id/amount hardcoding) and tests can assert them uncleared.
-	MayRentTxn      int64
-	JuneDonationTxn int64
+	MayRentTxn      ids.TransactionID
+	JuneDonationTxn ids.TransactionID
 
 	// CheckingUSRecon is the finalized 2026-05-31 Checking US (USD) reconciliation
 	// ExtendReconciliation creates -- zero until that seam is called.

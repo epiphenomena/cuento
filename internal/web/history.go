@@ -115,7 +115,7 @@ func (s *server) txnHistory(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(ctx)
 	lang := langOf(ctx)
-	id := parseID(r.PathValue("id"))
+	id := ids.TransactionID(parseID(r.PathValue("id")))
 
 	entries, err := s.store.TransactionHistory(ctx, id)
 	if err != nil {
@@ -128,7 +128,7 @@ func (s *server) txnHistory(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	model := historyPageModel{TxnID: id, Versions: view}
+	model := historyPageModel{TxnID: int64(id), Versions: view}
 	s.render(w, r, http.StatusOK, "history.tmpl", s.newShellPage(r, model))
 }
 

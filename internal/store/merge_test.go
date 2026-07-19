@@ -48,7 +48,7 @@ func accountActive(t *testing.T, d *sql.DB, accountID int64) int64 {
 
 // postExpense posts a balanced expense txn (debit `expense`, credit `checking`)
 // and returns the txn id plus its two live splits.
-func (e txnEnv) postExpense(t *testing.T, expense int64, amount int64) (int64, []SplitState) {
+func (e txnEnv) postExpense(t *testing.T, expense int64, amount int64) (ids.TransactionID, []SplitState) {
 	t.Helper()
 	mgmt := "management"
 	id, err := e.s.PostTransaction(mutCtx(), PostTransactionInput{

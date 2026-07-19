@@ -823,7 +823,7 @@ func renderCell(c reports.Cell, reportID, lang string, opts money.FormatOpts, df
 		// The reports package carries only the txn id; the web layer builds the URL
 		// (parallel to how it builds the drill URL from Drill), keeping URL
 		// construction out of reports.
-		href = "/transactions/" + strconv.FormatInt(c.TxnID, 10) + "/edit"
+		href = "/transactions/" + strconv.FormatInt(int64(c.TxnID), 10) + "/edit"
 	}
 	switch c.Kind {
 	case reports.CellMoney:

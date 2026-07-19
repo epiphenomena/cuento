@@ -388,7 +388,7 @@ func (s *server) expenseReviewPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Success: the report is converted and linked; send the reviewer to the posted txn.
-	s.redirectReview(w, r, "/transactions/"+strconv.FormatInt(txnID, 10)+"/history")
+	s.redirectReview(w, r, "/transactions/"+strconv.FormatInt(int64(txnID), 10)+"/history")
 }
 
 // ===========================================================================

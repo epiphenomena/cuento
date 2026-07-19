@@ -133,7 +133,7 @@ type DrillSplitsParams struct {
 
 type DrillSplitsRow struct {
 	SplitID         int64
-	TxnID           int64
+	TxnID           ids.TransactionID
 	Date            string
 	SubsidiaryID    ids.SubsidiaryID
 	Currency        string
@@ -654,7 +654,7 @@ type RegisterPageParams struct {
 
 type RegisterPageRow struct {
 	SplitID         int64
-	TxnID           int64
+	TxnID           ids.TransactionID
 	Date            string
 	SubsidiaryID    ids.SubsidiaryID
 	Currency        string
