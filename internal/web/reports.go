@@ -99,26 +99,40 @@ func (s *server) resolveParams(
 		p.AsOf = resolveDate(first(q, "asof"), df, today)
 	}
 	if rep.ParamsSpec.Period {
-		// p29.12: an OMITTED period bound brackets ALL data -- an empty From defaults to
-		// the day BEFORE the oldest non-deleted transaction, an empty To to the day AFTER
-		// the newest -- so a cleared bound captures everything. Fall back to the prior
-		// year-to-date default (Jan 1 .. today) when the bound is present-but-unparseable
-		// or when the ledger is empty (ok=false). Only query the range when at least one
-		// bound is missing.
+		// p30.8 (refines p29.12): the period default distinguishes an ABSENT bound from a
+		// PRESENT-BUT-EMPTY one.
+		//   - ABSENT (no from=/to= key at all — first page load): default to YTD, i.e.
+		//     From = Jan 1 of the current year, To = today. This is the sensible everyday
+		//     window ("everywhere probably").
+		//   - PRESENT-BUT-EMPTY (from= in the query, value ""): the user CLEARED the input
+		//     and the htmx GET auto-submitted the empty field, so BRACKET that bound —
+		//     From = day BEFORE the oldest txn, To = day AFTER the newest (via
+		//     LedgerDateRange) — capturing everything on that side.
+		// The discriminator is KEY EXISTENCE in the parsed form (a present-empty text
+		// input still submits its key), not the trimmed value. Only query the range when a
+		// bound is actually present-empty (bracket needed); an absent bound stays YTD.
 		yearStart := time.Date(today.Year(), 1, 1, 0, 0, 0, 0, time.UTC)
 		fromDefault, toDefault := yearStart, today
+		_, fromPresent := q["from"]
+		_, toPresent := q["to"]
 		fromRaw, toRaw := first(q, "from"), first(q, "to")
-		if fromRaw == "" || toRaw == "" {
+		fromBracket := fromPresent && fromRaw == ""
+		toBracket := toPresent && toRaw == ""
+		if fromBracket || toBracket {
 			if lo, hi, ok, err := s.store.LedgerDateRange(ctx); err != nil {
 				return reports.Params{}, paramsForm{}, err
 			} else if ok {
 				// Bracket everything: day BEFORE the oldest, day AFTER the newest. ISO in,
 				// ISO out (mirrors resolveDate's time arithmetic; the store keeps ISO).
-				if t, perr := time.Parse("2006-01-02", lo); perr == nil {
-					fromDefault = t.AddDate(0, 0, -1)
+				if fromBracket {
+					if t, perr := time.Parse("2006-01-02", lo); perr == nil {
+						fromDefault = t.AddDate(0, 0, -1)
+					}
 				}
-				if t, perr := time.Parse("2006-01-02", hi); perr == nil {
-					toDefault = t.AddDate(0, 0, 1)
+				if toBracket {
+					if t, perr := time.Parse("2006-01-02", hi); perr == nil {
+						toDefault = t.AddDate(0, 0, 1)
+					}
 				}
 			}
 		}

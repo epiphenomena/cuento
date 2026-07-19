@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/alexedwards/scs/v2"
 
@@ -403,29 +404,50 @@ func TestProgramSelectShowsHierarchy(t *testing.T) {
 	}
 }
 
-// TestPeriodDefaultBracketsAllData (p29.12): on a PERIOD report with NO from/to, an
-// empty From defaults to the day BEFORE the oldest non-deleted transaction and an
-// empty To to the day AFTER the newest -- so an omitted bound captures everything.
-// reportsApp seeds a single 2025-06-01 posting, so the defaults are 2025-05-31 and
-// 2025-06-02. An EXPLICIT from/to is respected unchanged.
-func TestPeriodDefaultBracketsAllData(t *testing.T) {
+// TestPeriodDefaults (p30.8, refines p29.12): the PERIOD default distinguishes an
+// ABSENT bound from a PRESENT-BUT-EMPTY one.
+//   - ABSENT (no from=/to= key — first page load) -> YTD: From = Jan 1 of the current
+//     year, To = today.
+//   - PRESENT-BUT-EMPTY (?from=&to= — the user cleared the input, htmx auto-submitted)
+//     -> BRACKET: From = day BEFORE the oldest txn, To = day AFTER the newest. reportsApp
+//     seeds a single 2025-06-01 posting, so the bracket is 2025-05-31 .. 2025-06-02.
+//   - EXPLICIT from/to is respected verbatim.
+func TestPeriodDefaults(t *testing.T) {
 	h, st, _, sm := reportsApp(t)
 	admin := mkUser(t, st, "admin", "none", true)
 
-	// No from/to -> the params form shows the bracketed defaults (ISO rendered).
+	// ABSENT: no from/to key at all -> YTD (Jan 1 of the current year .. today). The
+	// handler's clock is real time.Now, so compute the window from the same clock.
+	now := time.Now()
+	ytdFrom := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	ytdTo := now.Format("2006-01-02")
 	rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.IncomeStatementReportID, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("income statement status = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "2025-05-31") {
-		t.Errorf("empty From should default to the day BEFORE the oldest txn (2025-05-31); body:\n%s", body)
+	if !strings.Contains(body, ytdFrom) {
+		t.Errorf("absent From should default to YTD start %q; body:\n%s", ytdFrom, body)
 	}
-	if !strings.Contains(body, "2025-06-02") {
-		t.Errorf("empty To should default to the day AFTER the newest txn (2025-06-02); body:\n%s", body)
+	if !strings.Contains(body, ytdTo) {
+		t.Errorf("absent To should default to today %q; body:\n%s", ytdTo, body)
 	}
 
-	// An EXPLICIT period is respected (not overridden by the bracket default).
+	// PRESENT-BUT-EMPTY: from= and to= present with empty values -> bracket all data.
+	rec = asUser(t, h, sm, admin, http.MethodGet,
+		"/reports/"+reports.IncomeStatementReportID+"?from=&to=", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("present-empty status = %d, want 200", rec.Code)
+	}
+	body = rec.Body.String()
+	if !strings.Contains(body, "2025-05-31") {
+		t.Errorf("cleared From should bracket to the day BEFORE the oldest txn (2025-05-31); body:\n%s", body)
+	}
+	if !strings.Contains(body, "2025-06-02") {
+		t.Errorf("cleared To should bracket to the day AFTER the newest txn (2025-06-02); body:\n%s", body)
+	}
+
+	// An EXPLICIT period is respected (not overridden by either default).
 	rec = asUser(t, h, sm, admin, http.MethodGet,
 		"/reports/"+reports.IncomeStatementReportID+"?from=2025-01-01&to=2025-12-31", nil)
 	if rec.Code != http.StatusOK {
