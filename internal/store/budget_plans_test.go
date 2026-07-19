@@ -20,8 +20,9 @@ import (
 // plan on it, an R/E (expense) account mapped to it, a revenue account, an
 // open_item receivable account, a program, and a fund scoped to the sub.
 type splitSetup struct {
-	sub, expense, revenue, receivable, prog, fund int64
-	plan                                          ids.BudgetPlanID
+	sub, expense, revenue, receivable, prog int64
+	fund                                    ids.FundID
+	plan                                    ids.BudgetPlanID
 }
 
 func mkSplitSetup(t *testing.T, s *Store) splitSetup {
@@ -63,6 +64,10 @@ func mkSplitSetup(t *testing.T, s *Store) splitSetup {
 }
 
 func int64p(n int64) *int64 { return &n }
+
+// fundp returns a pointer to a fund id (the typed FundID pointer BudgetSplitInput
+// carries), the fund-typed sibling of int64p.
+func fundp(id ids.FundID) *ids.FundID { return &id }
 
 // TestDeleteBudgetPlanCascade: deleting a plan HARD-deletes it and all its splits
 // under one change, appending a 'delete' version for the plan AND each split (rule 14
@@ -137,7 +142,7 @@ func TestCreateBudgetSplitRE(t *testing.T) {
 	st := mkSplitSetup(t, s)
 	id, err := s.CreateBudgetSplit(mutCtx(), st.plan, BudgetSplitInput{
 		Description: "Monthly rent", Date: "2026-03-15", AccountID: st.expense,
-		FundID: int64p(st.fund), ProgramID: int64p(st.prog), Amount: 120000, Currency: "USD",
+		FundID: fundp(st.fund), ProgramID: int64p(st.prog), Amount: 120000, Currency: "USD",
 	})
 	if err != nil {
 		t.Fatalf("create R/E split: %v", err)

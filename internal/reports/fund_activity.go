@@ -93,9 +93,9 @@ func fundListTable(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 	}
 
 	// Deterministic order: real funds by id, then the Unrestricted line (fund 0) last.
-	fundIDs := make([]int64, 0, len(bals))
+	fundIDs := make([]FundID, 0, len(bals))
 	for id := range bals {
-		fundIDs = append(fundIDs, int64(id))
+		fundIDs = append(fundIDs, id)
 	}
 	sort.Slice(fundIDs, func(i, j int) bool {
 		// 0 (unrestricted) sorts last; others by id.
@@ -109,7 +109,7 @@ func fundListTable(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 	})
 
 	for _, id := range fundIDs {
-		amts := bals[FundID(id)]
+		amts := bals[id]
 		sort.Slice(amts, func(i, j int) bool { return amts[i].Currency < amts[j].Currency })
 		meta := funds[id]
 		for i, a := range amts {
@@ -203,7 +203,7 @@ func fundStatementTable(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 	}
 	sort.Slice(capitalIDs, func(i, j int) bool { return capitalIDs[i] < capitalIDs[j] })
 
-	fund := fundIDForDrill(int64(p.Fund))
+	fund := fundIDForDrill(p.Fund)
 	opening := dayBefore(p.From)
 
 	for _, ccy := range st.Currencies {
@@ -260,7 +260,7 @@ func statementRow(_ Table, labelKey, ccy string, minor int64, kind RowKind, d *D
 // nonExpenseDrill drills the non-expense-applied cell to the fund's capital-asset
 // splits (the Building) over the period. When the fund capitalized nothing (a cash-only
 // fund), there is nothing to drill (nil) — the cell renders as a plain zero.
-func nonExpenseDrill(p Params, capitalIDs []int64, ccy string, fund *int64) *Drill {
+func nonExpenseDrill(p Params, capitalIDs []int64, ccy string, fund *FundID) *Drill {
 	if len(capitalIDs) == 0 {
 		return nil
 	}
@@ -287,7 +287,7 @@ func revenueAndLiabilityDrill(ctx context.Context, tk *Toolkit) []int64 {
 // fund_id) returns nil — DrillSplits' fund filter is `fund = 0 OR fund_id = ?`, whose
 // "0" sentinel means "no filter" (matches ALL funds), and there is no NULL-fund filter,
 // so an unrestricted-line cell is left non-drillable rather than drilling every fund.
-func fundIDForDrill(id int64) *int64 {
+func fundIDForDrill(id FundID) *FundID {
 	if id == 0 {
 		return nil
 	}
@@ -308,12 +308,12 @@ type fundMeta struct {
 
 // fundMetaMap returns fund id -> its roster metadata for every fund (active AND
 // closed — the roster shows a closed fund's residual balance), loaded once.
-func fundMetaMap(ctx context.Context, st *store.Store) (map[int64]fundMeta, error) {
+func fundMetaMap(ctx context.Context, st *store.Store) (map[FundID]fundMeta, error) {
 	fs, err := st.ListFunds(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m := make(map[int64]fundMeta, len(fs))
+	m := make(map[FundID]fundMeta, len(fs))
 	for _, f := range fs {
 		m[f.ID] = fundMeta{name: f.Name, funder: f.Funder, restriction: f.Restriction, purpose: f.Purpose}
 	}

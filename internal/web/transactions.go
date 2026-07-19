@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -861,7 +862,8 @@ func (s *server) parseSplitForms(r *http.Request, exp int, acctType map[int64]st
 			sp.ID = &id
 		}
 		if fund != 0 {
-			sp.FundID = &fund
+			f := ids.FundID(fund)
+			sp.FundID = &f
 		}
 		if prog != 0 {
 			sp.ProgramID = &prog
@@ -959,11 +961,11 @@ func parseMainHeader(r *http.Request) (mainHeaderInput, bool) {
 func autoBalanceMain(main mainHeaderInput, body []store.SplitInput) ([]store.SplitInput, int) {
 	// Per-fund residual over the body (fund key 0 == unrestricted group), in first-seen
 	// order so the fan-out is deterministic.
-	residual := make(map[int64]int64)
-	var order []int64
-	seen := make(map[int64]bool)
+	residual := make(map[ids.FundID]int64)
+	var order []ids.FundID
+	seen := make(map[ids.FundID]bool)
 	for _, b := range body {
-		key := int64(0)
+		key := ids.FundID(0)
 		if b.FundID != nil {
 			key = *b.FundID
 		}
@@ -1103,7 +1105,7 @@ func (s *server) newEditorModel(ctx context.Context, u *store.CurrentUser, sub i
 		return model, err
 	}
 	for _, f := range funds {
-		model.Funds = append(model.Funds, txnOption{ID: f.ID, Name: f.Name})
+		model.Funds = append(model.Funds, txnOption{ID: int64(f.ID), Name: f.Name})
 	}
 
 	// Program select: active programs (tree order). The root is the default fallback.

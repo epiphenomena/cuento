@@ -91,7 +91,7 @@ func TestPostImportRowCreatesBalancedTxnAndLinks(t *testing.T) {
 	foundClass := false
 	for _, sp := range splits {
 		if sp.AccountID == expense {
-			if !sp.FundID.Valid || sp.FundID.Int64 != fund {
+			if !sp.FundID.Valid || sp.FundID.Int64 != int64(fund) {
 				t.Errorf("counter split fund = %v, want %d", sp.FundID, fund)
 			}
 			if !sp.FunctionalClass.Valid || sp.FunctionalClass.String != "program" {

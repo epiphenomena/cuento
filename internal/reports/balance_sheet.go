@@ -738,7 +738,7 @@ func (tk *Toolkit) restrictedNetAssets(ctx context.Context, scope SubsidiaryID, 
 	if err != nil {
 		return nil, err
 	}
-	restricted := map[int64]bool{}
+	restricted := map[FundID]bool{}
 	for _, f := range funds {
 		if f.Restriction != "" {
 			restricted[f.ID] = true

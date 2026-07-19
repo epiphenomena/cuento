@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -29,15 +30,15 @@ import (
 // the created entity ids (by source key) and the surfaced warnings (non-balancing
 // groups etc. -- NEVER silently forced, docs hazard #4).
 type BuildResult struct {
-	SubsidiaryIDs map[string]int64 // subsidiary name -> id (incl. renamed root)
-	ProgramIDs    map[string]int64 // program name -> id (incl. seeded root "General"? no -- created)
-	FundIDs       map[string]int64 // source donor -> fund id
-	AccountIDs    map[string]int64 // source_acct -> account id
+	SubsidiaryIDs map[string]int64      // subsidiary name -> id (incl. renamed root)
+	ProgramIDs    map[string]int64      // program name -> id (incl. seeded root "General"? no -- created)
+	FundIDs       map[string]ids.FundID // source donor -> fund id
+	AccountIDs    map[string]int64      // source_acct -> account id
 	Warnings      []string
 
 	// CampusFundID is the id of the marker-driven "campus" fund (cfg.CampusFund),
 	// or nil when none is configured. Set in the scaffold and rehydrated on reload.
-	CampusFundID *int64
+	CampusFundID *ids.FundID
 
 	// tidTxns records, per source tid, the transaction ids produced (one for a
 	// single-currency group, N for a decomposed multi-currency group).
@@ -70,7 +71,7 @@ func newResult() *BuildResult {
 	return &BuildResult{
 		SubsidiaryIDs: map[string]int64{},
 		ProgramIDs:    map[string]int64{},
-		FundIDs:       map[string]int64{},
+		FundIDs:       map[string]ids.FundID{},
 		AccountIDs:    map[string]int64{},
 		tidTxns:       map[string][]int64{},
 		splitAccounts: map[int64]bool{},
@@ -663,7 +664,7 @@ func (b *builder) reloadState(ctx context.Context, accMap []AccountMap) error {
 	if err != nil {
 		return fmt.Errorf("reload funds: %w", err)
 	}
-	fundByName := make(map[string]int64, len(funds))
+	fundByName := make(map[string]ids.FundID, len(funds))
 	for _, f := range funds {
 		fundByName[f.Name] = f.ID
 	}

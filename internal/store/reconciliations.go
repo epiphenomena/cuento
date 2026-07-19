@@ -434,7 +434,7 @@ type ReconciliationWorkspaceSplit struct {
 	SplitID      int64
 	TxnID        int64
 	Amount       int64 // net-debit signed minor units (D2)
-	FundID       *int64
+	FundID       *ids.FundID
 	SubsidiaryID int64
 	SplitMemo    string
 	Description  string // per-split free-text (p26.15); the workspace Description cell
@@ -508,7 +508,7 @@ func (s *Store) ReconciliationWorkspaceSplits(ctx context.Context, reconID ids.R
 			SplitID:      r.ID,
 			TxnID:        r.TransactionID,
 			Amount:       r.Amount,
-			FundID:       nullInt64ToPtr(r.FundID),
+			FundID:       ids.Ptr[ids.FundID](r.FundID),
 			SubsidiaryID: r.SubsidiaryID,
 			SplitMemo:    r.Memo,
 			Description:  r.Description,
@@ -562,7 +562,7 @@ type ReconciliationStatementSplit struct {
 	SplitID      int64
 	TxnID        int64
 	Amount       int64 // net-debit signed minor units (D2)
-	FundID       *int64
+	FundID       *ids.FundID
 	SubsidiaryID int64
 	SplitMemo    string
 	Description  string // per-split free-text (p26.15); the statement Description cell
@@ -588,7 +588,7 @@ func (s *Store) ReconciliationStatementSplits(ctx context.Context, reconID ids.R
 			SplitID:      r.ID,
 			TxnID:        r.TransactionID,
 			Amount:       r.Amount,
-			FundID:       nullInt64ToPtr(r.FundID),
+			FundID:       ids.Ptr[ids.FundID](r.FundID),
 			SubsidiaryID: r.SubsidiaryID,
 			SplitMemo:    r.Memo,
 			Description:  r.Description,

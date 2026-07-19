@@ -183,8 +183,8 @@ func TestActivitiesReleasedMatchesFundStatements(t *testing.T) {
 
 	// Sum p15.8 restricted-fund applications per currency, independently.
 	wantByCcy := map[string]int64{}
-	for _, fund := range []int64{f.IDs.BecaAgua, f.IDs.BuildingFund} {
-		st, err := tk.FundPeriodStatement(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, reports.FundID(fund), p.From, p.To)
+	for _, fund := range []reports.FundID{f.IDs.BecaAgua, f.IDs.BuildingFund} {
+		st, err := tk.FundPeriodStatement(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, fund, p.From, p.To)
 		if err != nil {
 			t.Fatalf("fund period statement (fund %d): %v", fund, err)
 		}
@@ -295,11 +295,11 @@ func abrDrillSum(t *testing.T, f *fixture.Fixture, d *reports.Drill) int64 {
 	funds := d.FundIDs
 	if len(funds) == 0 {
 		// Single-fund (or no-fund) drill: one pass with d.FundID.
-		var only []*int64
+		var only []*reports.FundID
 		only = append(only, d.FundID)
 		return abrDrillSumForFunds(t, f, d, only)
 	}
-	ptrs := make([]*int64, len(funds))
+	ptrs := make([]*reports.FundID, len(funds))
 	for i := range funds {
 		id := funds[i]
 		ptrs[i] = &id
@@ -307,7 +307,7 @@ func abrDrillSum(t *testing.T, f *fixture.Fixture, d *reports.Drill) int64 {
 	return abrDrillSumForFunds(t, f, d, ptrs)
 }
 
-func abrDrillSumForFunds(t *testing.T, f *fixture.Fixture, d *reports.Drill, funds []*int64) int64 {
+func abrDrillSumForFunds(t *testing.T, f *fixture.Fixture, d *reports.Drill, funds []*reports.FundID) int64 {
 	t.Helper()
 	var sum int64
 	for _, fund := range funds {

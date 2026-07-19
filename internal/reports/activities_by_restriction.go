@@ -196,7 +196,7 @@ func runActivitiesByRestriction(ctx context.Context, tk *Toolkit, p Params) (Tab
 // Total. Every money cell is native (the report is not converted).
 type abrBuilder struct {
 	p          Params
-	restricted []int64
+	restricted []FundID
 	cols       []Column
 	rows       []Row
 }
@@ -252,7 +252,7 @@ func (b *abrBuilder) releasedRow(labelKey, ccy string, released int64, d *Drill)
 // net-debit (negative) revenue figure — the drill lists the actual credit splits, whose
 // signed sum is the negated positive figure the cell shows (the p15.8 received-drill
 // convention).
-func (b *abrBuilder) revenueWithDrill(ccy string, revenueIDs []int64, funds []int64) *Drill {
+func (b *abrBuilder) revenueWithDrill(ccy string, revenueIDs []int64, funds []FundID) *Drill {
 	if len(funds) == 0 || len(revenueIDs) == 0 {
 		return nil
 	}
@@ -267,7 +267,7 @@ func (b *abrBuilder) revenueWithDrill(ccy string, revenueIDs []int64, funds []in
 // fund splits on the same accounts (unrestricted expenses, the unrestricted Building
 // opening) are filtered out by the fund set, so the drilled sum equals the derived
 // released figure exactly.
-func (b *abrBuilder) releasedDrill(ccy string, appIDs, funds []int64) *Drill {
+func (b *abrBuilder) releasedDrill(ccy string, appIDs []int64, funds []FundID) *Drill {
 	if len(funds) == 0 || len(appIDs) == 0 {
 		return nil
 	}
@@ -285,12 +285,12 @@ func (b *abrBuilder) table() Table { return Table{Columns: b.cols, Rows: b.rows}
 // purpose / time / perpetual) — the funds whose receipts are With-donor-restriction
 // support and whose applications derive the released line (Q3, D20). Fund id 0
 // (unrestricted) is never restricted. Mirrors the balance-sheet restrictedNetAssets rule.
-func (tk *Toolkit) restrictedFundIDs(ctx context.Context) ([]int64, error) {
+func (tk *Toolkit) restrictedFundIDs(ctx context.Context) ([]FundID, error) {
 	funds, err := tk.store.ListFunds(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var out []int64
+	var out []FundID
 	for _, f := range funds {
 		if f.Restriction != "" {
 			out = append(out, f.ID)
@@ -340,9 +340,9 @@ func idSet(ids []int64) map[int64]bool {
 
 // drillFunds copies the restricted-fund id slice for a Drill.FundIDs (defensive: the
 // drill must not alias the builder's slice, which the row loop reuses).
-func drillFunds(ids []int64) []int64 {
-	out := make([]int64, len(ids))
-	copy(out, ids)
+func drillFunds(fids []FundID) []FundID {
+	out := make([]FundID, len(fids))
+	copy(out, fids)
 	return out
 }
 

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"cuento/internal/ids"
 	"cuento/internal/testutil"
 )
 
@@ -1108,7 +1109,7 @@ func TestTransactionAsOf(t *testing.T) {
 	if !sal.ProgramID.Valid || sal.ProgramID.Int64 != educ {
 		t.Errorf("mid salaries program = %v, want educ %d", sal.ProgramID, educ)
 	}
-	if !sal.FundID.Valid || sal.FundID.Int64 != fundA {
+	if !sal.FundID.Valid || sal.FundID.Int64 != int64(fundA) {
 		t.Errorf("mid salaries fund = %v, want fundA %d", sal.FundID, fundA)
 	}
 	chk := byID[chkSplit]
@@ -1174,7 +1175,7 @@ func TestConcurrentPostsSerialize(t *testing.T) {
 // --- fixture helpers ------------------------------------------------------
 
 // mkFund creates a fund scoped to subs, optionally to a program subtree.
-func mkFund(t *testing.T, s *Store, name string, subs []int64, prog *int64) int64 {
+func mkFund(t *testing.T, s *Store, name string, subs []int64, prog *int64) ids.FundID {
 	t.Helper()
 	in := CreateFundInput{Name: name, Restriction: "purpose", Subsidiaries: subs}
 	if prog != nil {

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -146,7 +147,7 @@ func (s *server) buildVoidReview(ctx context.Context, u *store.CurrentUser, lang
 			Amount:  money.FormatMoney(sp.Amount, hdr.Currency, exp, opts),
 		}
 		if sp.FundID.Valid {
-			line.Fund = funds[sp.FundID.Int64]
+			line.Fund = funds[ids.FundID(sp.FundID.Int64)]
 		}
 		model.Lines = append(model.Lines, line)
 	}

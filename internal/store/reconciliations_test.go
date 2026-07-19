@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/ledger"
 	"cuento/internal/testutil"
 )
@@ -21,12 +22,12 @@ type reconEnv struct {
 	d     *sql.DB
 	subUS int64
 
-	checking int64 // asset, US, RECONCILABLE
-	other    int64 // asset, US, reconcilable (a different account, for Z8 mismatch)
-	expense  int64 // expense
-	revenue  int64 // revenue
-	equity   int64 // equity
-	fund     int64 // restricted fund scoped to US
+	checking int64      // asset, US, RECONCILABLE
+	other    int64      // asset, US, reconcilable (a different account, for Z8 mismatch)
+	expense  int64      // expense
+	revenue  int64      // revenue
+	equity   int64      // equity
+	fund     ids.FundID // restricted fund scoped to US
 }
 
 func newReconEnv(t *testing.T) reconEnv {

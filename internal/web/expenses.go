@@ -395,7 +395,7 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 		}
 		if l.FundID.Valid {
 			row.FundID = l.FundID.Int64
-			row.FundName = fundNames[l.FundID.Int64]
+			row.FundName = fundNames[ids.FundID(l.FundID.Int64)]
 		}
 		if l.ProgramID.Valid {
 			row.ProgramID = l.ProgramID.Int64
@@ -479,7 +479,7 @@ func (s *server) expenseLineOptions(ctx context.Context, sub int64, include ...i
 		return nil, nil, nil, err
 	}
 	for _, f := range fs {
-		funds = append(funds, txnOption{ID: f.ID, Name: f.Name})
+		funds = append(funds, txnOption{ID: int64(f.ID), Name: f.Name})
 	}
 
 	progs, err := s.store.ProgramTree(ctx)
@@ -609,7 +609,7 @@ func (s *server) expenseLinesSave(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 		if fund > 0 {
-			f := fund
+			f := ids.FundID(fund)
 			d.FundID = &f
 		}
 		if prog > 0 {

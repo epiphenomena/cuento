@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 	"cuento/internal/ledger"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
@@ -853,7 +854,7 @@ func TestCampusFundAssignedByKat(t *testing.T) {
 
 // assertCheckingCredit asserts exactly one Checking split in tid `tid`'s transaction
 // with the given fund (fund==0 means NULL/unrestricted) and exact amount.
-func assertCheckingCredit(t *testing.T, sqldb *sql.DB, res *BuildResult, tid string, fund, amount int64) {
+func assertCheckingCredit(t *testing.T, sqldb *sql.DB, res *BuildResult, tid string, fund ids.FundID, amount int64) {
 	t.Helper()
 	txns := res.tidTxns[tid]
 	if len(txns) == 0 {
@@ -1475,7 +1476,7 @@ func mustSub(t *testing.T, st *store.Store, id int64) sqlc.Subsidiary {
 	return s
 }
 
-func assertSplitFundProgram(t *testing.T, sqldb *sql.DB, res *BuildResult, srcAcct string, wantFund, wantProg int64) {
+func assertSplitFundProgram(t *testing.T, sqldb *sql.DB, res *BuildResult, srcAcct string, wantFund ids.FundID, wantProg int64) {
 	t.Helper()
 	acctID := res.AccountIDs[srcAcct]
 	rows, err := sqldb.Query(`SELECT fund_id, program_id FROM splits WHERE account_id = ?`, acctID)
@@ -1490,7 +1491,7 @@ func assertSplitFundProgram(t *testing.T, sqldb *sql.DB, res *BuildResult, srcAc
 			t.Fatal(err)
 		}
 		found = true
-		if asInt(f) != wantFund {
+		if asInt(f) != int64(wantFund) {
 			t.Errorf("split on %s fund_id = %v, want %d", srcAcct, f, wantFund)
 		}
 		if asInt(p) != wantProg {
@@ -1723,7 +1724,7 @@ func TestCorrectionPostsBalancedAdjustment(t *testing.T) {
 	var sum int64
 	for _, l := range legs {
 		sum += l.amount
-		if !l.fund.Valid || l.fund.Int64 != grant {
+		if !l.fund.Valid || l.fund.Int64 != int64(grant) {
 			t.Errorf("split acct=%d not tagged GRANT1 fund %d (got %v)", l.acct, grant, l.fund)
 		}
 	}
@@ -1844,7 +1845,7 @@ func TestCorrectionResolvesCampusFundByName(t *testing.T) {
 			t.Fatalf("scan split: %v", err)
 		}
 		n++
-		if !fund.Valid || fund.Int64 != campusID {
+		if !fund.Valid || fund.Int64 != int64(campusID) {
 			t.Errorf("split acct=%d fund=%v, want campus fund %d", acct, fund, campusID)
 		}
 	}

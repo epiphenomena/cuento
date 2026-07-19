@@ -37,13 +37,13 @@ type regEnv struct {
 	root       int64 // root subsidiary
 	subA, subB int64 // two children (so a >1-sub account exists)
 
-	checking int64 // reconcilable, mapped to subA only (1 sub -> no badge)
-	multiSub int64 // mapped to subA + subB (badge), NOT reconcilable
-	clearing int64 // mapped to all subs, USD+MXN (multi-currency running bal)
-	expense  int64 // an expense account (counter-account target)
-	otherExp int64 // a second expense (to make a >2-split txn -> "Split")
-	revenue  int64 // revenue account
-	fund     int64 // a restricted fund scoped to subA
+	checking int64      // reconcilable, mapped to subA only (1 sub -> no badge)
+	multiSub int64      // mapped to subA + subB (badge), NOT reconcilable
+	clearing int64      // mapped to all subs, USD+MXN (multi-currency running bal)
+	expense  int64      // an expense account (counter-account target)
+	otherExp int64      // a second expense (to make a >2-split txn -> "Split")
+	revenue  int64      // revenue account
+	fund     ids.FundID // a restricted fund scoped to subA
 }
 
 func newRegEnv(t *testing.T) *regEnv {
@@ -109,7 +109,7 @@ const generalProgram int64 = 1
 // post2 posts a simple balanced 2-split txn (debit `debit`, credit `credit`) in
 // USD on subA, with an optional fund on both splits and program on R/E splits. desc
 // (when non-empty) is set as the debit split's per-line description.
-func (e *regEnv) post2(t *testing.T, ctx context.Context, date string, amount int64, debit, credit int64, fund *int64, desc string) int64 {
+func (e *regEnv) post2(t *testing.T, ctx context.Context, date string, amount int64, debit, credit int64, fund *ids.FundID, desc string) int64 {
 	t.Helper()
 	prog := func(acct int64) *int64 {
 		if acct == e.expense || acct == e.otherExp || acct == e.revenue {

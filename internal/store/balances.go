@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // Balance queries (p08.4) -- the READ-ONLY backbone of registers, fund pages,
@@ -29,7 +30,7 @@ type AccountCurrencyAmount struct {
 // FundCurrencyAmount is one (fund, currency) balance cell. FundID 0 is the
 // unrestricted group (D20).
 type FundCurrencyAmount struct {
-	FundID   int64 // 0 = unrestricted
+	FundID   ids.FundID // 0 = unrestricted
 	Currency string
 	Amount   int64
 }
@@ -245,7 +246,7 @@ func (s *Store) ProgramActivity(ctx context.Context, from, to string, scopeSub i
 type BudgetKeyCell struct {
 	SubsidiaryID int64
 	AccountID    int64
-	FundID       int64 // 0 = unrestricted
+	FundID       ids.FundID // 0 = unrestricted
 	ProgramID    int64
 	Currency     string
 	Date         string
@@ -293,12 +294,12 @@ func (s *Store) BudgetKeyActivity(ctx context.Context, from, to string, scopeSub
 // "no filter on this dimension". Text matches (case-insensitively, substring)
 // against the transaction memo, the split memo, or the payee name.
 type RegisterFilters struct {
-	From       string // "" = no lower bound (YYYY-MM-DD)
-	To         string // "" = no upper bound (YYYY-MM-DD)
-	Text       string // "" = no text filter
-	FundID     *int64 // nil = any fund; a fund id filters to that fund's splits
-	Subsidiary *int64 // nil = any subsidiary
-	ProgramID  *int64 // nil = any program
+	From       string      // "" = no lower bound (YYYY-MM-DD)
+	To         string      // "" = no upper bound (YYYY-MM-DD)
+	Text       string      // "" = no text filter
+	FundID     *ids.FundID // nil = any fund; a fund id filters to that fund's splits
+	Subsidiary *int64      // nil = any subsidiary
+	ProgramID  *int64      // nil = any program
 }
 
 // RegisterCursor is the keyset position: the (Date, SplitID) of the LAST row of
@@ -317,7 +318,7 @@ type RegisterRow struct {
 	Currency        string
 	AccountID       int64 // the split's OWN account (a descendant leaf for a parent rollup)
 	Amount          int64 // signed minor units (net-debit, D2)
-	FundID          *int64
+	FundID          *ids.FundID
 	ProgramID       *int64
 	FunctionalClass *string
 	SplitMemo       string
@@ -378,7 +379,7 @@ func (s *Store) RegisterPage(
 		Memo_2:       like,
 		Description:  like,
 		Column10:     fundActive,
-		FundID:       nullInt64Ptr(filters.FundID),
+		FundID:       ids.Null(filters.FundID),
 		Column12:     subActive,
 		SubsidiaryID: derefOr0(filters.Subsidiary),
 		Column14:     progActive,
@@ -422,7 +423,7 @@ func (s *Store) RegisterPage(
 			Currency:        r.Currency,
 			AccountID:       r.AccountID,
 			Amount:          r.Amount,
-			FundID:          nullInt64ToPtr(r.FundID),
+			FundID:          ids.Ptr[ids.FundID](r.FundID),
 			ProgramID:       nullInt64ToPtr(r.ProgramID),
 			FunctionalClass: nullStringToPtr(r.FunctionalClass),
 			SplitMemo:       r.SplitMemo,
@@ -471,9 +472,9 @@ type FundLedgerRow struct {
 // as-of), so the fund page and the fund list agree even under future-dated splits.
 // There is no paging (a single fund's split set is bounded) and no scope filter (a
 // fund's splits already live only in its subsidiaries).
-func (s *Store) FundLedger(ctx context.Context, fundID int64, asof string) ([]FundLedgerRow, error) {
+func (s *Store) FundLedger(ctx context.Context, fundID ids.FundID, asof string) ([]FundLedgerRow, error) {
 	rows, err := s.q.FundLedger(ctx, sqlc.FundLedgerParams{
-		FundID: sql.NullInt64{Int64: fundID, Valid: true},
+		FundID: sql.NullInt64{Int64: int64(fundID), Valid: true},
 		Date:   asof,
 	})
 	if err != nil {
@@ -521,9 +522,9 @@ type DrillFilter struct {
 	From string
 	To   string
 
-	FundID    *int64  // nil = any fund
-	ProgramID *int64  // nil = any program
-	Class     *string // nil = any functional class
+	FundID    *ids.FundID // nil = any fund
+	ProgramID *int64      // nil = any program
+	Class     *string     // nil = any functional class
 }
 
 // DrillRow is one split behind a report figure: its raw signed amount (net-debit,
@@ -537,7 +538,7 @@ type DrillRow struct {
 	SubsidiaryID    int64
 	Currency        string
 	Amount          int64 // signed minor units (net-debit, D2)
-	FundID          *int64
+	FundID          *ids.FundID
 	ProgramID       *int64
 	FunctionalClass *string
 	SplitMemo       string
@@ -575,7 +576,7 @@ func (s *Store) DrillSplits(ctx context.Context, f DrillFilter) ([]DrillRow, err
 		Column8:         toActive,
 		Date_3:          f.To,
 		Column10:        fundActive,
-		FundID:          nullInt64Ptr(f.FundID),
+		FundID:          ids.Null(f.FundID),
 		Column12:        progActive,
 		ProgramID:       nullInt64Ptr(f.ProgramID),
 		Column14:        classActive,
@@ -594,7 +595,7 @@ func (s *Store) DrillSplits(ctx context.Context, f DrillFilter) ([]DrillRow, err
 			SubsidiaryID:    r.SubsidiaryID,
 			Currency:        r.Currency,
 			Amount:          r.Amount,
-			FundID:          nullInt64ToPtr(r.FundID),
+			FundID:          ids.Ptr[ids.FundID](r.FundID),
 			ProgramID:       nullInt64ToPtr(r.ProgramID),
 			FunctionalClass: nullStringToPtr(r.FunctionalClass),
 			SplitMemo:       r.SplitMemo,

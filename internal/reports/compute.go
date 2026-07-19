@@ -375,7 +375,7 @@ func (tk *Toolkit) FundPeriodStatement(ctx context.Context, s Scope, f FundID, f
 
 	// All the fund's splits up to To, ordered (date, split_id), with IsAsset and the
 	// per-currency asset-side running balance already computed by the store.
-	rows, err := tk.store.FundLedger(ctx, int64(f), to)
+	rows, err := tk.store.FundLedger(ctx, f, to)
 	if err != nil {
 		return FundStatement{}, err
 	}

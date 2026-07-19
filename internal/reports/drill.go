@@ -79,7 +79,7 @@ type Drill struct {
 	// FundID, ProgramID, Class are optional narrowing filters (nil/"" = no filter on
 	// that dimension). A fund-balances cell sets FundID; a program-statement cell
 	// sets ProgramID; a functional-expense cell sets Class.
-	FundID    *int64
+	FundID    *FundID
 	ProgramID *int64
 	Class     *string
 
@@ -92,7 +92,7 @@ type Drill struct {
 	// (no SQL change), the caller loops the set. FundID and FundIDs are mutually
 	// exclusive: a cell sets at most one (FundIDs when it aggregates funds, FundID for a
 	// single fund).
-	FundIDs []int64
+	FundIDs []FundID
 
 	// ProgramIDs is an optional program SET (p15.10): the drilled figure sums splits
 	// across SEVERAL programs at once (the program statement's ROLLUP cells — a parent
@@ -133,12 +133,12 @@ func (d Drill) Encode() string {
 		q.Set("ccy", d.Currency)
 	}
 	if d.FundID != nil {
-		q.Set("fund", strconv.FormatInt(*d.FundID, 10))
+		q.Set("fund", strconv.FormatInt(int64(*d.FundID), 10))
 	}
 	if len(d.FundIDs) > 0 {
 		ids := make([]string, len(d.FundIDs))
 		for i, id := range d.FundIDs {
-			ids[i] = strconv.FormatInt(id, 10)
+			ids[i] = strconv.FormatInt(int64(id), 10)
 		}
 		q.Set("funds", strings.Join(ids, ","))
 	}
@@ -198,13 +198,14 @@ func DecodeDrill(q url.Values) Drill {
 	d.Currency = strings.TrimSpace(q.Get("ccy"))
 	if v := strings.TrimSpace(q.Get("fund")); v != "" {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
-			d.FundID = &id
+			fid := FundID(id)
+			d.FundID = &fid
 		}
 	}
 	if v := strings.TrimSpace(q.Get("funds")); v != "" {
 		for _, part := range strings.Split(v, ",") {
 			if id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64); err == nil && id != 0 {
-				d.FundIDs = append(d.FundIDs, id)
+				d.FundIDs = append(d.FundIDs, FundID(id))
 			}
 		}
 		sort.Slice(d.FundIDs, func(i, j int) bool { return d.FundIDs[i] < d.FundIDs[j] })

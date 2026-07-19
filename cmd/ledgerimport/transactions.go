@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -191,11 +192,11 @@ func (b *builder) postBucket(
 	// unrestricted (NULL fund) group; fundOf recovers the *int64 for the counter-leg.
 	// After offsetRtW the campus-fund group normally nets to zero (no counter-leg);
 	// the rare leftover falls through here to a [campus-plug] Opening-Balances leg.
-	residual := map[int64]int64{}
-	fundOf := map[int64]*int64{}
-	var fundOrder []int64 // deterministic counter-leg order
+	residual := map[ids.FundID]int64{}
+	fundOf := map[ids.FundID]*ids.FundID{}
+	var fundOrder []ids.FundID // deterministic counter-leg order
 	for _, s := range splits {
-		key := int64(0)
+		key := ids.FundID(0)
 		if s.FundID != nil {
 			key = *s.FundID
 		}

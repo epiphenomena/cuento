@@ -18,7 +18,7 @@ import (
 // TestDrillRoundTrip: a fully-populated Drill (as-of and period variants, with
 // fund/program/class filters) survives Encode -> parse -> DecodeDrill unchanged.
 func TestDrillRoundTrip(t *testing.T) {
-	fund := int64(7)
+	fund := reports.FundID(7)
 	prog := int64(9)
 	class := "program"
 
@@ -53,7 +53,7 @@ func TestDrillRoundTrip(t *testing.T) {
 				Scope:      1,
 				AccountIDs: []int64{5, 6, 7},
 				Currency:   "USD",
-				FundIDs:    []int64{2, 3},
+				FundIDs:    []reports.FundID{2, 3},
 				Mode:       reports.DrillPeriod,
 				From:       "2025-01-01",
 				To:         "2026-06-30",

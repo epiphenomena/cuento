@@ -377,7 +377,7 @@ func (s *server) budgetSplitOptions(ctx context.Context, sub int64, include ...i
 		return nil, nil, nil, err
 	}
 	for _, f := range fs {
-		funds = append(funds, txnOption{ID: f.ID, Name: f.Name})
+		funds = append(funds, txnOption{ID: int64(f.ID), Name: f.Name})
 	}
 	progs, err := s.store.ProgramTree(ctx)
 	if err != nil {
@@ -493,7 +493,7 @@ func (s *server) budgetSplitsSave(w http.ResponseWriter, r *http.Request) {
 			Currency:    ccy,
 		}
 		if fund > 0 {
-			f := fund
+			f := ids.FundID(fund)
 			in.FundID = &f
 		}
 		if prog > 0 {
@@ -624,9 +624,9 @@ func (s *server) budgetPlanImport(w http.ResponseWriter, r *http.Request) {
 		acctByName[strings.ToLower(a.Name)] = a.ID
 		acctByName[strings.ToLower(a.Path)] = a.ID
 	}
-	fundByName := make(map[string]int64, len(funds))
+	fundByName := make(map[string]ids.FundID, len(funds))
 	for _, f := range funds {
-		fundByName[strings.ToLower(f.Name)] = f.ID
+		fundByName[strings.ToLower(f.Name)] = ids.FundID(f.ID)
 	}
 	progByName := make(map[string]int64, len(progs))
 	for _, p := range progs {

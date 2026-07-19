@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 const budgetKeyActivity = `-- name: BudgetKeyActivity :many
@@ -40,7 +42,7 @@ type BudgetKeyActivityParams struct {
 type BudgetKeyActivityRow struct {
 	SubsidiaryID int64
 	AccountID    int64
-	FundID       int64
+	FundID       ids.FundID
 	ProgramID    sql.NullInt64
 	Currency     string
 	Date         string
@@ -379,7 +381,7 @@ type FundBalancesAsOfParams struct {
 }
 
 type FundBalancesAsOfRow struct {
-	FundID   int64
+	FundID   ids.FundID
 	Currency string
 	Balance  int64
 }
@@ -443,7 +445,7 @@ type CurrentCashFundBalancesAsOfParams struct {
 }
 
 type CurrentCashFundBalancesAsOfRow struct {
-	FundID   int64
+	FundID   ids.FundID
 	Currency string
 	Balance  int64
 }

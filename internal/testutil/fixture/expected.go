@@ -110,7 +110,7 @@ type SampleBudgetPlanExpected struct {
 // currency (campus.py's identity), which is exactly the fund's spendable Closing
 // balance since the fund opens at 0.
 type CampaignExpected struct {
-	Fund          int64
+	Fund          ids.FundID
 	LandAccount   int64
 	ConstrAccount int64
 	FixedAssets   int64
@@ -183,7 +183,7 @@ type RatesExpected struct {
 // as an unrounded float in major units (dollars), plus the native minor-unit input
 // and its native currency so p15 can re-derive and round independently.
 type ConvertedFundBalance struct {
-	Fund         int64
+	Fund         ids.FundID
 	NativeCcy    string
 	NativeMinor  int64   // the native FundBalance amount (minor units)
 	ConvertedUSD float64 // NativeMinor/100 converted to USD at AsOf, unrounded
@@ -199,7 +199,7 @@ type AccountBalance struct {
 // FundBalance is one expected (fund, currency) asset-side balance. Fund 0 is the
 // unrestricted group.
 type FundBalance struct {
-	Fund     int64
+	Fund     ids.FundID
 	Currency string
 	Amount   int64
 }

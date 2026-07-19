@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"cuento/internal/i18n"
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/reports"
 	"cuento/internal/store"
@@ -114,7 +115,7 @@ func (s *server) reportDrill(w http.ResponseWriter, r *http.Request) {
 	// RESTRICTED funds, so the drill unions the per-(account, fund) split sets (the
 	// store query still filters ONE fund per call, no SQL change). With no fund set the
 	// single FundID applies (the established shape). Fetch each combination and merge.
-	fundFilters := []*int64{d.FundID}
+	fundFilters := []*ids.FundID{d.FundID}
 	if len(d.FundIDs) > 0 {
 		fundFilters = fundFilters[:0]
 		for i := range d.FundIDs {

@@ -205,7 +205,7 @@ func lineDescription(ln store.DrillRow) string {
 // noun, TEXT) for a restricted split, or the localized "Unrestricted" LABEL for a
 // nil-fund split (the unrestricted group, D20 — a synthetic label, not a stored name,
 // so it is a catalog key the renderer localizes).
-func fundCell(fundID *int64, funds map[int64]string) Cell {
+func fundCell(fundID *FundID, funds map[FundID]string) Cell {
 	if fundID == nil {
 		return LabelCell("reports.account_ledger.unrestricted")
 	}
@@ -257,12 +257,12 @@ func dayBefore(d string) string {
 
 // fundNames returns id->name for every fund (active AND closed — a historical line may
 // reference a now-closed fund), loaded once per report run.
-func fundNames(ctx context.Context, st *store.Store) (map[int64]string, error) {
+func fundNames(ctx context.Context, st *store.Store) (map[FundID]string, error) {
 	fs, err := st.ListFunds(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m := make(map[int64]string, len(fs))
+	m := make(map[FundID]string, len(fs))
 	for _, f := range fs {
 		m[f.ID] = f.Name
 	}

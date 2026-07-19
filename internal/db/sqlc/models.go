@@ -216,7 +216,7 @@ type Form990Line struct {
 }
 
 type Fund struct {
-	ID          int64
+	ID          ids.FundID
 	Name        string
 	Funder      string
 	Purpose     string
@@ -230,7 +230,7 @@ type Fund struct {
 
 type FundSubsidiariesVersion struct {
 	ID           int64
-	EntityID     int64
+	EntityID     ids.FundID
 	ChangeID     int64
 	ValidFrom    string
 	Op           string
@@ -238,13 +238,13 @@ type FundSubsidiariesVersion struct {
 }
 
 type FundSubsidiary struct {
-	FundID       int64
+	FundID       ids.FundID
 	SubsidiaryID int64
 }
 
 type FundsVersion struct {
 	ID          int64
-	EntityID    int64
+	EntityID    ids.FundID
 	ChangeID    int64
 	ValidFrom   string
 	Op          string

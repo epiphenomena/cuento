@@ -101,8 +101,8 @@ type IDs struct {
 	EventCosts      int64 // class fundraising
 
 	// Funds.
-	BecaAgua     int64 // purpose, subs {MX, US}, program Educacion
-	BuildingFund int64 // purpose, subs {US}, no program
+	BecaAgua     ids.FundID // purpose, subs {MX, US}, program Educacion
+	BuildingFund ids.FundID // purpose, subs {US}, no program
 
 	// Transactions of special interest to as-of / audit tests.
 	EditedTxn  int64 // edited twice
@@ -124,11 +124,11 @@ type IDs struct {
 	// fund whose revenue is partly deployed into a LAND purchase and a FIXED-ASSET
 	// (construction) purchase across several quarters, leaving an unspent restricted
 	// (spendable) balance -- the Capital Campaign report's data.
-	Campaign     int64 // the restricted capital-campaign fund
-	FixedAssets  int64 // placeholder parent for the campaign's capital accounts
-	CampaignLand int64 // "Land" leaf under Fixed Assets
-	Construction int64 // fixed-asset leaf under Fixed Assets
-	ConstrLoan   int64 // liability: a construction loan that financed a purchase
+	Campaign     ids.FundID // the restricted capital-campaign fund
+	FixedAssets  int64      // placeholder parent for the campaign's capital accounts
+	CampaignLand int64      // "Land" leaf under Fixed Assets
+	Construction int64      // fixed-asset leaf under Fixed Assets
+	ConstrLoan   int64      // liability: a construction loan that financed a purchase
 
 	// --- Sample budget-PLAN seam (ExtendSampleBudgetPlan, opt-in) --------------
 	// Zero until ExtendSampleBudgetPlan is called. A SAMPLE budget PLAN (the p27.2

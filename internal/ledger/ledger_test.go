@@ -39,7 +39,7 @@ type world struct {
 
 	subUS, subMX int64
 	prog         int64
-	fund         int64
+	fund         ids.FundID
 
 	checkingUS int64 // asset, US
 	salaries   int64 // expense (class management, prog root), US, 990-coded
@@ -149,7 +149,7 @@ func mkProg(t *testing.T, s *store.Store, name string) int64 {
 }
 
 // mkFundScoped creates a fund optionally scoped to a program subtree (progScope).
-func mkFundScoped(t *testing.T, s *store.Store, name string, subs []int64, progScope *int64) int64 {
+func mkFundScoped(t *testing.T, s *store.Store, name string, subs []int64, progScope *int64) ids.FundID {
 	t.Helper()
 	id, err := s.CreateFund(mutCtx(), store.CreateFundInput{
 		Name: name, Restriction: "purpose", Subsidiaries: subs, ProgramID: progScope,

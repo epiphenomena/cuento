@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/testutil"
 )
 
@@ -29,7 +30,7 @@ type balEnv struct {
 
 	subUS, subCA int64
 	educ         int64
-	grant        int64
+	grant        ids.FundID
 
 	checking, fxclear, contrib, salaries int64
 
@@ -125,7 +126,7 @@ func newBalEnv(t *testing.T) balEnv {
 type split struct {
 	acct   int64
 	amount int64
-	fund   *int64
+	fund   *ids.FundID
 	prog   *int64
 	fclass *string
 }
@@ -190,7 +191,7 @@ func acctMap(cells []AccountCurrencyAmount) map[string]int64 {
 	return m
 }
 
-func key2(id int64, ccy string) string { return ccyKey(id) + "/" + ccy }
+func key2[T ~int64](id T, ccy string) string { return ccyKey(int64(id)) + "/" + ccy }
 
 // ccyKey stringifies an int64 id without importing strconv into a hot path -- kept
 // tiny and local.
@@ -216,7 +217,7 @@ func ccyKey(id int64) string {
 	return string(b[i:])
 }
 
-func wantCell(t *testing.T, m map[string]int64, id int64, ccy string, want int64) {
+func wantCell[T ~int64](t *testing.T, m map[string]int64, id T, ccy string, want int64) {
 	t.Helper()
 	got, ok := m[key2(id, ccy)]
 	if !ok {
@@ -313,9 +314,9 @@ func TestFundBalancesAsOf(t *testing.T) {
 	// unexpended. T7's -99999 checking is DELETED and excluded.
 	wantCell(t, m, e.grant, "USD", 14000)
 	// unrestricted (fund 0) USD: T2 -10000, T5 fxclear +3000, T5 checking -3000, T6 +8000 = -2000.
-	wantCell(t, m, 0, "USD", -2000)
+	wantCell(t, m, ids.FundID(0), "USD", -2000)
 	// unrestricted MXN: T4 fxclear +5000.
-	wantCell(t, m, 0, "MXN", 5000)
+	wantCell(t, m, ids.FundID(0), "MXN", 5000)
 	if len(cells) != 3 {
 		t.Errorf("fund cells = %d, want 3: %+v", len(cells), cells)
 	}

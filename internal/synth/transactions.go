@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	entids "cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -14,7 +15,7 @@ import (
 type sp struct {
 	acct   int64
 	amount int64 // minor units, net-debit sign (D2)
-	fund   *int64
+	fund   *entids.FundID
 	prog   *int64
 	class  *string
 	desc   string // per-split free-text description; "" leaves it empty

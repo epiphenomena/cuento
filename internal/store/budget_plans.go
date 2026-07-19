@@ -199,7 +199,7 @@ type BudgetSplitInput struct {
 	Description string
 	Date        string
 	AccountID   int64
-	FundID      *int64
+	FundID      *ids.FundID
 	ProgramID   *int64
 	Amount      int64
 	Currency    string
@@ -223,7 +223,7 @@ func (s *Store) CreateBudgetSplit(ctx context.Context, planID ids.BudgetPlanID, 
 				Description: in.Description,
 				Date:        in.Date,
 				AccountID:   in.AccountID,
-				FundID:      nullInt64Ptr(in.FundID),
+				FundID:      ids.Null(in.FundID),
 				ProgramID:   resolved.programID,
 				Amount:      in.Amount,
 				Currency:    in.Currency,
@@ -260,7 +260,7 @@ func (s *Store) UpdateBudgetSplit(ctx context.Context, id ids.BudgetSplitID, in 
 				Description: in.Description,
 				Date:        in.Date,
 				AccountID:   in.AccountID,
-				FundID:      nullInt64Ptr(in.FundID),
+				FundID:      ids.Null(in.FundID),
 				ProgramID:   resolved.programID,
 				Amount:      in.Amount,
 				Currency:    in.Currency,
@@ -341,7 +341,7 @@ func (s *Store) ReplaceBudgetSplits(ctx context.Context, planID ids.BudgetPlanID
 					Description: in.Description,
 					Date:        in.Date,
 					AccountID:   in.AccountID,
-					FundID:      nullInt64Ptr(in.FundID),
+					FundID:      ids.Null(in.FundID),
 					ProgramID:   resolved.programID,
 					Amount:      in.Amount,
 					Currency:    in.Currency,
@@ -398,7 +398,7 @@ func (s *Store) AppendBudgetSplits(ctx context.Context, planID ids.BudgetPlanID,
 					Description: in.Description,
 					Date:        in.Date,
 					AccountID:   in.AccountID,
-					FundID:      nullInt64Ptr(in.FundID),
+					FundID:      ids.Null(in.FundID),
 					ProgramID:   resolved.programID,
 					Amount:      in.Amount,
 					Currency:    in.Currency,

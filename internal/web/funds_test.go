@@ -190,7 +190,7 @@ func TestFundsListClosedToggle(t *testing.T) {
 func TestFundStatementOpeningClosing(t *testing.T) {
 	h, st, sm, ids, writer := fundsFixtureApp(t)
 
-	rec := asUser(t, h, sm, writer, http.MethodGet, fundStatementURL(ids.BecaAgua), nil)
+	rec := asUser(t, h, sm, writer, http.MethodGet, fundStatementURL(int64(ids.BecaAgua)), nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET fund statement = %d, want 200", rec.Code)
 	}
@@ -317,7 +317,7 @@ func TestFundCreateNoSubsidiaryReRenders(t *testing.T) {
 func TestFundEditPrefillsChecklist(t *testing.T) {
 	h, _, sm, ids, writer := fundsFixtureApp(t)
 
-	rec := asUser(t, h, sm, writer, http.MethodGet, "/funds/"+itoa(ids.BecaAgua)+"/edit", nil)
+	rec := asUser(t, h, sm, writer, http.MethodGet, "/funds/"+itoa(int64(ids.BecaAgua))+"/edit", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET edit = %d, want 200", rec.Code)
 	}
@@ -341,7 +341,7 @@ func TestFundsPermReadCannotManage(t *testing.T) {
 	if rec := asUser(t, h, sm, reader, http.MethodGet, "/funds", nil); rec.Code != http.StatusOK {
 		t.Errorf("reader GET /funds = %d, want 200", rec.Code)
 	}
-	if rec := asUser(t, h, sm, reader, http.MethodGet, fundStatementURL(ids.BecaAgua), nil); rec.Code != http.StatusOK {
+	if rec := asUser(t, h, sm, reader, http.MethodGet, fundStatementURL(int64(ids.BecaAgua)), nil); rec.Code != http.StatusOK {
 		t.Errorf("reader GET statement = %d, want 200", rec.Code)
 	}
 
@@ -354,7 +354,7 @@ func TestFundsPermReadCannotManage(t *testing.T) {
 		t.Errorf("reader POST /funds = %d, want 403", rec.Code)
 	}
 	// Close.
-	if rec := asUser(t, h, sm, reader, http.MethodPost, fundStatementURL(ids.BecaAgua)+"/close", nil); rec.Code != http.StatusForbidden {
+	if rec := asUser(t, h, sm, reader, http.MethodPost, fundStatementURL(int64(ids.BecaAgua))+"/close", nil); rec.Code != http.StatusForbidden {
 		t.Errorf("reader POST close = %d, want 403", rec.Code)
 	}
 	// The new/edit GET forms are TxnWrite too.

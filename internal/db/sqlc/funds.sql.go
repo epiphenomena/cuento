@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 const activeFunds = `-- name: ActiveFunds :many
@@ -62,7 +64,7 @@ WHERE fund_id = ? AND subsidiary_id = ?
 `
 
 type DeleteFundSubsidiaryParams struct {
-	FundID       int64
+	FundID       ids.FundID
 	SubsidiaryID int64
 }
 
@@ -179,7 +181,7 @@ ORDER BY subsidiary_id
 
 // The subsidiary id set a fund currently maps (order-insensitive; the store
 // builds a set for the diff).
-func (q *Queries) FundSubsidiaries(ctx context.Context, fundID int64) ([]int64, error) {
+func (q *Queries) FundSubsidiaries(ctx context.Context, fundID ids.FundID) ([]int64, error) {
 	rows, err := q.db.QueryContext(ctx, fundSubsidiaries, fundID)
 	if err != nil {
 		return nil, err
@@ -209,7 +211,7 @@ FROM funds
 WHERE id = ?
 `
 
-func (q *Queries) GetFund(ctx context.Context, id int64) (Fund, error) {
+func (q *Queries) GetFund(ctx context.Context, id ids.FundID) (Fund, error) {
 	row := q.db.QueryRowContext(ctx, getFund, id)
 	var i Fund
 	err := row.Scan(
@@ -233,7 +235,7 @@ WHERE fund_id = ? AND subsidiary_id = ?
 `
 
 type HasFundSubsidiaryParams struct {
-	FundID       int64
+	FundID       ids.FundID
 	SubsidiaryID int64
 }
 
@@ -289,7 +291,7 @@ type InsertFundParams struct {
 // Live insert of a fund. restriction is a CHECK enum; program_id/start_date/
 // end_date are optional (validated in the store where required). Returns the new
 // id for the store to snapshot + return.
-func (q *Queries) InsertFund(ctx context.Context, arg InsertFundParams) (int64, error) {
+func (q *Queries) InsertFund(ctx context.Context, arg InsertFundParams) (ids.FundID, error) {
 	row := q.db.QueryRowContext(ctx, insertFund,
 		arg.Name,
 		arg.Funder,
@@ -301,7 +303,7 @@ func (q *Queries) InsertFund(ctx context.Context, arg InsertFundParams) (int64, 
 		arg.Notes,
 		arg.Active,
 	)
-	var id int64
+	var id ids.FundID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -312,7 +314,7 @@ VALUES (?, ?)
 `
 
 type InsertFundSubsidiaryParams struct {
-	FundID       int64
+	FundID       ids.FundID
 	SubsidiaryID int64
 }
 
@@ -334,7 +336,7 @@ WHERE c.id = ? AND fs.fund_id = ? AND fs.subsidiary_id = ?
 type InsertFundSubsidiaryVersionParams struct {
 	Op           string
 	ID           int64
-	FundID       int64
+	FundID       ids.FundID
 	SubsidiaryID int64
 }
 
@@ -367,7 +369,7 @@ WHERE c.id = ? AND f.id = ?
 type InsertFundVersionParams struct {
 	Op   string
 	ID   int64
-	ID_2 int64
+	ID_2 ids.FundID
 }
 
 // Snapshot-from-live version append for funds (STANDARD single-column entity,
@@ -443,7 +445,7 @@ type UpdateFundParams struct {
 	EndDate     sql.NullString
 	Notes       string
 	Active      int64
-	ID          int64
+	ID          ids.FundID
 }
 
 // Live update: rename / funder / purpose / restriction / program-scope / dates /

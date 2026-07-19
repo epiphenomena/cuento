@@ -214,7 +214,7 @@ func statementDescription(sp store.ReconciliationStatementSplit) string {
 // statementFundCell builds the FUND column cell for a cleared line: the fund's name (a
 // stored proper noun) for a restricted split, or the localized "Unrestricted" label for
 // a nil-fund split (D20). Mirrors the account-ledger's fundCell.
-func statementFundCell(fundID *int64, funds map[int64]string) Cell {
+func statementFundCell(fundID *FundID, funds map[FundID]string) Cell {
 	if fundID == nil {
 		return LabelCell("reports.reconciliation_statement.unrestricted")
 	}

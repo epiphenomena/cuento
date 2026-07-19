@@ -201,7 +201,7 @@ func actualDrill(key BudgetKey, bucketStart, bucketEnd, from, to string) *Drill 
 	if to != "" && to < tt {
 		tt = to
 	}
-	fund := int64(key.Fund)
+	fund := key.Fund
 	prog := int64(key.Program)
 	return &Drill{
 		Scope:      int64(key.Subsidiary),
@@ -354,7 +354,7 @@ func balanceAt(ser ProjectionSeries, d string) int64 {
 // noun). Loaded once per report run (bounded reference data).
 type keyNames struct {
 	account map[AccountID]string
-	fund    map[int64]string
+	fund    map[FundID]string
 	program map[ProgramID]string
 }
 
@@ -388,9 +388,9 @@ func budgetKeyNames(ctx context.Context, tk *Toolkit, lang string) (keyNames, er
 
 // fundLabelCell builds the FUND column cell: the fund's stored name for a restricted
 // key, or the localized "Unrestricted" label for fund 0 (D20).
-func fundLabelCell(fund FundID, funds map[int64]string) Cell {
+func fundLabelCell(fund FundID, funds map[FundID]string) Cell {
 	if fund == 0 {
 		return LabelCell("reports.budget.unrestricted")
 	}
-	return TextCell(funds[int64(fund)])
+	return TextCell(funds[fund])
 }

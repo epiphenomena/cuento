@@ -83,7 +83,7 @@ func (s *server) descriptionsPrefill(w http.ResponseWriter, r *http.Request) {
 		exp := s.currencyExponent(ctx, pf.Currency)
 		model.AccountID = pf.AccountID
 		model.AmountInput = money.Format(pf.Amount, exp, money.FormatOpts{Number: numberFormatFor(u)})
-		model.FundID = pf.FundID
+		model.FundID = int64(pf.FundID)
 		model.ProgramID = pf.ProgramID
 		model.Class = pf.Class
 		model.Memo = pf.Memo

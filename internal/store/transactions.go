@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // Transaction operations (p08.2) -- the CORE financial logic (D2, D18, D20, D21,
@@ -89,7 +90,7 @@ type SplitInput struct {
 	ID              *int64
 	AccountID       int64
 	Amount          int64
-	FundID          *int64
+	FundID          *ids.FundID
 	ProgramID       *int64
 	FunctionalClass *string
 	Memo            string
@@ -790,7 +791,7 @@ func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID int64, 
 		id:              in.ID,
 		accountID:       in.AccountID,
 		amount:          in.Amount,
-		fundID:          nullInt64Ptr(in.FundID),
+		fundID:          ids.Null(in.FundID),
 		programID:       programID,
 		functionalClass: functionalClass,
 		memo:            in.Memo,
@@ -813,9 +814,9 @@ func accountSplitInSubsidiary(ctx context.Context, q *sqlc.Queries, accountID, s
 
 // fundSplitInSubsidiary reports whether a non-deleted split tagged fundID lives in
 // a transaction of subsidiary S (completes UpdateFund's p08 guard).
-func fundSplitInSubsidiary(ctx context.Context, q *sqlc.Queries, fundID, subID int64) (bool, error) {
+func fundSplitInSubsidiary(ctx context.Context, q *sqlc.Queries, fundID ids.FundID, subID int64) (bool, error) {
 	inUse, err := q.SplitUsesFundInSubsidiary(ctx, sqlc.SplitUsesFundInSubsidiaryParams{
-		FundID: sql.NullInt64{Int64: fundID, Valid: true}, SubsidiaryID: subID,
+		FundID: sql.NullInt64{Int64: int64(fundID), Valid: true}, SubsidiaryID: subID,
 	})
 	if err != nil {
 		return false, fmt.Errorf("split-use of fund %d in sub %d: %w", fundID, subID, err)

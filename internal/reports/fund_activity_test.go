@@ -52,7 +52,7 @@ func fundActivityReport(t *testing.T) reports.Report {
 }
 
 // fullPeriod runs the report over the whole fixture span, root scope, lang en.
-func fullPeriod(f *fixture.Fixture, fund int64) reports.Params {
+func fullPeriod(f *fixture.Fixture, fund reports.FundID) reports.Params {
 	return reports.Params{
 		Scope: reports.SubsidiaryID(f.IDs.Root),
 		Fund:  reports.FundID(fund),
@@ -377,7 +377,7 @@ func TestFundActivityCSVParses(t *testing.T) {
 // fundDisplayName maps a fund id to the name the LIST view keys its first-column cell
 // by: a restricted fund's stored proper noun (a TEXT cell), or the Unrestricted LABEL
 // key for fund 0 (a CellLabel).
-func fundDisplayName(f *fixture.Fixture, id int64) string {
+func fundDisplayName(f *fixture.Fixture, id reports.FundID) string {
 	switch id {
 	case 0:
 		return "reports.fund_activity.unrestricted" // the label KEY (fund 0 is a label cell)
@@ -492,7 +492,7 @@ func drillLineSum(t *testing.T, f *fixture.Fixture, tbl reports.Table, labelKey,
 
 // expectedFundBalance returns the fixture's expected (fund, currency) as-of balance —
 // the independent oracle for the report's closing / total-assets figures.
-func expectedFundBalance(t *testing.T, f *fixture.Fixture, fund int64, ccy string) int64 {
+func expectedFundBalance(t *testing.T, f *fixture.Fixture, fund reports.FundID, ccy string) int64 {
 	t.Helper()
 	for _, fb := range f.Expected.FundBalances {
 		if fb.Fund == fund && fb.Currency == ccy {

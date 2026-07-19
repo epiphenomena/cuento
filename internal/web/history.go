@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"cuento/internal/i18n"
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -207,7 +208,7 @@ type histResolver struct {
 	lang     string
 	df       money.DateFormat
 	accounts map[int64]string
-	funds    map[int64]string
+	funds    map[ids.FundID]string
 	subs     map[int64]string
 	programs map[int64]string
 	opts     money.FormatOpts
@@ -323,7 +324,7 @@ func (r histResolver) fundName(id sql.NullInt64) string {
 	if !id.Valid {
 		return ""
 	}
-	return r.funds[id.Int64]
+	return r.funds[ids.FundID(id.Int64)]
 }
 
 // programName resolves a nullable program id to its name ("" for none).

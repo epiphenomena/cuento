@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -42,7 +43,7 @@ import (
 // per-currency balances, the negative-badge gate, the scope (subsidiary names +
 // optional program), and its active state.
 type fundListRow struct {
-	ID       int64
+	ID       ids.FundID
 	Name     string
 	Funder   string
 	Balances []string // pre-formatted "CCY 1,234.56" strings (rule 10)
@@ -106,7 +107,7 @@ func (s *server) buildFundsPage(ctx context.Context, showClosed bool) (fundsPage
 	}
 
 	// Group the balance cells per fund (fund 0 = unrestricted, dropped below).
-	byFund := make(map[int64][]store.FundCurrencyAmount, len(balCells))
+	byFund := make(map[ids.FundID][]store.FundCurrencyAmount, len(balCells))
 	for _, c := range balCells {
 		byFund[c.FundID] = append(byFund[c.FundID], c)
 	}
@@ -186,7 +187,7 @@ type fundOpenClose struct {
 // the per-currency opening/closing balances (opening is 0; closing is the last
 // running balance per currency -- reconciling to the list balance).
 type fundStatementModel struct {
-	FundID    int64
+	FundID    ids.FundID
 	FundName  string
 	Funder    string
 	Active    bool
@@ -204,7 +205,7 @@ func (s *server) fundStatement(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(ctx)
 	lang := langOf(ctx)
 
-	id := parseID(r.PathValue("id"))
+	id := ids.FundID(parseID(r.PathValue("id")))
 	fund, err := s.store.GetFund(ctx, id)
 	if err != nil {
 		http.NotFound(w, r)
@@ -289,7 +290,7 @@ func (s *server) fundStatement(w http.ResponseWriter, r *http.Request) {
 // subsidiary checklist (Subs + CheckedSubs, the sub_<id> pattern), the optional
 // program-scope select options, and an embedded formErrors. ID 0 = create.
 type fundForm struct {
-	ID          int64
+	ID          ids.FundID
 	Name        string
 	Funder      string
 	Purpose     string
@@ -321,7 +322,7 @@ func (s *server) fundNewForm(w http.ResponseWriter, r *http.Request) {
 // htmx swap.
 func (s *server) fundEditForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
+	id := ids.FundID(parseID(r.PathValue("id")))
 	fund, err := s.store.GetFund(ctx, id)
 	if err != nil {
 		http.NotFound(w, r)
@@ -355,7 +356,7 @@ func (s *server) fundEditForm(w http.ResponseWriter, r *http.Request) {
 // checklist (ALL subsidiaries -- a fund scopes to a FLAT set, >=1, D20) and the
 // program-scope select (every program; the store validates existence). The checked
 // set starts empty (create); the edit path fills it from FundSubsidiaries.
-func (s *server) buildFundForm(ctx context.Context, id int64) (fundForm, error) {
+func (s *server) buildFundForm(ctx context.Context, id ids.FundID) (fundForm, error) {
 	form := fundForm{ID: id, CheckedSubs: map[int64]bool{}}
 
 	subs, err := s.store.AllSubsidiaries(ctx)
@@ -397,7 +398,7 @@ type parsedFundForm struct {
 // parsedFundForm (for the store call). id is the edit target (0 = create); it is
 // threaded into buildFundForm so a 422 re-render rebuilds the same option lists. It
 // does NOT validate business rules (the store owns that).
-func (s *server) parseFundForm(r *http.Request, id int64) (fundForm, parsedFundForm, error) {
+func (s *server) parseFundForm(r *http.Request, id ids.FundID) (fundForm, parsedFundForm, error) {
 	if err := r.ParseForm(); err != nil {
 		return fundForm{}, parsedFundForm{}, err
 	}
@@ -471,7 +472,7 @@ func (s *server) fundCreate(w http.ResponseWriter, r *http.Request) {
 // non-nil-0-clears convention); a positive value sets it.
 func (s *server) fundUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
+	id := ids.FundID(parseID(r.PathValue("id")))
 	form, in, err := s.parseFundForm(r, id)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -512,7 +513,7 @@ func nonNilSubs(subs []int64) []int64 {
 // ACTION, not a form (mirroring programDeactivate). Success redirects to the list.
 func (s *server) fundClose(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
+	id := ids.FundID(parseID(r.PathValue("id")))
 	if err := s.store.CloseFund(s.actorCtx(ctx), id); err != nil {
 		s.serverError(w)
 		return
@@ -524,7 +525,7 @@ func (s *server) fundClose(w http.ResponseWriter, r *http.Request) {
 // the fund returns to the active list. Success redirects to the active list.
 func (s *server) fundReopen(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
+	id := ids.FundID(parseID(r.PathValue("id")))
 	if err := s.store.ReopenFund(s.actorCtx(ctx), id); err != nil {
 		s.serverError(w)
 		return

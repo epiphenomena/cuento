@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/testutil"
 )
 
@@ -24,7 +25,7 @@ func newFundSub(t *testing.T, s *Store, name string) int64 {
 }
 
 // getFund reads a fund's current live row for assertions.
-func getFund(t *testing.T, s *Store, id int64) sqlcFund {
+func getFund(t *testing.T, s *Store, id ids.FundID) sqlcFund {
 	t.Helper()
 	row, err := s.GetFund(context.Background(), id)
 	if err != nil {
@@ -52,7 +53,7 @@ type sqlcFund struct {
 }
 
 // fundSubSet reads a fund's current subsidiary set as a map for assertions.
-func fundSubSet(t *testing.T, d *sql.DB, fundID int64) map[int64]bool {
+func fundSubSet(t *testing.T, d *sql.DB, fundID ids.FundID) map[int64]bool {
 	t.Helper()
 	rows, err := d.Query(`SELECT subsidiary_id FROM fund_subsidiaries WHERE fund_id = ?`, fundID)
 	if err != nil {
@@ -100,9 +101,9 @@ func TestCreateFundVersioned(t *testing.T) {
 		t.Errorf("changes count = %d, want %d (fund + memberships under one change)", n, before+1)
 	}
 
-	testutil.AssertVersioned(t, d, "funds", id, "create")
-	testutil.AssertVersionedFundSub(t, d, id, subA, "create")
-	testutil.AssertVersionedFundSub(t, d, id, subB, "create")
+	testutil.AssertVersioned(t, d, "funds", int64(id), "create")
+	testutil.AssertVersionedFundSub(t, d, int64(id), subA, "create")
+	testutil.AssertVersionedFundSub(t, d, int64(id), subB, "create")
 
 	// Live row matches inputs.
 	f := getFund(t, s, id)
@@ -165,13 +166,13 @@ func TestActiveFundsForSubsidiary(t *testing.T) {
 		t.Fatalf("CloseFund: %v", err)
 	}
 
-	assertFundsForSub := func(sub int64, wantIDs ...int64) {
+	assertFundsForSub := func(sub int64, wantIDs ...ids.FundID) {
 		t.Helper()
 		funds, err := s.ActiveFunds(context.Background(), sub)
 		if err != nil {
 			t.Fatalf("ActiveFunds(%d): %v", sub, err)
 		}
-		got := make([]int64, len(funds))
+		got := make([]ids.FundID, len(funds))
 		for i, f := range funds {
 			got[i] = f.ID
 		}
@@ -258,7 +259,7 @@ func TestReopenAudited(t *testing.T) {
 	if err := s.CloseFund(mutCtx(), id); err != nil {
 		t.Fatalf("CloseFund: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "funds", id, "update")
+	testutil.AssertVersioned(t, d, "funds", int64(id), "update")
 	if f := getFund(t, s, id); f.Active != 0 {
 		t.Errorf("after close active = %d, want 0", f.Active)
 	}
@@ -266,7 +267,7 @@ func TestReopenAudited(t *testing.T) {
 	if err := s.ReopenFund(mutCtx(), id); err != nil {
 		t.Fatalf("ReopenFund: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "funds", id, "update")
+	testutil.AssertVersioned(t, d, "funds", int64(id), "update")
 	if f := getFund(t, s, id); f.Active != 1 {
 		t.Errorf("after reopen active = %d, want 1", f.Active)
 	}
@@ -316,14 +317,14 @@ func TestUpdateFundSubsetChange(t *testing.T) {
 		t.Errorf("live sub set = %v, want {%d,%d}", set, subA, subC)
 	}
 	// Membership version ops: C created, B deleted, A still create (untouched).
-	testutil.AssertVersionedFundSub(t, d, id, subC, "create")
-	testutil.AssertVersionedFundSub(t, d, id, subB, "delete")
-	testutil.AssertVersionedFundSub(t, d, id, subA, "create")
+	testutil.AssertVersionedFundSub(t, d, int64(id), subC, "create")
+	testutil.AssertVersionedFundSub(t, d, int64(id), subB, "delete")
+	testutil.AssertVersionedFundSub(t, d, int64(id), subA, "create")
 
 	if f := getFund(t, s, id); f.Name != "Renamed Grant" {
 		t.Errorf("live name = %q, want Renamed Grant", f.Name)
 	}
-	testutil.AssertVersioned(t, d, "funds", id, "update")
+	testutil.AssertVersioned(t, d, "funds", int64(id), "update")
 
 	// Narrowing to empty is rejected (>=1 must remain), no trace.
 	before := countChanges(t, d)
@@ -356,7 +357,7 @@ func TestCloseFundBlocksNewUse(t *testing.T) {
 	if err := s.CloseFund(mutCtx(), id); err != nil {
 		t.Fatalf("CloseFund: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "funds", id, "update")
+	testutil.AssertVersioned(t, d, "funds", int64(id), "update")
 	if f := getFund(t, s, id); f.Active != 0 {
 		t.Errorf("after close active = %d, want 0", f.Active)
 	}

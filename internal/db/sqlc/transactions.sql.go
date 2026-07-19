@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 const accountIsLeaf = `-- name: AccountIsLeaf :one
@@ -121,7 +123,7 @@ SELECT EXISTS (
 `
 
 type HasFundSubsidiaryMapParams struct {
-	FundID       int64
+	FundID       ids.FundID
 	SubsidiaryID int64
 }
 

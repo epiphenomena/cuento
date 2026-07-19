@@ -133,10 +133,10 @@ func TestFixtureKnownAggregates(t *testing.T) {
 	}
 	gotFund := map[key]int64{}
 	for _, b := range fbals {
-		gotFund[key{b.FundID, b.Currency}] = b.Amount
+		gotFund[key{int64(b.FundID), b.Currency}] = b.Amount
 	}
 	for _, want := range exp.FundBalances {
-		got, ok := gotFund[key{want.Fund, want.Currency}]
+		got, ok := gotFund[key{int64(want.Fund), want.Currency}]
 		if !ok {
 			t.Errorf("fund %d/%s missing from fund balances", want.Fund, want.Currency)
 			continue
@@ -228,7 +228,7 @@ func TestFixtureKnownAggregates(t *testing.T) {
 	restricted := false
 	for _, sp := range st.Splits {
 		if sp.AccountID == f.IDs.ProgramSupplies {
-			if sp.FundID.Valid && sp.FundID.Int64 == f.IDs.BecaAgua &&
+			if sp.FundID.Valid && sp.FundID.Int64 == int64(f.IDs.BecaAgua) &&
 				sp.ProgramID.Valid && sp.ProgramID.Int64 == f.IDs.Educacion {
 				restricted = true
 			}

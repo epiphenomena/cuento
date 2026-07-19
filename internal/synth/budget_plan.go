@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	entids "cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -49,7 +50,7 @@ func ExtendSampleBudgetPlan(ctx context.Context, s *store.Store, ids *IDs) error
 		desc    string
 		date    string
 		account int64
-		fund    *int64
+		fund    *entids.FundID
 		program *int64 // nil => rely on account default (R/E) or none (A/L)
 		amount  int64
 	}{

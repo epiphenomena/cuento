@@ -108,7 +108,7 @@ func runCapitalCampaign(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 	// The fund's whole ledger to the report date: used ONLY for the earliest date (the
 	// span start) and the per-account capital-detail balances. The classification and the
 	// line-item figures come from FundStatement below, not from re-scanning these rows.
-	rows, err := tk.store.FundLedger(ctx, int64(p.Fund), p.To)
+	rows, err := tk.store.FundLedger(ctx, p.Fund, p.To)
 	if err != nil {
 		return Table{}, err
 	}

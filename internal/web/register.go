@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -201,12 +202,12 @@ func accountNameMap(ctx context.Context, st *store.Store, lang string) (map[int6
 
 // fundNameMap returns id->name for every fund (active AND closed; a chip may name a
 // now-closed fund).
-func fundNameMap(ctx context.Context, st *store.Store) (map[int64]string, error) {
+func fundNameMap(ctx context.Context, st *store.Store) (map[ids.FundID]string, error) {
 	fs, err := st.ListFunds(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m := make(map[int64]string, len(fs))
+	m := make(map[ids.FundID]string, len(fs))
 	for _, f := range fs {
 		m[f.ID] = f.Name
 	}
@@ -419,7 +420,8 @@ func (s *server) parseRegisterFilters(r *http.Request, u *store.CurrentUser) (st
 	}
 	f.Text = q.Get("text")
 	if id := parseID(q.Get("fund")); id > 0 {
-		f.FundID = &id
+		fid := ids.FundID(id)
+		f.FundID = &fid
 	}
 	if id := parseID(q.Get("sub")); id > 0 {
 		f.Subsidiary = &id
@@ -459,7 +461,7 @@ func (s *server) attachRegisterFilterOptions(ctx context.Context, m *registerPag
 		return err
 	}
 	for _, f := range funds {
-		m.Funds = append(m.Funds, regFilterOption{ID: f.ID, Name: f.Name})
+		m.Funds = append(m.Funds, regFilterOption{ID: int64(f.ID), Name: f.Name})
 	}
 	subs, err := s.store.AllSubsidiaries(ctx)
 	if err != nil {
@@ -484,11 +486,13 @@ func (s *server) attachRegisterFilterOptions(ctx context.Context, m *registerPag
 }
 
 // derefID returns *p or 0 when nil (the "no filter" sentinel the template echoes).
-func derefID(p *int64) int64 {
+// Generic over any defined id type (ids.FundID, *int64 sub/program filters, …) so a
+// typed nullable id renders through the same seam.
+func derefID[T ~int64](p *T) int64 {
 	if p == nil {
 		return 0
 	}
-	return *p
+	return int64(*p)
 }
 
 // ---- template funcs ------------------------------------------------------

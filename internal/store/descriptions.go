@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // Per-split description autocomplete + per-row prefill (p26.18). Step 4a of the
@@ -48,9 +49,9 @@ func (s *Store) SuggestDescriptions(ctx context.Context, q string, sub int64) ([
 type DescriptionPrefill struct {
 	Found     bool
 	AccountID int64
-	Amount    int64 // signed minor units (net-debit sign, D1/D2)
-	FundID    int64 // 0 == unrestricted
-	ProgramID int64 // 0 == none
+	Amount    int64      // signed minor units (net-debit sign, D1/D2)
+	FundID    ids.FundID // 0 == unrestricted
+	ProgramID int64      // 0 == none
 	Class     string
 	Memo      string
 	Currency  string
@@ -87,7 +88,7 @@ func (s *Store) PrefillDescription(ctx context.Context, q string, sub int64) (De
 		Currency:  row.Currency,
 	}
 	if row.FundID.Valid {
-		out.FundID = row.FundID.Int64
+		out.FundID = ids.FundID(row.FundID.Int64)
 	}
 	if row.ProgramID.Valid {
 		out.ProgramID = row.ProgramID.Int64

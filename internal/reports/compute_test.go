@@ -104,7 +104,7 @@ func TestFundBalancesClosingConversion(t *testing.T) {
 	}
 
 	// A converting result is single-currency (USD): assert per fund the USD cell.
-	want := map[int64]int64{
+	want := map[reports.FundID]int64{
 		f.IDs.BecaAgua:     535_912 + 50_000,       // MXN 9.7M->535,912 plus its USD 50,000 leg
 		f.IDs.BuildingFund: 5_000_000,              // USD pass-through
 		0:                  1_709_392 + 18_517_500, // unrestricted MXN->USD + USD leg
@@ -426,7 +426,7 @@ func TestFundPeriodStatementPreWindowCapitalExcluded(t *testing.T) {
 	ctx := context.Background()
 
 	st, err := reports.NewToolkit(f.Store, reports.Params{}).
-		FundPeriodStatement(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, reports.FundID(f.IDs.BuildingFund), "2025-07-01", "2025-12-31")
+		FundPeriodStatement(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, f.IDs.BuildingFund, "2025-07-01", "2025-12-31")
 	if err != nil {
 		t.Fatalf("fund statement: %v", err)
 	}

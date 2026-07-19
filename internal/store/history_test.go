@@ -3,6 +3,8 @@ package store
 import (
 	"errors"
 	"testing"
+
+	"cuento/internal/ids"
 )
 
 // p12.4 transaction history reconstruction. The timeline is rebuilt from the
@@ -176,7 +178,7 @@ func TestHistoryUpdateShowsFundAndClassSplitDiffs(t *testing.T) {
 	if fd.Old.ID.Valid {
 		t.Fatalf("fund old should be unrestricted (invalid), got %+v", fd.Old.ID)
 	}
-	if !fd.New.ID.Valid || fd.New.ID.Int64 != fund {
+	if !fd.New.ID.Valid || fd.New.ID.Int64 != int64(fund) {
 		t.Fatalf("fund new id = %+v, want %d", fd.New.ID, fund)
 	}
 
@@ -552,7 +554,7 @@ func post2(t *testing.T, e txnEnv, sub, debitAcct int64, debitAmt int64, creditA
 }
 
 // newFund creates a fund scoped to subs (optionally a program scope) and returns id.
-func newFund(t *testing.T, s *Store, name string, subs []int64, programID *int64) int64 {
+func newFund(t *testing.T, s *Store, name string, subs []int64, programID *int64) ids.FundID {
 	t.Helper()
 	id, err := s.CreateFund(mutCtx(), CreateFundInput{
 		Name: name, Restriction: "purpose", Subsidiaries: subs, ProgramID: programID,

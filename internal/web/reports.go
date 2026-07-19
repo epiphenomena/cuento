@@ -392,7 +392,7 @@ func (s *server) fundActivityOptions(ctx context.Context) ([]fundOption, error) 
 	}
 	out := make([]fundOption, 0, len(fs))
 	for _, f := range fs {
-		out = append(out, fundOption{ID: f.ID, Name: f.Name})
+		out = append(out, fundOption{ID: int64(f.ID), Name: f.Name})
 	}
 	return out, nil
 }

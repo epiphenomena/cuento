@@ -49,7 +49,7 @@ type txnWebEnv struct {
 	progEdu  int64 // program under root, the fund's scope
 	progRoot int64
 
-	fund int64 // scoped to sub1, program scope = progEdu
+	fund ids.FundID // scoped to sub1, program scope = progEdu
 }
 
 func newTxnWebEnv(t *testing.T) *txnWebEnv {
@@ -421,12 +421,12 @@ func TestTxnFundProgramScopeGoesToRow(t *testing.T) {
 	f.Set("split_id_0", "")
 	f.Set("account_0", itoa(e.grantRev))
 	f.Set("amount_0", "-100.00")
-	f.Set("fund_0", itoa(e.fund))
+	f.Set("fund_0", itoa(int64(e.fund)))
 	f.Set("program_0", itoa(e.progRoot)) // outside the fund's Educación scope
 	f.Set("split_id_1", "")
 	f.Set("account_1", itoa(e.checking))
 	f.Set("amount_1", "100.00")
-	f.Set("fund_1", itoa(e.fund))
+	f.Set("fund_1", itoa(int64(e.fund)))
 	f.Set("rows", "2")
 
 	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions", f)
@@ -743,7 +743,7 @@ func TestTxnSubsidiaryFiltersOptions(t *testing.T) {
 		t.Fatalf("cashB (sub2) leaked into sub1 account options")
 	}
 	// The fund scoped to sub1 is offered.
-	if !strings.Contains(body, `value="`+itoa(e.fund)+`"`) {
+	if !strings.Contains(body, `value="`+itoa(int64(e.fund))+`"`) {
 		t.Fatalf("fund scoped to sub1 not offered")
 	}
 }
@@ -1102,11 +1102,11 @@ func TestTxnMainHeaderMultiFundFanOut(t *testing.T) {
 			t.Fatalf("fund %d does not net to zero: %d", key, sum)
 		}
 	}
-	if mainsOnChecking[e.fund] != -6000 {
-		t.Fatalf("Beca main residual = %d, want -6000", mainsOnChecking[e.fund])
+	if mainsOnChecking[int64(e.fund)] != -6000 {
+		t.Fatalf("Beca main residual = %d, want -6000", mainsOnChecking[int64(e.fund)])
 	}
-	if mainsOnChecking[fund2] != -4000 {
-		t.Fatalf("Beca Dos main residual = %d, want -4000", mainsOnChecking[fund2])
+	if mainsOnChecking[int64(fund2)] != -4000 {
+		t.Fatalf("Beca Dos main residual = %d, want -4000", mainsOnChecking[int64(fund2)])
 	}
 }
 
@@ -1253,8 +1253,8 @@ func TestTxnMainHeaderMissingAccount(t *testing.T) {
 
 // nn/ni/ns build the *int64 (store.SplitInput) / sql.NullInt64 (splitFull) / sql.NullString
 // the tests need for terse table rows.
-func nn(v int64) *int64        { return &v }
-func ni(v int64) sql.NullInt64 { return sql.NullInt64{Int64: v, Valid: true} }
+func nn[T ~int64](v T) *T            { return &v }
+func ni[T ~int64](v T) sql.NullInt64 { return sql.NullInt64{Int64: int64(v), Valid: true} }
 func ns(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: true}
 }
