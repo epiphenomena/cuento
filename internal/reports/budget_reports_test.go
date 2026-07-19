@@ -19,12 +19,45 @@ package reports_test
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 
 	"cuento/internal/reports"
 	"cuento/internal/store"
 	"cuento/internal/testutil/fixture"
 )
+
+// bvFirstMonth is the first MONTH column index in the p30.9 budget-variance pivot:
+// columns are Account(0) | Fund(1) | Program(2) | Currency(3) | <month...> | Total.
+const bvFirstMonth = 4
+
+// TestVarianceBucket pins the p30.9 over/under-budget MAGNITUDE thresholds (rule 4): the
+// pure |variance|/|budgeted| classifier the web layer color-codes. The boundaries are the
+// crux of the color feature, so they are pinned here (a ratio tweak must break a test).
+func TestVarianceBucket(t *testing.T) {
+	cases := []struct {
+		name             string
+		budgeted, varnce int64
+		want             string
+	}{
+		{"zero variance is neutral", 1000, 0, reports.VarianceNeutral},
+		{"9.9% is slight (below 10%)", 1000, 99, reports.VarianceSlight},
+		{"exactly 10% is moderate", 1000, 100, reports.VarianceModerate},
+		{"24% is moderate (below 25%)", 1000, 240, reports.VarianceModerate},
+		{"exactly 25% is large", 1000, 250, reports.VarianceLarge},
+		{"50% is large", 1000, 500, reports.VarianceLarge},
+		{"negative variance uses |ratio| (under budget)", 1000, -300, reports.VarianceLarge},
+		{"zero budget, nonzero variance is large (unbudgeted)", 0, 1500, reports.VarianceLarge},
+		{"both zero is neutral", 0, 0, reports.VarianceNeutral},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := reports.VarianceBucket(c.budgeted, c.varnce); got != c.want {
+				t.Errorf("VarianceBucket(%d, %d) = %q, want %q", c.budgeted, c.varnce, got, c.want)
+			}
+		})
+	}
+}
 
 // budgetReport fetches a registered budget report from the default registry (proving
 // it IS registered under its id in the "budget" group).
@@ -133,33 +166,90 @@ func TestBudgetVarianceGolden(t *testing.T) {
 		t.Fatalf("budget variance produced no data rows")
 	}
 
-	// At least one DATA row must carry a non-zero BUDGETED figure (proving the plan's
-	// projected splits reached the report). The budgeted cell (col 5) must NOT drill.
-	var sawBudgeted bool
+	// p30.9 STRUCTURE: columns are Account | Fund | Program | Currency | <month...> | Total.
+	// The last column is the row Total (a CellMeasures), the columns before it (from index
+	// bvFirstMonth=4) are the month cells (also CellMeasures). A row label must carry the
+	// fully-qualified (dotted-path) ACCOUNT + the FUND + the PROGRAM (rule 1).
+	if got, want := len(table.Columns), 5; got < want {
+		t.Fatalf("budget variance has %d columns, want >= %d (account/fund/program/currency/months/total)", got, want)
+	}
+	totalCol := len(table.Columns) - 1
+
+	// A qualified row label: at least one data row's account cell is a DOTTED path (the
+	// fixture nests the R/E accounts under Revenue/Expenses), and its fund+program cells
+	// are populated -- so the row unambiguously names which account, fund, and program.
+	var sawQualified bool
 	for _, r := range table.Rows {
-		if r.Kind != reports.RowData || len(r.Cells) < 8 {
+		if r.Kind != reports.RowData {
 			continue
 		}
-		if r.Cells[5].Minor != 0 {
-			sawBudgeted = true
-			if r.Cells[5].Drill != nil {
-				t.Errorf("budgeted cell must NOT be drillable (it is a plan)")
+		acct := r.Cells[0].Text
+		if strings.Contains(acct, ".") && r.Cells[1].Text != "" && r.Cells[2].Text != "" {
+			sawQualified = true
+			break
+		}
+	}
+	if !sawQualified {
+		t.Errorf("no data row carried a dotted-path account label with fund+program (rule 1)")
+	}
+
+	// Each grid cell carries all three measures (CellMeasures with budgeted/actual/variance),
+	// and variance == actual − budgeted. At least one row must carry a non-zero BUDGETED
+	// figure somewhere (the plan's projected splits reached the report). Only the ACTUAL
+	// measure drills, and a restricted actual drill reconciles; an unrestricted one is nil.
+	var sawBudgeted, sawMeasures bool
+	for _, r := range table.Rows {
+		if r.Kind != reports.RowData {
+			continue
+		}
+		unrestricted := r.Cells[1].Text == "reports.budget.unrestricted"
+		for col := bvFirstMonth; col <= totalCol; col++ {
+			c := r.Cells[col]
+			if c.Kind != reports.CellMeasures {
+				t.Fatalf("row cell col %d is kind %d, want CellMeasures", col, c.Kind)
 			}
-		}
-		// An unrestricted (fund 0) actual cell is not drillable; the fund label cell
-		// renders the i18n key for the unrestricted group.
-		if r.Cells[2].Text == "reports.budget.unrestricted" && r.Cells[6].Drill != nil {
-			t.Errorf("unrestricted actual cell must NOT be drillable")
-		}
-		// A restricted (proper-noun fund) actual cell that drills must reconcile.
-		if r.Cells[2].Text != "reports.budget.unrestricted" && r.Cells[6].Drill != nil {
-			if sum := drillSum(t, f, r.Cells[6].Drill); sum != r.Cells[6].Minor {
-				t.Errorf("drilled actual sum = %d, want %d (reconciliation)", sum, r.Cells[6].Minor)
+			sawMeasures = true
+			if c.Variance != c.Actual-c.Budgeted {
+				t.Errorf("cell variance %d != actual %d - budgeted %d", c.Variance, c.Actual, c.Budgeted)
+			}
+			if c.Budgeted != 0 {
+				sawBudgeted = true
+			}
+			// An unrestricted cell never drills (fund-IS-NULL inexpressible); the Total
+			// column never drills (it spans months).
+			if (unrestricted || col == totalCol) && c.Drill != nil {
+				t.Errorf("col %d (unrestricted=%v total=%v) must NOT drill", col, unrestricted, col == totalCol)
+			}
+			// A restricted MONTH actual drill must reconcile to the cell's Actual.
+			if !unrestricted && col != totalCol && c.Drill != nil {
+				if sum := drillSum(t, f, c.Drill); sum != c.Actual {
+					t.Errorf("drilled actual sum = %d, want %d (reconciliation)", sum, c.Actual)
+				}
 			}
 		}
 	}
+	if !sawMeasures {
+		t.Errorf("no CellMeasures cell found (the grid should fold three measures per cell)")
+	}
 	if !sawBudgeted {
 		t.Errorf("no variance row carried a non-zero budgeted figure")
+	}
+
+	// A color-bucket class is set on an over/under TOTAL: at least one per-currency
+	// grand-total row's Total cell carries a non-neutral magnitude bucket (rule 4), and
+	// a zero-budget nonzero variance classes LARGE.
+	var sawBucket bool
+	for _, r := range table.Rows {
+		if r.Kind != reports.RowTotal {
+			continue
+		}
+		tc := r.Cells[totalCol]
+		if tc.Kind == reports.CellMeasures && tc.Bucket != reports.VarianceNeutral {
+			sawBucket = true
+		}
+	}
+	if !sawBucket {
+		t.Errorf("no over/under TOTAL carried a color-bucket class (rule 4)")
 	}
 
 	exps := goldenExps(t, f)
@@ -246,7 +336,7 @@ func TestBudgetVarianceGrantProgramScope(t *testing.T) {
 	// No DATA row may carry the General program (the sibling); at least one Educacion row
 	// must survive (both the projected and actual sides are filtered, so a row exists).
 	for _, r := range table.Rows {
-		if r.Kind == reports.RowData && len(r.Cells) >= 4 && r.Cells[3].Text == "General" {
+		if r.Kind == reports.RowData && len(r.Cells) >= 3 && r.Cells[2].Text == "General" {
 			t.Errorf("scoped budget variance leaks a General-program row: %+v", r.Cells)
 		}
 	}
@@ -267,10 +357,10 @@ func TestBudgetVarianceGrantProgramScope(t *testing.T) {
 }
 
 // bvHasProgramRow reports whether any DATA row of a budget-variance table carries the given
-// program name in the program column (index 3).
+// program name in the program column (p30.9: index 2).
 func bvHasProgramRow(t reports.Table, program string) bool {
 	for _, r := range t.Rows {
-		if r.Kind == reports.RowData && len(r.Cells) >= 4 && r.Cells[3].Text == program {
+		if r.Kind == reports.RowData && len(r.Cells) >= 3 && r.Cells[2].Text == program {
 			return true
 		}
 	}
@@ -280,13 +370,15 @@ func bvHasProgramRow(t reports.Table, program string) bool {
 // bvTotals holds a budget-variance TOTAL row's budgeted + actual figures (a currency).
 type bvTotals struct{ budgeted, actual int64 }
 
-// bvTotalFor returns the budgeted/actual figures of the per-currency TOTAL row (the label
-// row whose currency cell, index 4, equals ccy). Columns: [bucket, account, fund, program,
-// currency, budgeted, actual, variance].
+// bvTotalFor returns the budgeted/actual figures of the per-currency grand-TOTAL row (the
+// label row whose currency cell, index 3, equals ccy). Columns (p30.9): Account | Fund |
+// Program | Currency | <month...> | Total; the Total cell (last) is a CellMeasures folding
+// budgeted/actual/variance.
 func bvTotalFor(t reports.Table, ccy string) (bvTotals, bool) {
 	for _, r := range t.Rows {
-		if r.Kind == reports.RowTotal && len(r.Cells) >= 7 && r.Cells[4].Text == ccy {
-			return bvTotals{budgeted: r.Cells[5].Minor, actual: r.Cells[6].Minor}, true
+		if r.Kind == reports.RowTotal && len(r.Cells) >= 5 && r.Cells[3].Text == ccy {
+			tc := r.Cells[len(r.Cells)-1]
+			return bvTotals{budgeted: tc.Budgeted, actual: tc.Actual}, true
 		}
 	}
 	return bvTotals{}, false

@@ -1,14 +1,10 @@
-   Period      Account               Fund           Program      Currency        Budgeted          Actual        Variance
--  ----------  --------------------  -------------  -----------  --------  --------------  --------------  --------------
-   2026-01-01  Contributions         Unrestricted   General      USD       USD -$4,000.00       USD $0.00   USD $4,000.00
-   2026-01-01  Program Service Fees  Unrestricted   Educacion    USD            USD $0.00  USD -$1,200.00  USD -$1,200.00
-   2026-01-01  Occupancy             Building Fund  Educacion    USD          USD $900.00       USD $0.00    USD -$900.00
-   2026-02-01  Salaries              Unrestricted   General      USD        USD $1,800.00   USD $8,500.00   USD $6,700.00
-   2026-03-01  Program Service Fees  Unrestricted   Educacion    USD       USD -$1,200.00       USD $0.00   USD $1,200.00
-   2026-03-01  Food Purchases        Unrestricted   Food Pantry  MXN            MXN $0.00   MXN $1,500.00   MXN $1,500.00
-   2026-04-01  Contributions         Unrestricted   General      USD       USD -$3,500.00       USD $0.00   USD $3,500.00
-   2026-04-01  Occupancy             Building Fund  Educacion    USD          USD $900.00       USD $0.00    USD -$900.00
-   2026-05-01  Salaries              Unrestricted   General      USD        USD $1,850.00       USD $0.00  USD -$1,850.00
-   2026-05-01  Occupancy             Unrestricted   General      USD            USD $0.00   USD $1,550.00   USD $1,550.00
-=  Total                                                         MXN            MXN $0.00   MXN $1,500.00   MXN $1,500.00
-=  Total                                                         USD       USD -$3,250.00   USD $8,850.00  USD $12,100.00
+   Account                       Fund           Program      Currency                           2026-01-01                             2026-02-01                          2026-03-01                          2026-04-01                          2026-05-01                 2026-06-01                                    Total
+-  ----------------------------  -------------  -----------  --------  -----------------------------------  -------------------------------------  ----------------------------------  ----------------------------------  ----------------------------------  -------------------------  ---------------------------------------
+   Expenses.Food Purchases       Unrestricted   Food Pantry  MXN                 MXN $0.00 / $0.00 / $0.00              MXN $0.00 / $0.00 / $0.00   MXN $0.00 / $1,500.00 / $1,500.00           MXN $0.00 / $0.00 / $0.00           MXN $0.00 / $0.00 / $0.00  MXN $0.00 / $0.00 / $0.00        MXN $0.00 / $1,500.00 / $1,500.00
+   Expenses.Occupancy            Unrestricted   General      USD                 USD $0.00 / $0.00 / $0.00              USD $0.00 / $0.00 / $0.00           USD $0.00 / $0.00 / $0.00           USD $0.00 / $0.00 / $0.00   USD $0.00 / $1,550.00 / $1,550.00  USD $0.00 / $0.00 / $0.00        USD $0.00 / $1,550.00 / $1,550.00
+   Expenses.Occupancy            Building Fund  Educacion    USD            USD $900.00 / $0.00 / -$900.00              USD $0.00 / $0.00 / $0.00           USD $0.00 / $0.00 / $0.00      USD $900.00 / $0.00 / -$900.00           USD $0.00 / $0.00 / $0.00  USD $0.00 / $0.00 / $0.00       USD $1,800.00 / $0.00 / -$1,800.00
+   Expenses.Salaries             Unrestricted   General      USD                 USD $0.00 / $0.00 / $0.00  USD $1,800.00 / $8,500.00 / $6,700.00           USD $0.00 / $0.00 / $0.00           USD $0.00 / $0.00 / $0.00  USD $1,850.00 / $0.00 / -$1,850.00  USD $0.00 / $0.00 / $0.00    USD $3,650.00 / $8,500.00 / $4,850.00
+   Revenue.Contributions         Unrestricted   General      USD        USD -$4,000.00 / $0.00 / $4,000.00              USD $0.00 / $0.00 / $0.00           USD $0.00 / $0.00 / $0.00  USD -$3,500.00 / $0.00 / $3,500.00           USD $0.00 / $0.00 / $0.00  USD $0.00 / $0.00 / $0.00       USD -$7,500.00 / $0.00 / $7,500.00
+   Revenue.Program Service Fees  Unrestricted   Educacion    USD       USD $0.00 / -$1,200.00 / -$1,200.00              USD $0.00 / $0.00 / $0.00  USD -$1,200.00 / $0.00 / $1,200.00           USD $0.00 / $0.00 / $0.00           USD $0.00 / $0.00 / $0.00  USD $0.00 / $0.00 / $0.00      USD -$1,200.00 / -$1,200.00 / $0.00
+=  Total                                                     MXN                                                                                                                                                                                                                                MXN $0.00 / $1,500.00 / $1,500.00
+=  Total                                                     USD                                                                                                                                                                                                                          USD -$3,250.00 / $8,850.00 / $12,100.00

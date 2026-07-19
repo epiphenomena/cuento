@@ -68,6 +68,13 @@ func csvCell(c Cell, exps map[string]int) string {
 			Neg:     money.Minus,
 			Display: money.Signed,
 		})
+	case CellMeasures:
+		// p30.9: all three measures, ';'-separated (not a comma, so csv never has to
+		// quote), machine-recoverable in fixed budgeted;actual;variance order.
+		exp := exps[c.Currency]
+		opts := money.FormatOpts{Number: money.NumberPlain, Neg: money.Minus, Display: money.Signed}
+		f := func(m int64) string { return money.Format(m, exp, opts) }
+		return f(c.Budgeted) + ";" + f(c.Actual) + ";" + f(c.Variance)
 	default: // CellText, CellDate
 		return c.Text
 	}

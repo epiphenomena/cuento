@@ -96,6 +96,15 @@ const (
 	CellMoney
 	// CellDate is an ISO (YYYY-MM-DD) date string.
 	CellDate
+	// CellMeasures (p30.9) is a budget-variance grid cell folding THREE co-located
+	// money measures — budgeted, actual, variance — in one currency, so the web
+	// renderer can emit all three (each formatted server-side, rule 10) and a client
+	// module shows one at a time without a round trip. The text/CSV renderers emit all
+	// three compound (B/A/V) so the golden stays reconcilable. Budgeted/Actual/Variance
+	// hold the exact minor-unit amounts; Currency the ISO code; Bucket the over/under
+	// magnitude class (empty = neutral, no color); ActualDrill the actual measure's
+	// drill (the budgeted/variance measures never drill — a plan and a derived figure).
+	CellMeasures
 )
 
 // Cell is one typed table cell. Exactly one value field is meaningful per Kind:
@@ -123,6 +132,20 @@ type Cell struct {
 	// to drill). It is data-only and pure, so the CSV/text renderers ignore it (the
 	// golden is unchanged) and the reconciliation invariant is unit-testable.
 	Drill *Drill
+
+	// Budgeted / Actual / Variance are the three folded measures of a CellMeasures cell
+	// (p30.9), exact minor units in Currency. Variance = Actual − Budgeted (the report's
+	// net-debit convention: positive = over budget / under-collection). Unused (zero) on
+	// every other cell kind.
+	Budgeted int64
+	Actual   int64
+	Variance int64
+	// Bucket is a CellMeasures cell's over/under-budget MAGNITUDE class (p30.9): "" =
+	// neutral (no color, e.g. a per-month data cell or a zero variance), else one of
+	// the varianceBucket* names the web layer maps to a theme-aware CSS class. Set only
+	// on TOTAL cells (row-total column + grand-total rows) so color reinforces the
+	// variance sign there; ignored by the text/CSV renderers (color is presentation).
+	Bucket string
 
 	// TxnID, when nonzero, links this cell to the transaction editor/history (p12.4):
 	// the web layer renders the cell's value as a link to /transactions/{TxnID}/edit.
@@ -175,3 +198,57 @@ func MoneyCell(minor int64, currency string) Cell {
 // BlankMoneyCell builds a money cell that renders empty (not a formatted zero),
 // for the amount columns of a pure label/heading row.
 func BlankMoneyCell() Cell { return Cell{Kind: CellMoney, Blank: true} }
+
+// Over/under-budget magnitude buckets (p30.9): a variance total's |variance|/|budgeted|
+// ratio deepens the color. The names are the CSS-class suffix the web layer maps to a
+// theme-aware token; "" (VarianceNeutral) means no color. A zero-budget-but-nonzero
+// actual variance is inexpressible as a ratio, so it classes LARGE (a wholly
+// unbudgeted/uncollected figure is the strongest signal); both-zero is neutral.
+const (
+	VarianceNeutral  = ""
+	VarianceSlight   = "slight"
+	VarianceModerate = "moderate"
+	VarianceLarge    = "large"
+)
+
+// VarianceBucket classifies a variance total into its over/under magnitude bucket from
+// the |variance|/|budgeted| ratio (p30.9). It returns the bucket NAME only — the SIGN
+// (over vs under) is the web layer's concern (positive variance = over = red ramp;
+// negative = under = green ramp), so this is a pure magnitude decision, unit-testable
+// at the reports level. Thresholds (DECISIONS p30.9): <10% slight, <25% moderate, else
+// large; a zero budget with a nonzero variance is large (unbudgeted); both-zero neutral.
+func VarianceBucket(budgeted, variance int64) string {
+	if variance == 0 {
+		return VarianceNeutral
+	}
+	if budgeted == 0 {
+		return VarianceLarge // nonzero variance against no budget: the strongest signal
+	}
+	absV, absB := variance, budgeted
+	if absV < 0 {
+		absV = -absV
+	}
+	if absB < 0 {
+		absB = -absB
+	}
+	switch {
+	case absV*100 < absB*10: // ratio < 0.10
+		return VarianceSlight
+	case absV*100 < absB*25: // ratio < 0.25
+		return VarianceModerate
+	default:
+		return VarianceLarge
+	}
+}
+
+// MeasuresCell builds a budget-variance grid cell (p30.9) folding the three measures
+// (budgeted, actual, variance) in one currency, with an over/under magnitude bucket
+// (VarianceBucket; "" = neutral). The web layer renders all three formatted spans and a
+// client module toggles which shows; the text/CSV renderers emit all three compound.
+// The ACTUAL measure opts into a drill via WithDrill (only the actual is posted data).
+func MeasuresCell(budgeted, actual, variance int64, currency, bucket string) Cell {
+	return Cell{
+		Kind: CellMeasures, Currency: currency,
+		Budgeted: budgeted, Actual: actual, Variance: variance, Bucket: bucket,
+	}
+}

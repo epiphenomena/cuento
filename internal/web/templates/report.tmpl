@@ -247,6 +247,21 @@
   </div>
   {{end}}
 
+  {{/* p30.9: the budget-variance MEASURE toggle — a radio-like button group that switches
+       which of the three folded measures (Budgeted / Actual / Variance) the grid shows,
+       INSTANTLY and client-side (budgetvariance.js flips the table's data-measure attr; CSS
+       shows the matching spans). No-JS: the table's default data-measure (variance) already
+       shows via CSS, and these plain buttons do nothing (no form, no href) — the report is
+       still usable. Strict CSP: no inline handler; the module wires the clicks. The pressed
+       button starts on the default measure. */}}
+  {{if .MeasureToggle}}
+  <div class="report-controls bv-measure-toggle" role="group" aria-label="{{t "reports.budget_variance.measure"}}">
+    <button type="button" class="btn btn-ghost bv-measure-btn" data-measure="budgeted" aria-pressed="false">{{t "reports.budget_variance.col.budgeted"}}</button>
+    <button type="button" class="btn btn-ghost bv-measure-btn" data-measure="actual" aria-pressed="false">{{t "reports.budget_variance.col.actual"}}</button>
+    <button type="button" class="btn btn-ghost bv-measure-btn" data-measure="variance" aria-pressed="true">{{t "reports.budget_variance.col.variance"}}</button>
+  </div>
+  {{end}}
+
   {{/* p26.54: the table scrolls inside .report-scroll with STICKY headers -- the top
        header row and the left (first) column stay visible while a wide/tall matrix (e.g.
        the program statement) scrolls. Scoped to @media screen so print/PDF/CSV are
@@ -254,7 +269,7 @@
        Table, not this shell) nor the treetable controls (findControls falls back to the
        page-level .tree-controls). */}}
   <div class="report-scroll">
-  <table class="report-table{{if .Tree}} tree-table{{end}}">
+  <table class="report-table{{if .Tree}} tree-table{{end}}{{if .MeasureToggle}} bv-table{{end}}"{{if .MeasureToggle}} data-measure="variance"{{end}}>
     <thead>
       <tr>
         {{- range .Table.Columns}}
@@ -266,7 +281,21 @@
       {{- range .Table.Rows}}
       <tr class="report-row report-indent-{{.Indent}}{{if .Subtotal}} report-subtotal{{end}}{{if .Total}} report-total{{end}}{{if .Warning}} report-warning{{end}}"{{if $.Tree}} data-depth="{{.Indent}}"{{end}}{{if .Warning}} role="alert"{{end}}>
         {{- range .Cells}}
+        {{- if .Measures}}
+        {{/* p30.9: a budget-variance grid cell folds all three measures into three spans;
+             budgetvariance.js shows one at a time via the table's data-measure attribute
+             (CSS show/hide). No-JS: CSS shows the default (variance) span, buttons inert.
+             Only the ACTUAL span carries the drill link (posted actuals), so the link is
+             live exactly when Actual is displayed — no client link-rewrapping. The variance
+             span carries the over/under magnitude class on the TOTAL cells (color). */}}
+        <td class="amount bv-cell">{{with .Measures -}}
+          <span class="bv-measure bv-budgeted">{{.Budgeted}}</span>
+          <span class="bv-measure bv-actual">{{if .ActualHref}}<a class="report-drill-link" href="{{.ActualHref}}">{{.Actual}}</a>{{else}}{{.Actual}}{{end}}</span>
+          <span class="bv-measure bv-variance{{if .Bucket}} bv-{{.Bucket}}{{end}}">{{.Variance}}</span>
+        {{- end}}</td>
+        {{- else}}
         <td{{if .Right}} class="amount"{{end}}>{{if .Href}}<a class="report-drill-link" href="{{.Href}}">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>
+        {{- end}}
         {{- end}}
       </tr>
       {{- else}}
@@ -297,6 +326,16 @@
        re-runs on htmx:afterSwap when a filter change replaces #report-results. It
        enhances every table.tree-table, looking up the sibling .tree-controls container. */}}
   <script type="module" src="{{asset "treetable.js"}}"></script>
+  {{end}}
+
+  {{if .MeasureToggle}}
+  {{/* p30.9: the budget-variance measure toggle module. Loaded on the PAGE (a script
+       injected by an htmx innerHTML swap would not execute); self-inits on
+       DOMContentLoaded and re-wires on htmx:afterSwap when a filter change replaces
+       #report-results (the buttons + table swap together). It wires every .bv-table to its
+       sibling .bv-measure-toggle and flips the table's data-measure attribute on click —
+       no server round trip. */}}
+  <script type="module" src="{{asset "budgetvariance.js"}}"></script>
   {{end}}
   {{- end}}
 {{template "shell-close" .}}

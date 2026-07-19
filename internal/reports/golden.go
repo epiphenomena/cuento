@@ -132,6 +132,12 @@ func dumpCell(c Cell, localize func(key string) string, exps map[string]int) str
 		// the per-currency symbol via FormatMoney, so the golden shows every cell
 		// gaining its symbol while USD/MXN (both "$") stay distinguishable.
 		return c.Currency + " " + money.FormatMoney(c.Minor, c.Currency, exps[c.Currency], GoldenMoneyOpts)
+	case CellMeasures:
+		// p30.9: all three measures compound (B / A / V), currency-prefixed once, so the
+		// golden stays reconcilable (a reviewer confirms V = A − B and the totals sum).
+		exp := exps[c.Currency]
+		f := func(m int64) string { return money.FormatMoney(m, c.Currency, exp, GoldenMoneyOpts) }
+		return c.Currency + " " + f(c.Budgeted) + " / " + f(c.Actual) + " / " + f(c.Variance)
 	case CellLabel:
 		return localize(c.Text)
 	default: // CellText, CellDate

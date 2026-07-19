@@ -1457,6 +1457,10 @@ other = "Presupuestado"
 other = "Real"
 [reports.budget_variance.col.variance]
 other = "Variación"
+[reports.budget_variance.col.total]
+other = "Total"
+[reports.budget_variance.measure]
+other = "Medida"
 [reports.budget_variance.total]
 other = "Total"
 [reports.cashflow_projection.title]

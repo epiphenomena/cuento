@@ -759,6 +759,12 @@ type reportPageModel struct {
 	// columns renders in the FULL-viewport-width shell (app-main-full) so no column
 	// truncates/scrolls. False keeps the ordinary wide shell (100rem reading cap).
 	FullWidth bool
+	// MeasureToggle (p30.9) mirrors reports.Report.MeasureToggle: the budget-variance
+	// grid folds three measures per cell (budgeted/actual/variance) and offers a
+	// client-side button group to switch which shows. The template then renders the
+	// toggle above the table (with a default-measure table attribute) and loads
+	// budgetvariance.js. False renders no toggle (byte-identical to before).
+	MeasureToggle bool
 }
 
 // renderedTable is a Table prepared for the HTML template: localized column headers
@@ -792,6 +798,24 @@ type renderedCell struct {
 	// handler). It is set for a drillable cell (Cell.Drill != nil), pointing at the
 	// report's /reports/{id}/drill route with the encoded filter.
 	Href string
+	// Measures (p30.9), when non-nil, marks a budget-variance grid cell that carries
+	// THREE pre-formatted measures (budgeted/actual/variance) the template renders as
+	// three toggle-able spans instead of a single value. Mutually exclusive with a plain
+	// Text render.
+	Measures *renderedMeasures
+}
+
+// renderedMeasures holds the three pre-formatted measure strings of a CellMeasures cell
+// (p30.9), each formatted server-side per the user's settings (rule 10 -- the JS never
+// does money math, it only shows/hides). ActualHref carries the actual measure's drill
+// link (only the posted actuals drill); Bucket is the over/under CSS-class suffix ("" =
+// no color) the template stamps on the variance span so a total reads its magnitude.
+type renderedMeasures struct {
+	Budgeted   string
+	Actual     string
+	Variance   string
+	ActualHref string
+	Bucket     string // "" | "over-slight" | "under-large" | ... (signed magnitude class)
 }
 
 // renderTable turns a reports.Table into the display-ready renderedTable for lang,
@@ -849,6 +873,20 @@ func renderCell(c reports.Cell, reportID, lang string, opts money.FormatOpts, df
 			Right: true,
 			Href:  href,
 		}
+	case reports.CellMeasures:
+		// p30.9: format all three measures server-side (rule 10) into three spans the
+		// client toggles; the ACTUAL span carries the drill (only posted actuals drill).
+		exp := exps[c.Currency]
+		return renderedCell{
+			Right: true,
+			Measures: &renderedMeasures{
+				Budgeted:   money.FormatMoney(c.Budgeted, c.Currency, exp, opts),
+				Actual:     money.FormatMoney(c.Actual, c.Currency, exp, opts),
+				Variance:   money.FormatMoney(c.Variance, c.Currency, exp, opts),
+				ActualHref: href,
+				Bucket:     measureBucketClass(c.Variance, c.Bucket),
+			},
+		}
 	case reports.CellDate:
 		if c.Text == "" {
 			return renderedCell{}
@@ -859,6 +897,23 @@ func renderCell(c reports.Cell, reportID, lang string, opts money.FormatOpts, df
 	default: // CellText -- a stored proper noun, verbatim
 		return renderedCell{Text: c.Text}
 	}
+}
+
+// measureBucketClass maps a variance total's SIGN (over vs under budget) and its
+// magnitude bucket (reports.VarianceBucket name) to a CSS-class suffix the template
+// stamps on the variance span (p30.9). Positive variance = OVER budget (a red ramp);
+// negative = UNDER (a green ramp); the magnitude deepens the shade. "" (neutral bucket
+// or zero variance) => no class (no color). The number's sign already carries over/under
+// for accessibility; the color only reinforces it (never the sole cue).
+func measureBucketClass(variance int64, bucket string) string {
+	if bucket == reports.VarianceNeutral {
+		return ""
+	}
+	dir := "over"
+	if variance < 0 {
+		dir = "under"
+	}
+	return dir + "-" + bucket // e.g. "over-slight", "under-large"
 }
 
 // ---- index (p15.12) -------------------------------------------------------
@@ -958,10 +1013,11 @@ func (s *server) reportPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	model := reportPageModel{
-		Title:     i18n.T(lang, rep.TitleKey),
-		Params:    form,
-		Tree:      rep.Tree,       // p26.26: nested-account reports emit data-depth + tree controls.
-		FullWidth: rep.WideMatrix, // p29.11: comparative statements use the full-viewport shell.
+		Title:         i18n.T(lang, rep.TitleKey),
+		Params:        form,
+		Tree:          rep.Tree,          // p26.26: nested-account reports emit data-depth + tree controls.
+		FullWidth:     rep.WideMatrix,    // p29.11: comparative statements use the full-viewport shell.
+		MeasureToggle: rep.MeasureToggle, // p30.9: budget variance offers the measure toggle.
 	}
 
 	table, err := rep.Run(ctx, reports.NewToolkit(s.store, params), params)

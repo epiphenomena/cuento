@@ -792,6 +792,35 @@ input[aria-invalid="true"] {
    column picks up the same highlight instead of masking it with its opaque bg. */
 .report-table tbody tr:hover { background: var(--color-surface-alt); }
 
+/* p30.9 BUDGET-VARIANCE measure toggle + magnitude color-coding.
+   Each grid cell (.bv-cell) folds all three measures into three spans; the table's
+   data-measure attribute (flipped by budgetvariance.js, defaulted server-side to
+   "variance") selects which spans show — no server round-trip, no client money math
+   (the values are pre-formatted, rule 10). No-JS: the default data-measure shows the
+   variance spans and the inert buttons do nothing. */
+.bv-measure { display: none; }
+.bv-table[data-measure="budgeted"] .bv-budgeted,
+.bv-table[data-measure="actual"] .bv-actual,
+.bv-table[data-measure="variance"] .bv-variance { display: inline; }
+/* The toggle button group: mark the active measure. aria-pressed is the source of truth
+   (accessible); the visual pressed style mirrors it so the choice is obvious. */
+.bv-measure-toggle { display: flex; gap: var(--space-2); }
+.bv-measure-btn[aria-pressed="true"] {
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  border-color: var(--color-primary);
+}
+/* Magnitude buckets on a variance TOTAL: over budget = red ramp, under = green ramp,
+   deepening with |variance|/|budgeted| (slight → moderate → large). Theme-aware via the
+   light-dark() token pairs. Color only REINFORCES the sign the number already carries
+   (accessibility: never the sole cue) — a bold weight backs it up too. */
+.bv-over-slight   { color: light-dark(#c25a52, #ff9a94); }
+.bv-over-moderate { color: light-dark(#b3261e, #ff8079); font-weight: 600; }
+.bv-over-large    { color: light-dark(#8f1d17, #ff5c52); font-weight: 700; }
+.bv-under-slight   { color: light-dark(#3f8f5b, #8fe6a5); }
+.bv-under-moderate { color: light-dark(#1f7a3d, #6fdd8b); font-weight: 600; }
+.bv-under-large    { color: light-dark(#155c2c, #52d377); font-weight: 700; }
+
 /* p26.54: a wide/tall report matrix (e.g. the program statement) scrolls inside
    .report-scroll with STICKY headers -- the top header ROW and the left (first) COLUMN
    stay visible while scrolling. Scoped to @media screen so print/PDF is never clipped by

@@ -83,6 +83,15 @@ type Report struct {
 	// EXPLICITLY here rather than inferred from ParamsSpec.Program, because the
 	// program-dimensioned set is broader than the reports offering a program selector.
 	ProgramDimensioned bool
+
+	// MeasureToggle marks a report whose money grid folds THREE co-located measures per
+	// cell (budgeted / actual / variance -- CellMeasures) that the web layer lets the
+	// user switch between INSTANTLY, client-side, with a button group (p30.9). The web
+	// layer reads this to render the measure toggle above the table and load the
+	// budgetvariance.js module (which shows one measure at a time via a table-level
+	// data-measure attribute). Only budget_variance sets it; every other report leaves
+	// it false and renders no toggle (byte-identical).
+	MeasureToggle bool
 }
 
 // Groups returns the code-declared report-group set (D10): the permission buckets

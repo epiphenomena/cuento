@@ -1213,3 +1213,104 @@ test('reports: open the 990 package, see the four Parts + Unmapped buckets + tot
   const body990 = await resp990.text();
   expect(body990).toContain(',');
 });
+
+const BV = '/reports/budget_variance';
+
+// p30.9 BUDGET-VARIANCE REDESIGN: the report is a MONTHLY pivot with qualified row labels
+// and a MEASURE TOGGLE (Budgeted / Actual / Variance) that switches which measure the grid
+// shows INSTANTLY, client-side, with NO server round-trip. This spec SEEDS a budget plan
+// with a projected revenue split + a matching posted revenue transaction (so the grid has
+// both a budgeted and an actual figure to toggle between), opens the report, and:
+//   - confirms the monthly grid renders with the qualified columns (Account/Fund/Program/
+//     Currency + month columns + Total) and the three-button measure toggle;
+//   - the default measure is Variance (its button pressed, the table's data-measure attr);
+//   - clicking "Actual" flips the table's data-measure to "actual" with NO network request
+//     (the whole point: all three values are already in the page, the JS only shows/hides).
+//
+// This test MUTATES (creates an account, a plan+split, a txn); names are unique so it never
+// collides with sibling specs sharing the worker db, and it only ADDS rows. Strict CSP
+// (script-src 'self') => NO page.waitForFunction; only locator/URL/attribute waits.
+test('reports: budget variance renders the monthly grid + toggles the measure with no round trip', async ({
+  page,
+  server,
+}) => {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  const revName = `BV Gift E2E ${suffix}`;
+  const cashName = `BV Cash E2E ${suffix}`;
+  const planName = `BV Plan E2E ${suffix}`;
+
+  await login(page, server);
+
+  // --- seed: a revenue leaf + a cash asset (the receipt's two legs) ---
+  await createRevenueAccount(page, revName);
+  await createAsset(page, cashName);
+
+  // --- a budget plan with ONE projected revenue split for that account (2026-02) ---
+  await page.goto('/budget-plans');
+  await page.locator('#new-budget-plan').click();
+  await page.locator('#bpf-name').fill(planName);
+  await page.locator('#budget-plan-create').click();
+  await page.waitForURL('**/budget-plans/*');
+  const planPath = new URL(page.url()).pathname;
+  await page.locator('#bs-account-0').selectOption({ label: revName });
+  await page.locator('#bs-date-0').fill('2026-02-15');
+  await page.locator('#bs-amount-0').fill('500.00');
+  await page.locator('#bs-program-0').selectOption({ label: 'General' }); // R/E needs a program
+  const planReload = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === planPath && r.request().method() === 'GET',
+  );
+  await page.locator('#budget-save-splits').click();
+  await planReload;
+
+  // --- a matching posted revenue receipt (the ACTUAL side) in the plan span ---
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await page.locator('#txn-main-account').selectOption({ label: cashName });
+  await page.locator('#txn-account-0').selectOption({ label: revName });
+  await page.locator('#txn-amount-0').fill('-320.00'); // a revenue credit (net-debit negative)
+  await page.locator('#txn-date').fill('2026-02-20');
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+  // --- open the budget variance report on the seeded plan over its span ---
+  await page.goto(BV);
+  const budgetSel = page.locator('select.report-budget-select[name="budget"]');
+  await expect(budgetSel).toBeVisible();
+  const planVal = await budgetSel.locator('option', { hasText: planName }).getAttribute('value');
+  await page.goto(`${BV}?scope=1&budget=${planVal}&from=2026-01-01&to=2026-03-31`);
+
+  // The monthly-pivot table renders with the qualified columns + month columns + Total.
+  const table = page.locator('table.report-table.bv-table');
+  await expect(table).toBeVisible();
+  const headers = page.locator('table.report-table thead th');
+  // Account | Fund | Program | Currency | >=3 months | Total => >= 6 columns (a flat
+  // per-period layout could not produce the qualified + monthly grid).
+  expect(await headers.count()).toBeGreaterThanOrEqual(6);
+  await expect(page.locator('table.report-table thead')).toContainText('Total');
+  // A qualified row label: the account name in the first column + its fund + program.
+  await expect(table).toContainText(revName);
+  await expect(table).toContainText('Unrestricted');
+  await expect(table).toContainText('General');
+
+  // --- the MEASURE TOGGLE: three buttons; Variance pressed by default (also the table attr) ---
+  const toggle = page.locator('.bv-measure-toggle');
+  await expect(toggle).toBeVisible();
+  await expect(toggle.locator('.bv-measure-btn')).toHaveCount(3);
+  await expect(table).toHaveAttribute('data-measure', 'variance');
+  await expect(page.locator('.bv-measure-btn[data-measure="variance"]')).toHaveAttribute('aria-pressed', 'true');
+
+  // --- click "Actual": the displayed measure switches with NO network request. We record any
+  // request to the report endpoint during the click; the table's data-measure attribute flips
+  // purely client-side (all three values are already in the page — the JS only shows/hides). ---
+  let sawRequest = false;
+  const onReq = (req) => {
+    if (req.url().includes('/reports/budget_variance')) sawRequest = true;
+  };
+  page.on('request', onReq);
+  await page.locator('.bv-measure-btn[data-measure="actual"]').click();
+  await expect(table).toHaveAttribute('data-measure', 'actual'); // switched (client-side)
+  await expect(page.locator('.bv-measure-btn[data-measure="actual"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.bv-measure-btn[data-measure="variance"]')).toHaveAttribute('aria-pressed', 'false');
+  page.off('request', onReq);
+  expect(sawRequest).toBe(false); // no server round-trip: the switch is pure JS show/hide
+});
