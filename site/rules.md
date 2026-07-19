@@ -23,7 +23,7 @@ Every database write goes through one helper in the store package; handlers,
 reports, and the CLI never open transactions or execute writes directly. Reads
 outside the store go only through generated queries. One choke point is where
 versioning, actor attribution, and the ledger invariants are enforced. See
-[Data integrity](data-integrity.md).
+[Data integrity](data-integrity.html).
 
 ## 3. Money is exact
 
@@ -37,7 +37,7 @@ drift.
 The schema is defined by embedded, forward-only, numbered migrations. An applied
 migration is never edited, there are no down migrations, and the runner backs up
 the database file before applying anything. The schema history is reproducible
-and cannot be reversed by accident. See [Architecture](architecture.md).
+and cannot be reversed by accident. See [Architecture](architecture.html).
 
 ## 5. Everything is versioned
 
@@ -61,13 +61,13 @@ exactly on revenue and expense splits and within the fund's program scope; a
 functional class present exactly on expense splits. Each is enforced in the store
 on write and independently re-verified by the `cuento check` command; schema
 triggers cover the row-local subset. Correctness is guaranteed at write time and
-auditable after the fact. See [Data integrity](data-integrity.md).
+auditable after the fact. See [Data integrity](data-integrity.html).
 
 ## 8. Routes exist only through the registry
 
 Every route is declared in one registry with an explicit permission, and a
 permission-matrix test picks up new routes automatically. A route that bypasses
-the registry is treated as a security defect. See [Security](security.md).
+the registry is treated as a security defect. See [Security](security.html).
 
 ## 9. No user-visible string outside the translation catalogs
 
@@ -93,7 +93,7 @@ fixture exclusively, and the one-shot historical importer runs locally only.
 html/template, a vendored pinned copy of htmx, and small hand-written ES modules
 — no framework, no bundler, no CDN, no inline scripts, and a strict
 Content-Security-Policy. JavaScript is unit-tested, and end-to-end behavior is
-covered by a browser test suite. See [Architecture](architecture.md).
+covered by a browser test suite. See [Architecture](architecture.html).
 
 ## 13. A defined security posture
 
@@ -101,7 +101,7 @@ argon2id password hashing; server-side sessions stored in SQLite; HttpOnly,
 SameSite cookies (Secure outside local development); cross-origin protection on
 every mutating route; rate-limited login; uniform authentication errors that do
 not reveal whether an account exists; and security headers asserted by tests
-across every route. See [Security](security.md).
+across every route. See [Security](security.html).
 
 ## 14. The audit trail is sacred
 
