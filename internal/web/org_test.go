@@ -17,7 +17,9 @@ import (
 // a real migrated db, reusing accountsApp/asUser/mkUser (p11.1 helpers).
 
 // TestOrgPageRenders: GET /admin/org (Admin) renders the form prefilled from the
-// seeded settings (enabled_languages = en,es).
+// seeded settings (enabled_languages = en,es). The org display name is DERIVED from
+// the root subsidiary (p30.14) and shown read-only -- the editable org_name input
+// is gone.
 func TestOrgPageRenders(t *testing.T) {
 	h, st, sm := accountsApp(t)
 	admin := mkUser(t, st, "admin2", "none", true)
@@ -27,8 +29,8 @@ func TestOrgPageRenders(t *testing.T) {
 		t.Fatalf("GET /admin/org as admin: status=%d, body: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `name="org_name"`) {
-		t.Errorf("org form missing org_name input; body: %s", body)
+	if strings.Contains(body, `name="org_name"`) {
+		t.Errorf("org form still has the retired org_name input; body: %s", body)
 	}
 	if !strings.Contains(body, `name="enabled_languages"`) {
 		t.Errorf("org form missing enabled_languages input; body: %s", body)
@@ -36,30 +38,33 @@ func TestOrgPageRenders(t *testing.T) {
 	if !strings.Contains(body, "en,es") {
 		t.Errorf("org form does not prefill seeded enabled_languages; body: %s", body)
 	}
+	// The derived org display name (the root subsidiary's name) is shown, pointing
+	// the admin at /admin/subsidiaries to change it.
+	rootName, err := st.RootSubsidiaryName(context.Background())
+	if err != nil {
+		t.Fatalf("RootSubsidiaryName: %v", err)
+	}
+	if !strings.Contains(body, rootName) {
+		t.Errorf("org page does not show the derived org name %q; body: %s", rootName, body)
+	}
+	if !strings.Contains(body, `href="/admin/subsidiaries"`) {
+		t.Errorf("org page does not link to /admin/subsidiaries; body: %s", body)
+	}
 }
 
-// TestOrgSettingsPersist: POSTing the org form stores org_name and
-// enabled_languages; they read back through the store.
+// TestOrgSettingsPersist: POSTing the org form stores enabled_languages; it reads
+// back through the store. (org_name was retired, p30.14.)
 func TestOrgSettingsPersist(t *testing.T) {
 	h, st, sm := accountsApp(t)
 	admin := mkUser(t, st, "admin2", "none", true)
 	ctx := context.Background()
 
 	form := url.Values{}
-	form.Set("org_name", "FitSupply")
 	form.Set("enabled_languages", "en,es,fr")
 
 	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/org", form)
 	if rec.Code >= 400 {
 		t.Fatalf("POST /admin/org returned %d, body: %s", rec.Code, rec.Body.String())
-	}
-
-	name, err := st.OrgSetting(ctx, store.SettingOrgName, "")
-	if err != nil {
-		t.Fatalf("OrgSetting org_name: %v", err)
-	}
-	if name != "FitSupply" {
-		t.Errorf("org_name = %q, want FitSupply", name)
 	}
 
 	langs, err := st.EnabledLanguages(ctx)
@@ -89,7 +94,7 @@ func TestOrgFormAdminOnly(t *testing.T) {
 		t.Errorf("GET /admin/org as bookkeeper: status=%d, want 403", rec.Code)
 	}
 	rec = asUser(t, h, sm, book, http.MethodPost, "/admin/org",
-		url.Values{"org_name": {"x"}, "enabled_languages": {"en"}})
+		url.Values{"enabled_languages": {"en"}})
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("POST /admin/org as bookkeeper: status=%d, want 403", rec.Code)
 	}

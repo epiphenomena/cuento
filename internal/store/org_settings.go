@@ -20,18 +20,18 @@ import (
 //
 // Report base currency is INTENTIONALLY NOT a setting here: it follows the scoped
 // subsidiary's base_currency (D18), so it lives on subsidiaries, not org_settings.
+//
+// The former org_name setting was RETIRED (p30.14): the organization's display
+// name is now DERIVED from the root subsidiary's name (RootSubsidiaryName), the
+// single consolidating entity (D18/p09.1). We stopped reading/writing org_name;
+// the harmless config row seeded by migration 00012 is left in place (migrations
+// are forward-only with no down, rule 4). enabled_languages is the only remaining
+// org-level setting.
 
-// Org-setting keys. Kept as named constants so callers reference them
-// symbolically and the two seeded keys are discoverable from Go.
-const (
-	// SettingOrgName is the organization's display name (seeded empty; no chrome
-	// consumer yet -- p13.x wires it in. p11.4 only stores it).
-	SettingOrgName = "org_name"
-	// SettingEnabledLanguages is a CSV of the languages account NAMES may be
-	// entered in (seeded 'en,es', D14). It drives the account form's per-language
-	// name inputs ONLY -- the UI chrome stays en/es via i18n.T fallback.
-	SettingEnabledLanguages = "enabled_languages"
-)
+// SettingEnabledLanguages is a CSV of the languages account NAMES may be entered
+// in (seeded 'en,es', D14). It drives the account form's per-language name inputs
+// ONLY -- the UI chrome stays en/es via i18n.T fallback.
+const SettingEnabledLanguages = "enabled_languages"
 
 // baseNameLang is the required base language for account names: en is always an
 // enabled name language and the name-fallback base (p05.3, D14), so

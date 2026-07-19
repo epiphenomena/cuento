@@ -252,6 +252,23 @@ func (s *Store) SubTree(ctx context.Context) ([]sqlc.SubTreeRow, error) {
 	return rows, nil
 }
 
+// RootSubsidiaryName returns the name of the root subsidiary (the single node
+// whose parent_id is NULL) — the canonical organization display name (p30.14).
+// The root is the consolidating entity (D18/p09.1) and ErrSecondRoot guarantees
+// exactly one root exists, so SubTree's pre-order first row (its base case is
+// `parent_id IS NULL`) is always the root; no extra query is needed. A missing
+// root (an unmigrated/empty db) is an error rather than a silent empty name.
+func (s *Store) RootSubsidiaryName(ctx context.Context) (string, error) {
+	rows, err := s.q.SubTree(ctx)
+	if err != nil {
+		return "", fmt.Errorf("store: root subsidiary name: %w", err)
+	}
+	if len(rows) == 0 {
+		return "", errors.New("store: no root subsidiary")
+	}
+	return rows[0].Name, nil
+}
+
 // Descendants returns a subsidiary plus its transitive closure (self included) —
 // the primitive report scoping uses (D18). Read; recursive CTE via sqlc.
 func (s *Store) Descendants(ctx context.Context, id ids.SubsidiaryID) ([]sqlc.DescendantsRow, error) {

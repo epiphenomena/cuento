@@ -1,9 +1,12 @@
 {{/*
   p11.4 org settings & languages page (/admin/org, Admin). A small settings form:
-  the org name and the enabled-languages CSV (the languages account NAMES may be
-  entered in, D14 -- adding one makes a new name column appear in the account form).
-  Like the other shell pages it is a self-contained top-level template that emits
-  shell-open, its <main> content, then shell-close. .Page is an orgForm.
+  the enabled-languages CSV (the languages account NAMES may be entered in, D14 --
+  adding one makes a new name column appear in the account form). The organization
+  display name is DERIVED from the root subsidiary (p30.14) and shown read-only,
+  pointing the admin at /admin/subsidiaries to change it (the name is stored data,
+  not a catalog entry, so it is interpolated as data -- rule 9). Like the other
+  shell pages it is a self-contained top-level template that emits shell-open, its
+  <main> content, then shell-close. .Page is an orgForm.
 
   A plain full-page form POST to /admin/org (NOT an htmx partial swap -- this page
   is the whole settings document, not a fetched region like the subsidiaries inline
@@ -21,12 +24,12 @@
   <p class="notice" role="status">{{t "org.saved"}}</p>
   {{end}}
 
-  <form method="post" action="/admin/org" class="org-form">
-    <div class="field">
-      <label for="org-name">{{t "org.form.name"}}</label>
-      <input id="org-name" name="org_name" type="text" value="{{.OrgName}}">
-    </div>
+  <p class="hint">
+    {{t "org.display.label"}}: <strong>{{.OrgDisplayName}}</strong>
+    &mdash; <a href="/admin/subsidiaries">{{t "org.display.edit"}}</a>
+  </p>
 
+  <form method="post" action="/admin/org" class="org-form">
     <div class="field">
       <label for="org-langs">{{t "org.form.enabled_languages"}}</label>
       <input id="org-langs" name="enabled_languages" type="text" value="{{.EnabledLanguages}}">

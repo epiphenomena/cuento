@@ -947,6 +947,18 @@ Owner: the combobox filter was a SCATTERED-subsequence matcher (`fp` matched `Fo
 
 **e2e retargeting.** `combo-account-fuzzy.spec.js` had queries that relied on the old scattered behavior (`fzchk`, `advsav`, `hipar.leaf`, `kbsav`, …); retargeted each to contiguous fragments (`fuzz check`, `adv sav`, `hier.leaf`, `kb sav`, …) — each fragment a real substring, and the `combo-text` value literal updated to match. `combo-program-fuzzy.spec.js` (`gen.edufuzz`) and `combo-descprefill.spec.js` (single-word queries) already used contiguous queries and were unchanged.
 
+### p30.14 Retire the org-name setting; derive the org display name from the root subsidiary (2026-07-19)
+
+Owner: the `org_name` org setting (a display label) was barely wired in and duplicated information already carried by the subsidiary tree. Retired it; the organization's canonical display name is now DERIVED from the ROOT subsidiary — the single `parent_id IS NULL` node, which D18/p09.1 establish as the consolidating entity (its `base_currency` already drives report base currency; its name is the natural org name).
+
+**Derived-name helper.** `store.RootSubsidiaryName(ctx) (string, error)` returns `SubTree()`'s first row's name. `SubTree`'s recursive CTE base case is `parent_id IS NULL` and it emits pre-order, so the root is always first; `ErrSecondRoot` guarantees exactly one root. This reuses the existing query — NO new sqlc query, no `make gen`, no hardcoded id 1 in store code (`ids.Root` is a fixture struct field, not a package const). An empty result is a returned error, not a silent empty name.
+
+**Removed vs kept.** Removed: the `SettingOrgName` const + all `org_name` reads/writes (`org_settings.go`), the `orgForm.OrgName` field and its load/save (`org.go`), the org-name `<input>` (`org.tmpl`), and the `org.form.name` key from both catalogs. Kept fully working: the generic `OrgSetting`/`SetOrgSetting` upsert helpers, `EnabledLanguages`, and the `enabled_languages` setting — now the only editable org-level setting. `org.intro` reworded to describe just the languages.
+
+**No migration.** The seeded `org_name` config row (migration `00012`) is LEFT in place: migrations are forward-only with no down (rule 4), and a stray key/value config row that nothing reads is harmless. We simply stopped reading/writing it — no `00xxx` delete migration.
+
+**Surfacing (rule 9).** `/admin/org` shows the derived name read-only ("Organization: <root name> — edit under Subsidiaries", linking `/admin/subsidiaries`). The subsidiary name is STORED DATA interpolated as data, not a catalog entry; only the label and the link text are catalog keys (`org.display.label`, `org.display.edit`, both catalogs). Grep confirmed nothing else (Go, templates, catalogs, e2e specs) referenced `org_name`, so no other consumer to repoint.
+
 ### p31 (proposal) — FX under GAAP: remeasurement to income vs. translation to CTA (2026-07-19, owner-requested design)
 
 **Problem.** Under D3, cross-currency value movements flow through the equity-class **FX Clearing** account, whose converted balance IS the cumulative FX gain/loss — and because FX Clearing is equity, **every** FX effect currently lands in Net Assets; **none** is recognized in the change in net assets (income). That is not GAAP-faithful.

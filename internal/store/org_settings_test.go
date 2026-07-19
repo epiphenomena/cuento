@@ -11,19 +11,12 @@ import (
 // currencies): the store exposes plain reads and an idempotent upsert outside the
 // write funnel. These tests drive the store directly over a migrated temp db.
 
-// TestOrgSettingsSeeded: migration 00012 seeds an empty org_name and
-// enabled_languages en,es; the store reads them back.
+// TestOrgSettingsSeeded: migration 00012 seeds enabled_languages en,es; the store
+// reads it back. (org_name was retired in p30.14 -- the org display name is derived
+// from the root subsidiary; the harmless seed row is left in place but unread.)
 func TestOrgSettingsSeeded(t *testing.T) {
 	s := New(testutil.NewDB(t))
 	ctx := context.Background()
-
-	name, err := s.OrgSetting(ctx, SettingOrgName, "DEFAULT")
-	if err != nil {
-		t.Fatalf("OrgSetting org_name: %v", err)
-	}
-	if name != "" {
-		t.Errorf("seeded org_name = %q, want empty", name)
-	}
 
 	langs, err := s.OrgSetting(ctx, SettingEnabledLanguages, "DEFAULT")
 	if err != nil {
@@ -49,30 +42,65 @@ func TestOrgSettingDefaultWhenUnset(t *testing.T) {
 
 // TestSetOrgSettingPersists: SetOrgSetting stores a value that reads back, and a
 // second write updates it (idempotent upsert). No actor needed (config, not audit).
+// Exercised via the generic upsert on a bespoke key (org_name was retired, p30.14).
 func TestSetOrgSettingPersists(t *testing.T) {
 	s := New(testutil.NewDB(t))
 	ctx := context.Background()
 
-	if err := s.SetOrgSetting(ctx, SettingOrgName, "FitSupply"); err != nil {
+	const key = "test_key"
+	if err := s.SetOrgSetting(ctx, key, "first"); err != nil {
 		t.Fatalf("SetOrgSetting: %v", err)
 	}
-	got, err := s.OrgSetting(ctx, SettingOrgName, "")
+	got, err := s.OrgSetting(ctx, key, "")
 	if err != nil {
 		t.Fatalf("OrgSetting: %v", err)
 	}
-	if got != "FitSupply" {
-		t.Errorf("org_name = %q, want FitSupply", got)
+	if got != "first" {
+		t.Errorf("%s = %q, want first", key, got)
 	}
 
-	if err := s.SetOrgSetting(ctx, SettingOrgName, "FitSupply Inc"); err != nil {
+	if err := s.SetOrgSetting(ctx, key, "second"); err != nil {
 		t.Fatalf("SetOrgSetting (update): %v", err)
 	}
-	got, err = s.OrgSetting(ctx, SettingOrgName, "")
+	got, err = s.OrgSetting(ctx, key, "")
 	if err != nil {
 		t.Fatalf("OrgSetting: %v", err)
 	}
-	if got != "FitSupply Inc" {
-		t.Errorf("org_name after update = %q, want %q", got, "FitSupply Inc")
+	if got != "second" {
+		t.Errorf("%s after update = %q, want %q", key, got, "second")
+	}
+}
+
+// TestRootSubsidiaryName: the org display name is derived from the root subsidiary
+// (p30.14). The seeded root is renamed and RootSubsidiaryName returns the new name;
+// adding a child does not change which name is returned (the root stays first).
+func TestRootSubsidiaryName(t *testing.T) {
+	s := New(testutil.NewDB(t))
+	ctx := context.Background()
+
+	name, err := s.RootSubsidiaryName(ctx)
+	if err != nil {
+		t.Fatalf("RootSubsidiaryName: %v", err)
+	}
+	if name == "" {
+		t.Fatalf("RootSubsidiaryName returned empty for the seeded root")
+	}
+
+	// Rename the root; the derived name follows it.
+	newName := "FitSupply"
+	if err := s.UpdateSubsidiary(mutCtx(), 1, UpdateSubsidiaryInput{Name: &newName}); err != nil {
+		t.Fatalf("UpdateSubsidiary(root): %v", err)
+	}
+	// A child must not shadow the root as the display name.
+	if _, err := s.CreateSubsidiary(mutCtx(), CreateSubsidiaryInput{ParentID: 1, Name: "Child", BaseCurrency: "USD"}); err != nil {
+		t.Fatalf("CreateSubsidiary(child): %v", err)
+	}
+	got, err := s.RootSubsidiaryName(ctx)
+	if err != nil {
+		t.Fatalf("RootSubsidiaryName after rename: %v", err)
+	}
+	if got != newName {
+		t.Errorf("RootSubsidiaryName = %q, want %q", got, newName)
 	}
 }
 

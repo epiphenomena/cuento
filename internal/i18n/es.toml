@@ -344,11 +344,13 @@ other = "La linea %s no tiene la columna source."
 [org.title]
 other = "Ajustes de la organizacion"
 [org.intro]
-other = "El nombre de su organizacion y los idiomas en que se pueden nombrar las cuentas."
+other = "Los idiomas en que se pueden nombrar las cuentas."
 [org.saved]
 other = "Ajustes guardados."
-[org.form.name]
-other = "Nombre de la organizacion"
+[org.display.label]
+other = "Organizacion"
+[org.display.edit]
+other = "editar en Subsidiarias"
 [org.form.enabled_languages]
 other = "Idiomas de nombres de cuenta"
 [org.form.enabled_languages_hint]

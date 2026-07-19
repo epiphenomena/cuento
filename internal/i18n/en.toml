@@ -350,11 +350,13 @@ other = "Line %s is missing the source column."
 [org.title]
 other = "Organization settings"
 [org.intro]
-other = "Your organization's name and the languages accounts may be named in."
+other = "The languages accounts may be named in."
 [org.saved]
 other = "Settings saved."
-[org.form.name]
-other = "Organization name"
+[org.display.label]
+other = "Organization"
+[org.display.edit]
+other = "edit under Subsidiaries"
 [org.form.enabled_languages]
 other = "Account name languages"
 [org.form.enabled_languages_hint]
