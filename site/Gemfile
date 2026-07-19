@@ -1,8 +1,8 @@
-# The published documentation site (Jekyll). On GitHub Pages this builds via the
-# github-pages gem; locally, `bundle install && bundle exec jekyll serve` works.
+# The published documentation site (Jekyll). The site is self-contained — it
+# ships its own layouts, includes, and stylesheet and uses no remote theme — so
+# it builds on plain Jekyll with no network access. Locally,
+# `bundle install && bundle exec jekyll serve` works; on GitHub Pages it is
+# built via a GitHub Actions workflow (see README.md).
 source "https://rubygems.org"
 
-# Matches GitHub Pages' supported build environment; pulls in a compatible Jekyll
-# and the jekyll-remote-theme plugin used to load just-the-docs.
-gem "github-pages", group: :jekyll_plugins
-gem "jekyll-remote-theme"
+gem "jekyll", "~> 4.4"

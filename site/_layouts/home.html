@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+{% include head.html %}
+<body class="page page--home">
+  {% include header.html %}
+
+  <main>
+    <section class="hero">
+      <div class="wrap hero__inner">
+        <p class="hero__eyebrow">{{ page.hero.eyebrow }}</p>
+        <h1 class="hero__headline">{{ page.hero.headline }}</h1>
+        <p class="hero__lede">{{ page.hero.lede }}</p>
+        <div class="hero__actions">
+          <a class="btn btn--primary" href="{{ page.hero.primary.url | relative_url }}">{{ page.hero.primary.label }}</a>
+          {%- assign sec_url = page.hero.secondary.url -%}
+          {%- if sec_url == "repo" -%}{%- assign sec_url = site.repo_url -%}{%- else -%}{%- assign sec_url = sec_url | relative_url -%}{%- endif -%}
+          <a class="btn btn--ghost" href="{{ sec_url }}"{% if page.hero.secondary.url == "repo" %} rel="noopener" target="_blank"{% endif %}>{{ page.hero.secondary.label }} →</a>
+        </div>
+        <ul class="hero__facts">
+          <li><strong>One binary</strong> · one SQLite file</li>
+          <li><strong>Server-rendered</strong> HTML + pinned htmx</li>
+          <li><strong>Bilingual</strong> English / Spanish</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="constraints">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>{{ page.constraints_heading }}</h2>
+          <p>{{ page.constraints_lede }}</p>
+        </div>
+        <ul class="cards">
+          {%- for c in page.constraints -%}
+          <li class="card">
+            <span class="card__index" aria-hidden="true">{{ forloop.index | prepend: '0' }}</span>
+            <h3 class="card__title">{{ c.title }}</h3>
+            <p class="card__body">{{ c.body }}</p>
+          </li>
+          {%- endfor -%}
+        </ul>
+      </div>
+    </section>
+
+    <section class="story">
+      <div class="wrap story__inner">
+        {{ content }}
+      </div>
+    </section>
+
+    <section class="docs-index">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Documentation</h2>
+          <p>Deep dives into how cuento is built and what it guarantees.</p>
+        </div>
+        <ul class="doclist">
+          {%- for doc in site.docs -%}
+          <li class="doclist__item">
+            <a class="doclist__link" href="{{ doc.url | relative_url }}">
+              <h3>{{ doc.title }}</h3>
+              <p>{{ doc.blurb }}</p>
+              <span class="doclist__cta" aria-hidden="true">Read →</span>
+            </a>
+          </li>
+          {%- endfor -%}
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  {% include footer.html %}
+</body>
+</html>

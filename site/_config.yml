@@ -1,32 +1,56 @@
 title: cuento
+tagline: Self-hosted fund accounting, built to fit one nonprofit exactly.
 description: >-
   Self-hosted double-entry fund accounting for a small multi-subsidiary
   nonprofit. One Go binary, one SQLite file, server-rendered HTML + htmx,
   bilingual (en/es).
 
-# just-the-docs is a docs-oriented theme: a left sidebar navigation plus
-# built-in search. Served via remote_theme so no local theme gem is needed on
-# GitHub Pages.
-remote_theme: just-the-docs/just-the-docs
+# This site is self-contained: it ships its own layouts (_layouts), a shared
+# head partial (_includes), and a single hand-written stylesheet (assets/css).
+# There is no remote theme, so the site builds on plain Jekyll with no network
+# access — the same boring-frontend ethos as the app it documents.
 
-# Plugins allowed on GitHub Pages.
-plugins:
-  - jekyll-remote-theme
+# The ordered list of documentation pages, rendered in the header nav and the
+# landing page's documentation section.
+docs:
+  - title: Architecture
+    url: /architecture.html
+    blurb: >-
+      The binary/SQLite/htmx stack, request lifecycle, package boundaries,
+      migrations + sqlc, the write funnel, the reports registry, the
+      frontend/CSP model, and testing.
+  - title: Security
+    url: /security.html
+    blurb: >-
+      Passwords, sessions, cross-origin protection, rate-limiting, the
+      permission-gated route registry, the strict CSP, and the security
+      headers — with the tests that enforce each.
+  - title: Data integrity
+    url: /data-integrity.html
+    blurb: >-
+      Exact money, the single write funnel, append-only versioning,
+      migrations-as-truth, sqlc-only SQL, and the ledger invariants enforced
+      twice.
+  - title: Features
+    url: /features.html
+    blurb: >-
+      The full feature set: fund accounting, subsidiaries and consolidation,
+      programs and functional classes, the report catalog, bank import,
+      reconciliation, budgeting, and expense reports.
+  - title: Rules
+    url: /rules.html
+    blurb: >-
+      The fourteen non-negotiable engineering rules the project is held to,
+      each with the reason behind it and a link to the mechanism that
+      satisfies it.
 
-# Sidebar / search behaviour.
-search_enabled: true
-heading_anchors: true
-
-# Navigation ordering is driven by each page's `nav_order` front matter.
-color_scheme: light
-
-# Footer.
-aux_links:
-  Repository: "https://github.com"
-aux_links_new_tab: true
+# The repository link shown in the header and footer. This is a PLACEHOLDER —
+# replace it with the real repository URL when the project is published.
+repo_url: "https://github.com"
 
 # Exclude site scaffolding from the build output.
 exclude:
   - Gemfile
   - Gemfile.lock
   - vendor
+  - README.md

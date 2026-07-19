@@ -1,0 +1,14 @@
+<header class="site-header">
+  <div class="wrap site-header__inner">
+    <a class="site-header__brand" href="{{ '/' | relative_url }}">
+      <span class="site-header__mark" aria-hidden="true"></span>
+      <span class="site-header__name">cuento</span>
+    </a>
+    <nav class="site-header__nav" aria-label="Primary">
+      {%- for doc in site.docs -%}
+        <a href="{{ doc.url | relative_url }}"{% if page.url == doc.url %} aria-current="page"{% endif %}>{{ doc.title }}</a>
+      {%- endfor -%}
+      <a class="site-header__repo" href="{{ site.repo_url }}" rel="noopener" target="_blank">Repository</a>
+    </nav>
+  </div>
+</header>

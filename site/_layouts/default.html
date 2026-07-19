@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+{% include head.html %}
+<body class="page page--doc">
+  {% include header.html %}
+  <main class="doc">
+    <div class="wrap doc__wrap">
+      <article class="doc__body">
+        {{ content }}
+      </article>
+      <aside class="doc__aside" aria-label="Documentation pages">
+        <span class="doc__aside-heading">Documentation</span>
+        <nav class="doc__aside-nav">
+          {%- for doc in site.docs -%}
+            <a href="{{ doc.url | relative_url }}"{% if page.url == doc.url %} aria-current="page"{% endif %}>{{ doc.title }}</a>
+          {%- endfor -%}
+        </nav>
+        <a class="doc__aside-home" href="{{ '/' | relative_url }}">← Overview</a>
+      </aside>
+    </div>
+  </main>
+  {% include footer.html %}
+</body>
+</html>
