@@ -6,7 +6,8 @@
 // Responsibilities (all DISPLAY/UX; the server is the sole validator, trap 5):
 //   - DR/CR twin columns -> normalize into the hidden signed amount_i field (trap 3,
 //     the ONE mapping site is drcrToSigned in txnamount.js).
-//   - live imbalance chips (overall + per fund) from fundImbalances (display only).
+//   - live PER-FUND imbalance chips from fundImbalances (display only; p29.5 dropped the
+//     always-zero overall Total chip -- the balancing main split makes it always 0).
 //   - show the program select only on R/E rows, the class select only on expense
 //     rows, prefilled from the account's data-* defaults (server re-defaults).
 //   - subsidiary re-filter: flag rows whose account left the sub (invalidRowsForSub).
@@ -16,7 +17,7 @@
 // Guarded so importing under Node is side-effect free (no `document`).
 
 import { parseAmountMinor, drcrToSigned, formatSignedMinor } from './txnamount.js';
-import { fundImbalances, chipLabel, overallImbalance } from './txnfund.js';
+import { fundImbalances, chipLabel } from './txnfund.js';
 import { nextCell, invalidRowsForSubsidiary } from './txngrid.js';
 import { isRowEmpty } from './rowstate.js';
 import { initCombos, stripCombo, resyncCombos } from './combobox.js';
@@ -75,29 +76,12 @@ function initEditor(form) {
       return { fund: fundSel ? fundSel.value.replace(/^0$/, '') : '', amount: rowAmount(i) };
     });
     const { total, perFund } = fundImbalances(rows);
-    // Chip labels come from the i18n catalog (server-stamped on the form) + the fund
-    // names read from the fund options (rule 9). Amount formatting stays client-side.
-    const totalLabel = form.dataset.chipTotal || 'Total';
+    // Chip labels: the per-fund chips use the fund names read from the fund options
+    // (rule 9) + the localized "Unrestricted" label (server-stamped on the form). Amount
+    // formatting stays client-side. (p29.5 removed the overall Total chip -- a transaction
+    // is enforced zero-sum overall too, so the balancing main split makes it always 0.)
     const unrestrictedLabel = form.dataset.chipUnrestricted || 'Unrestricted';
 
-    // p28.4: `total` is the BODY sum only. With the main-split design (MainPresent) the
-    // header/main split auto-balances the body: its amount is the residual -(body sum), so
-    // the OVERALL transaction (body + main) is ALWAYS zero and a genuinely-balanced entry
-    // must render the Total chip NEUTRAL, not red. Compute the overall imbalance INCLUDING
-    // the main split's balancing amount, and drive both the chip text and the red state off
-    // THAT. In the flat fallback grid (no main header: import / expense-review / multi-fund)
-    // there is no balancing split, so overall == the body sum and a nonzero total is red.
-    const mainPresent = !!form.querySelector('#txn-main-header');
-    const overall_ = overallImbalance(total, mainPresent); // 0 whenever MainPresent
-
-    const overall = form.querySelector('#txn-total-overall');
-    if (overall) {
-      // Always show the running Total as a NEUTRAL chip (a balanced total is not an error);
-      // it flips to the danger `imbalanced` state only when the OVERALL transaction (body +
-      // main balancing split) is genuinely nonzero.
-      overall.textContent = fmtChip(totalLabel, overall_);
-      overall.classList.toggle('imbalanced', overall_ !== 0);
-    }
     const chips = form.querySelector('#txn-fund-chips');
     if (chips) {
       chips.textContent = '';

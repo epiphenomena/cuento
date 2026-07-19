@@ -30,18 +30,6 @@ export function fundImbalances(rows) {
   return { total, perFund };
 }
 
-// overallImbalance computes the OVERALL transaction imbalance (p28.4) from the BODY
-// splits' net sum and whether the header MAIN split is present. `bodyTotal` is the signed
-// net-debit sum of the body rows (fundImbalances().total). When the main split is present
-// (the normal editor), it auto-balances the body -- its amount is the residual -(bodyTotal)
-// -- so the overall transaction is ALWAYS zero (a genuinely-balanced entry; the Total chip
-// must render NEUTRAL, not red). In the flat fallback grid (no main split: import /
-// expense-review / multi-fund) there is no balancing split, so the overall imbalance IS the
-// body sum. Pure (no DOM), so it is node-tested; the caller drives the chip color off it.
-export function overallImbalance(bodyTotal, mainPresent) {
-  return mainPresent ? bodyTotal + -bodyTotal : bodyTotal;
-}
-
 // chipLabel resolves a per-fund imbalance chip's LABEL from a fund key. `key` is
 // the fund id string ("" = unrestricted, per fundImbalances). `names` maps fund id
 // -> fund NAME (proper nouns, stored data — NOT a catalog key, AGENTS rule 9), and

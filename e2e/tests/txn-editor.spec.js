@@ -626,8 +626,9 @@ test.describe('transaction editor', () => {
     await page.locator('#txn-fund-1').selectOption({ label: 'Beta Grant' });
     await page.locator('#txn-amount-1').fill('-60.00');
 
-    // The overall chip uses the localized "Total" label (not the old hardcoded 'total').
-    await expect(page.locator('#txn-total-overall')).toContainText(/^Total:/);
+    // p29.5: the redundant always-zero overall Total chip was removed; only the per-fund
+    // imbalance chips remain (this test's actual subject).
+    await expect(page.locator('#txn-total-overall')).toHaveCount(0);
 
     // The per-fund chips render the fund NAMES, never the raw fund id.
     const chips = page.locator('#txn-fund-chips .txn-fund-chip');
@@ -641,11 +642,11 @@ test.describe('transaction editor', () => {
     }
   });
 
-  // p28.4: with the main-split design the header/main split auto-balances the BODY, so a
-  // genuinely-balanced transaction (overall, including the main split) is always zero -- its
-  // Total chip must render NEUTRAL (no `.imbalanced` danger class), even though the body
-  // splits alone are nonzero. Regression for "a balanced entry still shows a red total".
-  test('a balanced main-split transaction shows a neutral (non-red) Total', async ({
+  // p28.4/p29.5: the header/main split auto-balances the BODY -- its amount previews the
+  // residual -(body sum) -- so a balanced entry always nets to zero overall. p29.5 REMOVED
+  // the always-zero overall Total chip (redundant); this test now guards only the surviving
+  // behavior: the main-split residual preview keeps up with the body.
+  test('the main-split amount previews the balancing residual of the body', async ({
     page,
     server,
   }) => {
@@ -656,7 +657,6 @@ test.describe('transaction editor', () => {
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
 
-    const overall = page.locator('#txn-total-overall');
     // Header (balancing) account + a single body leg: Savings +40. The header takes the
     // residual -40, so the OVERALL transaction is balanced (0) even though the body sum is 40.
     await page.locator('#txn-main-account').selectOption({ label: 'Bal Checking' });
@@ -666,10 +666,8 @@ test.describe('transaction editor', () => {
     // The header main split's amount previews the -40 residual (proves the body IS balanced
     // by the main split).
     await expect(page.locator('#txn-main-amount')).toHaveValue(/40/);
-    // The Total chip is NEUTRAL: it does NOT carry the danger `.imbalanced` class, and it
-    // reads the balanced overall (0.00), NOT the raw body sum (40.00).
-    await expect(overall).not.toHaveClass(/\bimbalanced\b/);
-    await expect(overall).toContainText(/^Total:\s*0/);
+    // The redundant overall Total chip is gone (only the per-fund chips remain).
+    await expect(page.locator('#txn-total-overall')).toHaveCount(0);
   });
 
   // p26.37: opening a NEW transaction prefills the header (balancing) account -- from a

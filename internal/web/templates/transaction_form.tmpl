@@ -196,7 +196,6 @@
       data-root-program="{{.RootProgram}}"
       data-user-program="{{.UserProgram}}"
       data-account-missing-msg="{{t "error.txn.account_missing"}}"
-      data-chip-total="{{t "txn.total"}}"
       data-chip-unrestricted="{{t "txn.fund.unrestricted"}}"
       data-drcr="{{if .DisplayDRCR}}1{{else}}0{{end}}">
 
@@ -339,11 +338,13 @@
        auto-appends a fresh trailing row as soon as the last row is edited; the trailing
        empty row is dropped server-side on submit. */}}
 
-  {{/* Sticky totals bar (Appendix C): the live imbalance chips (overall + per fund)
-       are populated client-side (display only); the server's authoritative
-       imbalance error lands in the totals-error slot (trap 5). */}}
+  {{/* Sticky totals bar (Appendix C): the live PER-FUND imbalance chips (which fund is
+       off) are populated client-side (display only); the server's authoritative imbalance
+       error lands in the totals-error slot (trap 5). p29.5: the overall Total chip is gone
+       -- a transaction is enforced zero-sum per fund AND overall, so the balancing main
+       split makes the overall total always 0 (a redundant display). The per-fund chips and
+       all submit-time validation are unchanged. */}}
   <div class="txn-totals" id="txn-totals" aria-live="polite">
-    <span class="txn-total-chip" id="txn-total-overall"></span>
     <span class="txn-fund-chips" id="txn-fund-chips"></span>
     {{if .TotalsError}}<span class="field-error txn-totals-error" id="txn-totals-error" role="alert"{{if eq $.Page.FirstErrorRow -1}} autofocus{{end}}>{{t .TotalsError}}</span>{{else}}<span class="txn-totals-error" id="txn-totals-error"></span>{{end}}
   </div>

@@ -869,8 +869,6 @@ other = "Elija una cuenta"
 other = "(no disponible)"
 [txn.fund.unrestricted]
 other = "Sin restricción"
-[txn.total]
-other = "Total"
 [txn.amount.debit]
 other = "Debe"
 [txn.amount.credit]

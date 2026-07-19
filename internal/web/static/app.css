@@ -1289,9 +1289,10 @@ input[aria-invalid="true"] {
   min-height: 2.25rem;
 }
 .txn-fund-chips { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
-/* p28: a chip is NEUTRAL by default (a running total is not a problem) -- muted theme
-   surface + text, NOT the red error token. Only a genuine imbalance flips to danger. */
-.txn-total-chip, .txn-fund-chip {
+/* p28/p29.5: a per-fund chip is NEUTRAL by default (a running per-fund sum is not a
+   problem) -- muted theme surface + text, NOT the red error token. Only a genuine
+   imbalance flips to danger. (The always-zero overall Total chip was removed in p29.5.) */
+.txn-fund-chip {
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius);
   font-variant-numeric: tabular-nums;
@@ -1300,11 +1301,10 @@ input[aria-invalid="true"] {
   color: var(--color-text-muted);
 }
 /* A live imbalance is the alarm state; it flips the chip to danger so it stays distinct. */
-.txn-total-chip.imbalanced, .txn-fund-chip.imbalanced {
+.txn-fund-chip.imbalanced {
   background: var(--color-danger-bg);
   color: var(--color-danger);
 }
-.txn-total-chip:empty { display: none; }
 .txn-totals-error:not(:empty) { color: var(--color-danger); font-weight: 600; }
 
 /* p24.2 transaction-level notes: a full-width multiline field below the grid, for a
