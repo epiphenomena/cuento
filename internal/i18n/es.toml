@@ -1006,6 +1006,31 @@ other = "Fondo"
 other = "Programa"
 [history.field.functional_class]
 other = "Clase funcional"
+[history.intro]
+other = "Cada estado guardado de esta transacción, desde el primero hasta el actual. Los cambios respecto al estado anterior están resaltados."
+[history.legend]
+other = "Leyenda de cambios"
+[history.was]
+other = "era"
+[history.col.change]
+other = "Cambio"
+[history.col.line]
+other = "Línea"
+[history.seq.initial]
+other = "Estado inicial"
+[history.seq.current]
+other = "Estado actual"
+[history.seq.version]
+one = "Estado %d"
+other = "Estado %d"
+[history.marker.added]
+other = "Agregado"
+[history.marker.removed]
+other = "Eliminado"
+[history.marker.changed]
+other = "Modificado"
+[history.marker.unchanged]
+other = "Sin cambios"
 
 [void.title]
 other = "Anular transacción"

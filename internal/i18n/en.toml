@@ -1013,6 +1013,31 @@ other = "Fund"
 other = "Program"
 [history.field.functional_class]
 other = "Functional class"
+[history.intro]
+other = "Every saved state of this transaction, from the first to the current. Changes since the previous state are highlighted."
+[history.legend]
+other = "Change legend"
+[history.was]
+other = "was"
+[history.col.change]
+other = "Change"
+[history.col.line]
+other = "Line"
+[history.seq.initial]
+other = "Initial state"
+[history.seq.current]
+other = "Current state"
+[history.seq.version]
+one = "State %d"
+other = "State %d"
+[history.marker.added]
+other = "Added"
+[history.marker.removed]
+other = "Removed"
+[history.marker.changed]
+other = "Changed"
+[history.marker.unchanged]
+other = "Unchanged"
 
 [void.title]
 other = "Void transaction"

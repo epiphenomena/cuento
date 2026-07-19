@@ -1,71 +1,108 @@
 {{/*
-  p12.4 transaction history panel (/transactions/{id}/history, TxnRead). A read-only
-  timeline reconstructed from the version twins: one entry per change, showing the
-  actor, the (user-formatted) date, an op label (created/updated/voided), the header
-  field diffs, and the split-set diffs (added/removed/changed, INCLUDING fund and
-  functional-class deltas). Diffs are already resolved to display strings by the
-  handler (names in the request language, amounts through the money formatter); this
-  template only lays them out. .Page is a historyPageModel.
+  p29.16 transaction history (/transactions/{id}/history, TxnRead). A read-only vertical
+  timeline of SAVED-STATE cards, reconstructed from the append-only version twins:
+  FIRST state -> ... -> CURRENT state. Each card shows the FULL transaction at that
+  version (header fields + split rows as they stood) with the CHANGES from the prior
+  version highlighted -- added (green, +), removed (red struck, -), changed (amber, ~).
+  Color is never the only signal: each changed row/field carries a +/-/~ marker and a
+  status label. Values are pre-resolved by the handler (names in the request language,
+  amounts through the money formatter). .Page is a historyPageModel; no inline
+  script/style (rule 12).
 
-  Each field diff renders as OLD -> NEW; a one-sided diff (a create's initial value,
-  a removed field) shows just the present side. Every label is an i18n key (rule 9);
-  no inline script/style (rule 12).
+  emptyDash renders a real value or an em dash so blank cells read as "none", not gap.
 */ -}}
-
-{{/* history-diff: one field change (label + old/new). Shared by header and split
-     diffs. Data is a histDiffView. */ -}}
-{{define "history-diff" -}}
-<li class="hist-diff">
-  <span class="hist-field">{{t .Label}}</span>
-  {{- if and .Old .New}}
-  <span class="hist-old">{{.Old}}</span>
-  <span class="hist-arrow" aria-hidden="true">-&gt;</span>
-  <span class="hist-new">{{.New}}</span>
-  {{- else if .New}}
-  <span class="hist-new">{{.New}}</span>
-  {{- else}}
-  <span class="hist-old">{{.Old}}</span>
-  {{- end}}
-</li>
-{{- end}}
+{{define "hist-cell" -}}{{if .}}{{.}}{{else}}<span class="hist-none" aria-hidden="true">&mdash;</span>{{end}}{{- end}}
 
 {{define "history.tmpl" -}}
 {{template "shell-open" (shellTitle . (t "history.title"))}}
   {{- with .Page}}
   <h1>{{t "history.title"}}</h1>
-  <p><a href="/transactions/{{.TxnID}}/edit">{{t "history.back_to_txn"}}</a></p>
+  <p class="hist-back"><a href="/transactions/{{.TxnID}}/edit">{{t "history.back_to_txn"}}</a></p>
+  <p class="hist-intro">{{t "history.intro"}}</p>
 
-  <ol class="history-timeline">
-    {{range .Entries}}
-    <li class="hist-entry">
-      <div class="hist-head">
+  {{if .Versions}}
+  {{/* Legend: the four row markers so color is never the only cue. */ -}}
+  <ul class="hist-legend" aria-label="{{t "history.legend"}}">
+    <li class="hist-legend-item is-added"><span class="hist-marker" aria-hidden="true">+</span> {{t "history.split.added"}}</li>
+    <li class="hist-legend-item is-changed"><span class="hist-marker" aria-hidden="true">~</span> {{t "history.split.changed"}}</li>
+    <li class="hist-legend-item is-removed"><span class="hist-marker" aria-hidden="true">&minus;</span> {{t "history.split.removed"}}</li>
+  </ul>
+
+  <ol class="hist-timeline">
+    {{range .Versions}}
+    <li class="hist-version{{if .Voided}} is-voided{{end}}">
+      <div class="hist-version-head">
         <span class="hist-op">{{t .OpKey}}</span>
+        {{if .SeqKey}}<span class="hist-seq">{{t .SeqKey}}</span>{{else}}<span class="hist-seq">{{tn "history.seq.version" .SeqNum}}</span>{{end}}
         <span class="hist-actor">{{.Actor}}</span>
         <time class="hist-date">{{.Date}}</time>
       </div>
 
-      {{if .HeaderDiffs}}
-      <ul class="hist-header-diffs">
-        {{range .HeaderDiffs}}{{template "history-diff" .}}{{end}}
-      </ul>
+      {{if .Fields}}
+      <dl class="hist-fields">
+        {{range .Fields}}
+        <div class="hist-field{{if .Changed}} is-changed{{end}}">
+          <dt class="hist-field-label">{{t .Label}}</dt>
+          <dd class="hist-field-value">
+            {{if .Changed}}<span class="hist-marker" aria-label="{{t "history.marker.changed"}}">~</span>{{end}}
+            {{if and .Changed .Old}}<span class="hist-old"><span class="hist-vis-label">{{t "history.was"}}</span> {{.Old}}</span> {{end}}
+            <span class="hist-value">{{template "hist-cell" .Value}}</span>
+          </dd>
+        </div>
+        {{end}}
+      </dl>
       {{end}}
 
-      {{range .SplitDiffs}}
-      <div class="hist-split">
-        <span class="hist-split-op">{{t .OpKey}}</span>
-        <span class="hist-split-line">{{tn "history.split.line" .Line}}</span>
-        {{if .Diffs}}
-        <ul class="hist-split-diffs">
-          {{range .Diffs}}{{template "history-diff" .}}{{end}}
-        </ul>
-        {{end}}
-      </div>
+      {{if .Splits}}
+      <table class="hist-splits">
+        <thead>
+          <tr>
+            <th class="hist-col-marker"><span class="hist-vis-label">{{t "history.col.change"}}</span></th>
+            <th class="hist-col-line">{{t "history.col.line"}}</th>
+            <th>{{t "history.field.account"}}</th>
+            <th class="hist-col-amount">{{t "history.field.amount"}}</th>
+            <th>{{t "history.field.fund"}}</th>
+            <th>{{t "history.field.program"}}</th>
+            <th>{{t "history.field.functional_class"}}</th>
+            <th>{{t "history.field.memo"}}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Splits}}
+          <tr class="hist-split-row{{if .Status}} is-{{.Status}}{{end}}">
+            <td class="hist-col-marker">
+              <span class="hist-marker" aria-hidden="true">{{if eq .Status "create"}}+{{else if eq .Status "delete"}}&minus;{{else if eq .Status "update"}}~{{else}}&nbsp;{{end}}</span>
+              {{if .StatusKey}}<span class="hist-status-word">{{t .StatusKey}}</span>{{end}}
+              <span class="hist-vis-label">{{t .MarkerKey}}</span>
+            </td>
+            <td class="hist-col-line">{{.Line}}</td>
+            {{$cells := .ChangedCells -}}
+            {{template "hist-split-cell" (splitCell .Account (index $cells "account"))}}
+            <td class="hist-col-amount{{if index $cells "amount"}} is-cell-changed{{end}}">
+              {{with index $cells "amount"}}{{if .Old}}<span class="hist-old">{{.Old}}</span> {{end}}{{end}}{{template "hist-cell" .Amount}}
+            </td>
+            {{template "hist-split-cell" (splitCell .Fund (index $cells "fund"))}}
+            {{template "hist-split-cell" (splitCell .Program (index $cells "program"))}}
+            {{template "hist-split-cell" (splitCell .Class (index $cells "functional_class"))}}
+            {{template "hist-split-cell" (splitCell .Memo (index $cells "memo"))}}
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
       {{end}}
     </li>
-    {{else}}
-    <li class="hist-empty">{{t "history.empty"}}</li>
     {{end}}
   </ol>
+  {{else}}
+  <p class="hist-empty">{{t "history.empty"}}</p>
+  {{end}}
   {{- end}}
 {{template "shell-close" .}}
+{{- end}}
+
+{{/* hist-split-cell: one split-table cell. Data is a histSplitCell (Val + optional
+     Delta): when Delta is present the field changed on this row, so the cell is
+     emphasized and prefixed with the struck prior value. */ -}}
+{{define "hist-split-cell" -}}
+<td{{if .Changed}} class="is-cell-changed"{{end}}>{{if and .Changed .Old}}<span class="hist-old">{{.Old}}</span> {{end}}{{template "hist-cell" .Val}}</td>
 {{- end}}

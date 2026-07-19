@@ -90,6 +90,33 @@ func TestHistoryTimelineRendersDiffs(t *testing.T) {
 	if !strings.Contains(body, "Beca") {
 		t.Errorf("history missing fund split diff (Beca)")
 	}
+
+	// p29.16: the page is now a set of SAVED-STATE cards. Assert the new structure --
+	// each version is a state card (hist-version) with a full split table (hist-splits),
+	// and there are TWO cards (initial create + the edit) so a reviewer sees each state.
+	if got := strings.Count(body, "hist-version"); got < 2 {
+		t.Errorf("want >=2 state cards (hist-version), got %d", got)
+	}
+	if !strings.Contains(body, "hist-splits") {
+		t.Errorf("history missing the full split table (hist-splits)")
+	}
+	// The initial + current state sequence labels are present.
+	if !strings.Contains(body, "Initial state") || !strings.Contains(body, "Current state") {
+		t.Errorf("history missing initial/current state labels")
+	}
+	// The changed header memo is VISIBLY MARKED as changed (the field carries is-changed
+	// AND the prior value is shown struck via hist-old), not just present as text.
+	if !strings.Contains(body, "is-changed") {
+		t.Errorf("changed field not marked (is-changed)")
+	}
+	// A split fund was added on the edit -> the row is marked changed with a status word.
+	if !strings.Contains(body, "is-update") {
+		t.Errorf("changed split row not marked (is-update)")
+	}
+	// The initial state card shows the FULL split set (checking split's account name).
+	if !strings.Contains(body, "Checking") {
+		t.Errorf("state card missing the full split set (checking account)")
+	}
 }
 
 // TestHistoryVisibleAfterVoid: viewing history of a VOIDED txn does NOT 404 (the

@@ -45,6 +45,7 @@ func mustParseTemplates() *template.Template {
 		"expenseAccountsByType":    groupExpenseAccountsByType, // p26.74 expense grid: group account options into <optgroup> per type
 		"reconRowCtx":              makeReconRowCtx,            // p16.3 recon: pair a split row with the toggle base + finalized gate
 		"reconSummaryCtx":          makeReconSummaryCtx,        // p16.3 recon: wrap the sticky summary (OOB flag + finalize path)
+		"splitCell":                makeHistSplitCell,          // p29.16 history: pair a split cell value with its (optional) prior-value delta
 	}
 	t, err := template.New("").Funcs(stub).ParseFS(templatesFS, "templates/*.tmpl")
 	if err != nil {

@@ -81,10 +81,52 @@ type SplitDiff struct {
 	Fields   []FieldDiff
 }
 
+// HistHeaderState is the FULL reconstructed header of a transaction as of one version
+// (structured, not rendered -- the web layer resolves the subsidiary name and formats
+// nothing here). Deleted marks the void state (the delete version).
+type HistHeaderState struct {
+	Date         string
+	SubsidiaryID int64
+	Memo         string
+	Notes        string
+	Currency     string
+	Deleted      bool
+}
+
+// HistSplitState is one split as it stood live at a version, plus its change status vs the
+// prior version so the web layer can highlight it: Status is "" (unchanged), "create"
+// (added this version), "update" (changed this version), or "delete" (removed this
+// version -- a ghost row shown at its last position). ChangedFields names the fields
+// that moved on an update so the web layer can emphasize exactly those cells; Old
+// carries the prior-version value of each changed field (for the struck old value).
+type HistSplitState struct {
+	SplitID         int64
+	AccountID       int64
+	Amount          int64
+	FundID          sql.NullInt64
+	ProgramID       sql.NullInt64
+	FunctionalClass sql.NullString
+	Memo            string
+	Description     string
+	Position        int64
+	Status          string      // "" | "create" | "update" | "delete"
+	ChangedFields   []FieldDiff // populated for Status=="update"; carries old/new per changed field
+}
+
+// HistVersionState is the FULL transaction state at one version: its header plus the live
+// split set (ordered by Position, with removed rows folded in as ghosts at their last
+// position). It lets the web layer render each SAVED STATE in full (rule: the owner
+// wants to SEE every state), with per-row change status overlaid for highlighting.
+type HistVersionState struct {
+	Header HistHeaderState
+	Splits []HistSplitState
+}
+
 // HistoryEntry is one change in the timeline: its actor + timestamp + op, the
-// header field diffs, and the split-set diffs. Op is the HEADER op when the change
-// touched the header ("create"/"update"/"delete"); a change that touched only splits
-// (a future account-merge repoint) carries op="update" with no header diffs.
+// header field diffs, the split-set diffs, and the FULL reconstructed state as of this
+// version. Op is the HEADER op when the change touched the header
+// ("create"/"update"/"delete"); a change that touched only splits (a future
+// account-merge repoint) carries op="update" with no header diffs.
 type HistoryEntry struct {
 	ChangeID    int64
 	ActorID     int64
@@ -93,6 +135,7 @@ type HistoryEntry struct {
 	Op          string
 	HeaderDiffs []FieldDiff
 	SplitDiffs  []SplitDiff
+	State       HistVersionState
 }
 
 // TransactionHistory returns the ordered change timeline for one transaction,
@@ -172,7 +215,113 @@ func (s *Store) TransactionHistory(ctx context.Context, id int64) ([]HistoryEntr
 	}
 	// Order by change_id ascending (monotonic with the change timestamp).
 	sort.Slice(out, func(i, j int) bool { return out[i].ChangeID < out[j].ChangeID })
+
+	reconstructStates(out, hdrRows, splitRows)
 	return out, nil
+}
+
+// reconstructStates fills each entry's State with the FULL transaction state as of its
+// version, by CARRY-FORWARD in change order: a running header snapshot and a running
+// map of live splits keyed by split id. For each change (already ordered by ChangeID),
+// apply that change's header/split version rows to the running state, then snapshot it
+// into the entry.
+//
+// The subtle correctness point (the bug to avoid): the state at version N is EVERY
+// split live as of N, not merely the splits N touched. An untouched split from an
+// earlier version must carry forward. A "delete" split row removes it from the live
+// set; it is shown once, as a ghost row, on the change that removed it (Status
+// "delete"), then dropped from later states.
+//
+// A header "delete" (void) writes NO split versions, so the split set carries forward
+// unchanged onto the void card -- the reviewer sees the transaction's final live splits
+// with the header marked Deleted. Each split row also carries its change status vs the
+// prior version (create/update/delete) so the web layer can highlight what moved; a
+// carried-forward untouched split has Status "".
+func reconstructStates(out []HistoryEntry, hdrRows []sqlc.TransactionVersionHistoryRow, splitRows []sqlc.SplitVersionHistoryRow) {
+	// Index the raw version rows by change id (a change touches at most one header row
+	// and any number of split rows). Rows are already oldest-first.
+	hdrByChange := make(map[int64]*sqlc.TransactionVersionHistoryRow, len(hdrRows))
+	for i := range hdrRows {
+		hdrByChange[hdrRows[i].ChangeID] = &hdrRows[i]
+	}
+	splitsByChange := make(map[int64][]*sqlc.SplitVersionHistoryRow, len(splitRows))
+	for i := range splitRows {
+		cid := splitRows[i].ChangeID
+		splitsByChange[cid] = append(splitsByChange[cid], &splitRows[i])
+	}
+
+	var header HistHeaderState
+	live := make(map[int64]*HistSplitState) // split id -> carried-forward live state
+	prevSplitRow := make(map[int64]*sqlc.SplitVersionHistoryRow)
+
+	for i := range out {
+		cid := out[i].ChangeID
+
+		// Header: apply this change's header row when present; otherwise carry forward.
+		if hr := hdrByChange[cid]; hr != nil {
+			header = HistHeaderState{
+				Date:         hr.Date,
+				SubsidiaryID: hr.SubsidiaryID,
+				Memo:         hr.Memo,
+				Notes:        hr.Notes,
+				Currency:     hr.Currency,
+				Deleted:      hr.Deleted != 0,
+			}
+		}
+
+		// Reset every carried-forward split to "unchanged" for this version, then apply
+		// this change's split rows to set the per-row status.
+		for _, sp := range live {
+			sp.Status = ""
+			sp.ChangedFields = nil
+		}
+		var ghosts []HistSplitState // "delete" rows: shown once, then dropped
+		for _, row := range splitsByChange[cid] {
+			switch row.Op {
+			case "delete":
+				g := splitSnapshot(row)
+				g.Status = "delete"
+				ghosts = append(ghosts, g)
+				delete(live, row.EntityID)
+			default: // create | update
+				sp := splitSnapshot(row)
+				if row.Op == "update" {
+					sp.Status = "update"
+					sp.ChangedFields = splitDiff(prevSplitRow[row.EntityID], row)
+				} else {
+					sp.Status = "create"
+				}
+				live[row.EntityID] = &sp
+			}
+			prevSplitRow[row.EntityID] = row
+		}
+
+		// Assemble the ordered split set: live rows plus this change's ghosts, sorted by
+		// Position (ghosts at their last position keep the table coherent).
+		state := make([]HistSplitState, 0, len(live)+len(ghosts))
+		for _, sp := range live {
+			state = append(state, *sp)
+		}
+		state = append(state, ghosts...)
+		sort.SliceStable(state, func(a, b int) bool { return state[a].Position < state[b].Position })
+
+		out[i].State = HistVersionState{Header: header, Splits: state}
+	}
+}
+
+// splitSnapshot copies one split version row into a HistSplitState (structured, unresolved).
+func splitSnapshot(row *sqlc.SplitVersionHistoryRow) HistSplitState {
+	return HistSplitState{
+		SplitID:         row.EntityID,
+		AccountID:       row.AccountID,
+		Amount:          row.Amount,
+		FundID:          row.FundID,
+		ProgramID:       row.ProgramID,
+		FunctionalClass: row.FunctionalClass,
+		Memo:            row.Memo,
+		Description:     row.Description,
+		Position:        row.Position,
+	}
 }
 
 // headerDiff computes the changed header fields between two snapshots. prev == nil

@@ -309,6 +309,220 @@ func TestHistoryVoidVisibleAfterDelete(t *testing.T) {
 	findEntryOp(t, entries, "delete")
 }
 
+// findSplitState returns the HistSplitState for a given account in a version's state.
+func findSplitState(t *testing.T, e HistoryEntry, accountID int64) HistSplitState {
+	t.Helper()
+	for _, sp := range e.State.Splits {
+		if sp.AccountID == accountID {
+			return sp
+		}
+	}
+	t.Fatalf("no split state for account %d in state %+v", accountID, e.State.Splits)
+	return HistSplitState{}
+}
+
+// TestHistoryStateReconstructsFullSet: each version's State carries the FULL live split
+// set -- an UNTOUCHED split carries forward onto a later version (the carry-forward
+// correctness point), and only the split the edit touched is marked "update".
+func TestHistoryStateReconstructsFullSet(t *testing.T) {
+	e := newTxnEnv(t)
+	id := post2(t, e, e.subUS, e.salaries, 10000, e.checking, -10000)
+
+	live, err := e.s.TransactionSplits(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("TransactionSplits: %v", err)
+	}
+	var salID, chkID int64
+	for _, sp := range live {
+		if sp.AccountID == e.salaries {
+			salID = sp.ID
+		} else {
+			chkID = sp.ID
+		}
+	}
+	// Edit ONLY the salaries amount (checking is untouched but must carry forward).
+	if err := e.s.UpdateTransaction(mutCtx(), id, PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{ID: &salID, AccountID: e.salaries, Amount: 12000, Position: 0},
+			{ID: &chkID, AccountID: e.checking, Amount: -12000, Position: 1},
+		},
+	}); err != nil {
+		t.Fatalf("UpdateTransaction: %v", err)
+	}
+
+	entries, err := e.s.TransactionHistory(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("TransactionHistory: %v", err)
+	}
+	u := findEntryOp(t, entries, "update")
+
+	// The update version's state has BOTH splits (the full live set), ordered by position.
+	if len(u.State.Splits) != 2 {
+		t.Fatalf("update state should carry both splits, got %d: %+v", len(u.State.Splits), u.State.Splits)
+	}
+	sal := findSplitState(t, u, e.salaries)
+	if sal.Status != "update" || sal.Amount != 12000 {
+		t.Fatalf("salaries split status=%q amount=%d, want update/12000", sal.Status, sal.Amount)
+	}
+	// The checking split changed its amount to balance too -- but the point stands: a
+	// split present in an earlier version is present in the later version's full state
+	// (carry-forward), not dropped. Assert it is present.
+	chk := findSplitState(t, u, e.checking)
+	if chk.SplitID != chkID {
+		t.Fatalf("checking split missing from carried-forward state")
+	}
+}
+
+// TestHistoryStateMemoOnlyEditKeepsSplitsUnchanged: a header-only edit (change just the
+// memo) must NOT mark the untouched splits as changed -- they carry forward with Status
+// "" so the version card renders them neutral, not spurious-amber. This is the
+// carry-forward path that matters: a split with no field delta in a change.
+func TestHistoryStateMemoOnlyEditKeepsSplitsUnchanged(t *testing.T) {
+	e := newTxnEnv(t)
+	id := post2(t, e, e.subUS, e.salaries, 10000, e.checking, -10000)
+
+	live, err := e.s.TransactionSplits(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("TransactionSplits: %v", err)
+	}
+	var salID, chkID int64
+	for _, sp := range live {
+		if sp.AccountID == e.salaries {
+			salID = sp.ID
+		} else {
+			chkID = sp.ID
+		}
+	}
+	// Edit ONLY the header memo; splits are byte-for-byte identical (same ids/amounts).
+	if err := e.s.UpdateTransaction(mutCtx(), id, PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD", Memo: "just the memo",
+		Splits: []SplitInput{
+			{ID: &salID, AccountID: e.salaries, Amount: 10000, Position: 0},
+			{ID: &chkID, AccountID: e.checking, Amount: -10000, Position: 1},
+		},
+	}); err != nil {
+		t.Fatalf("UpdateTransaction: %v", err)
+	}
+
+	entries, err := e.s.TransactionHistory(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("TransactionHistory: %v", err)
+	}
+	u := findEntryOp(t, entries, "update")
+	if len(u.State.Splits) != 2 {
+		t.Fatalf("memo-only edit state should carry both splits, got %d", len(u.State.Splits))
+	}
+	for _, sp := range u.State.Splits {
+		// A split with no changed field must be Status "" (or, if the store re-versions
+		// it, an "update" whose ChangedFields is empty -- both mean "render neutral").
+		if sp.Status == "update" && len(sp.ChangedFields) > 0 {
+			t.Fatalf("split %d marked changed on a memo-only edit: %+v", sp.SplitID, sp.ChangedFields)
+		}
+	}
+}
+
+// TestHistoryStateGhostThenDropped: a removed split appears as a "delete" ghost row on
+// the version that removed it, then is ABSENT from later versions' states.
+func TestHistoryStateGhostThenDropped(t *testing.T) {
+	e := newTxnEnv(t)
+	prog := "program"
+	id, err := e.s.PostTransaction(mutCtx(), PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{AccountID: e.salaries, Amount: 6000, Position: 0},
+			{AccountID: e.supplies, Amount: 4000, FunctionalClass: &prog, Position: 1},
+			{AccountID: e.checking, Amount: -10000, Position: 2},
+		},
+	})
+	if err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+	liveSplits, err := e.s.TransactionSplits(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("TransactionSplits: %v", err)
+	}
+	var salID, chkID int64
+	for _, sp := range liveSplits {
+		switch sp.AccountID {
+		case e.salaries:
+			salID = sp.ID
+		case e.checking:
+			chkID = sp.ID
+		}
+	}
+	// Edit 1: drop supplies.
+	if err := e.s.UpdateTransaction(mutCtx(), id, PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{ID: &salID, AccountID: e.salaries, Amount: 6000, Position: 0},
+			{ID: &chkID, AccountID: e.checking, Amount: -6000, Position: 1},
+		},
+	}); err != nil {
+		t.Fatalf("UpdateTransaction 1: %v", err)
+	}
+	// Edit 2: bump salaries (a later version where supplies must be gone entirely).
+	if err := e.s.UpdateTransaction(mutCtx(), id, PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD", Memo: "later",
+		Splits: []SplitInput{
+			{ID: &salID, AccountID: e.salaries, Amount: 7000, Position: 0},
+			{ID: &chkID, AccountID: e.checking, Amount: -7000, Position: 1},
+		},
+	}); err != nil {
+		t.Fatalf("UpdateTransaction 2: %v", err)
+	}
+
+	entries, err := e.s.TransactionHistory(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("TransactionHistory: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("want 3 versions, got %d", len(entries))
+	}
+	// Version 2 (the drop): supplies present as a "delete" ghost row.
+	drop := entries[1]
+	ghost := findSplitState(t, drop, e.supplies)
+	if ghost.Status != "delete" {
+		t.Fatalf("dropped supplies should be a delete ghost, got status=%q", ghost.Status)
+	}
+	// Version 3 (later): supplies is GONE from the state entirely.
+	last := entries[2]
+	for _, sp := range last.State.Splits {
+		if sp.AccountID == e.supplies {
+			t.Fatalf("supplies should be absent from the final state, got %+v", sp)
+		}
+	}
+	if len(last.State.Splits) != 2 {
+		t.Fatalf("final state should have 2 splits, got %d", len(last.State.Splits))
+	}
+}
+
+// TestHistoryStateVoidCarriesSplits: voiding writes NO split versions, so the void
+// version's state carries the pre-void split set forward with the header marked Deleted.
+func TestHistoryStateVoidCarriesSplits(t *testing.T) {
+	e := newTxnEnv(t)
+	id := post2(t, e, e.subUS, e.salaries, 10000, e.checking, -10000)
+	if err := e.s.DeleteTransaction(mutCtx(), id); err != nil {
+		t.Fatalf("DeleteTransaction: %v", err)
+	}
+	entries, err := e.s.TransactionHistory(mutCtx(), id)
+	if err != nil {
+		t.Fatalf("TransactionHistory: %v", err)
+	}
+	del := findEntryOp(t, entries, "delete")
+	if !del.State.Header.Deleted {
+		t.Fatalf("void version header should be marked Deleted")
+	}
+	if len(del.State.Splits) != 2 {
+		t.Fatalf("void version should carry the pre-void 2 splits, got %d", len(del.State.Splits))
+	}
+	for _, sp := range del.State.Splits {
+		if sp.Status != "" {
+			t.Fatalf("void carries splits unchanged (status \"\"), got %q", sp.Status)
+		}
+	}
+}
+
 // TestHistoryMissingTransaction: a never-created id has no version rows ->
 // ErrTransactionNotFound.
 func TestHistoryMissingTransaction(t *testing.T) {

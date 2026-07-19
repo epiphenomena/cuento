@@ -89,11 +89,29 @@ test.describe('transaction history / void / duplicate', () => {
       .getByRole('link', { name: /^history$/i }).click();
     await page.waitForURL('**/transactions/*/history');
 
-    const timeline = page.locator('ol.history-timeline');
+    // p29.16: the page is a vertical timeline of SAVED-STATE cards (first -> current).
+    // Assert there are (at least) two state cards -- the initial create and the edit --
+    // so a reviewer SEES each saved state, not just a delta.
+    const timeline = page.locator('ol.hist-timeline');
     await expect(timeline).toBeVisible();
+    const cards = page.locator('li.hist-version');
+    await expect(cards).toHaveCount(2);
     await expect(timeline).toContainText('Created');
     await expect(timeline).toContainText('Updated');
-    await expect(timeline).toContainText('edited memo');
+    await expect(timeline).toContainText('Initial state');
+    await expect(timeline).toContainText('Current state');
+
+    // Each state card shows the FULL transaction state: the split table with both split
+    // rows (the transfer's two accounts) is present in each card.
+    await expect(page.locator('table.hist-splits')).toHaveCount(2);
+
+    // The CURRENT-state card shows the edited memo AND marks it as CHANGED (the memo
+    // field carries is-changed and the prior value is struck via hist-old), so the
+    // reviewer can tell at a glance what moved -- not just that the value is present.
+    const current = cards.last();
+    await expect(current).toContainText('edited memo');
+    await expect(current.locator('.hist-field.is-changed')).toContainText('edited memo');
+    await expect(current.locator('.hist-field.is-changed .hist-old')).toContainText('original memo');
   });
 
   test('void with confirm removes the transaction from the register', async ({ page, server }) => {

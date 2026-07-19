@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"net/http"
 
+	"cuento/internal/i18n"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
@@ -22,37 +23,89 @@ import (
 // live deleted flag) and only 404s when the txn never existed. So this handler must
 // NOT pre-guard with GetTransaction (which hides a soft-deleted txn).
 
-// histDiffView is one rendered field change: the localized field label + the old/new
-// display strings. Empty Old (a create/added field) or empty New (a removed field)
-// renders as an addition/removal in the template.
-type histDiffView struct {
-	Label string // i18n label KEY (rendered via {{t}})
-	Old   string // display string ("" = none/empty side)
-	New   string
+// The history page is a vertical timeline of SAVED-STATE cards (first -> current).
+// Each card shows the FULL transaction state at that version -- the header fields and
+// the split rows as they stood -- with the CHANGES from the prior version highlighted:
+// added (green, "+"), removed (red, struck, "-"), changed (amber, "~"). Color is never
+// the only signal: every changed row/field carries a +/-/~ glyph and a status label.
+
+// histFieldView is one header field row in a state card: its label, current value, and
+// -- when it changed this version -- the marker and the prior value (shown struck).
+type histFieldView struct {
+	Label   string // i18n label KEY (rendered via {{t}})
+	Value   string // display string of the value at THIS version
+	Changed bool   // true when this field changed vs the prior version
+	Old     string // prior value (display string), shown only when Changed
 }
 
-// histSplitView is one split's change within a timeline entry: its op (create/
-// update/delete -> an i18n op label), a 1-based line number, and the per-field diffs.
-type histSplitView struct {
-	OpKey string // i18n key: history.split.added | .changed | .removed
-	Line  int
-	Diffs []histDiffView
+// histSplitRowView is one split line in a state card's split table, as it stood at this
+// version, with its change status overlaid so the row can be highlighted.
+//   - Status: "" unchanged | "create" added | "update" changed | "delete" removed(ghost)
+//   - MarkerKey / StatusKey: i18n keys for the +/-/~ glyph label and the status word.
+//   - Each cell (Account/Amount/Fund/Program/Class/Memo/Description) is a display
+//     string; a Changed* flag + Old* prior value drives the per-cell emphasis on an
+//     update so the eye lands on exactly the cell that moved.
+type histSplitRowView struct {
+	Line      int
+	Status    string // "" | "create" | "update" | "delete"
+	MarkerKey string // history.marker.added|.removed|.changed|.unchanged (accessible label)
+	StatusKey string // history.split.added|.removed|.changed (visible status word; "" if unchanged)
+
+	Account      string
+	Amount       string
+	Fund         string
+	Program      string
+	Class        string
+	Memo         string
+	Description  string
+	ChangedCells map[string]*histCellDelta // field name -> prior value, for changed cells (update only)
 }
 
-// histEntryView is one change in the rendered timeline: actor, formatted date, the
-// op label, header field diffs, and split diffs.
-type histEntryView struct {
-	Actor       string
-	Date        string // formatted per the user's date format (rule 10)
-	OpKey       string // i18n key: history.op.created | .updated | .voided
-	HeaderDiffs []histDiffView
-	SplitDiffs  []histSplitView
+// histCellDelta carries the prior display value of one changed cell (for the struck old
+// value shown inline next to the new value on an updated row).
+type histCellDelta struct {
+	Old string
+}
+
+// histSplitCell is the template-side pairing of a split-table cell's value with whether
+// that field changed on the row (and its prior value). makeHistSplitCell builds it from
+// the row's ChangedCells map so the template needn't distinguish absent from empty.
+type histSplitCell struct {
+	Val     string
+	Changed bool
+	Old     string
+}
+
+// makeHistSplitCell is the `splitCell` template func: pair a cell value with the row's
+// delta for that field (a nil *histCellDelta means unchanged this version -- the `index`
+// on the ChangedCells map yields nil for an absent key).
+func makeHistSplitCell(val string, delta *histCellDelta) histSplitCell {
+	c := histSplitCell{Val: val}
+	if delta != nil {
+		c.Changed = true
+		c.Old = delta.Old
+	}
+	return c
+}
+
+// histVersionView is one SAVED-STATE card: the version heading (op, actor, date, and a
+// sequence label -- Initial / Current / #N), the full header field set, and the full
+// split row set at this version.
+type histVersionView struct {
+	OpKey  string // i18n key: history.op.created | .updated | .voided
+	Actor  string
+	Date   string // formatted per the user's date format (rule 10)
+	SeqKey string // history.seq.initial | .current | "" (a middle version)
+	SeqNum int    // 1-based version number (shown for middle versions)
+	Voided bool   // header is in the deleted state (void card)
+	Fields []histFieldView
+	Splits []histSplitRowView
 }
 
 // historyPageModel is the GET model for the history page.
 type historyPageModel struct {
-	TxnID   int64
-	Entries []histEntryView
+	TxnID    int64
+	Versions []histVersionView
 }
 
 // txnHistory handles GET /transactions/{id}/history (TxnRead). It renders the change
@@ -74,7 +127,7 @@ func (s *server) txnHistory(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	model := historyPageModel{TxnID: id, Entries: view}
+	model := historyPageModel{TxnID: id, Versions: view}
 	s.render(w, r, http.StatusOK, "history.tmpl", s.newShellPage(r, model))
 }
 
@@ -82,7 +135,7 @@ func (s *server) txnHistory(w http.ResponseWriter, r *http.Request) {
 // ids -> names (rule 9), amounts -> formatted strings (rule 10), fields -> i18n label
 // keys. The name maps are loaded ONCE per render (tiny sets), reusing the register's
 // helpers.
-func (s *server) renderHistory(ctx context.Context, u *store.CurrentUser, lang string, entries []store.HistoryEntry) ([]histEntryView, error) {
+func (s *server) renderHistory(ctx context.Context, u *store.CurrentUser, lang string, entries []store.HistoryEntry) ([]histVersionView, error) {
 	accounts, err := accountNameMap(ctx, s.store, lang)
 	if err != nil {
 		return nil, err
@@ -100,68 +153,195 @@ func (s *server) renderHistory(ctx context.Context, u *store.CurrentUser, lang s
 		return nil, err
 	}
 
-	// The txn is single-currency (D3); take the currency from the last header snapshot
-	// carrying one so amounts format with the right exponent.
-	currency := lastCurrency(entries)
-	exp := s.currencyExponent(ctx, currency)
 	opts := formatOptsFor(u)
 	df := dateFormatFor(u)
 
-	// resolve turns one DiffValue into its display string given its field.
-	resolve := func(field store.HistoryField, v store.DiffValue) string {
-		switch field {
-		case store.FieldAmount:
-			// A zero-value DiffValue (empty side) renders as "" so a create/removal
-			// shows one-sided; a real amount is always non-zero (schema CHECK).
-			if v.Amount == 0 {
-				return ""
-			}
-			return money.FormatMoney(v.Amount, currency, exp, opts)
-		case store.FieldSubsidiary:
-			return nameOr(subs, v.ID)
-		case store.FieldAccount:
-			return nameOr(accounts, v.ID)
-		case store.FieldFund:
-			// An invalid id means the Unrestricted group (fund NULL); render its label.
-			if !v.ID.Valid {
-				return ""
-			}
-			return funds[v.ID.Int64]
-		case store.FieldProgram:
-			return nameOr(programs, v.ID)
-		default: // date / memo / currency / functional_class -> the stored text
-			return v.Text
-		}
-	}
+	// r groups the per-value display helpers for one render, keyed by the version's own
+	// currency so amounts format with the right exponent (the txn is single-currency,
+	// D3, but currency can itself be edited across versions).
+	r := histResolver{lang: lang, df: df, accounts: accounts, funds: funds, subs: subs, programs: programs, opts: opts}
 
-	views := make([]histEntryView, 0, len(entries))
-	for _, e := range entries {
-		ev := histEntryView{
-			Actor: e.ActorName,
-			Date:  money.FormatDate(parseISOForDisplay(dateOnly(e.At)), df),
-			OpKey: histOpKey(e.Op),
+	views := make([]histVersionView, 0, len(entries))
+	for i, e := range entries {
+		st := e.State
+		cur := st.Header.Currency
+		if cur == "" {
+			cur = "USD"
 		}
-		for _, d := range e.HeaderDiffs {
-			ev.HeaderDiffs = append(ev.HeaderDiffs, histDiffView{
-				Label: histFieldLabel(d.Field),
-				Old:   resolve(d.Field, d.Old),
-				New:   resolve(d.Field, d.New),
-			})
+		exp := s.currencyExponent(ctx, cur)
+
+		vv := histVersionView{
+			OpKey:  histOpKey(e.Op),
+			Actor:  e.ActorName,
+			Date:   money.FormatDate(parseISOForDisplay(dateOnly(e.At)), df),
+			Voided: st.Header.Deleted,
 		}
-		for _, sd := range e.SplitDiffs {
-			sv := histSplitView{OpKey: histSplitOpKey(sd.Op), Line: int(sd.Position) + 1}
-			for _, d := range sd.Fields {
-				sv.Diffs = append(sv.Diffs, histDiffView{
-					Label: histFieldLabel(d.Field),
-					Old:   resolve(d.Field, d.Old),
-					New:   resolve(d.Field, d.New),
-				})
-			}
-			ev.SplitDiffs = append(ev.SplitDiffs, sv)
+		switch {
+		case i == 0:
+			vv.SeqKey = "history.seq.initial"
+		case i == len(entries)-1:
+			vv.SeqKey = "history.seq.current"
+		default:
+			vv.SeqNum = i + 1
 		}
-		views = append(views, ev)
+
+		// Header field rows: the FULL header at this version, each flagged changed when
+		// it moved this version (from the header diffs, keyed by field).
+		changedHdr := headerDiffByField(e.HeaderDiffs, i == 0)
+		vv.Fields = r.headerFields(st.Header, cur, exp, changedHdr)
+
+		// Split rows: the FULL live split set at this version, each with its change
+		// status overlaid. On the FIRST version the rows are the initial baseline, not
+		// "added" -- render them neutral (DECISIONS p29.16).
+		for _, sp := range st.Splits {
+			vv.Splits = append(vv.Splits, r.splitRow(sp, cur, exp, i == 0))
+		}
+		views = append(views, vv)
 	}
 	return views, nil
+}
+
+// histResolver holds the per-render name maps + format options so the field/split
+// builders can turn structured state into display strings (rules 9/10).
+type histResolver struct {
+	lang     string
+	df       money.DateFormat
+	accounts map[int64]string
+	funds    map[int64]string
+	subs     map[int64]string
+	programs map[int64]string
+	opts     money.FormatOpts
+}
+
+// headerDiffByField indexes a version's header diffs by field, and returns nil for the
+// first version (its "diffs" are just the initial values, not changes to highlight).
+func headerDiffByField(diffs []store.FieldDiff, first bool) map[store.HistoryField]store.FieldDiff {
+	if first {
+		return nil
+	}
+	m := make(map[store.HistoryField]store.FieldDiff, len(diffs))
+	for _, d := range diffs {
+		m[d.Field] = d
+	}
+	return m
+}
+
+// headerFields builds the full header field rows for one version, marking each field
+// changed (with its prior value) when the version's diffs touched it.
+func (r histResolver) headerFields(h store.HistHeaderState, cur string, exp int, changed map[store.HistoryField]store.FieldDiff) []histFieldView {
+	fields := []struct {
+		field store.HistoryField
+		value string
+	}{
+		{store.FieldDate, money.FormatDate(parseISOForDisplay(h.Date), r.df)},
+		{store.FieldSubsidiary, r.subs[h.SubsidiaryID]},
+		{store.FieldCurrency, h.Currency},
+		{store.FieldMemo, h.Memo},
+		{store.FieldNotes, h.Notes},
+	}
+	out := make([]histFieldView, 0, len(fields))
+	for _, f := range fields {
+		// Skip empty optional free-text (memo/notes) unless it changed this version.
+		d, isChanged := changed[f.field]
+		if f.value == "" && !isChanged && (f.field == store.FieldMemo || f.field == store.FieldNotes) {
+			continue
+		}
+		fv := histFieldView{Label: histFieldLabel(f.field), Value: f.value, Changed: isChanged}
+		if isChanged {
+			fv.Old = r.resolveValue(f.field, d.Old, cur, exp)
+		}
+		out = append(out, fv)
+	}
+	return out
+}
+
+// splitRow builds one split-row view for a version, resolving its cells and (on an
+// update) the prior value of each changed cell. first suppresses the "added" status on
+// the initial-baseline version.
+func (r histResolver) splitRow(sp store.HistSplitState, cur string, exp int, first bool) histSplitRowView {
+	status := sp.Status
+	if first && status == "create" {
+		status = "" // initial baseline: neutral, not "added"
+	}
+	// Guard: an "update" with no changed fields would render as a spurious "changed"
+	// (amber) row with nothing to point at. The store today only versions a split that
+	// actually changed (splitUnchanged skips no-op splits), so this never fires; keep it
+	// as cheap insurance so a future re-version-everything change can't paint every row
+	// amber. Downgrade to neutral.
+	if status == "update" && len(sp.ChangedFields) == 0 {
+		status = ""
+	}
+	row := histSplitRowView{
+		Line:        int(sp.Position) + 1,
+		Status:      status,
+		MarkerKey:   histMarkerKey(status),
+		StatusKey:   histSplitStatusKey(status),
+		Account:     r.accounts[sp.AccountID],
+		Amount:      money.FormatMoney(sp.Amount, cur, exp, r.opts),
+		Fund:        r.fundName(sp.FundID),
+		Program:     r.programName(sp.ProgramID),
+		Class:       r.classLabel(sp.FunctionalClass),
+		Memo:        sp.Memo,
+		Description: sp.Description,
+	}
+	if status == "update" && len(sp.ChangedFields) > 0 {
+		row.ChangedCells = make(map[string]*histCellDelta, len(sp.ChangedFields))
+		for _, d := range sp.ChangedFields {
+			row.ChangedCells[string(d.Field)] = &histCellDelta{Old: r.resolveValue(d.Field, d.Old, cur, exp)}
+		}
+	}
+	return row
+}
+
+// resolveValue turns one DiffValue into its display string given its field (used for the
+// struck "old" value on changed header fields and split cells).
+func (r histResolver) resolveValue(field store.HistoryField, v store.DiffValue, cur string, exp int) string {
+	switch field {
+	case store.FieldAmount:
+		if v.Amount == 0 {
+			return ""
+		}
+		return money.FormatMoney(v.Amount, cur, exp, r.opts)
+	case store.FieldSubsidiary:
+		return nameOr(r.subs, v.ID)
+	case store.FieldAccount:
+		return nameOr(r.accounts, v.ID)
+	case store.FieldFund:
+		return r.fundName(v.ID)
+	case store.FieldProgram:
+		return nameOr(r.programs, v.ID)
+	case store.FieldFunctional:
+		return r.classLabel(sql.NullString{String: v.Text, Valid: v.Text != ""})
+	default: // date / memo / currency / notes / description -> stored text
+		return v.Text
+	}
+}
+
+// fundName resolves a nullable fund id to its name; an invalid id is the Unrestricted
+// group (fund NULL) and renders "" (the template shows a dash).
+func (r histResolver) fundName(id sql.NullInt64) string {
+	if !id.Valid {
+		return ""
+	}
+	return r.funds[id.Int64]
+}
+
+// programName resolves a nullable program id to its name ("" for none).
+func (r histResolver) programName(id sql.NullInt64) string {
+	if !id.Valid {
+		return ""
+	}
+	return r.programs[id.Int64]
+}
+
+// classLabel renders a nullable functional class through its i18n label in the request
+// language ("" for none). The class value ("program"/"management"/"fundraising") keys
+// the functional.<class> catalog entry (rule 9).
+func (r histResolver) classLabel(c sql.NullString) string {
+	if !c.Valid || c.String == "" {
+		return ""
+	}
+	return i18n.T(r.lang, "functional."+c.String)
 }
 
 // nameOr returns the mapped name for a valid id, else "" (an unset/invalid id --
@@ -171,24 +351,6 @@ func nameOr(m map[int64]string, id sql.NullInt64) string {
 		return ""
 	}
 	return m[id.Int64]
-}
-
-// lastCurrency returns the currency of the latest header diff that set one, defaulting
-// to USD when none is present (a splits-only change with no header currency).
-func lastCurrency(entries []store.HistoryEntry) string {
-	cur := "USD"
-	for _, e := range entries {
-		for _, d := range e.HeaderDiffs {
-			if d.Field == store.FieldCurrency {
-				if d.New.Text != "" {
-					cur = d.New.Text
-				} else if d.Old.Text != "" {
-					cur = d.Old.Text
-				}
-			}
-		}
-	}
-	return cur
 }
 
 // dateOnly trims an RFC3339Nano timestamp to its YYYY-MM-DD prefix so the money date
@@ -229,15 +391,33 @@ func histOpKey(op string) string {
 	}
 }
 
-// histSplitOpKey maps a split op to its i18n label key.
-func histSplitOpKey(op string) string {
-	switch op {
+// histSplitStatusKey maps a split-row change status to its visible status-word i18n key
+// (paired with the marker glyph). An unchanged row has no status word ("").
+func histSplitStatusKey(status string) string {
+	switch status {
 	case "create":
 		return "history.split.added"
 	case "delete":
 		return "history.split.removed"
-	default:
+	case "update":
 		return "history.split.changed"
+	default:
+		return ""
+	}
+}
+
+// histMarkerKey maps a change status to the i18n key for its +/-/~ marker's accessible
+// label (the non-color signal, rule: color is never the only cue).
+func histMarkerKey(status string) string {
+	switch status {
+	case "create":
+		return "history.marker.added"
+	case "delete":
+		return "history.marker.removed"
+	case "update":
+		return "history.marker.changed"
+	default:
+		return "history.marker.unchanged"
 	}
 }
 
