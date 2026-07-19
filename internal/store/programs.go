@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"cuento/internal/db/sqlc"
 )
@@ -241,6 +242,46 @@ func (s *Store) ProgramTree(ctx context.Context) ([]sqlc.ProgramTreeRow, error) 
 		return nil, fmt.Errorf("store: program tree: %w", err)
 	}
 	return rows, nil
+}
+
+// ProgramPaths returns id -> dotted-ancestor-path for every program in the tree
+// (p29.13), mirroring AccountPaths (p28.2). The web layer stamps this path onto every
+// program-select option's data-path so the shared fuzzy combobox (combofilter.js) shows
+// and RANKS by the hierarchy -- a query like "gen.ed" lines up with "General.Education".
+// A top-level program's path is just its name (the seeded root "General"). No lang
+// param: program names are single stored proper nouns (no per-language variant), unlike
+// account names. Read via ProgramTree (rule 2).
+func (s *Store) ProgramPaths(ctx context.Context) (map[int64]string, error) {
+	rows, err := s.ProgramTree(ctx)
+	if err != nil {
+		return nil, err
+	}
+	parentOf := make(map[int64]sql.NullInt64, len(rows))
+	nameOf := make(map[int64]string, len(rows))
+	for _, r := range rows {
+		parentOf[r.ID] = r.ParentID
+		nameOf[r.ID] = r.Name
+	}
+	pathOf := func(id int64) string {
+		var seg []string
+		for n, valid := id, true; valid; {
+			seg = append(seg, nameOf[n])
+			p := parentOf[n]
+			if !p.Valid || p.Int64 == n {
+				break
+			}
+			n = p.Int64
+		}
+		for i, j := 0, len(seg)-1; i < j; i, j = i+1, j-1 {
+			seg[i], seg[j] = seg[j], seg[i]
+		}
+		return strings.Join(seg, ".")
+	}
+	out := make(map[int64]string, len(rows))
+	for _, r := range rows {
+		out[r.ID] = pathOf(r.ID)
+	}
+	return out, nil
 }
 
 // ProgramDescendants returns a program plus its transitive closure (self

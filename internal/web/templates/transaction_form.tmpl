@@ -139,7 +139,7 @@
       <select name="progclass_{{.Index}}" id="txn-progclass-{{.Index}}" class="txn-progclass combo-input">
         <option value="c:management" data-class="1"{{if eq .Class "management"}} selected{{end}}>{{t "txn.progclass.admin"}}</option>
         <option value="c:fundraising" data-class="1"{{if eq .Class "fundraising"}} selected{{end}}>{{t "txn.progclass.fundraising"}}</option>
-        {{range $.Page.Programs}}<option value="p:{{.ID}}"{{if and (eq .ID $.Row.Program) (progclassProgramSelected $.Row.Class)}} selected{{end}}>{{.Name}}</option>
+        {{range $.Page.Programs}}<option value="p:{{.ID}}" data-path="{{.Path}}"{{if and (eq .ID $.Row.Program) (progclassProgramSelected $.Row.Class)}} selected{{end}}>{{.Name}}</option>
         {{end}}
       </select>
     </td>

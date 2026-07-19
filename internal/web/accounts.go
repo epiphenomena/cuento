@@ -527,6 +527,12 @@ type currencyOption struct {
 type programOption struct {
 	ID   int64
 	Name string
+	// Path (p29.13) is the program's dotted ancestor chain (e.g. "General.Education").
+	// Every program-select option carries it on data-path so the shared fuzzy combobox
+	// (combos.js / combofilter.js) shows and ranks by the hierarchy, exactly like the
+	// account pickers (p28.2). Empty on option lists built before ProgramPaths is wired
+	// (the template falls back to Name), but every real site now stamps it.
+	Path string
 }
 
 // accountNewForm handles GET /accounts/new (TxnWrite): the empty create form on its
@@ -763,8 +769,13 @@ func (s *server) buildAccountForm(ctx context.Context, id int64, typ string) (ac
 		if err != nil {
 			return form, err
 		}
+		// p29.13: dotted hierarchy path per program for the default-program combobox.
+		progPaths, err := s.store.ProgramPaths(ctx)
+		if err != nil {
+			return form, err
+		}
 		for _, p := range progs {
-			form.Programs = append(form.Programs, programOption{ID: p.ID, Name: p.Name})
+			form.Programs = append(form.Programs, programOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
 		}
 	}
 

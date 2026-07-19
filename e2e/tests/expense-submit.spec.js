@@ -281,7 +281,9 @@ test('expenses: subsidiary auto-set, account/fund/program combos, amount blur, d
   const progCell = page.locator('.el-row[data-row="0"] .el-program-cell');
   await progCell.locator('.combo-text').click();
   await expect(progCell.locator('.combo-list')).toBeVisible();
-  await progCell.locator('.combo-option', { hasText: 'General' }).click();
+  // p29.13: program combo labels now carry the dotted PATH (children read "General.x"),
+  // so match the ROOT exactly to avoid a substring collision with any seeded child.
+  await progCell.locator('.combo-option', { hasText: /^General$/ }).click();
   await expect(page.locator('#el-program-0')).toHaveValue(/[1-9]\d*/);
   // Re-open: the value-0 "None" entry must be present and pickable (the p26.3 fix). Move
   // focus away first (a pick leaves the overlay focused, so a re-click would not re-fire

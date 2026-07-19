@@ -71,10 +71,11 @@
         {{- if $grant.ScopeSelectable}}
         <div class="grant-scope">
           <label for="grant-scope-{{$grant.Name}}">{{t "admin.users.grant_scope_label"}}</label>
-          <select id="grant-scope-{{$grant.Name}}" name="program_{{$grant.Name}}">
+          {{/* p29.13: fuzzy program combobox (combo-input) with the dotted hierarchy in data-path. */}}
+          <select id="grant-scope-{{$grant.Name}}" name="program_{{$grant.Name}}" class="combo-input">
             <option value="">{{t "admin.users.grant_scope_org_wide"}}</option>
             {{- range $programs}}
-            <option value="{{.ID}}"{{if eq .ID $grant.ScopeID}} selected{{end}}>{{.Name}}</option>
+            <option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $grant.ScopeID}} selected{{end}}>{{.Name}}</option>
             {{- end}}
           </select>
           {{- if $grant.Granted}}

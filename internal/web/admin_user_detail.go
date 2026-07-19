@@ -54,6 +54,11 @@ func (g grantCheckbox) ScopeID() int64 {
 type programScopeOption struct {
 	ID   int64
 	Name string
+	// Path (p29.13) is the program's dotted ancestor chain, stamped on the grant
+	// program-scope select's data-path so the shared fuzzy combobox ranks by the
+	// hierarchy. The field order MUST match programOption so the direct struct
+	// conversion below stays valid.
+	Path string
 }
 
 // userDetailModel is the GET /admin/users/{id} model: the subject user, the

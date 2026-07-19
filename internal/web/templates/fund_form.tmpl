@@ -51,10 +51,11 @@
 
   <div class="field">
     <label for="ff-program">{{t "funds.form.program"}}</label>
-    <select id="ff-program" name="program_id"
+    {{/* p29.13: fuzzy program combobox (combo-input) with the dotted hierarchy in data-path. */}}
+    <select id="ff-program" name="program_id" class="combo-input"
       {{- if eq .Errors.FirstInvalid "program_id"}} autofocus{{end}}>
       <option value="0">{{t "funds.form.no_program"}}</option>
-      {{range .Programs}}<option value="{{.ID}}"{{if eq .ID $.ProgramID}} selected{{end}}>{{.Name}}</option>
+      {{range .Programs}}<option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.ProgramID}} selected{{end}}>{{.Name}}</option>
       {{end}}
     </select>
     {{with .Errors.ErrorKey "program_id"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}

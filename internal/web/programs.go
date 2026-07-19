@@ -251,11 +251,17 @@ func (s *server) buildProgramForm(ctx context.Context, id int64) (programForm, e
 	if err != nil {
 		return form, err
 	}
+	// p29.13: dotted hierarchy path per program so the program's own PARENT picker (a
+	// program selector) fuzzy-ranks by hierarchy like every other program select.
+	progPaths, err := s.store.ProgramPaths(ctx)
+	if err != nil {
+		return form, err
+	}
 	for _, p := range progs {
 		if excluded[p.ID] {
 			continue
 		}
-		form.Parents = append(form.Parents, programOption{ID: p.ID, Name: p.Name})
+		form.Parents = append(form.Parents, programOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
 	}
 	return form, nil
 }

@@ -412,9 +412,15 @@ func (s *server) programStatementOptions(ctx context.Context) ([]programOption, 
 	if err != nil {
 		return nil, err
 	}
+	// p29.13: the dotted hierarchy path per program, stamped on each option's data-path
+	// so the report's program combobox fuzzy-ranks by hierarchy like the account pickers.
+	paths, err := s.store.ProgramPaths(ctx)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]programOption, 0, len(tree))
 	for _, p := range tree {
-		out = append(out, programOption{ID: p.ID, Name: p.Name})
+		out = append(out, programOption{ID: p.ID, Name: p.Name, Path: paths[p.ID]})
 	}
 	return out, nil
 }

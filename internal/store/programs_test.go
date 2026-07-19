@@ -261,6 +261,32 @@ func TestProgramTree(t *testing.T) {
 	}
 }
 
+// TestProgramPaths (p29.13): id -> dotted ancestor path over the program tree. The
+// seeded root ("General") is its bare name; a child joins its ancestors with ".".
+func TestProgramPaths(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	//   General(root) - Education - K12
+	educ, _ := s.CreateProgram(mutCtx(), CreateProgramInput{ParentID: rootProgramID, Name: "Education"})
+	k12, _ := s.CreateProgram(mutCtx(), CreateProgramInput{ParentID: educ, Name: "K12"})
+
+	paths, err := s.ProgramPaths(context.Background())
+	if err != nil {
+		t.Fatalf("ProgramPaths: %v", err)
+	}
+	want := map[int64]string{
+		rootProgramID: "General",
+		educ:          "General.Education",
+		k12:           "General.Education.K12",
+	}
+	for id, w := range want {
+		if got := paths[id]; got != w {
+			t.Errorf("ProgramPaths[%d] = %q, want %q", id, got, w)
+		}
+	}
+}
+
 // TestProgramDescendants: self + transitive closure. Self must be present; a
 // sibling subtree and an ancestor must be excluded.
 func TestProgramDescendants(t *testing.T) {

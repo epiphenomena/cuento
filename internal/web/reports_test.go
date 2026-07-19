@@ -375,6 +375,33 @@ func TestWideMatrixReportsFullWidth(t *testing.T) {
 	}
 }
 
+// TestProgramSelectShowsHierarchy (p29.13): the program-statement report's program
+// selector is a fuzzy hierarchy combobox (combo-input) whose options carry the dotted
+// ancestor path on data-path, exactly like the account pickers (p28.2), so the shared
+// combobox ranks/labels by the program tree.
+func TestProgramSelectShowsHierarchy(t *testing.T) {
+	h, st, _, sm := reportsApp(t)
+	admin := mkUser(t, st, "admin", "none", true)
+
+	// A child under the seeded root "General" so a dotted path exists.
+	ctx := store.WithActor(context.Background(), store.Actor{ID: admin})
+	if _, err := st.CreateProgram(ctx, store.CreateProgramInput{ParentID: 1, Name: "Education"}); err != nil {
+		t.Fatalf("create program: %v", err)
+	}
+
+	rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.ProgramStatementReportID, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("program statement status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `report-program-select combo-input`) {
+		t.Errorf("program selector is not a combo-input; body:\n%s", body)
+	}
+	if !strings.Contains(body, `data-path="General.Education"`) {
+		t.Errorf("program option missing the dotted hierarchy data-path; body:\n%s", body)
+	}
+}
+
 // TestPeriodDefaultBracketsAllData (p29.12): on a PERIOD report with NO from/to, an
 // empty From defaults to the day BEFORE the oldest non-deleted transaction and an
 // empty To to the day AFTER the newest -- so an omitted bound captures everything.

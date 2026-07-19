@@ -139,10 +139,11 @@
   {{if .IsRE}}
   <div class="field">
     <label for="af-program">{{t "accounts.form.default_program"}}</label>
-    <select id="af-program" name="default_program"
+    {{/* p29.13: fuzzy program combobox (combo-input) with the dotted hierarchy in data-path. */}}
+    <select id="af-program" name="default_program" class="combo-input"
       {{- if eq .Errors.FirstInvalid "default_program"}} autofocus{{end}}>
       <option value="0">{{t "accounts.form.none"}}</option>
-      {{range .Programs}}<option value="{{.ID}}"{{if eq .ID $.DefaultProgram}} selected{{end}}>{{.Name}}</option>
+      {{range .Programs}}<option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.DefaultProgram}} selected{{end}}>{{.Name}}</option>
       {{end}}
     </select>
     {{with .Errors.ErrorKey "default_program"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}

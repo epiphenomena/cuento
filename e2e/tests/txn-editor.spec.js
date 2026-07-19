@@ -387,8 +387,11 @@ test.describe('transaction editor', () => {
     const pcInput = pcCell.locator('.combo-text');
     await pcInput.click();
     await pcInput.fill('gene');
-    await expect(pcCell.locator('.combo-option', { hasText: 'General' })).toBeVisible();
-    await pcCell.locator('.combo-option', { hasText: 'General' }).click();
+    // p29.13: program combo labels now carry the dotted PATH, so child programs read
+    // "General.x" -- match the ROOT exactly (^General$) to avoid a substring collision
+    // with any child a prior spec seeded into this worker's shared db.
+    await expect(pcCell.locator('.combo-option', { hasText: /^General$/ })).toBeVisible();
+    await pcCell.locator('.combo-option', { hasText: /^General$/ }).click();
     await expect(page.locator('#txn-progclass-0')).toHaveValue(/^p:\d+$/);
     await expect(page.locator('#txn-program-0')).toHaveValue(/\d+/);
     await expect(pcInput).toHaveValue(/General/);

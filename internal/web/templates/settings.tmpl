@@ -94,10 +94,11 @@
 
     <div class="field">
       <label for="setting-program">{{t "settings.default_program"}}</label>
-      <select id="setting-program" name="default_program"{{if eq .Errors.FirstInvalid "default_program"}} autofocus{{end}}>
+      {{/* p29.13: fuzzy program combobox (combo-input) with the dotted hierarchy in data-path. */}}
+      <select id="setting-program" name="default_program" class="combo-input"{{if eq .Errors.FirstInvalid "default_program"}} autofocus{{end}}>
         <option value="">{{t "settings.default_program_none"}}</option>
         {{- range .Programs}}
-        <option value="{{.ID}}"{{if eq .ID $.Page.DefaultProgram}} selected{{end}}>{{.Name}}</option>
+        <option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.Page.DefaultProgram}} selected{{end}}>{{.Name}}</option>
         {{- end}}
       </select>
       <p class="hint">{{t "settings.default_program_hint"}}</p>

@@ -370,8 +370,13 @@ func (s *server) buildFundForm(ctx context.Context, id int64) (fundForm, error) 
 	if err != nil {
 		return form, err
 	}
+	// p29.13: dotted hierarchy path per program for the fund form's program combobox.
+	progPaths, err := s.store.ProgramPaths(ctx)
+	if err != nil {
+		return form, err
+	}
 	for _, p := range progs {
-		form.Programs = append(form.Programs, programOption{ID: p.ID, Name: p.Name})
+		form.Programs = append(form.Programs, programOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
 	}
 	return form, nil
 }

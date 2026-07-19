@@ -135,7 +135,7 @@
           <td class="txn-cell bs-program-cell" colspan="3">
             <select name="program_{{$i}}" id="bs-program-{{$i}}" class="bs-program combo-input">
               <option value="0">{{t "budget_plan.split.program_none"}}</option>
-              {{range $page.Programs}}<option value="{{.ID}}"{{if eq .ID $sp.ProgramID}} selected{{end}}>{{.Name}}</option>
+              {{range $page.Programs}}<option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $sp.ProgramID}} selected{{end}}>{{.Name}}</option>
               {{end}}
             </select>
           </td>

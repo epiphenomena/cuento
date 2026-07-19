@@ -249,6 +249,10 @@ func accountShowsSubBadge(ctx context.Context, st *store.Store, accountID int64)
 type regFilterOption struct {
 	ID   int64
 	Name string
+	// Path (p29.13) is a PROGRAM option's dotted ancestor chain, stamped on the register
+	// program-filter select's data-path so the shared fuzzy combobox ranks by the
+	// hierarchy. Empty for the subsidiary options that reuse this type.
+	Path string
 }
 
 // registerPageModel is the GET model: the account header, gating flags, the current
@@ -468,8 +472,13 @@ func (s *server) attachRegisterFilterOptions(ctx context.Context, m *registerPag
 	if err != nil {
 		return err
 	}
+	// p29.13: dotted hierarchy path per program for the register program-filter combobox.
+	progPaths, err := s.store.ProgramPaths(ctx)
+	if err != nil {
+		return err
+	}
 	for _, p := range progs {
-		m.Programs = append(m.Programs, regFilterOption{ID: p.ID, Name: p.Name})
+		m.Programs = append(m.Programs, regFilterOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
 	}
 	return nil
 }

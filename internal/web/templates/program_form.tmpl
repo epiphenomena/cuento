@@ -34,9 +34,10 @@
   {{if not .IsRoot}}
   <div class="field">
     <label for="pf-parent">{{t "programs.form.parent"}}</label>
-    <select id="pf-parent" name="parent_id"
+    {{/* p29.13: fuzzy program combobox (combo-input) with the dotted hierarchy in data-path. */}}
+    <select id="pf-parent" name="parent_id" class="combo-input"
       {{- if eq .Errors.FirstInvalid "parent_id"}} autofocus{{end}}>
-      {{range .Parents}}<option value="{{.ID}}"{{if eq .ID $.ParentID}} selected{{end}}>{{.Name}}</option>
+      {{range .Parents}}<option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.ParentID}} selected{{end}}>{{.Name}}</option>
       {{end}}
     </select>
     {{with .Errors.ErrorKey "parent_id"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}

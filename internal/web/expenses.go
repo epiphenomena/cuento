@@ -485,11 +485,16 @@ func (s *server) expenseLineOptions(ctx context.Context, sub int64, include ...i
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	// p29.13: dotted hierarchy path per program for the expense grid's program combobox.
+	progPaths, err := s.store.ProgramPaths(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	for _, p := range progs {
 		if p.Active == 0 {
 			continue
 		}
-		programs = append(programs, txnOption{ID: p.ID, Name: p.Name})
+		programs = append(programs, txnOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
 	}
 	return accounts, funds, programs, nil
 }

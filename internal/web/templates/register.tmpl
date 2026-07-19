@@ -60,9 +60,10 @@
     {{end}}
   </select>
   <label for="reg-prog">{{t "register.filter.program"}}</label>
-  <select id="reg-prog" name="prog">
+  {{/* p29.13: fuzzy program combobox (combo-input) with the dotted hierarchy in data-path. */}}
+  <select id="reg-prog" name="prog" class="combo-input">
     <option value="0">{{t "register.filter.any_program"}}</option>
-    {{range .Programs}}<option value="{{.ID}}"{{if eq .ID $.FilterProg}} selected{{end}}>{{.Name}}</option>
+    {{range .Programs}}<option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.FilterProg}} selected{{end}}>{{.Name}}</option>
     {{end}}
   </select>
   {{/* No-JS fallback: without htmx the change-trigger can't fire, so keep a submit. */}}

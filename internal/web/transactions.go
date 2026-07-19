@@ -84,6 +84,11 @@ type txnAccountOption struct {
 type txnOption struct {
 	ID   int64
 	Name string
+	// Path (p29.13) is a PROGRAM option's dotted ancestor chain (e.g. "General.Education"),
+	// stamped on the program select's data-path so the shared fuzzy combobox ranks by the
+	// hierarchy. Empty for the subsidiary/fund options that reuse this type (their selects
+	// fall back to Name), populated only where a program list is built.
+	Path string
 }
 
 // txnEditorModel is the whole editor page/partial model.
@@ -1106,6 +1111,12 @@ func (s *server) newEditorModel(ctx context.Context, u *store.CurrentUser, sub i
 	if err != nil {
 		return model, err
 	}
+	// p29.13: dotted hierarchy path per program so the txn editor's program/progclass
+	// combobox fuzzy-ranks by hierarchy (the path rides on the p: program options only).
+	progPaths, err := s.store.ProgramPaths(ctx)
+	if err != nil {
+		return model, err
+	}
 	for _, p := range progs {
 		if p.Active == 0 {
 			continue
@@ -1113,7 +1124,7 @@ func (s *server) newEditorModel(ctx context.Context, u *store.CurrentUser, sub i
 		if !p.ParentID.Valid {
 			model.RootProgram = p.ID
 		}
-		model.Programs = append(model.Programs, txnOption{ID: p.ID, Name: p.Name})
+		model.Programs = append(model.Programs, txnOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
 	}
 
 	return model, nil

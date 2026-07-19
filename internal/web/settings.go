@@ -152,12 +152,17 @@ func (s *server) buildSettingsForm(r *http.Request, form settingsForm) (settings
 	if err != nil {
 		return settingsForm{}, err
 	}
+	// p29.13: dotted hierarchy path per program for the default-program combobox.
+	progPaths, err := s.store.ProgramPaths(r.Context())
+	if err != nil {
+		return settingsForm{}, err
+	}
 	form.Programs = make([]programOption, 0, len(progs))
 	for _, p := range progs {
 		if p.Active == 0 {
 			continue
 		}
-		form.Programs = append(form.Programs, programOption{ID: p.ID, Name: p.Name})
+		form.Programs = append(form.Programs, programOption{ID: p.ID, Name: p.Name, Path: progPaths[p.ID]})
 	}
 	form.Langs = langOptions(form.Locale)
 	form.DateFormats = dateFormatOptions()
