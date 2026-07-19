@@ -219,9 +219,27 @@ function enhance(input) {
     }
   });
 
+  // p29.3 select-all on focus, so the whole value can be replaced by typing.
+  // GOTCHA: a plain focus->select() is undone by the click's mouseup, which
+  // collapses the selection to the caret — so select-all would work on Tab-in but
+  // NOT on a mouse click. A one-shot flag armed on focus lets us preventDefault the
+  // FIRST mouseup after focus (keeping the whole-value selection), then disarm so
+  // later clicks inside the field position the caret normally.
+  let selectArmed = false;
+  input.addEventListener('focus', () => {
+    selectArmed = true;
+    if (typeof input.select === 'function') input.select();
+  });
+  input.addEventListener('mouseup', (evt) => {
+    if (!selectArmed) return;
+    selectArmed = false;
+    evt.preventDefault(); // don't let this click's mouseup collapse the select-all
+  });
+
   // Reformat a parseable value to the canonical display form on blur (so "6-1"
   // becomes the full date); leave an unparseable value for the server to reject.
   input.addEventListener('blur', () => {
+    selectArmed = false;
     const d = parseDate(input.value, fmt, new Date());
     if (d) input.value = formatDate(d, fmt);
   });

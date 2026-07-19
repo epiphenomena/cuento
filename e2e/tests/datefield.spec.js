@@ -105,3 +105,38 @@ test('datefield: the month/year title opens a navigator to step the year and pic
   await page.keyboard.press('Escape');
   await expect(pop).toBeHidden();
 });
+
+// NB: this asserts the select-all-on-focus FEATURE (typing replaces the whole value)
+// for both a mouse click-in and a keyboard focus-in. It cannot isolate the mouseup
+// guard specifically: synthetic Playwright clicks don't reproduce the native mouseup
+// that collapses the selection (dispatched events are untrusted, so the default caret
+// placement never runs), so the mouse case would pass with or without the guard in
+// this environment. The guard is verified manually in a real browser. Removing the
+// focus->select() entirely, however, DOES break both sub-cases here (typing appends).
+test('datefield: focusing a date field selects all, so typing replaces the value (mouse + keyboard)', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+  await page.goto('/reports/income_statement');
+
+  // --- mouse click-in: the click's mouseup must NOT collapse the select-all, so a
+  // full typed date REPLACES the seeded value rather than inserting into it. ---
+  const from = page.locator('#rp-from');
+  const to = page.locator('#rp-to');
+  await from.fill('2026-03-15');
+  await to.fill('2026-06-30');
+  // Move focus off both fields so the next focus/click really fires the focus event.
+  await page.getByRole('heading').first().click();
+
+  await from.click(); // real mouse click (mousedown+mouseup) into the field
+  await page.keyboard.type('2024-01-02');
+  await expect(from).toHaveValue('2024-01-02'); // replaced, not appended/spliced
+
+  // --- keyboard focus-in (the Tab path): focus fires, select() runs, no mouseup, so
+  // the whole value is selected and typing replaces it. ---
+  await page.getByRole('heading').first().click(); // move focus away again
+  await to.focus();
+  await page.keyboard.type('2025-05-05');
+  await expect(to).toHaveValue('2025-05-05');
+});
