@@ -260,6 +260,7 @@ type registerPageModel struct {
 
 	ShowSubBadge bool // account maps to >1 subsidiary (D18)
 	Reconcilable bool // account is reconcilable -> render the recon column (p16 wires the mark)
+	CanCreateTxn bool // account is a LEAF -> offer the New-transaction action (p29.7); a parent holds no splits
 
 	Rows []regRow
 
@@ -317,11 +318,21 @@ func (s *server) registerPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A parent account holds no splits (D11), so its register offers no New-transaction
+	// action; only a leaf does. Active matters too: a deactivated account accepts no new
+	// entry even if it is a leaf.
+	leaf, err := s.store.AccountIsLeaf(ctx, id)
+	if err != nil {
+		s.serverError(w)
+		return
+	}
+
 	model := registerPageModel{
 		AccountID:    id,
 		AccountName:  s.accountName(ctx, id, lang),
 		ShowSubBadge: badge,
 		Reconcilable: acct.Reconcilable != 0,
+		CanCreateTxn: leaf && acct.Active != 0,
 		Rows:         rows,
 		HasMore:      hasMore,
 		NextDate:     next.Date,

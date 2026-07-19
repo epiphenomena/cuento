@@ -170,8 +170,10 @@
   <h1>{{t "register.title"}}: {{.AccountName}}</h1>
   <p><a href="/accounts">{{t "register.back_to_accounts"}}</a>
      {{/* p12.2: open the transaction editor for a new entry (the register is the
-          everyday landing for data entry, W3). Edit links live per-row in p12.4. */}}
-     · <a href="/transactions/new?from=/accounts/{{.AccountID}}/register" class="btn btn-primary">{{t "register.new_txn"}}</a></p>
+          everyday landing for data entry, W3). Edit links live per-row in p12.4.
+          p29.7: only a LEAF (and active) account offers this -- a parent holds no
+          splits, so there is nothing to post to it. */}}
+     {{if .CanCreateTxn}} · <a href="/transactions/new?from=/accounts/{{.AccountID}}/register" class="btn btn-primary">{{t "register.new_txn"}}</a>{{end}}</p>
 
   {{/* The filter form lives in the section bar (register-controls, p23.12); the
        results swap in here on a filter change. */}}

@@ -250,17 +250,23 @@ func (s *server) txnNewForm(w http.ResponseWriter, r *http.Request) {
 // the user's last-used header account from the store. Returns 0 (leave blank) when
 // neither applies (no origin + no prior transaction, or a lookup miss).
 func (s *server) prefillHeaderAccount(ctx context.Context, u *store.CurrentUser, origin string) int64 {
-	if id := accountIDFromRegisterPath(origin); id != 0 {
-		return id
+	id := accountIDFromRegisterPath(origin)
+	if id == 0 && u != nil {
+		if last, err := s.store.LastHeaderAccountForActor(ctx, u.ID); err == nil {
+			id = last // best-effort convenience; a lookup failure just leaves the header blank
+		}
 	}
-	if u == nil {
+	if id == 0 {
 		return 0
 	}
-	acct, err := s.store.LastHeaderAccountForActor(ctx, u.ID)
-	if err != nil {
-		return 0 // best-effort convenience; a lookup failure just leaves the header blank
+	// p29.7: only prefill a LEAF header account. A split may post only to a leaf (D11),
+	// so prefilling a parent (e.g. arriving from a parent account's register, or a stale
+	// last-used account that has since gained children) would seed an unusable header;
+	// leave it blank instead.
+	if leaf, err := s.store.AccountIsLeaf(ctx, id); err != nil || !leaf {
+		return 0
 	}
-	return acct
+	return id
 }
 
 // accountIDFromRegisterPath extracts <id> from a same-site register origin path of the

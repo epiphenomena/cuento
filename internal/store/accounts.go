@@ -553,6 +553,19 @@ func (s *Store) GetAccount(ctx context.Context, id int64) (sqlc.Account, error) 
 	return row, nil
 }
 
+// AccountIsLeaf reports whether the account has NO children. Splits may post only to a
+// leaf account (D11 / rule 7), enforced on write; this is the read the UI uses to gate
+// new-transaction entry (a parent account's register offers no New-transaction action,
+// and the editor never prefills a parent header). Reuses the same AccountIsLeaf query
+// the write-side split validation runs, so the UI gate and the store rule can't drift.
+func (s *Store) AccountIsLeaf(ctx context.Context, id int64) (bool, error) {
+	leaf, err := s.q.AccountIsLeaf(ctx, sql.NullInt64{Int64: id, Valid: true})
+	if err != nil {
+		return false, fmt.Errorf("store: account is-leaf %d: %w", id, err)
+	}
+	return leaf, nil
+}
+
 // SplitIDsForAccount returns the ids of every split currently on an account, in
 // id order. Read; sqlc. It reuses the SAME SplitIdsByAccount query MergeAccount
 // repoints from, so the merge-UI consequences preview counts EXACTLY the splits

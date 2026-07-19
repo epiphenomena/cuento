@@ -570,6 +570,37 @@ func TestRegisterSubBadgeGating(t *testing.T) {
 	}
 }
 
+// TestRegisterNewTxnLeafOnly: the New-transaction action appears on a LEAF account's
+// register (splits post to leaves) but NOT on a parent/placeholder account's register
+// (p29.7 -- a parent holds no splits, so there is nothing to post to it).
+func TestRegisterNewTxnLeafOnly(t *testing.T) {
+	e := newRegEnv(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	parent, err := e.st.CreateAccount(ctx, store.CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash Group"}, Subsidiaries: []int64{e.subA},
+	})
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	leaf, err := e.st.CreateAccount(ctx, store.CreateAccountInput{
+		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash Leaf"}, Subsidiaries: []int64{e.subA},
+	})
+	if err != nil {
+		t.Fatalf("create leaf: %v", err)
+	}
+
+	const newTxnMark = `/transactions/new?from=/accounts/`
+	leafHTML := renderRegisterHTML(t, e, e.book, leaf)
+	if !strings.Contains(leafHTML, newTxnMark+strconv.FormatInt(leaf, 10)+"/register") {
+		t.Errorf("leaf account register should offer the New-transaction action")
+	}
+	parentHTML := renderRegisterHTML(t, e, e.book, parent)
+	if strings.Contains(parentHTML, newTxnMark) {
+		t.Errorf("parent account register must NOT offer the New-transaction action")
+	}
+}
+
 // TestRegisterReconColumnGating: the recon column/placeholder is present only for
 // reconcilable accounts.
 func TestRegisterReconColumnGating(t *testing.T) {
