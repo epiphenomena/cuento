@@ -26,6 +26,10 @@ other = "Cancel"
 other = "Skip to content"
 [common.updating]
 other = "Updating…"
+# p30.9: the GnuCash-style keyboard shortcuts a focused date field supports, shown as a
+# native hover tooltip (title=) on every datefield input via the shared partial.
+[datefield.shortcuts]
+other = "Shortcuts: t = today · [ / ] = prev/next month · - / + = prev/next day · h = end of month"
 
 # Authenticated shell (p10.2): the top-level navigation sections (Appendix F).
 # Each entry renders only for permitted personas AND only once its route exists;

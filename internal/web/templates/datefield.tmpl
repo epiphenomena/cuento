@@ -12,5 +12,5 @@
   wrote none by hand reproduces exactly. Autofocus is a caller-computed error flag.
 */ -}}
 {{- define "datefield" -}}
-<input type="text" id="{{.ID}}"{{if .Name}} name="{{.Name}}"{{end}} class="js-datefield{{if .Class}} {{.Class}}{{end}}"{{if .Value}} value="{{.Value}}"{{end}}{{if .Placeholder}} placeholder="{{.Placeholder}}"{{end}}{{if .Format}} data-date-format="{{.Format}}"{{end}} autocomplete="off"{{if .Autofocus}} autofocus{{end}}>
+<input type="text" id="{{.ID}}"{{if .Name}} name="{{.Name}}"{{end}} class="js-datefield{{if .Class}} {{.Class}}{{end}}"{{if .Value}} value="{{.Value}}"{{end}}{{if .Placeholder}} placeholder="{{.Placeholder}}"{{end}}{{if .Format}} data-date-format="{{.Format}}"{{end}} autocomplete="off" title="{{t "datefield.shortcuts"}}"{{if .Autofocus}} autofocus{{end}}>
 {{- end -}}

@@ -19,6 +19,10 @@ other = "Cancelar"
 other = "Ir al contenido"
 [common.updating]
 other = "Actualizando…"
+# p30.9: los atajos de teclado estilo GnuCash de un campo de fecha, mostrados como
+# tooltip nativo (title=) en cada input de fecha mediante la plantilla compartida.
+[datefield.shortcuts]
+other = "Atajos: t = hoy · [ / ] = mes ant./sig. · - / + = día ant./sig. · h = fin de mes"
 
 # Shell autenticado (p10.2): las secciones de navegacion de nivel superior
 # (Apendice F). Cada entrada se muestra solo para personas permitidas Y solo
