@@ -83,7 +83,7 @@ test.describe('merge accounts', () => {
     const swap = page.waitForResponse(
       (r) => new URL(r.url()).pathname === '/accounts' && r.request().method() === 'GET',
     );
-    await page.locator('.subnav-filters input[name="active"]').check();
+    await page.locator('.accounts-filters input[name="active"]').check();
     await swap;
     await expect(page.getByText('Supplies E2E', { exact: true })).toHaveCount(0);
     // The destination survives.

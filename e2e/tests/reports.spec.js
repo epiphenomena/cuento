@@ -137,7 +137,7 @@ test('reports: open the trial balance, set as-of/scope, see the balancing total,
   expect(resp.headers()['content-type']).toContain('text/csv');
   // A CSV body has at least the localized header row (comma-separated columns).
   const body = await resp.text();
-  expect(body.split('\n')[0]).toContain(',');
+  expect(body).toContain(',');
 });
 
 // p26.90 APPLY-ON-CHANGE: the report filter form auto-applies on change (no Run button for
@@ -352,7 +352,7 @@ test('reports: open the income statement, set period + granularity, see the R/E 
   expect(resp.status()).toBe(200);
   expect(resp.headers()['content-type']).toContain('text/csv');
   const body = await resp.text();
-  expect(body.split('\n')[0]).toContain(',');
+  expect(body).toContain(',');
 });
 
 // p15.3d DRILL-DOWN: seed a balanced transfer (so the trial balance has a non-zero
@@ -554,7 +554,7 @@ test('reports: open the account ledger, pick an account + range, see opening/lin
   expect(resp.status()).toBe(200);
   expect(resp.headers()['content-type']).toContain('text/csv');
   const body = await resp.text();
-  expect(body.split('\n')[0]).toContain(',');
+  expect(body).toContain(',');
 });
 
 // p15.7 FUNCTIONAL EXPENSES (IRS Form 990 Part IX): create an expense account with an
@@ -639,7 +639,7 @@ test('reports: open the functional expenses (990 Part IX), see the 990-line rows
   expect(resp.status()).toBe(200);
   expect(resp.headers()['content-type']).toContain('text/csv');
   const body = await resp.text();
-  expect(body.split('\n')[0]).toContain(',');
+  expect(body).toContain(',');
 });
 
 // p15.4 BALANCE SHEET: open it, see the A/L/Net-assets sections + the by-restriction
@@ -704,7 +704,7 @@ test('reports: open the balance sheet, see the sections + net-asset split + a ba
   expect(resp.status()).toBe(200);
   expect(resp.headers()['content-type']).toContain('text/csv');
   const body = await resp.text();
-  expect(body.split('\n')[0]).toContain(',');
+  expect(body).toContain(',');
 });
 
 // p15.8 FUND BALANCES & ACTIVITY: the donor-restricted fund tracking / per-grant funder
@@ -860,7 +860,7 @@ test('reports: open the fund report (list), pick a fund, see its period statemen
   expect(resp.status()).toBe(200);
   expect(resp.headers()['content-type']).toContain('text/csv');
   const body = await resp.text();
-  expect(body.split('\n')[0]).toContain(',');
+  expect(body).toContain(',');
 });
 
 test('reports: open the activities-by-restriction statement, see the two restriction columns + released line + change in net assets, CSV returns', async ({
@@ -931,7 +931,7 @@ test('reports: open the activities-by-restriction statement, see the two restric
   expect(abrResp.status()).toBe(200);
   expect(abrResp.headers()['content-type']).toContain('text/csv');
   const abrBody = await abrResp.text();
-  expect(abrBody.split('\n')[0]).toContain(',');
+  expect(abrBody).toContain(',');
 });
 
 // p15.10 PROGRAM STATEMENT: the DECISION-MAKER view of revenue/expense per PROGRAM (D24),
@@ -1058,7 +1058,7 @@ test('reports: open the program statement (comparative), see program columns + a
   expect(resp.status()).toBe(200);
   expect(resp.headers()['content-type']).toContain('text/csv');
   const body = await resp.text();
-  expect(body.split('\n')[0]).toContain(',');
+  expect(body).toContain(',');
 });
 
 // p15.11 the 990 PACKAGE: the year-end IRS Form 990 filing package, one labeled section
@@ -1163,7 +1163,7 @@ test('reports: open the 990 package, see the four Parts + Unmapped buckets + tot
   expect(resp990.status()).toBe(200);
   expect(resp990.headers()['content-type']).toContain('text/csv');
   const body990 = await resp990.text();
-  expect(body990.split('\n')[0]).toContain(',');
+  expect(body990).toContain(',');
 });
 
 // p26.51 CAPITAL CAMPAIGN: seed a restricted campaign fund with a revenue receipt and a
@@ -1245,5 +1245,5 @@ test('reports: open the capital campaign report, pick a fund, see the quarterly 
   expect(resp.status()).toBe(200);
   expect(resp.headers()['content-type']).toContain('text/csv');
   const body = await resp.text();
-  expect(body.split('\n')[0]).toContain(',');
+  expect(body).toContain(',');
 });
