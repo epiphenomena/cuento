@@ -336,7 +336,7 @@ WHERE c.id = ? AND fs.fund_id = ? AND fs.subsidiary_id = ?
 
 type InsertFundSubsidiaryVersionParams struct {
 	Op           string
-	ID           int64
+	ID           ids.ChangeID
 	FundID       ids.FundID
 	SubsidiaryID ids.SubsidiaryID
 }
@@ -370,7 +370,7 @@ WHERE c.id = ? AND f.id = ?
 
 type InsertFundVersionParams struct {
 	Op   string
-	ID   int64
+	ID   ids.ChangeID
 	ID_2 ids.FundID
 }
 

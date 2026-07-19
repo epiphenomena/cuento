@@ -537,7 +537,7 @@ WHERE c.id = ? AND an.account_id = ? AND an.lang = ?
 
 type InsertAccountNameVersionParams struct {
 	Op        string
-	ID        int64
+	ID        ids.ChangeID
 	AccountID int64
 	Lang      string
 }
@@ -584,7 +584,7 @@ WHERE c.id = ? AND asub.account_id = ? AND asub.subsidiary_id = ?
 
 type InsertAccountSubsidiaryVersionParams struct {
 	Op           string
-	ID           int64
+	ID           ids.ChangeID
 	AccountID    int64
 	SubsidiaryID ids.SubsidiaryID
 }
@@ -621,7 +621,7 @@ WHERE c.id = ? AND a.id = ?
 
 type InsertAccountVersionParams struct {
 	Op   string
-	ID   int64
+	ID   ids.ChangeID
 	ID_2 int64
 }
 

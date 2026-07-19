@@ -54,7 +54,7 @@ func (s *Store) CreateUser(ctx context.Context, in CreateUserInput) (ids.UserID,
 
 	var newID ids.UserID
 	_, err := s.write(ctx, "user.create", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			id, err := q.InsertUser(ctx, sqlc.InsertUserParams{
 				Username:     in.Username,
 				DisplayName:  in.DisplayName,
@@ -113,7 +113,7 @@ var ErrUserNotFound = errors.New("store: user not found")
 // live table, never the audit trail.
 func (s *Store) SetUserPassword(ctx context.Context, userID ids.UserID, passwordHash string) error {
 	_, err := s.write(ctx, "user.passwd", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if err := q.SetUserPassword(ctx, sqlc.SetUserPasswordParams{
 				PasswordHash: sql.NullString{String: passwordHash, Valid: true},
 				ID:           userID,
@@ -173,7 +173,7 @@ func (s *Store) DisableUser(ctx context.Context, userID ids.UserID) error {
 		}
 	}
 	_, err = s.write(ctx, "user.disable", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if err := q.SetUserDisabled(ctx, sqlc.SetUserDisabledParams{
 				DisabledAt: sql.NullString{String: s.now().Format(time.RFC3339Nano), Valid: true},
 				ID:         userID,
@@ -214,7 +214,7 @@ func (s *Store) SetUserTxnPerm(ctx context.Context, userID ids.UserID, perm stri
 		return ErrInvalidTxnPerm
 	}
 	_, err := s.write(ctx, "user.txn_perm", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if err := q.SetUserTxnPerm(ctx, sqlc.SetUserTxnPermParams{TxnPerm: perm, ID: userID}); err != nil {
 				return fmt.Errorf("set txn_perm: %w", err)
 			}
@@ -238,7 +238,7 @@ func (s *Store) SetUserCanSubmitExpenses(ctx context.Context, userID ids.UserID,
 		return ErrSystemUser
 	}
 	_, err := s.write(ctx, "user.can_submit_expenses", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if err := q.SetUserCanSubmitExpenses(ctx, sqlc.SetUserCanSubmitExpensesParams{
 				CanSubmitExpenses: boolToInt(can), ID: userID,
 			}); err != nil {
@@ -514,7 +514,7 @@ func (s *Store) UpdateUserSettings(ctx context.Context, userID ids.UserID, in Us
 	}
 
 	_, err := s.write(ctx, "user.settings", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if err := q.UpdateUserSettings(ctx, sqlc.UpdateUserSettingsParams{
 				Locale:              in.Locale,
 				DateFormat:          in.DateFormat,
@@ -546,7 +546,7 @@ func (s *Store) SetUserTheme(ctx context.Context, userID ids.UserID, theme strin
 		return ErrInvalidTheme
 	}
 	_, err := s.write(ctx, "user.theme", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if err := q.SetUserTheme(ctx, sqlc.SetUserThemeParams{Theme: theme, ID: userID}); err != nil {
 				return fmt.Errorf("set theme: %w", err)
 			}
@@ -562,7 +562,7 @@ func (s *Store) SetUserTheme(ctx context.Context, userID ids.UserID, theme strin
 // the generated positional-param names (ID=change_id, ID_2=entity_id) behind one
 // call site. It MUST run after the live insert so the snapshot captures the new
 // row -- and by design the query omits password_hash (rule 5).
-func insertUserVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.UserID) error {
+func insertUserVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID ids.UserID) error {
 	if err := q.InsertUserVersion(ctx, sqlc.InsertUserVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append user version (entity %d, op %s): %w", entityID, op, err)
 	}

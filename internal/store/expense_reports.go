@@ -71,7 +71,7 @@ var (
 func (s *Store) CreateExpenseReport(ctx context.Context, submitterID ids.UserID, subsidiaryID ids.SubsidiaryID) (ids.ExpenseReportID, error) {
 	var newID ids.ExpenseReportID
 	_, err := s.write(ctx, "expense_report.create", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if _, err := q.GetUser(ctx, submitterID); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrExpenseReportRefMissing
@@ -108,7 +108,7 @@ func (s *Store) CreateExpenseReport(ctx context.Context, submitterID ids.UserID,
 // Versioned op='update'.
 func (s *Store) UpdateExpenseReportSubsidiary(ctx context.Context, reportID ids.ExpenseReportID, subsidiaryID ids.SubsidiaryID) error {
 	_, err := s.write(ctx, "expense_report.set_subsidiary", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			rep, err := loadExpenseReport(ctx, q, reportID)
 			if err != nil {
 				return err
@@ -152,7 +152,7 @@ func (s *Store) UpdateExpenseReportSubsidiary(ctx context.Context, reportID ids.
 // op='delete' version BEFORE the report row is deleted (rule 14: snapshot-before-delete).
 func (s *Store) DiscardExpenseReport(ctx context.Context, reportID ids.ExpenseReportID) error {
 	_, err := s.write(ctx, "expense_report.discard", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			rep, err := loadExpenseReport(ctx, q, reportID)
 			if err != nil {
 				return err
@@ -206,7 +206,7 @@ type ExpenseReportLineInput struct {
 func (s *Store) AddExpenseReportLine(ctx context.Context, reportID ids.ExpenseReportID, in ExpenseReportLineInput) (ids.ExpenseReportLineID, error) {
 	var newID ids.ExpenseReportLineID
 	_, err := s.write(ctx, "expense_report_line.create", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if err := requireEditable(ctx, q, reportID); err != nil {
 				return err
 			}
@@ -238,7 +238,7 @@ func (s *Store) AddExpenseReportLine(ctx context.Context, reportID ids.ExpenseRe
 // report is draft|rejected) under one change.
 func (s *Store) UpdateExpenseReportLine(ctx context.Context, lineID ids.ExpenseReportLineID, in ExpenseReportLineInput) error {
 	_, err := s.write(ctx, "expense_report_line.update", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			line, err := q.GetExpenseReportLine(ctx, lineID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -276,7 +276,7 @@ func (s *Store) UpdateExpenseReportLine(ctx context.Context, lineID ids.ExpenseR
 // rule 14).
 func (s *Store) RemoveExpenseReportLine(ctx context.Context, lineID ids.ExpenseReportLineID) error {
 	_, err := s.write(ctx, "expense_report_line.delete", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			line, err := q.GetExpenseReportLine(ctx, lineID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -320,7 +320,7 @@ type ExpenseReportLineDesired struct {
 // rejection rolls the whole change back and leaves no audit trace.
 func (s *Store) ReplaceExpenseReportLines(ctx context.Context, reportID ids.ExpenseReportID, desired []ExpenseReportLineDesired) error {
 	_, err := s.write(ctx, "expense_report.replace_lines", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if err := requireEditable(ctx, q, reportID); err != nil {
 				return err
 			}
@@ -445,7 +445,7 @@ func (s *Store) RejectExpenseReport(ctx context.Context, reportID ids.ExpenseRep
 		return ErrExpenseReportReasonRequired
 	}
 	_, err := s.write(ctx, "expense_report.reject", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			rep, err := loadExpenseReport(ctx, q, reportID)
 			if err != nil {
 				return err
@@ -477,7 +477,7 @@ func (s *Store) RejectExpenseReport(ctx context.Context, reportID ids.ExpenseRep
 // Versioned op='update'.
 func (s *Store) ConvertExpenseReport(ctx context.Context, reportID ids.ExpenseReportID, postedTxnID int64) error {
 	_, err := s.write(ctx, "expense_report.convert", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			rep, err := loadExpenseReport(ctx, q, reportID)
 			if err != nil {
 				return err
@@ -524,7 +524,7 @@ func (s *Store) ConvertExpenseReport(ctx context.Context, reportID ids.ExpenseRe
 func (s *Store) PostAndConvertExpenseReport(ctx context.Context, reportID ids.ExpenseReportID, in PostTransactionInput) (int64, error) {
 	var txnID int64
 	_, err := s.write(ctx, "expense_report.post_convert", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			rep, err := loadExpenseReport(ctx, q, reportID)
 			if err != nil {
 				return err
@@ -604,7 +604,7 @@ func (s *Store) transitionExpenseReport(
 	decide func(rep sqlc.ExpenseReport, q *sqlc.Queries) (string, error),
 ) error {
 	_, err := s.write(ctx, kind, "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			rep, err := loadExpenseReport(ctx, q, reportID)
 			if err != nil {
 				return err
@@ -691,7 +691,7 @@ func validateExpenseReportLine(ctx context.Context, q *sqlc.Queries, in ExpenseR
 
 // insertExpenseReportVersion appends the expense_reports snapshot-from-live version
 // row (MUST run after the live write). Hides the ID/ID_2 positional-param names.
-func insertExpenseReportVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.ExpenseReportID) error {
+func insertExpenseReportVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID ids.ExpenseReportID) error {
 	if err := q.InsertExpenseReportVersion(ctx, sqlc.InsertExpenseReportVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append expense report version (entity %d, op %s): %w", entityID, op, err)
 	}
@@ -700,7 +700,7 @@ func insertExpenseReportVersion(ctx context.Context, q *sqlc.Queries, changeID i
 
 // insertExpenseReportLineVersion appends the expense_report_lines snapshot-from-live
 // version row. For op='delete' it MUST run BEFORE the live delete.
-func insertExpenseReportLineVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.ExpenseReportLineID) error {
+func insertExpenseReportLineVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID ids.ExpenseReportLineID) error {
 	if err := q.InsertExpenseReportLineVersion(ctx, sqlc.InsertExpenseReportLineVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append expense report line version (entity %d, op %s): %w", entityID, op, err)
 	}

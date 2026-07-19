@@ -37,7 +37,7 @@ type AccountName struct {
 type AccountNamesVersion struct {
 	ID        int64
 	EntityID  int64
-	ChangeID  int64
+	ChangeID  ids.ChangeID
 	ValidFrom string
 	Op        string
 	Lang      string
@@ -47,7 +47,7 @@ type AccountNamesVersion struct {
 type AccountSubsidiariesVersion struct {
 	ID           int64
 	EntityID     int64
-	ChangeID     int64
+	ChangeID     ids.ChangeID
 	ValidFrom    string
 	Op           string
 	SubsidiaryID ids.SubsidiaryID
@@ -61,7 +61,7 @@ type AccountSubsidiary struct {
 type AccountsVersion struct {
 	ID               int64
 	EntityID         int64
-	ChangeID         int64
+	ChangeID         ids.ChangeID
 	ValidFrom        string
 	Op               string
 	ParentID         sql.NullInt64
@@ -92,7 +92,7 @@ type BudgetPlan struct {
 type BudgetPlansVersion struct {
 	ID           int64
 	EntityID     ids.BudgetPlanID
-	ChangeID     int64
+	ChangeID     ids.ChangeID
 	ValidFrom    string
 	Op           string
 	Name         string
@@ -118,7 +118,7 @@ type BudgetSplit struct {
 type BudgetSplitsVersion struct {
 	ID          int64
 	EntityID    ids.BudgetSplitID
-	ChangeID    int64
+	ChangeID    ids.ChangeID
 	ValidFrom   string
 	Op          string
 	PlanID      ids.BudgetPlanID
@@ -132,7 +132,7 @@ type BudgetSplitsVersion struct {
 }
 
 type Change struct {
-	ID      int64
+	ID      ids.ChangeID
 	ActorID int64
 	At      string
 	Kind    string
@@ -153,7 +153,7 @@ type ExchangeRate struct {
 	Quote    string
 	Rate     float64
 	Source   string
-	ChangeID int64
+	ChangeID ids.ChangeID
 }
 
 type ExpenseReport struct {
@@ -180,7 +180,7 @@ type ExpenseReportLine struct {
 type ExpenseReportLinesVersion struct {
 	ID          int64
 	EntityID    ids.ExpenseReportLineID
-	ChangeID    int64
+	ChangeID    ids.ChangeID
 	ValidFrom   string
 	Op          string
 	ReportID    ids.ExpenseReportID
@@ -195,7 +195,7 @@ type ExpenseReportLinesVersion struct {
 type ExpenseReportsVersion struct {
 	ID                  int64
 	EntityID            ids.ExpenseReportID
-	ChangeID            int64
+	ChangeID            ids.ChangeID
 	ValidFrom           string
 	Op                  string
 	SubmitterID         ids.UserID
@@ -231,7 +231,7 @@ type Fund struct {
 type FundSubsidiariesVersion struct {
 	ID           int64
 	EntityID     ids.FundID
-	ChangeID     int64
+	ChangeID     ids.ChangeID
 	ValidFrom    string
 	Op           string
 	SubsidiaryID ids.SubsidiaryID
@@ -245,7 +245,7 @@ type FundSubsidiary struct {
 type FundsVersion struct {
 	ID          int64
 	EntityID    ids.FundID
-	ChangeID    int64
+	ChangeID    ids.ChangeID
 	ValidFrom   string
 	Op          string
 	Name        string
@@ -305,7 +305,7 @@ type Program struct {
 type ProgramsVersion struct {
 	ID        int64
 	EntityID  ids.ProgramID
-	ChangeID  int64
+	ChangeID  ids.ChangeID
 	ValidFrom string
 	Op        string
 	ParentID  sql.NullInt64
@@ -327,7 +327,7 @@ type Reconciliation struct {
 type ReconciliationsVersion struct {
 	ID               int64
 	EntityID         ids.ReconciliationID
-	ChangeID         int64
+	ChangeID         ids.ChangeID
 	ValidFrom        string
 	Op               string
 	AccountID        int64
@@ -366,7 +366,7 @@ type Split struct {
 type SplitsVersion struct {
 	ID              int64
 	EntityID        int64
-	ChangeID        int64
+	ChangeID        ids.ChangeID
 	ValidFrom       string
 	Op              string
 	TransactionID   int64
@@ -383,7 +383,7 @@ type SplitsVersion struct {
 type SubsidiariesVersion struct {
 	ID           int64
 	EntityID     ids.SubsidiaryID
-	ChangeID     int64
+	ChangeID     ids.ChangeID
 	ValidFrom    string
 	Op           string
 	ParentID     sql.NullInt64
@@ -415,7 +415,7 @@ type Transaction struct {
 type TransactionsVersion struct {
 	ID           int64
 	EntityID     int64
-	ChangeID     int64
+	ChangeID     ids.ChangeID
 	ValidFrom    string
 	Op           string
 	Date         string
@@ -455,7 +455,7 @@ type UserReportGrant struct {
 type UserReportGrantsVersion struct {
 	ID        int64
 	EntityID  ids.UserID
-	ChangeID  int64
+	ChangeID  ids.ChangeID
 	ValidFrom string
 	Op        string
 	GroupName string
@@ -465,7 +465,7 @@ type UserReportGrantsVersion struct {
 type UsersVersion struct {
 	ID                  int64
 	EntityID            ids.UserID
-	ChangeID            int64
+	ChangeID            ids.ChangeID
 	ValidFrom           string
 	Op                  string
 	Username            string

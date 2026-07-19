@@ -129,7 +129,7 @@ type resolvedSplit struct {
 func (s *Store) PostTransaction(ctx context.Context, in PostTransactionInput) (int64, error) {
 	var newID int64
 	_, err := s.write(ctx, "transaction.post", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			id, err := s.postTransactionTx(ctx, q, changeID, in)
 			if err != nil {
 				return err
@@ -151,7 +151,7 @@ func (s *Store) PostTransaction(ctx context.Context, in PostTransactionInput) (i
 // no window in which a posted txn exists with a still-pending import row (which would
 // double-post on retry). All validation runs on q, so a rejection rolls the caller's
 // change back.
-func (s *Store) postTransactionTx(ctx context.Context, q *sqlc.Queries, changeID int64, in PostTransactionInput) (int64, error) {
+func (s *Store) postTransactionTx(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, in PostTransactionInput) (int64, error) {
 	resolved, err := s.validateAndResolve(ctx, q, in, nil)
 	if err != nil {
 		return 0, err
@@ -187,7 +187,7 @@ func (s *Store) postTransactionTx(ctx context.Context, q *sqlc.Queries, changeID
 // a clean LIMIT-1 lookup.
 func (s *Store) UpdateTransaction(ctx context.Context, id int64, in PostTransactionInput) error {
 	_, err := s.write(ctx, "transaction.update", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			cur, err := q.GetTransaction(ctx, id)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -341,7 +341,7 @@ func (s *Store) UpdateTransaction(ctx context.Context, id int64, in PostTransact
 // delete-versions) -- the as-of query excludes the txn by its own delete row.
 func (s *Store) DeleteTransaction(ctx context.Context, id int64) error {
 	_, err := s.write(ctx, "transaction.delete", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if _, err := q.GetTransaction(ctx, id); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrTransactionNotFound
@@ -827,7 +827,7 @@ func fundSplitInSubsidiary(ctx context.Context, q *sqlc.Queries, fundID ids.Fund
 // --- small helpers -------------------------------------------------------
 
 // insertSplit inserts one resolved split live then appends its op='create' version.
-func insertSplit(ctx context.Context, q *sqlc.Queries, changeID, txnID int64, r resolvedSplit) error {
+func insertSplit(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, txnID int64, r resolvedSplit) error {
 	sid, err := q.InsertSplit(ctx, sqlc.InsertSplitParams{
 		TransactionID:   txnID,
 		AccountID:       r.accountID,
@@ -875,7 +875,7 @@ func nullStringEq(a, b sql.NullString) bool {
 
 // insertTransactionVersion appends the transactions snapshot-from-live version row,
 // hiding the generated positional-param names (ID=change_id, ID_2=entity_id).
-func insertTransactionVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID int64) error {
+func insertTransactionVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID int64) error {
 	if err := q.InsertTransactionVersion(ctx, sqlc.InsertTransactionVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append transaction version (entity %d, op %s): %w", entityID, op, err)
 	}
@@ -884,7 +884,7 @@ func insertTransactionVersion(ctx context.Context, q *sqlc.Queries, changeID int
 
 // insertSplitVersion appends the splits snapshot-from-live version row. For
 // op='delete' the caller runs this BEFORE the live DELETE.
-func insertSplitVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID int64) error {
+func insertSplitVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID int64) error {
 	if err := q.InsertSplitVersion(ctx, sqlc.InsertSplitVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append split version (entity %d, op %s): %w", entityID, op, err)
 	}

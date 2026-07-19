@@ -79,7 +79,7 @@ func (s *Store) CreateSubsidiary(ctx context.Context, in CreateSubsidiaryInput) 
 
 	var newID ids.SubsidiaryID
 	_, err := s.write(ctx, "subsidiary.create", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			// Validate the parent exists inside the tx (transaction-consistent).
 			if _, err := q.GetSubsidiary(ctx, in.ParentID); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -115,7 +115,7 @@ func (s *Store) CreateSubsidiary(ctx context.Context, in CreateSubsidiaryInput) 
 // The version append reflects the NEW values (it runs after the live update).
 func (s *Store) UpdateSubsidiary(ctx context.Context, id ids.SubsidiaryID, in UpdateSubsidiaryInput) error {
 	_, err := s.write(ctx, "subsidiary.update", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			cur, err := q.GetSubsidiary(ctx, id)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -182,7 +182,7 @@ func (s *Store) UpdateSubsidiary(ctx context.Context, id ids.SubsidiaryID, in Up
 // (p08).
 func (s *Store) DeactivateSubsidiary(ctx context.Context, id ids.SubsidiaryID) error {
 	_, err := s.write(ctx, "subsidiary.deactivate", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			cur, err := q.GetSubsidiary(ctx, id)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -222,7 +222,7 @@ func (s *Store) DeactivateSubsidiary(ctx context.Context, id ids.SubsidiaryID) e
 // generated positional-param names (ID=change_id, Op, ID_2=entity_id — see the
 // query comment) behind one call site so every entity op reads the same way. It
 // MUST run after the live write so the snapshot captures the new values.
-func insertSubsidiaryVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.SubsidiaryID) error {
+func insertSubsidiaryVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID ids.SubsidiaryID) error {
 	if err := q.InsertSubsidiaryVersion(ctx, sqlc.InsertSubsidiaryVersionParams{
 		ID:   changeID,
 		Op:   op,

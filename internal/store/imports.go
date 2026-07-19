@@ -53,7 +53,7 @@ func (s *Store) CreateMappingProfile(ctx context.Context, name string, cfg banki
 	}
 	var newID ids.MappingProfileID
 	_, err = s.write(ctx, "import.profile.create", "",
-		func(ctx context.Context, q *sqlc.Queries, _ int64) error {
+		func(ctx context.Context, q *sqlc.Queries, _ ids.ChangeID) error {
 			id, err := q.InsertMappingProfile(ctx, sqlc.InsertMappingProfileParams{
 				Name:   name,
 				Config: string(blob),
@@ -121,7 +121,7 @@ func (s *Store) GetMappingProfile(ctx context.Context, id ids.MappingProfileID) 
 // ErrMappingProfileNotFound. Non-versioned: funnel, no version append.
 func (s *Store) DeactivateMappingProfile(ctx context.Context, id ids.MappingProfileID) error {
 	_, err := s.write(ctx, "import.profile.deactivate", "",
-		func(ctx context.Context, q *sqlc.Queries, _ int64) error {
+		func(ctx context.Context, q *sqlc.Queries, _ ids.ChangeID) error {
 			n, err := q.DeactivateMappingProfile(ctx, id)
 			if err != nil {
 				return fmt.Errorf("deactivate mapping profile: %w", err)
@@ -150,7 +150,7 @@ func (s *Store) CreateImportBatch(ctx context.Context, filename string, accountI
 	}
 	var newID ids.ImportBatchID
 	_, err := s.write(ctx, "import.batch.create", "",
-		func(ctx context.Context, q *sqlc.Queries, _ int64) error {
+		func(ctx context.Context, q *sqlc.Queries, _ ids.ChangeID) error {
 			maps, err := q.HasAccountSubsidiaryMap(ctx, sqlc.HasAccountSubsidiaryMapParams{
 				AccountID:    accountID,
 				SubsidiaryID: subsidiaryID,
@@ -217,7 +217,7 @@ func (s *Store) StageImportRows(ctx context.Context, batchID ids.ImportBatchID, 
 
 	out := make([]StagedRow, 0, len(rows))
 	_, err = s.write(ctx, "import.rows.stage", "",
-		func(ctx context.Context, q *sqlc.Queries, _ int64) error {
+		func(ctx context.Context, q *sqlc.Queries, _ ids.ChangeID) error {
 			out = out[:0]
 			// Within-batch duplicates also flag (a file listing the same line twice).
 			seen := make(map[string]bool)
@@ -465,7 +465,7 @@ func (s *Store) GetImportRow(ctx context.Context, rowID ids.ImportRowID) (Import
 func (s *Store) PostImportRow(ctx context.Context, rowID ids.ImportRowID, in PostTransactionInput) (int64, error) {
 	var txnID int64
 	_, err := s.write(ctx, "import.row.post", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			row, err := q.GetImportRow(ctx, rowID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -505,7 +505,7 @@ func (s *Store) DiscardImportRow(ctx context.Context, rowID ids.ImportRowID, rea
 		return ErrDiscardReasonRequired
 	}
 	_, err := s.write(ctx, "import.row.discard", reason,
-		func(ctx context.Context, q *sqlc.Queries, _ int64) error {
+		func(ctx context.Context, q *sqlc.Queries, _ ids.ChangeID) error {
 			row, err := q.GetImportRow(ctx, rowID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {

@@ -103,7 +103,7 @@ WHERE c.id = ? AND g.user_id = ? AND g.group_name = ?
 
 type InsertReportGrantVersionParams struct {
 	Op        string
-	ID        int64
+	ID        ids.ChangeID
 	UserID    ids.UserID
 	GroupName string
 }

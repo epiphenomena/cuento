@@ -80,7 +80,7 @@ func (s *Store) CreateProgram(ctx context.Context, in CreateProgramInput) (ids.P
 
 	var newID ids.ProgramID
 	_, err := s.write(ctx, "program.create", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			// Validate the parent exists inside the tx (transaction-consistent).
 			if _, err := q.GetProgram(ctx, in.ParentID); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -114,7 +114,7 @@ func (s *Store) CreateProgram(ctx context.Context, in CreateProgramInput) (ids.P
 // The version append reflects the NEW values (it runs after the live update).
 func (s *Store) UpdateProgram(ctx context.Context, id ids.ProgramID, in UpdateProgramInput) error {
 	_, err := s.write(ctx, "program.update", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			cur, err := q.GetProgram(ctx, id)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -176,7 +176,7 @@ func (s *Store) UpdateProgram(ctx context.Context, id ids.ProgramID, in UpdatePr
 // use (the full split-based blocks-new-use assertion lands in p08).
 func (s *Store) DeactivateProgram(ctx context.Context, id ids.ProgramID) error {
 	_, err := s.write(ctx, "program.deactivate", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			cur, err := q.GetProgram(ctx, id)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -215,7 +215,7 @@ func (s *Store) DeactivateProgram(ctx context.Context, id ids.ProgramID) error {
 // generated positional-param names (ID=change_id, Op, ID_2=entity_id) behind one
 // call site. It MUST run after the live write so the snapshot captures the new
 // values.
-func insertProgramVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.ProgramID) error {
+func insertProgramVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID ids.ProgramID) error {
 	if err := q.InsertProgramVersion(ctx, sqlc.InsertProgramVersionParams{
 		ID:   changeID,
 		Op:   op,

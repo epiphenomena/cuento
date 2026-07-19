@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 const countChanges = `-- name: CountChanges :one
@@ -27,7 +29,7 @@ FROM changes
 WHERE id = ?
 `
 
-func (q *Queries) GetChange(ctx context.Context, id int64) (Change, error) {
+func (q *Queries) GetChange(ctx context.Context, id ids.ChangeID) (Change, error) {
 	row := q.db.QueryRowContext(ctx, getChange, id)
 	var i Change
 	err := row.Scan(
@@ -53,14 +55,14 @@ type InsertChangeParams struct {
 	Note    sql.NullString
 }
 
-func (q *Queries) InsertChange(ctx context.Context, arg InsertChangeParams) (int64, error) {
+func (q *Queries) InsertChange(ctx context.Context, arg InsertChangeParams) (ids.ChangeID, error) {
 	row := q.db.QueryRowContext(ctx, insertChange,
 		arg.ActorID,
 		arg.At,
 		arg.Kind,
 		arg.Note,
 	)
-	var id int64
+	var id ids.ChangeID
 	err := row.Scan(&id)
 	return id, err
 }

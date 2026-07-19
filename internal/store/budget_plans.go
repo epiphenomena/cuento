@@ -76,7 +76,7 @@ type BudgetPlanInput struct {
 func (s *Store) CreateBudgetPlan(ctx context.Context, in BudgetPlanInput) (ids.BudgetPlanID, error) {
 	var newID ids.BudgetPlanID
 	_, err := s.write(ctx, "budget_plan.create", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if _, err := q.GetSubsidiary(ctx, in.SubsidiaryID); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrBudgetSplitRefMissing
@@ -103,7 +103,7 @@ func (s *Store) CreateBudgetPlan(ctx context.Context, in BudgetPlanInput) (ids.B
 // UpdateBudgetPlan replaces a plan's fields under one change.
 func (s *Store) UpdateBudgetPlan(ctx context.Context, id ids.BudgetPlanID, in BudgetPlanInput) error {
 	_, err := s.write(ctx, "budget_plan.update", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if _, err := q.GetBudgetPlan(ctx, id); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrBudgetPlanNotFound
@@ -139,7 +139,7 @@ func (s *Store) UpdateBudgetPlan(ctx context.Context, id ids.BudgetPlanID, in Bu
 // audit trail is complete (a delete version exists for each removed row).
 func (s *Store) DeleteBudgetPlan(ctx context.Context, id ids.BudgetPlanID) error {
 	_, err := s.write(ctx, "budget_plan.delete", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if _, err := q.GetBudgetPlan(ctx, id); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrBudgetPlanNotFound
@@ -213,7 +213,7 @@ type BudgetSplitInput struct {
 func (s *Store) CreateBudgetSplit(ctx context.Context, planID ids.BudgetPlanID, in BudgetSplitInput) (ids.BudgetSplitID, error) {
 	var newID ids.BudgetSplitID
 	_, err := s.write(ctx, "budget_split.create", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			resolved, err := resolveBudgetSplit(ctx, q, planID, in)
 			if err != nil {
 				return err
@@ -244,7 +244,7 @@ func (s *Store) CreateBudgetSplit(ctx context.Context, planID ids.BudgetPlanID, 
 // program defaulting as create). The plan is fixed (a split belongs to its plan).
 func (s *Store) UpdateBudgetSplit(ctx context.Context, id ids.BudgetSplitID, in BudgetSplitInput) error {
 	_, err := s.write(ctx, "budget_split.update", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			cur, err := q.GetBudgetSplit(ctx, id)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -280,7 +280,7 @@ func (s *Store) UpdateBudgetSplit(ctx context.Context, id ids.BudgetSplitID, in 
 // version FIRST (snapshot-before-delete, rule 14).
 func (s *Store) DeleteBudgetSplit(ctx context.Context, id ids.BudgetSplitID) error {
 	_, err := s.write(ctx, "budget_split.delete", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if _, err := q.GetBudgetSplit(ctx, id); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrBudgetSplitNotFound
@@ -315,7 +315,7 @@ func (s *Store) DeleteBudgetSplit(ctx context.Context, id ids.BudgetSplitID) err
 func (s *Store) ReplaceBudgetSplits(ctx context.Context, planID ids.BudgetPlanID, desired []BudgetSplitInput) (int, error) {
 	failedIdx := -1
 	_, err := s.write(ctx, "budget_plan.replace_splits", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if _, err := q.GetBudgetPlan(ctx, planID); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrBudgetPlanNotFound
@@ -380,7 +380,7 @@ func (s *Store) ReplaceBudgetSplits(ctx context.Context, planID ids.BudgetPlanID
 func (s *Store) AppendBudgetSplits(ctx context.Context, planID ids.BudgetPlanID, splits []BudgetSplitInput) (int, error) {
 	failedIdx := -1
 	_, err := s.write(ctx, "budget_plan.append_splits", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if _, err := q.GetBudgetPlan(ctx, planID); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrBudgetPlanNotFound
@@ -577,7 +577,7 @@ func resolveBudgetSplit(ctx context.Context, q *sqlc.Queries, planID ids.BudgetP
 }
 
 // insertBudgetPlanVersion appends the budget_plans snapshot-from-live version row.
-func insertBudgetPlanVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.BudgetPlanID) error {
+func insertBudgetPlanVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID ids.BudgetPlanID) error {
 	if err := q.InsertBudgetPlanVersion(ctx, sqlc.InsertBudgetPlanVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append budget plan version (entity %d, op %s): %w", entityID, op, err)
 	}
@@ -586,7 +586,7 @@ func insertBudgetPlanVersion(ctx context.Context, q *sqlc.Queries, changeID int6
 
 // insertBudgetSplitVersion appends the budget_splits snapshot-from-live version row.
 // For op='delete' it MUST run BEFORE the live delete (see DeleteBudgetSplit).
-func insertBudgetSplitVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.BudgetSplitID) error {
+func insertBudgetSplitVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID ids.BudgetSplitID) error {
 	if err := q.InsertBudgetSplitVersion(ctx, sqlc.InsertBudgetSplitVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append budget split version (entity %d, op %s): %w", entityID, op, err)
 	}

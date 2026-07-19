@@ -89,7 +89,7 @@ func (s *Store) StartReconciliation(ctx context.Context, accountID int64, curren
 
 	var newID ids.ReconciliationID
 	_, err := s.write(ctx, "reconciliation.start", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			// Account exists, reconcilable, active (D13).
 			acct, err := q.GetAccount(ctx, accountID)
 			if err != nil {
@@ -153,7 +153,7 @@ func (s *Store) StartReconciliation(ctx context.Context, accountID int64, curren
 // a changes row anchors the tx boundary + actor.
 func (s *Store) SetSplitReconciled(ctx context.Context, reconID ids.ReconciliationID, splitID int64, on bool) error {
 	_, err := s.write(ctx, "reconciliation.toggle", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			recon, err := q.GetReconciliation(ctx, reconID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -218,7 +218,7 @@ func (s *Store) SetSplitReconciled(ctx context.Context, reconID ids.Reconciliati
 // recon's cleared splits are locked (the DB trigger + the store's edit block).
 func (s *Store) Finalize(ctx context.Context, reconID ids.ReconciliationID) error {
 	_, err := s.write(ctx, "reconciliation.finalize", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			recon, err := q.GetReconciliation(ctx, reconID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -272,7 +272,7 @@ func (s *Store) Finalize(ctx context.Context, reconID ids.ReconciliationID) erro
 // was not finalized.
 func (s *Store) Reopen(ctx context.Context, reconID ids.ReconciliationID) error {
 	_, err := s.write(ctx, "reconciliation.reopen", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			recon, err := q.GetReconciliation(ctx, reconID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -343,7 +343,7 @@ func (s *Store) EditReconciliationStatement(ctx context.Context, reconID ids.Rec
 		return ErrBadDate
 	}
 	_, err := s.write(ctx, "reconciliation.edit", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			recon, err := q.GetReconciliation(ctx, reconID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -386,7 +386,7 @@ func (s *Store) EditReconciliationStatement(ctx context.Context, reconID ids.Rec
 // q so a rejection rolls the change back (no audit trace).
 func (s *Store) DiscardReconciliation(ctx context.Context, reconID ids.ReconciliationID) error {
 	_, err := s.write(ctx, "reconciliation.discard", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			recon, err := q.GetReconciliation(ctx, reconID)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -652,7 +652,7 @@ func (s *Store) GetReconciliation(ctx context.Context, id ids.ReconciliationID) 
 // insertReconciliationVersion appends the reconciliations snapshot-from-live
 // version row, hiding the generated positional-param names (ID=change_id,
 // ID_2=entity_id). MUST run after the live write.
-func insertReconciliationVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.ReconciliationID) error {
+func insertReconciliationVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID ids.ReconciliationID) error {
 	if err := q.InsertReconciliationVersion(ctx, sqlc.InsertReconciliationVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append reconciliation version (entity %d, op %s): %w", entityID, op, err)
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // p18.3 ops: the admin ops page's audited backup action. Taking a database
@@ -27,9 +28,9 @@ import (
 // changes row (kind "ops.backup") naming the actor in ctx. It returns the change
 // id (unused today, kept for symmetry with the other entity ops). It performs NO
 // other write -- the snapshot is a separate, non-transactional VACUUM INTO.
-func (s *Store) RecordBackup(ctx context.Context) (int64, error) {
+func (s *Store) RecordBackup(ctx context.Context) (ids.ChangeID, error) {
 	return s.write(ctx, "ops.backup", "",
-		func(_ context.Context, _ *sqlc.Queries, _ int64) error { return nil })
+		func(_ context.Context, _ *sqlc.Queries, _ ids.ChangeID) error { return nil })
 }
 
 // Backup writes a consistent, standalone snapshot of the whole database to path

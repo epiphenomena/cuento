@@ -195,7 +195,7 @@ WHERE c.id = ? AND s.id = ?
 
 type InsertSplitVersionParams struct {
 	Op   string
-	ID   int64
+	ID   ids.ChangeID
 	ID_2 int64
 }
 
@@ -254,7 +254,7 @@ WHERE c.id = ? AND t.id = ?
 
 type InsertTransactionVersionParams struct {
 	Op   string
-	ID   int64
+	ID   ids.ChangeID
 	ID_2 int64
 }
 
@@ -486,7 +486,7 @@ ORDER BY sv.valid_from, sv.id
 
 type SplitVersionHistoryRow struct {
 	EntityID        int64
-	ChangeID        int64
+	ChangeID        ids.ChangeID
 	Op              string
 	ValidFrom       string
 	AccountID       int64
@@ -805,7 +805,7 @@ ORDER BY tv.valid_from, tv.id
 `
 
 type TransactionVersionHistoryRow struct {
-	ChangeID     int64
+	ChangeID     ids.ChangeID
 	Op           string
 	ValidFrom    string
 	Date         string

@@ -167,7 +167,7 @@ WHERE c.id = ? AND u.id = ?
 
 type InsertUserVersionParams struct {
 	Op   string
-	ID   int64
+	ID   ids.ChangeID
 	ID_2 ids.UserID
 }
 

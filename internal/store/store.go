@@ -119,8 +119,8 @@ func New(db *sql.DB, opts ...Option) *Store {
 func (s *Store) write(
 	ctx context.Context,
 	kind, note string,
-	fn func(ctx context.Context, q *sqlc.Queries, changeID int64) error,
-) (int64, error) {
+	fn func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error,
+) (ids.ChangeID, error) {
 	actor, ok := ActorFrom(ctx)
 	if !ok {
 		return 0, ErrNoActor

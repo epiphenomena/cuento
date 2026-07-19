@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 	"cuento/internal/testutil"
 )
 
@@ -37,7 +38,7 @@ func TestWriteRequiresActor(t *testing.T) {
 
 	fnCalled := false
 	_, err := s.write(context.Background(), "test", "note",
-		func(_ context.Context, _ *sqlc.Queries, _ int64) error {
+		func(_ context.Context, _ *sqlc.Queries, _ ids.ChangeID) error {
 			fnCalled = true
 			return nil
 		})
@@ -66,7 +67,7 @@ func TestWriteRecordsChange(t *testing.T) {
 
 	ctx := WithActor(context.Background(), Actor{ID: 1})
 	changeID, err := s.write(ctx, "create.thing", "a note",
-		func(_ context.Context, _ *sqlc.Queries, _ int64) error { return nil })
+		func(_ context.Context, _ *sqlc.Queries, _ ids.ChangeID) error { return nil })
 	if err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -113,7 +114,7 @@ func TestWriteAtomicRollback(t *testing.T) {
 	sentinel := errors.New("boom")
 	ctx := WithActor(context.Background(), Actor{ID: 1})
 	_, err := s.write(ctx, "test", "",
-		func(fnCtx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(fnCtx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			// A real caller's live-table write happens here on the same tx-bound
 			// q. Insert a side effect, then fail: the deferred rollback must undo
 			// both this and the funnel's own change row.

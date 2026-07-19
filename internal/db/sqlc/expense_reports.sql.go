@@ -186,7 +186,7 @@ WHERE c.id = ? AND erl.id = ?
 
 type InsertExpenseReportLineVersionParams struct {
 	Op   string
-	ID   int64
+	ID   ids.ChangeID
 	ID_2 ids.ExpenseReportLineID
 }
 
@@ -210,7 +210,7 @@ WHERE c.id = ? AND er.id = ?
 
 type InsertExpenseReportVersionParams struct {
 	Op   string
-	ID   int64
+	ID   ids.ChangeID
 	ID_2 ids.ExpenseReportID
 }
 

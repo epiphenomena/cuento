@@ -156,7 +156,7 @@ func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (int64
 
 	var newID int64
 	_, err := s.write(ctx, "account.create", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			// Validate the parent (if any): it must exist and be type-compatible
 			// (D11). No sub-mismatch check here: create AUTO-PROPAGATES every
 			// assigned subsidiary up the ancestor chain (each ancestor gains it if
@@ -247,7 +247,7 @@ func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (int64
 // reflects the NEW values (it runs after the live update).
 func (s *Store) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInput) error {
 	_, err := s.write(ctx, "account.update", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			cur, err := q.GetAccount(ctx, id)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -398,7 +398,7 @@ func (s *Store) validateMove(ctx context.Context, q *sqlc.Queries, id int64, cur
 // create the first time that (account, lang) is written, update thereafter.
 func (s *Store) SetAccountName(ctx context.Context, id int64, lang, name string) error {
 	_, err := s.write(ctx, "account.name", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if _, err := q.GetAccount(ctx, id); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrAccountNotFound
@@ -426,7 +426,7 @@ func (s *Store) SetAccountName(ctx context.Context, id int64, lang, name string)
 // are local and blocked while a child still maps the sub (ErrSubInUseByChild).
 func (s *Store) SetAccountSubsidiaries(ctx context.Context, id int64, subs []ids.SubsidiaryID) error {
 	_, err := s.write(ctx, "account.subsidiaries", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if _, err := q.GetAccount(ctx, id); err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrAccountNotFound
@@ -494,7 +494,7 @@ func (s *Store) SetAccountSubsidiaries(ctx context.Context, id int64, subs []ids
 // persists; delete-op is reserved for transaction soft-delete, rule 14).
 func (s *Store) DeactivateAccount(ctx context.Context, id int64) error {
 	_, err := s.write(ctx, "account.deactivate", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			cur, err := q.GetAccount(ctx, id)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -744,7 +744,7 @@ func check990Type(ctx context.Context, q *sqlc.Queries, code, accountType string
 // ancestor missing it (D18 auto-propagation). Each newly-added membership (self
 // or ancestor) gets its own op='create' version row; an account already holding
 // the sub is a no-op with no version row (the PK forbids a duplicate).
-func addSubWithPropagation(ctx context.Context, q *sqlc.Queries, changeID, accountID int64, sid ids.SubsidiaryID) error {
+func addSubWithPropagation(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, accountID int64, sid ids.SubsidiaryID) error {
 	anc, err := q.AccountAncestors(ctx, accountID)
 	if err != nil {
 		return fmt.Errorf("load ancestors of %d: %w", accountID, err)
@@ -779,7 +779,7 @@ func addSubWithPropagation(ctx context.Context, q *sqlc.Queries, changeID, accou
 // captured BEFORE the live row is deleted, or there is nothing left to snapshot.
 // This is the one place the account ops depart from subsidiaries.go's order; the
 // comment is deliberate.
-func removeSub(ctx context.Context, q *sqlc.Queries, changeID, accountID int64, sid ids.SubsidiaryID) error {
+func removeSub(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, accountID int64, sid ids.SubsidiaryID) error {
 	if err := q.InsertAccountSubsidiaryVersion(ctx, sqlc.InsertAccountSubsidiaryVersionParams{
 		Op: "delete", ID: changeID, AccountID: accountID, SubsidiaryID: sid,
 	}); err != nil {
@@ -792,7 +792,7 @@ func removeSub(ctx context.Context, q *sqlc.Queries, changeID, accountID int64, 
 }
 
 // upsertAccountName writes one (account_id, lang) name live then versions it.
-func upsertAccountName(ctx context.Context, q *sqlc.Queries, changeID, accountID int64, lang, name, op string) error {
+func upsertAccountName(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, accountID int64, lang, name, op string) error {
 	if err := q.UpsertAccountName(ctx, sqlc.UpsertAccountNameParams{AccountID: accountID, Lang: lang, Name: name}); err != nil {
 		return fmt.Errorf("upsert name (%d,%s): %w", accountID, lang, err)
 	}
@@ -807,7 +807,7 @@ func upsertAccountName(ctx context.Context, q *sqlc.Queries, changeID, accountID
 // insertAccountVersion appends the accounts snapshot-from-live version row. It
 // hides the generated positional-param names (ID=change_id, ID_2=entity_id)
 // behind one call site. MUST run after the live write.
-func insertAccountVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID int64) error {
+func insertAccountVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID int64) error {
 	if err := q.InsertAccountVersion(ctx, sqlc.InsertAccountVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append account version (entity %d, op %s): %w", entityID, op, err)
 	}

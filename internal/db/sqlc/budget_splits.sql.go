@@ -111,7 +111,7 @@ WHERE c.id = ? AND bp.id = ?
 
 type InsertBudgetPlanVersionParams struct {
 	Op   string
-	ID   int64            // change_id
+	ID   ids.ChangeID     // change_id
 	ID_2 ids.BudgetPlanID // entity_id (budget_plans.id)
 }
 
@@ -178,7 +178,7 @@ WHERE c.id = ? AND bs.id = ?
 
 type InsertBudgetSplitVersionParams struct {
 	Op   string
-	ID   int64             // change_id
+	ID   ids.ChangeID      // change_id
 	ID_2 ids.BudgetSplitID // entity_id (budget_splits.id)
 }
 

@@ -100,7 +100,7 @@ WHERE c.id = ? AND p.id = ?
 
 type InsertProgramVersionParams struct {
 	Op   string
-	ID   int64
+	ID   ids.ChangeID
 	ID_2 ids.ProgramID
 }
 

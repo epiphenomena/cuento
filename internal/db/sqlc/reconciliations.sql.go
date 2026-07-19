@@ -280,7 +280,7 @@ WHERE c.id = ? AND r.id = ?
 
 type InsertReconciliationVersionParams struct {
 	Op   string
-	ID   int64                // change_id
+	ID   ids.ChangeID         // change_id
 	ID_2 ids.ReconciliationID // entity_id (reconciliations.id)
 }
 

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // Account merge (p08.5). MergeAccount folds a SOURCE leaf account into a
@@ -74,7 +75,7 @@ func (s *Store) MergeAccount(ctx context.Context, src, dst int64) error {
 		return ErrMergeSelf
 	}
 	_, err := s.write(ctx, "account.merge", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			srcAcct, err := q.GetAccount(ctx, src)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {

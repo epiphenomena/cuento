@@ -7,6 +7,8 @@ package sqlc
 
 import (
 	"context"
+
+	"cuento/internal/ids"
 )
 
 const insertRate = `-- name: InsertRate :exec
@@ -23,7 +25,7 @@ type InsertRateParams struct {
 	Quote    string
 	Rate     float64
 	Source   string
-	ChangeID int64
+	ChangeID ids.ChangeID
 }
 
 // exchange_rates queries (p14.1). ASCII only, POSITIONAL ? params (p04.2 sqlc

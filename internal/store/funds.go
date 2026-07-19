@@ -97,7 +97,7 @@ func (s *Store) CreateFund(ctx context.Context, in CreateFundInput) (ids.FundID,
 
 	var newID ids.FundID
 	_, err := s.write(ctx, "fund.create", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			// Validate an optional program scope exists (D20). Runs inside fn so a
 			// rejection rolls the change back.
 			if in.ProgramID != nil {
@@ -153,7 +153,7 @@ func (s *Store) CreateFund(ctx context.Context, in CreateFundInput) (ids.FundID,
 // reflects the NEW field values (it runs after the live update).
 func (s *Store) UpdateFund(ctx context.Context, id ids.FundID, in UpdateFundInput) error {
 	_, err := s.write(ctx, "fund.update", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			cur, err := q.GetFund(ctx, id)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -281,7 +281,7 @@ func (s *Store) ReopenFund(ctx context.Context, id ids.FundID) error {
 // flag, then append an op='update' version row.
 func (s *Store) setFundActive(ctx context.Context, id ids.FundID, active int64, kind string) error {
 	_, err := s.write(ctx, kind, "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			cur, err := q.GetFund(ctx, id)
 			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
@@ -374,7 +374,7 @@ func fundSubSetTx(ctx context.Context, q *sqlc.Queries, fundID ids.FundID) (map[
 
 // addFundSub adds membership (fundID, sid) live then versions it op='create'.
 // The set is FLAT: no propagation. Live-write-FIRST, then snapshot-from-live.
-func addFundSub(ctx context.Context, q *sqlc.Queries, changeID int64, fundID ids.FundID, sid ids.SubsidiaryID) error {
+func addFundSub(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, fundID ids.FundID, sid ids.SubsidiaryID) error {
 	if err := q.InsertFundSubsidiary(ctx, sqlc.InsertFundSubsidiaryParams{FundID: fundID, SubsidiaryID: sid}); err != nil {
 		return fmt.Errorf("add fund membership (%d,%d): %w", fundID, sid, err)
 	}
@@ -392,7 +392,7 @@ func addFundSub(ctx context.Context, q *sqlc.Queries, changeID int64, fundID ids
 // snapshot-FROM-LIVE, so the version row (the last-known membership) MUST be
 // captured BEFORE the live row is deleted, or there is nothing left to snapshot.
 // This mirrors accounts.go's removeSub ordering.
-func removeFundSub(ctx context.Context, q *sqlc.Queries, changeID int64, fundID ids.FundID, sid ids.SubsidiaryID) error {
+func removeFundSub(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, fundID ids.FundID, sid ids.SubsidiaryID) error {
 	if err := q.InsertFundSubsidiaryVersion(ctx, sqlc.InsertFundSubsidiaryVersionParams{
 		Op: "delete", ID: changeID, FundID: fundID, SubsidiaryID: sid,
 	}); err != nil {
@@ -407,7 +407,7 @@ func removeFundSub(ctx context.Context, q *sqlc.Queries, changeID int64, fundID 
 // insertFundVersion appends the funds snapshot-from-live version row. It hides
 // the generated positional-param names (ID=change_id, ID_2=entity_id) behind one
 // call site. MUST run after the live write.
-func insertFundVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.FundID) error {
+func insertFundVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID ids.FundID) error {
 	if err := q.InsertFundVersion(ctx, sqlc.InsertFundVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append fund version (entity %d, op %s): %w", entityID, op, err)
 	}

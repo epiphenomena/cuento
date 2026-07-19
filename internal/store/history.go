@@ -129,7 +129,7 @@ type HistVersionState struct {
 // ("create"/"update"/"delete"); a change that touched only splits (a future
 // account-merge repoint) carries op="update" with no header diffs.
 type HistoryEntry struct {
-	ChangeID    int64
+	ChangeID    ids.ChangeID
 	ActorID     int64
 	ActorName   string
 	At          string // RFC3339Nano (== changes.at); the web layer formats the date
@@ -163,8 +163,8 @@ func (s *Store) TransactionHistory(ctx context.Context, id int64) ([]HistoryEntr
 	// the audit backbone requires, and it is correct even for a SPLIT-ONLY change (an
 	// account-merge repoint versions a split with NO transactions_versions row): such a
 	// change is placed by its own change_id, not appended after all header changes.
-	entries := make(map[int64]*HistoryEntry, len(hdrRows))
-	ensure := func(changeID, actorID int64, actorName, at string) *HistoryEntry {
+	entries := make(map[ids.ChangeID]*HistoryEntry, len(hdrRows))
+	ensure := func(changeID ids.ChangeID, actorID int64, actorName, at string) *HistoryEntry {
 		e, ok := entries[changeID]
 		if !ok {
 			e = &HistoryEntry{
@@ -241,11 +241,11 @@ func (s *Store) TransactionHistory(ctx context.Context, id int64) ([]HistoryEntr
 func reconstructStates(out []HistoryEntry, hdrRows []sqlc.TransactionVersionHistoryRow, splitRows []sqlc.SplitVersionHistoryRow) {
 	// Index the raw version rows by change id (a change touches at most one header row
 	// and any number of split rows). Rows are already oldest-first.
-	hdrByChange := make(map[int64]*sqlc.TransactionVersionHistoryRow, len(hdrRows))
+	hdrByChange := make(map[ids.ChangeID]*sqlc.TransactionVersionHistoryRow, len(hdrRows))
 	for i := range hdrRows {
 		hdrByChange[hdrRows[i].ChangeID] = &hdrRows[i]
 	}
-	splitsByChange := make(map[int64][]*sqlc.SplitVersionHistoryRow, len(splitRows))
+	splitsByChange := make(map[ids.ChangeID][]*sqlc.SplitVersionHistoryRow, len(splitRows))
 	for i := range splitRows {
 		cid := splitRows[i].ChangeID
 		splitsByChange[cid] = append(splitsByChange[cid], &splitRows[i])

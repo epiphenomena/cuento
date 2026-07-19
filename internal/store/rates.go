@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // Exchange rates (p14.1) -- report-time FX conversion input (D12). Unlike the
@@ -61,7 +62,7 @@ func (s *Store) PutRates(ctx context.Context, rates []Rate) error {
 		return nil
 	}
 	_, err := s.write(ctx, "rates.put", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			for _, r := range rates {
 				if err := q.InsertRate(ctx, sqlc.InsertRateParams{
 					RateDate: r.RateDate,

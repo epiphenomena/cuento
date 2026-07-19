@@ -125,7 +125,7 @@ func (s *Store) GrantReportGroup(ctx context.Context, userID ids.UserID, group s
 		want = sql.NullInt64{Int64: int64(*programID), Valid: true}
 	}
 	_, err := s.write(ctx, "user.grant", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			has, err := q.HasReportGrant(ctx, sqlc.HasReportGrantParams{UserID: userID, GroupName: group})
 			if err != nil {
 				return fmt.Errorf("check grant: %w", err)
@@ -178,7 +178,7 @@ func (s *Store) RevokeReportGroup(ctx context.Context, userID ids.UserID, group 
 		return ErrSystemUser
 	}
 	_, err := s.write(ctx, "user.revoke", "",
-		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			has, err := q.HasReportGrant(ctx, sqlc.HasReportGrantParams{UserID: userID, GroupName: group})
 			if err != nil {
 				return fmt.Errorf("check grant: %w", err)
