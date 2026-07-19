@@ -109,6 +109,7 @@ dev-db:
 		-o $(DEV_DB)
 	printf '%s\n' '$(DEV_PASS)' | $(BINARY) user add $(DEV_USER) --admin -db $(DEV_DB)
 	$(BINARY) devseed budget -db $(DEV_DB)
+	$(BINARY) devseed expense-report -db $(DEV_DB)
 	@echo "dev-db: rebuilt $(DEV_DB) (login $(DEV_USER)/$(DEV_PASS)) — (re)start the :3390 server now"
 
 ## scaffold-db / import-sub — local only: the SPLIT go-live import (D26). scaffold-db
