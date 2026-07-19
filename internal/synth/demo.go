@@ -6,6 +6,7 @@ import (
 
 	"cuento/internal/auth"
 	"cuento/internal/bankimport"
+	"cuento/internal/ids"
 	"cuento/internal/reports"
 	"cuento/internal/store"
 )
@@ -71,7 +72,7 @@ type DemoIDs struct {
 	SubmittedReport int64
 	PostedReport    int64
 
-	OpenRecon int64 // an in-progress (unfinalized) reconciliation on Checking MX
+	OpenRecon ids.ReconciliationID // an in-progress (unfinalized) reconciliation on Checking MX
 
 	MappingProfile int64
 	ImportBatch    int64 // a staged (unposted) import batch on Checking US
@@ -100,11 +101,11 @@ type DemoIDs struct {
 func BuildDemo(ctx context.Context, s *store.Store) (DemoIDs, error) {
 	var d DemoIDs
 
-	ids, err := Build(ctx, s)
+	baseIDs, err := Build(ctx, s)
 	if err != nil {
 		return d, fmt.Errorf("build base: %w", err)
 	}
-	d.IDs = ids
+	d.IDs = baseIDs
 
 	// Rates (no splits; order-independent, but before the campaign so campaign splits
 	// have on-or-before rates for a converted report run).

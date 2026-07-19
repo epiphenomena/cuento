@@ -23,6 +23,7 @@ import (
 	"context"
 	"time"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -116,7 +117,7 @@ type IDs struct {
 
 	// CheckingUSRecon is the finalized 2026-05-31 Checking US (USD) reconciliation
 	// ExtendReconciliation creates -- zero until that seam is called.
-	CheckingUSRecon int64
+	CheckingUSRecon ids.ReconciliationID
 
 	// --- Capital-campaign seam (ExtendCapitalCampaign, opt-in) -----------------
 	// Zero until ExtendCapitalCampaign is called. A restricted CAPITAL CAMPAIGN

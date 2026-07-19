@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 const countOpenReconciliations = `-- name: CountOpenReconciliations :one
@@ -75,7 +77,7 @@ ORDER BY r.statement_date DESC, r.id DESC
 `
 
 type FinalizedReconciliationsForAccountRow struct {
-	ID               int64
+	ID               ids.ReconciliationID
 	StatementDate    string
 	StatementBalance int64
 	Currency         string
@@ -125,7 +127,7 @@ FROM reconciliations
 WHERE id = ?
 `
 
-func (q *Queries) GetReconciliation(ctx context.Context, id int64) (Reconciliation, error) {
+func (q *Queries) GetReconciliation(ctx context.Context, id ids.ReconciliationID) (Reconciliation, error) {
 	row := q.db.QueryRowContext(ctx, getReconciliation, id)
 	var i Reconciliation
 	err := row.Scan(
@@ -190,7 +192,7 @@ type HasLaterFinalizedReconciliationParams struct {
 	Currency        string
 	StatementDate   string
 	StatementDate_2 string
-	ID              int64
+	ID              ids.ReconciliationID
 }
 
 // 1 when a LATER FINALIZED reconciliation exists for the SAME (account, currency),
@@ -252,14 +254,14 @@ type InsertReconciliationParams struct {
 // Live insert of an OPEN reconciliation (status defaults 'open', notes ”). Per
 // (account, currency) across all funds (D13). Returns the new id for the store to
 // snapshot + return.
-func (q *Queries) InsertReconciliation(ctx context.Context, arg InsertReconciliationParams) (int64, error) {
+func (q *Queries) InsertReconciliation(ctx context.Context, arg InsertReconciliationParams) (ids.ReconciliationID, error) {
 	row := q.db.QueryRowContext(ctx, insertReconciliation,
 		arg.AccountID,
 		arg.StatementDate,
 		arg.StatementBalance,
 		arg.Currency,
 	)
-	var id int64
+	var id ids.ReconciliationID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -276,8 +278,8 @@ WHERE c.id = ? AND r.id = ?
 
 type InsertReconciliationVersionParams struct {
 	Op   string
-	ID   int64
-	ID_2 int64
+	ID   int64                // change_id
+	ID_2 ids.ReconciliationID // entity_id (reconciliations.id)
 }
 
 // Snapshot-from-live version append for reconciliations (STANDARD single-column
@@ -391,7 +393,7 @@ type PriorFinalizedStatementBalanceParams struct {
 	Currency        string
 	StatementDate   string
 	StatementDate_2 string
-	ID              int64
+	ID              ids.ReconciliationID
 }
 
 // The opening balance for a reconciliation: the statement_balance of the prior
@@ -491,7 +493,7 @@ WHERE s.reconciliation_id = CAST(? AS INTEGER) AND t.deleted = 0
 // Finalize's zero-difference gate -- byte-identical to Z9's inner SUM. The recon
 // id param is CAST so sqlc types it int64 (the reconciliation_id column is
 // nullable); the SUM is CAST so sqlc pins the static return type to int64.
-func (q *Queries) ReconciliationClearedSum(ctx context.Context, dollar_1 int64) (int64, error) {
+func (q *Queries) ReconciliationClearedSum(ctx context.Context, dollar_1 ids.ReconciliationID) (int64, error) {
 	row := q.db.QueryRowContext(ctx, reconciliationClearedSum, dollar_1)
 	var column_1 int64
 	err := row.Scan(&column_1)
@@ -504,7 +506,7 @@ UPDATE reconciliations SET status = ? WHERE id = ?
 
 type SetReconciliationStatusParams struct {
 	Status string
-	ID     int64
+	ID     ids.ReconciliationID
 }
 
 // Flip a reconciliation's status (open <-> finalized, or open -> discarded). The
@@ -522,7 +524,7 @@ UPDATE reconciliations SET statement_date = ?, statement_balance = ? WHERE id = 
 type SetReconciliationStatementParams struct {
 	StatementDate    string
 	StatementBalance int64
-	ID               int64
+	ID               ids.ReconciliationID
 }
 
 // p26.57: edit an OPEN reconciliation's statement_date + statement_balance. The

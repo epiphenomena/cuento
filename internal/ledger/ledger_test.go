@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/ledger"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
@@ -832,7 +833,7 @@ func TestZ20OpenItemWrongType(t *testing.T) {
 // snapshot-from-live row (op='create'). An open recon is enough to exercise the new
 // Z3/Z5 blocks -- no finalize is needed (nothing is finalized, so the 00014
 // split-lock trigger never fires on the Z3 tamper). Returns the reconciliation id.
-func mkReconData(t *testing.T, w *world) int64 {
+func mkReconData(t *testing.T, w *world) ids.ReconciliationID {
 	t.Helper()
 	acctID, err := w.s.CreateAccount(mutCtx(), store.CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD",

@@ -34,10 +34,11 @@ import (
 // intended AND carry real compile-time safety. They are aliases (not new defined
 // types): a reports.AccountID IS an ids.AccountID.
 type (
-	AccountID    = ids.AccountID
-	FundID       = ids.FundID
-	ProgramID    = ids.ProgramID
-	SubsidiaryID = ids.SubsidiaryID
+	AccountID        = ids.AccountID
+	FundID           = ids.FundID
+	ProgramID        = ids.ProgramID
+	SubsidiaryID     = ids.SubsidiaryID
+	ReconciliationID = ids.ReconciliationID
 )
 
 // Scope is a report scope: a subsidiary consolidated with ALL its descendants

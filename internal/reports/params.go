@@ -76,7 +76,7 @@ type Params struct {
 	// against the real finalized-recon set. It is NOT scoped by subsidiary -- a
 	// reconciliation spans all funds AND subsidiaries (D13/D20), so Scope is inert on the
 	// statement report.
-	Reconciliation int64
+	Reconciliation ReconciliationID
 
 	// Program is the single program a report-specific "which program" control names
 	// (p15.10 program statement): the program whose subtree the report prints (that

@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // Reconciliation operations (p16.2) -- the bank-statement reconciliation lifecycle
@@ -81,12 +82,12 @@ var (
 // The recon spans ALL funds -- splitting by fund is deliberately not a parameter
 // (D13/D20). Versioned op='create'. All validation runs inside fn on the tx-bound
 // q so a rejection rolls the change back (no audit trace).
-func (s *Store) StartReconciliation(ctx context.Context, accountID int64, currency, statementDate string, statementBalance int64) (int64, error) {
+func (s *Store) StartReconciliation(ctx context.Context, accountID int64, currency, statementDate string, statementBalance int64) (ids.ReconciliationID, error) {
 	if !validDate(statementDate) {
 		return 0, ErrBadDate
 	}
 
-	var newID int64
+	var newID ids.ReconciliationID
 	_, err := s.write(ctx, "reconciliation.start", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			// Account exists, reconcilable, active (D13).
@@ -150,7 +151,7 @@ func (s *Store) StartReconciliation(ctx context.Context, accountID int64, curren
 // cannot be cleared (ErrSplitDeleted). This is a LIVE-ONLY column update (00014):
 // NO split version is appended -- but it STILL runs through the funnel (rule 2), so
 // a changes row anchors the tx boundary + actor.
-func (s *Store) SetSplitReconciled(ctx context.Context, reconID, splitID int64, on bool) error {
+func (s *Store) SetSplitReconciled(ctx context.Context, reconID ids.ReconciliationID, splitID int64, on bool) error {
 	_, err := s.write(ctx, "reconciliation.toggle", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			recon, err := q.GetReconciliation(ctx, reconID)
@@ -187,14 +188,14 @@ func (s *Store) SetSplitReconciled(ctx context.Context, reconID, splitID int64, 
 					return ErrSplitReconCurrency
 				}
 				return q.SetSplitReconciliation(ctx, sqlc.SetSplitReconciliationParams{
-					ReconciliationID: sql.NullInt64{Int64: reconID, Valid: true},
+					ReconciliationID: ids.Null(&reconID),
 					ID:               splitID,
 				})
 			}
 			// Unclear: NULL the column. Only touch a split actually cleared against
 			// THIS recon (clearing off a split cleared elsewhere would silently
 			// unclear the wrong recon's split).
-			if sp.ReconciliationID.Valid && sp.ReconciliationID.Int64 != reconID {
+			if sp.ReconciliationID.Valid && sp.ReconciliationID.Int64 != int64(reconID) {
 				return ErrSplitReconAccount
 			}
 			return q.SetSplitReconciliation(ctx, sqlc.SetSplitReconciliationParams{
@@ -215,7 +216,7 @@ func (s *Store) SetSplitReconciled(ctx context.Context, reconID, splitID int64, 
 // the statement chain. The computation MIRRORS ledger Z9 byte-for-byte so that a
 // finalized recon always passes Z9. Versioned op='update'. After finalize the
 // recon's cleared splits are locked (the DB trigger + the store's edit block).
-func (s *Store) Finalize(ctx context.Context, reconID int64) error {
+func (s *Store) Finalize(ctx context.Context, reconID ids.ReconciliationID) error {
 	_, err := s.write(ctx, "reconciliation.finalize", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			recon, err := q.GetReconciliation(ctx, reconID)
@@ -269,7 +270,7 @@ func (s *Store) Finalize(ctx context.Context, reconID int64) error {
 // D13), so its splits are editable again. Versioned op='update' -- the version row
 // names the acting user (TestReopenAudited). ErrReconciliationNotFinalized if it
 // was not finalized.
-func (s *Store) Reopen(ctx context.Context, reconID int64) error {
+func (s *Store) Reopen(ctx context.Context, reconID ids.ReconciliationID) error {
 	_, err := s.write(ctx, "reconciliation.reopen", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			recon, err := q.GetReconciliation(ctx, reconID)
@@ -337,7 +338,7 @@ func (s *Store) Reopen(ctx context.Context, reconID int64) error {
 // the workspace summary (and thus the finalize-until-zero gate) recomputes against
 // them. All validation runs inside fn on the tx-bound q so a rejection rolls the
 // change back (no audit trace).
-func (s *Store) EditReconciliationStatement(ctx context.Context, reconID int64, statementDate string, statementBalance int64) error {
+func (s *Store) EditReconciliationStatement(ctx context.Context, reconID ids.ReconciliationID, statementDate string, statementBalance int64) error {
 	if !validDate(statementDate) {
 		return ErrBadDate
 	}
@@ -383,7 +384,7 @@ func (s *Store) EditReconciliationStatement(ctx context.Context, reconID int64, 
 // currency) (ErrOpenReconciliationExists passes), leaves the continue/open list, and
 // is ignored by the opening chain + Z9. All validation runs inside fn on the tx-bound
 // q so a rejection rolls the change back (no audit trace).
-func (s *Store) DiscardReconciliation(ctx context.Context, reconID int64) error {
+func (s *Store) DiscardReconciliation(ctx context.Context, reconID ids.ReconciliationID) error {
 	_, err := s.write(ctx, "reconciliation.discard", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			recon, err := q.GetReconciliation(ctx, reconID)
@@ -399,7 +400,7 @@ func (s *Store) DiscardReconciliation(ctx context.Context, reconID int64) error 
 			}
 			// Release the recon's cleared splits FIRST (live-only, no split version).
 			// The recon is still 'open' here, so the finalized-lock trigger never fires.
-			if err := q.UnclearReconciliationSplits(ctx, sql.NullInt64{Int64: reconID, Valid: true}); err != nil {
+			if err := q.UnclearReconciliationSplits(ctx, ids.Null(&reconID)); err != nil {
 				return fmt.Errorf("unclear splits for reconciliation %d: %w", reconID, err)
 			}
 			if err := q.SetReconciliationStatus(ctx, sqlc.SetReconciliationStatusParams{Status: "discarded", ID: reconID}); err != nil {
@@ -449,7 +450,7 @@ type ReconciliationWorkspaceSplit struct {
 // a difference of 0 here means Finalize will accept, a nonzero means it will reject
 // with ErrReconciliationDifference. This is what makes the disabled button
 // server-authoritative rather than a divergent client guess.
-func (s *Store) ReconciliationSummaryFor(ctx context.Context, reconID int64) (ReconciliationSummary, error) {
+func (s *Store) ReconciliationSummaryFor(ctx context.Context, reconID ids.ReconciliationID) (ReconciliationSummary, error) {
 	recon, err := s.q.GetReconciliation(ctx, reconID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -485,7 +486,7 @@ func (s *Store) ReconciliationSummaryFor(ctx context.Context, reconID int64) (Re
 // finalized recon are excluded -- they are folded into the opening balance). Ordered
 // chronologically. The account + currency come from the recon row, so the caller
 // only needs the recon id.
-func (s *Store) ReconciliationWorkspaceSplits(ctx context.Context, reconID int64) ([]ReconciliationWorkspaceSplit, error) {
+func (s *Store) ReconciliationWorkspaceSplits(ctx context.Context, reconID ids.ReconciliationID) ([]ReconciliationWorkspaceSplit, error) {
 	recon, err := s.q.GetReconciliation(ctx, reconID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -496,7 +497,7 @@ func (s *Store) ReconciliationWorkspaceSplits(ctx context.Context, reconID int64
 	rows, err := s.q.WorkspaceSplits(ctx, sqlc.WorkspaceSplitsParams{
 		AccountID:        recon.AccountID,
 		Currency:         recon.Currency,
-		ReconciliationID: sql.NullInt64{Int64: reconID, Valid: true},
+		ReconciliationID: ids.Null(&reconID),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("store: reconciliation workspace splits %d: %w", reconID, err)
@@ -513,7 +514,7 @@ func (s *Store) ReconciliationWorkspaceSplits(ctx context.Context, reconID int64
 			Description:  r.Description,
 			TxnMemo:      r.TxnMemo,
 			Date:         r.Date,
-			Cleared:      r.ReconciliationID.Valid && r.ReconciliationID.Int64 == reconID,
+			Cleared:      r.ReconciliationID.Valid && r.ReconciliationID.Int64 == int64(reconID),
 		}
 	}
 	return out, nil
@@ -576,8 +577,8 @@ type ReconciliationStatementSplit struct {
 // total: the p16.4 statement report re-derives opening + Sigma(these) == statement
 // balance from THESE rows. It spans ALL funds and ALL subsidiaries (D13/D20) -- the
 // cleared set is fully identified by the reconciliation id, so there is no scope.
-func (s *Store) ReconciliationStatementSplits(ctx context.Context, reconID int64) ([]ReconciliationStatementSplit, error) {
-	rows, err := s.q.ReconciliationClearedSplits(ctx, sql.NullInt64{Int64: reconID, Valid: true})
+func (s *Store) ReconciliationStatementSplits(ctx context.Context, reconID ids.ReconciliationID) ([]ReconciliationStatementSplit, error) {
+	rows, err := s.q.ReconciliationClearedSplits(ctx, ids.Null(&reconID))
 	if err != nil {
 		return nil, fmt.Errorf("store: reconciliation statement splits %d: %w", reconID, err)
 	}
@@ -604,7 +605,7 @@ func (s *Store) ReconciliationStatementSplits(ctx context.Context, reconID int64
 // finalize). FinalizedAt is a raw timestamp string (the change's `at`); the web layer
 // renders its date portion (money has no datetime formatter, D-p16.4).
 type FinalizedReconciliation struct {
-	ID               int64
+	ID               ids.ReconciliationID
 	StatementDate    string
 	StatementBalance int64
 	Currency         string
@@ -635,7 +636,7 @@ func (s *Store) FinalizedReconciliationsForAccount(ctx context.Context, accountI
 }
 
 // GetReconciliation returns the current live row for one reconciliation (read; sqlc).
-func (s *Store) GetReconciliation(ctx context.Context, id int64) (sqlc.Reconciliation, error) {
+func (s *Store) GetReconciliation(ctx context.Context, id ids.ReconciliationID) (sqlc.Reconciliation, error) {
 	row, err := s.q.GetReconciliation(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -651,7 +652,7 @@ func (s *Store) GetReconciliation(ctx context.Context, id int64) (sqlc.Reconcili
 // insertReconciliationVersion appends the reconciliations snapshot-from-live
 // version row, hiding the generated positional-param names (ID=change_id,
 // ID_2=entity_id). MUST run after the live write.
-func insertReconciliationVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID int64) error {
+func insertReconciliationVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.ReconciliationID) error {
 	if err := q.InsertReconciliationVersion(ctx, sqlc.InsertReconciliationVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append reconciliation version (entity %d, op %s): %w", entityID, op, err)
 	}

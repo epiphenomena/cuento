@@ -11,6 +11,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
 )
@@ -116,7 +117,7 @@ func splitOnAccount(t *testing.T, db *sql.DB, txn, account int64) int64 {
 
 // startRecon starts a recon on Checking (statement balance 0 by default) and returns
 // its id, using the store directly (the list-start path is exercised separately).
-func (e reconWebEnv) startRecon(t *testing.T, statement int64) int64 {
+func (e reconWebEnv) startRecon(t *testing.T, statement int64) ids.ReconciliationID {
 	t.Helper()
 	ctx := store.WithActor(context.Background(), store.Actor{ID: e.writer})
 	id, err := e.st.StartReconciliation(ctx, e.checking, "USD", "2026-02-28", statement)
@@ -142,7 +143,7 @@ func TestReconListShowsReconcilableAccount(t *testing.T) {
 func TestReconWorkspaceRendersSplits(t *testing.T) {
 	e := newReconWebEnv(t)
 	id := e.startRecon(t, 0)
-	rec := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(id), nil)
+	rec := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(int64(id)), nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET workspace = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
@@ -160,13 +161,13 @@ func TestReconWorkspaceRendersSplits(t *testing.T) {
 	}
 	// p26.50: the "Add transaction" button links to the editor with a `from` origin back
 	// to THIS workspace (so Cancel/Save return here).
-	wantAdd := `href="/transactions/new?from=/reconciliations/` + strconv.FormatInt(id, 10) + `"`
+	wantAdd := `href="/transactions/new?from=/reconciliations/` + strconv.FormatInt(int64(id), 10) + `"`
 	if !strings.Contains(body, wantAdd) {
 		t.Errorf("workspace missing Add-transaction link %q; body:\n%s", wantAdd, body)
 	}
 	// p26.50: each split row carries an Edit link to its transaction, carrying the same
 	// `from` origin. Assert the deposit split's transaction edit link is present.
-	wantEdit := `href="/transactions/` + strconv.FormatInt(e.txnDep, 10) + `/edit?from=/reconciliations/` + strconv.FormatInt(id, 10) + `"`
+	wantEdit := `href="/transactions/` + strconv.FormatInt(e.txnDep, 10) + `/edit?from=/reconciliations/` + strconv.FormatInt(int64(id), 10) + `"`
 	if !strings.Contains(body, wantEdit) {
 		t.Errorf("workspace missing per-row Edit link %q; body:\n%s", wantEdit, body)
 	}
@@ -204,7 +205,7 @@ func TestToggleReturnsPartialAndUpdatesDifference(t *testing.T) {
 	e := newReconWebEnv(t)
 	id := e.startRecon(t, 0) // statement 0; opening 0 => difference starts at 0
 
-	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(id, e.spDep), url.Values{})
+	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), e.spDep), url.Values{})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("toggle POST = %d, want 200; body: %s", rec.Code, rec.Body.String())
 	}
@@ -247,7 +248,7 @@ func TestToggleReturnsPartialAndUpdatesDifference(t *testing.T) {
 		t.Errorf("difference after clearing +250 = %d, want -25000", sum.Difference)
 	}
 	// A second toggle unclears it (round-trips).
-	rec2 := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(id, e.spDep), url.Values{})
+	rec2 := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), e.spDep), url.Values{})
 	if rec2.Code != http.StatusOK {
 		t.Fatalf("second toggle = %d, want 200", rec2.Code)
 	}
@@ -265,7 +266,7 @@ func TestFinalizeDisabledUntilZero(t *testing.T) {
 	e := newReconWebEnv(t)
 	id := e.startRecon(t, 0) // statement 0, nothing cleared => difference 0 => enabled
 
-	body := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(id), nil).Body.String()
+	body := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(int64(id)), nil).Body.String()
 	if finalizeDisabled(body) {
 		t.Errorf("Finalize should be ENABLED at zero difference; body:\n%s", body)
 	}
@@ -275,7 +276,7 @@ func TestFinalizeDisabledUntilZero(t *testing.T) {
 	if err := e.st.SetSplitReconciled(ctxW, id, e.spDep, true); err != nil {
 		t.Fatalf("clear split: %v", err)
 	}
-	body2 := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(id), nil).Body.String()
+	body2 := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(int64(id)), nil).Body.String()
 	if !finalizeDisabled(body2) {
 		t.Errorf("Finalize should be DISABLED at nonzero difference; body:\n%s", body2)
 	}
@@ -286,7 +287,7 @@ func TestFinalizeDisabledUntilZero(t *testing.T) {
 func TestFinalizeAtNonzeroRejectedCleanly(t *testing.T) {
 	e := newReconWebEnv(t)
 	id := e.startRecon(t, 100_000) // statement 100000, opening 0, cleared 0 => diff 100000
-	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconFinalizePath(id), url.Values{})
+	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconFinalizePath(int64(id)), url.Values{})
 	if rec.Code == http.StatusInternalServerError {
 		t.Fatalf("finalize at nonzero difference returned 500 (should be a clean guard); body: %s", rec.Body.String())
 	}
@@ -305,7 +306,7 @@ func TestFinalizeAtNonzeroRejectedCleanly(t *testing.T) {
 func TestFinalizeAtZeroSucceeds(t *testing.T) {
 	e := newReconWebEnv(t)
 	id := e.startRecon(t, 0) // statement 0, nothing cleared => diff 0
-	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconFinalizePath(id), url.Values{})
+	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconFinalizePath(int64(id)), url.Values{})
 	if rec.Code >= 400 {
 		t.Fatalf("finalize at zero difference = %d, want redirect/200; body: %s", rec.Code, rec.Body.String())
 	}
@@ -369,7 +370,7 @@ func TestReconPermsReadCannotAct(t *testing.T) {
 	if rec := asUser(t, e.h, e.sm, e.reader, http.MethodGet, "/reconciliations", nil); rec.Code != http.StatusOK {
 		t.Errorf("reader GET list = %d, want 200", rec.Code)
 	}
-	if rec := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(id), nil); rec.Code != http.StatusOK {
+	if rec := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(int64(id)), nil); rec.Code != http.StatusOK {
 		t.Errorf("reader GET workspace = %d, want 200", rec.Code)
 	}
 
@@ -377,9 +378,9 @@ func TestReconPermsReadCannotAct(t *testing.T) {
 	for _, tc := range []struct {
 		name, method, path string
 	}{
-		{"toggle", http.MethodPost, reconTogglePath(id, e.spDep)},
-		{"finalize", http.MethodPost, reconFinalizePath(id)},
-		{"reopen", http.MethodPost, reconReopenPath(id)},
+		{"toggle", http.MethodPost, reconTogglePath(int64(id), e.spDep)},
+		{"finalize", http.MethodPost, reconFinalizePath(int64(id))},
+		{"reopen", http.MethodPost, reconReopenPath(int64(id))},
 		{"start", http.MethodPost, "/reconciliations"},
 	} {
 		rec := asUser(t, e.h, e.sm, e.reader, tc.method, tc.path, url.Values{})
@@ -389,7 +390,7 @@ func TestReconPermsReadCannotAct(t *testing.T) {
 	}
 
 	// Writer CAN toggle (200).
-	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(id, e.spDep), url.Values{}); rec.Code != http.StatusOK {
+	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), e.spDep), url.Values{}); rec.Code != http.StatusOK {
 		t.Errorf("writer toggle = %d, want 200", rec.Code)
 	}
 }
@@ -435,7 +436,7 @@ func TestReconStartFormErrorPartial(t *testing.T) {
 // finalizeRecon clears both Checking splits and finalizes a recon whose statement
 // balance is their net sum (-15,000 = +25,000 - 40,000, opening 0), returning its id.
 // Used by the p16.4 history tests to build a FINALIZED recon through the store.
-func (e reconWebEnv) finalizeRecon(t *testing.T) int64 {
+func (e reconWebEnv) finalizeRecon(t *testing.T) ids.ReconciliationID {
 	t.Helper()
 	ctx := store.WithActor(context.Background(), store.Actor{ID: e.writer})
 	id := e.startRecon(t, -15_000)
@@ -468,14 +469,14 @@ func TestReconHistoryListsFinalizedRecon(t *testing.T) {
 	if !strings.Contains(body, `class="recon-history-table"`) {
 		t.Errorf("list missing the history section; body:\n%s", body)
 	}
-	if !strings.Contains(body, "recon-history-"+strconv.FormatInt(id, 10)) {
+	if !strings.Contains(body, "recon-history-"+strconv.FormatInt(int64(id), 10)) {
 		t.Errorf("history missing the finalized recon row (id %d)", id)
 	}
 	if !strings.Contains(body, "2026-02-28") {
 		t.Errorf("history missing the finalized recon's statement date")
 	}
 	// Each history row links to the statement report with the recon id param.
-	wantHref := reconStatementReportHref(id)
+	wantHref := reconStatementReportHref(int64(id))
 	if !strings.Contains(body, wantHref) {
 		t.Errorf("history row missing statement-report link %q; body:\n%s", wantHref, body)
 	}
@@ -498,7 +499,7 @@ func TestReconHistoryEmptyForAccountWithNone(t *testing.T) {
 		t.Fatalf("GET /reconciliations = %d, want 200", rec.Code)
 	}
 	body := rec.Body.String()
-	if strings.Contains(body, "recon-history-"+strconv.FormatInt(openID, 10)) {
+	if strings.Contains(body, "recon-history-"+strconv.FormatInt(int64(openID), 10)) {
 		t.Errorf("open recon %d wrongly listed as finalized history", openID)
 	}
 	if strings.Contains(body, `class="recon-history-row"`) {
@@ -535,7 +536,7 @@ func finalizeDisabled(body string) bool {
 func TestReconEditWorkspaceShowsForm(t *testing.T) {
 	e := newReconWebEnv(t)
 	id := e.startRecon(t, 25_000)
-	body := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(id), nil).Body.String()
+	body := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(int64(id)), nil).Body.String()
 	if !strings.Contains(body, `id="recon-edit-form"`) {
 		t.Errorf("open workspace missing the statement-edit form; body:\n%s", body)
 	}
@@ -544,8 +545,8 @@ func TestReconEditWorkspaceShowsForm(t *testing.T) {
 		t.Errorf("edit form missing prefilled balance 250.00; body:\n%s", body)
 	}
 	// The discard action is present on an open recon.
-	if !strings.Contains(body, reconDiscardPath(id)) {
-		t.Errorf("open workspace missing discard action %q", reconDiscardPath(id))
+	if !strings.Contains(body, reconDiscardPath(int64(id))) {
+		t.Errorf("open workspace missing discard action %q", reconDiscardPath(int64(id)))
 	}
 }
 
@@ -555,16 +556,16 @@ func TestReconEditUpdatesSummaryAndGate(t *testing.T) {
 	e := newReconWebEnv(t)
 	// Start at statement 0, clear the +250 deposit => difference -250, Finalize disabled.
 	id := e.startRecon(t, 0)
-	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(id, e.spDep), url.Values{}); rec.Code != http.StatusOK {
+	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), e.spDep), url.Values{}); rec.Code != http.StatusOK {
 		t.Fatalf("toggle deposit = %d", rec.Code)
 	}
-	before := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(id), nil).Body.String()
+	before := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(int64(id)), nil).Body.String()
 	if !finalizeDisabled(before) {
 		t.Fatalf("Finalize should be DISABLED before the edit (diff -250)")
 	}
 
 	// Edit the ending balance to 250.00 (== opening 0 + cleared 250) and a new date.
-	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconEditPath(id), url.Values{
+	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconEditPath(int64(id)), url.Values{
 		"statement_date": {"2026-03-15"},
 		"balance":        {"250.00"},
 	})
@@ -586,13 +587,13 @@ func TestReconEditUpdatesSummaryAndGate(t *testing.T) {
 	if got.StatementDate != "2026-03-15" {
 		t.Errorf("statement date after edit = %q, want 2026-03-15", got.StatementDate)
 	}
-	after := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(id), nil).Body.String()
+	after := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(int64(id)), nil).Body.String()
 	if finalizeDisabled(after) {
 		t.Errorf("Finalize should be ENABLED after the balancing edit; body:\n%s", after)
 	}
 
 	// A bad balance re-renders the workspace at 422 with a field error (no change).
-	bad := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconEditPath(id), url.Values{
+	bad := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconEditPath(int64(id)), url.Values{
 		"statement_date": {"2026-03-15"},
 		"balance":        {"not-a-number"},
 	})
@@ -612,25 +613,25 @@ func TestReconDiscardReleasesAndRemovesFromList(t *testing.T) {
 	e := newReconWebEnv(t)
 	id := e.startRecon(t, 0)
 	// Clear the deposit split against this recon.
-	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(id, e.spDep), url.Values{}); rec.Code != http.StatusOK {
+	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconTogglePath(int64(id), e.spDep), url.Values{}); rec.Code != http.StatusOK {
 		t.Fatalf("toggle = %d", rec.Code)
 	}
 
 	// The list offers "Continue" for the open recon before discard.
 	listBefore := asUser(t, e.h, e.sm, e.reader, http.MethodGet, "/reconciliations", nil).Body.String()
-	if !strings.Contains(listBefore, `href="/reconciliations/`+strconv.FormatInt(id, 10)+`"`) {
+	if !strings.Contains(listBefore, `href="/reconciliations/`+strconv.FormatInt(int64(id), 10)+`"`) {
 		t.Fatalf("list should offer Continue for the open recon before discard")
 	}
 
 	// Discard.
-	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconDiscardPath(id), url.Values{})
+	rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconDiscardPath(int64(id)), url.Values{})
 	if rec.Code != http.StatusSeeOther && rec.Code != http.StatusOK {
 		t.Fatalf("discard POST = %d, want redirect/200; body: %s", rec.Code, rec.Body.String())
 	}
 
 	// (a) gone from the open/continue list (no continue link to this recon id).
 	listAfter := asUser(t, e.h, e.sm, e.reader, http.MethodGet, "/reconciliations", nil).Body.String()
-	if strings.Contains(listAfter, `href="/reconciliations/`+strconv.FormatInt(id, 10)+`"`) {
+	if strings.Contains(listAfter, `href="/reconciliations/`+strconv.FormatInt(int64(id), 10)+`"`) {
 		t.Errorf("discarded recon still offered as Continue in the list; body:\n%s", listAfter)
 	}
 	// The account row now shows a START form again (a fresh recon can begin).
@@ -667,10 +668,10 @@ func TestReconDiscardedWorkspaceReadOnly(t *testing.T) {
 	e := newReconWebEnv(t)
 	id := e.startRecon(t, 0)
 	// Discard it (no need to clear anything).
-	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconDiscardPath(id), url.Values{}); rec.Code != http.StatusSeeOther && rec.Code != http.StatusOK {
+	if rec := asUser(t, e.h, e.sm, e.writer, http.MethodPost, reconDiscardPath(int64(id)), url.Values{}); rec.Code != http.StatusSeeOther && rec.Code != http.StatusOK {
 		t.Fatalf("discard = %d", rec.Code)
 	}
-	body := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(id), nil).Body.String()
+	body := asUser(t, e.h, e.sm, e.reader, http.MethodGet, reconWorkspacePath(int64(id)), nil).Body.String()
 	if !strings.Contains(body, "recon-discarded-note") {
 		t.Errorf("discarded workspace missing the discarded note; body:\n%s", body)
 	}

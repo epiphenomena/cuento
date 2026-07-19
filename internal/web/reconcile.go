@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/reports"
 	"cuento/internal/store"
@@ -168,7 +169,7 @@ func (s *server) reconList(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			if rc.Status == "open" && row.OpenReconID == 0 {
-				row.OpenReconID = rc.ID
+				row.OpenReconID = int64(rc.ID)
 			}
 			if rc.Status == "finalized" && row.LastDate == "" {
 				row.LastDate = money.FormatDate(parseISOForDisplay(rc.StatementDate), df)
@@ -194,12 +195,12 @@ func (s *server) reconList(w http.ResponseWriter, r *http.Request) {
 				finDate = money.FormatDate(parseISOForDisplay(dateOnly(fr.FinalizedAt)), df)
 			}
 			row.History = append(row.History, reconHistoryRow{
-				ReconID:       fr.ID,
+				ReconID:       int64(fr.ID),
 				StatementDate: money.FormatDate(parseISOForDisplay(fr.StatementDate), df),
 				BalanceFmt:    money.FormatMoney(fr.StatementBalance, fr.Currency, exps[fr.Currency], opts),
 				Currency:      fr.Currency,
 				FinalizedDate: finDate,
-				ReportHref:    reconStatementReportHref(fr.ID),
+				ReportHref:    reconStatementReportHref(int64(fr.ID)),
 			})
 		}
 
@@ -274,7 +275,7 @@ func (s *server) reconStart(w http.ResponseWriter, r *http.Request) {
 		s.renderFormError(w, r, "recon-start-form", form)
 		return
 	}
-	redirectAfterForm(w, r, reconWorkspacePath(id))
+	redirectAfterForm(w, r, reconWorkspacePath(int64(id)))
 }
 
 // reconStartErrorField maps a StartReconciliation typed error to a (field, i18n key)
@@ -361,12 +362,12 @@ type reconEditForm struct {
 func (s *server) reconWorkspace(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := parseID(r.PathValue("id"))
-	recon, err := s.store.GetReconciliation(ctx, id)
+	recon, err := s.store.GetReconciliation(ctx, ids.ReconciliationID(id))
 	if err != nil {
 		http.NotFound(w, r)
 		return
 	}
-	model, err := s.buildWorkspace(ctx, recon.ID)
+	model, err := s.buildWorkspace(ctx, int64(recon.ID))
 	if err != nil {
 		s.serverError(w)
 		return
@@ -381,15 +382,15 @@ func (s *server) buildWorkspace(ctx context.Context, reconID int64) (reconWorksp
 	u := currentUser(ctx)
 	lang := langOf(ctx)
 
-	recon, err := s.store.GetReconciliation(ctx, reconID)
+	recon, err := s.store.GetReconciliation(ctx, ids.ReconciliationID(reconID))
 	if err != nil {
 		return reconWorkspaceModel{}, err
 	}
-	splits, err := s.store.ReconciliationWorkspaceSplits(ctx, reconID)
+	splits, err := s.store.ReconciliationWorkspaceSplits(ctx, ids.ReconciliationID(reconID))
 	if err != nil {
 		return reconWorkspaceModel{}, err
 	}
-	sum, err := s.store.ReconciliationSummaryFor(ctx, reconID)
+	sum, err := s.store.ReconciliationSummaryFor(ctx, ids.ReconciliationID(reconID))
 	if err != nil {
 		return reconWorkspaceModel{}, err
 	}
@@ -473,7 +474,7 @@ func (s *server) reconToggle(w http.ResponseWriter, r *http.Request) {
 
 	// Determine the current state so the toggle flips it. A split absent from the
 	// workspace set (wrong account/currency, deleted, or prior-finalized) is a 404.
-	splits, err := s.store.ReconciliationWorkspaceSplits(ctx, reconID)
+	splits, err := s.store.ReconciliationWorkspaceSplits(ctx, ids.ReconciliationID(reconID))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -491,7 +492,7 @@ func (s *server) reconToggle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.SetSplitReconciled(s.actorCtx(ctx), reconID, splitID, !cleared); err != nil {
+	if err := s.store.SetSplitReconciled(s.actorCtx(ctx), ids.ReconciliationID(reconID), splitID, !cleared); err != nil {
 		// A finalized recon (not open) or a rejected clear is a clean guard, not a 500.
 		if errors.Is(err, store.ErrReconciliationNotOpen) {
 			http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
@@ -543,7 +544,7 @@ type reconToggleResponse struct {
 func (s *server) reconFinalize(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := parseID(r.PathValue("id"))
-	if err := s.store.Finalize(s.actorCtx(ctx), id); err != nil {
+	if err := s.store.Finalize(s.actorCtx(ctx), ids.ReconciliationID(id)); err != nil {
 		switch {
 		case errors.Is(err, store.ErrReconciliationDifference):
 			// Re-render the workspace at 422 (the diff chip explains why); the button
@@ -574,7 +575,7 @@ func (s *server) reconFinalize(w http.ResponseWriter, r *http.Request) {
 func (s *server) reconReopen(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := parseID(r.PathValue("id"))
-	if err := s.store.Reopen(s.actorCtx(ctx), id); err != nil {
+	if err := s.store.Reopen(s.actorCtx(ctx), ids.ReconciliationID(id)); err != nil {
 		switch {
 		case errors.Is(err, store.ErrReconciliationNotFinalized),
 			errors.Is(err, store.ErrReconciliationNotLatest),
@@ -617,7 +618,7 @@ func (s *server) reconEdit(w http.ResponseWriter, r *http.Request) {
 	dayStr := r.PostFormValue("statement_date")
 	balStr := r.PostFormValue("balance")
 
-	recon, err := s.store.GetReconciliation(ctx, id)
+	recon, err := s.store.GetReconciliation(ctx, ids.ReconciliationID(id))
 	if err != nil {
 		http.NotFound(w, r)
 		return
@@ -650,7 +651,7 @@ func (s *server) reconEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.EditReconciliationStatement(s.actorCtx(ctx), id, day.Format("2006-01-02"), bal); err != nil {
+	if err := s.store.EditReconciliationStatement(s.actorCtx(ctx), ids.ReconciliationID(id), day.Format("2006-01-02"), bal); err != nil {
 		switch {
 		case errors.Is(err, store.ErrReconciliationNotOpen):
 			http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)
@@ -674,7 +675,7 @@ func (s *server) reconEdit(w http.ResponseWriter, r *http.Request) {
 func (s *server) reconDiscard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := parseID(r.PathValue("id"))
-	if err := s.store.DiscardReconciliation(s.actorCtx(ctx), id); err != nil {
+	if err := s.store.DiscardReconciliation(s.actorCtx(ctx), ids.ReconciliationID(id)); err != nil {
 		switch {
 		case errors.Is(err, store.ErrReconciliationNotOpen):
 			http.Error(w, http.StatusText(http.StatusConflict), http.StatusConflict)

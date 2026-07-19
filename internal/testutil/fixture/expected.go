@@ -1,5 +1,7 @@
 package fixture
 
+import "cuento/internal/ids"
+
 // Expected holds the hand-computed aggregates a golden/report test asserts
 // against the p08.4 balance queries. Every number is NATIVE-CURRENCY (no FX
 // conversion -- that is p14) and is derived independently from the transaction
@@ -134,7 +136,7 @@ type CampaignExpected struct {
 // the ClearedCount cleared splits (the Finalize gate / Z9). UnclearedTxns are the
 // two transactions deliberately left uncleared.
 type ReconciliationExpected struct {
-	ID               int64
+	ID               ids.ReconciliationID
 	Account          int64
 	Currency         string
 	StatementDate    string

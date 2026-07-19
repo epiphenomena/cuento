@@ -6,6 +6,8 @@ package sqlc
 
 import (
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 type Account struct {
@@ -313,7 +315,7 @@ type ProgramsVersion struct {
 }
 
 type Reconciliation struct {
-	ID               int64
+	ID               ids.ReconciliationID
 	AccountID        int64
 	StatementDate    string
 	StatementBalance int64
@@ -324,7 +326,7 @@ type Reconciliation struct {
 
 type ReconciliationsVersion struct {
 	ID               int64
-	EntityID         int64
+	EntityID         ids.ReconciliationID
 	ChangeID         int64
 	ValidFrom        string
 	Op               string

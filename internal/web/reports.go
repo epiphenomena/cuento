@@ -208,7 +208,7 @@ func (s *server) resolveParams(
 		}
 		if v != "" {
 			if id := parseID(v); id != 0 && reconExists(recons, id) {
-				p.Reconciliation = id
+				p.Reconciliation = reports.ReconciliationID(id)
 			}
 		}
 	}
@@ -467,7 +467,7 @@ func (s *server) reconStatementOptions(ctx context.Context, lang string) ([]reco
 		name := s.accountName(ctx, a.ID, lang)
 		for _, rc := range recs {
 			out = append(out, reconOption{
-				ID:    rc.ID,
+				ID:    int64(rc.ID),
 				Label: name + " " + rc.StatementDate + " " + rc.Currency,
 			})
 		}
@@ -652,7 +652,7 @@ func (s *server) buildParamsForm(
 		Account:         int64(p.Account),
 		Fund:            int64(p.Fund),
 		Program:         int64(p.Program),
-		Recon:           p.Reconciliation,
+		Recon:           int64(p.Reconciliation),
 		Budget:          p.Budget,
 	}
 	for _, sub := range subs {

@@ -130,12 +130,12 @@ func TestReconciliationLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartReconciliation: %v", err)
 	}
-	testutil.AssertVersioned(t, e.d, "reconciliations", recon, "create")
+	testutil.AssertVersioned(t, e.d, "reconciliations", int64(recon), "create")
 
 	if err := e.s.SetSplitReconciled(ctx, recon, spID, true); err != nil {
 		t.Fatalf("SetSplitReconciled on: %v", err)
 	}
-	if got := reconOf(t, e.d, spID); got != recon {
+	if got := reconOf(t, e.d, spID); got != int64(recon) {
 		t.Fatalf("split reconciliation_id = %d, want %d", got, recon)
 	}
 	// Clearing is LIVE-ONLY: it mints NO split version (only the create version).
@@ -146,7 +146,7 @@ func TestReconciliationLifecycle(t *testing.T) {
 	if err := e.s.Finalize(ctx, recon); err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
-	testutil.AssertVersioned(t, e.d, "reconciliations", recon, "update")
+	testutil.AssertVersioned(t, e.d, "reconciliations", int64(recon), "update")
 	got, _ := e.s.GetReconciliation(ctx, recon)
 	if got.Status != "finalized" {
 		t.Errorf("status after Finalize = %q, want finalized", got.Status)
@@ -156,7 +156,7 @@ func TestReconciliationLifecycle(t *testing.T) {
 	if err := e.s.Reopen(ctx, recon); err != nil {
 		t.Fatalf("Reopen: %v", err)
 	}
-	testutil.AssertVersioned(t, e.d, "reconciliations", recon, "update")
+	testutil.AssertVersioned(t, e.d, "reconciliations", int64(recon), "update")
 	got, _ = e.s.GetReconciliation(ctx, recon)
 	if got.Status != "open" {
 		t.Errorf("status after Reopen = %q, want open", got.Status)
@@ -367,7 +367,7 @@ func TestReconciliationReopenAudited(t *testing.T) {
 	if err := e.s.Reopen(reopenCtx, recon); err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
-	if actor := testutil.LatestVersionActor(t, e.d, "reconciliations", recon); actor != reopener {
+	if actor := testutil.LatestVersionActor(t, e.d, "reconciliations", int64(recon)); actor != reopener {
 		t.Errorf("reopen version actor = %d, want %d", actor, reopener)
 	}
 }
@@ -984,7 +984,7 @@ func TestEditReconciliationStatement(t *testing.T) {
 	if err := e.s.EditReconciliationStatement(ctx, recon, "2026-03-02", 25_000); err != nil {
 		t.Fatalf("EditReconciliationStatement: %v", err)
 	}
-	testutil.AssertVersioned(t, e.d, "reconciliations", recon, "update")
+	testutil.AssertVersioned(t, e.d, "reconciliations", int64(recon), "update")
 
 	got, _ := e.s.GetReconciliation(ctx, recon)
 	if got.StatementDate != "2026-03-02" || got.StatementBalance != 25_000 {
@@ -1056,7 +1056,7 @@ func TestDiscardReconciliation(t *testing.T) {
 	if err := e.s.SetSplitReconciled(ctx, recon, spID, true); err != nil {
 		t.Fatalf("clear split: %v", err)
 	}
-	if got := reconOf(t, e.d, spID); got != recon {
+	if got := reconOf(t, e.d, spID); got != int64(recon) {
 		t.Fatalf("split cleared against %d, want %d", got, recon)
 	}
 	preSplitVersions := splitVersionCount(t, e.d, spID)
@@ -1070,7 +1070,7 @@ func TestDiscardReconciliation(t *testing.T) {
 	if err := e.s.DiscardReconciliation(ctx, recon); err != nil {
 		t.Fatalf("DiscardReconciliation: %v", err)
 	}
-	testutil.AssertVersioned(t, e.d, "reconciliations", recon, "update")
+	testutil.AssertVersioned(t, e.d, "reconciliations", int64(recon), "update")
 
 	got, _ := e.s.GetReconciliation(ctx, recon)
 	if got.Status != "discarded" {
