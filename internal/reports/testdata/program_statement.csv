@@ -1,22 +1,28 @@
 Account,Currency,General,Educacion,Food Pantry
-Revenue,,,,
-Contributions,USD,52750.00,0.00,0.00
+Revenue,MXN,,,
+Revenue,MXN,100000.00,100000.00,0.00
 Government Grants,MXN,100000.00,100000.00,0.00
+Total revenue,MXN,100000.00,100000.00,0.00
+Expenses,MXN,,,
+Expenses,MXN,8600.00,5000.00,1500.00
+Program Supplies,MXN,5000.00,5000.00,0.00
+Food Purchases,MXN,3600.00,0.00,1500.00
+Total expenses,MXN,8600.00,5000.00,1500.00
+Net (revenue − expenses),MXN,91400.00,95000.00,-1500.00
+Revenue,USD,,,
+Revenue,USD,58950.00,3200.00,0.00
+Contributions,USD,52750.00,0.00,0.00
 Government Grants,USD,2000.00,2000.00,0.00
 Program Service Fees,USD,1200.00,1200.00,0.00
 Event Income,USD,3000.00,0.00,0.00
-Total revenue,MXN,100000.00,100000.00,0.00
 Total revenue,USD,58950.00,3200.00,0.00
-Expenses,,,,
+Expenses,USD,,,
+Expenses,USD,23275.00,1500.00,0.00
 Salaries,USD,16500.00,0.00,0.00
-Program Supplies,MXN,5000.00,5000.00,0.00
 Program Supplies,USD,2100.00,1500.00,0.00
-Food Purchases,MXN,3600.00,0.00,1500.00
 Occupancy,USD,3050.00,0.00,0.00
 Insurance,USD,600.00,0.00,0.00
 Bank Fees,USD,25.00,0.00,0.00
 Event Costs,USD,1000.00,0.00,0.00
-Total expenses,MXN,8600.00,5000.00,1500.00
 Total expenses,USD,23275.00,1500.00,0.00
-Net (revenue − expenses),MXN,91400.00,95000.00,-1500.00
 Net (revenue − expenses),USD,35675.00,1700.00,0.00

@@ -527,6 +527,221 @@ func TestProgramStatementCSVParses(t *testing.T) {
 	}
 }
 
+// psRow returns the full Row (kind, indent, cells) for the row whose account/label cell
+// (col 0) is name AND currency cell (col 1) is ccy, and whether found. Matches TEXT
+// (account name) and LABEL (section) rows alike on the raw first-cell string.
+func psRow(tbl reports.Table, name, ccy string) (reports.Row, bool) {
+	for _, row := range tbl.Rows {
+		if len(row.Cells) < 2 {
+			continue
+		}
+		if row.Cells[0].Text == name && row.Cells[1].Text == ccy {
+			return row, true
+		}
+	}
+	return reports.Row{}, false
+}
+
+// TestProgramStatementCollapsibleTree (p29.15): the statement is a COLLAPSIBLE ACCOUNT
+// TREE. The report registers Tree: true (so the web layer emits data-depth + the
+// collapse/expand controls), and a placeholder PARENT account (the "Expenses" section
+// parent) renders as a roll-up SUBTOTAL row over its indented leaf children — WITHIN a
+// currency block, its per-program cell == the sum of that currency's leaves. The subtotal
+// row is NOT drillable (a rollup spans many leaves). This is the SoA machinery, now on the
+// program statement.
+func TestProgramStatementCollapsibleTree(t *testing.T) {
+	f := fixture.New(t)
+	ctx := context.Background()
+	rep := psReport(t)
+
+	// The report must be Tree-marked so the template emits data-depth + tree controls.
+	if !rep.Tree {
+		t.Fatalf("program statement must register Tree: true for collapsibility")
+	}
+
+	p := psParams(f)
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	gen := psColIndex(t, table, "General")
+
+	// The "Expenses" placeholder parent renders as a SUBTOTAL row in each currency block,
+	// at tree depth 0 (a top-level R/E section parent -> Indent 0), and its cell is NOT a
+	// drill link (rollups aren't drillable).
+	for _, blk := range []struct {
+		ccy       string
+		wantExp   int64 // General column Expenses subtotal for this currency
+		leafIn    string
+		leafAmt   int64
+		leafOutOf string // a leaf that must be ABSENT from this currency block
+	}{
+		// USD block: Expenses $23,275.00 = Σ children (Salaries $16,500 + Program Supplies
+		// $2,100 + Occupancy $3,050 + Insurance $600 + Bank Fees $25 + Event Costs $1,000);
+		// Food Purchases (MXN-only) must NOT appear here.
+		{"USD", 2_327_500, "Salaries", 1_650_000, "Food Purchases"},
+		// MXN block: Expenses $8,600.00 = Program Supplies $5,000 + Food Purchases $3,600;
+		// Salaries (USD-only) must NOT appear here (the per-currency fold).
+		{"MXN", 860_000, "Program Supplies", 500_000, "Salaries"},
+	} {
+		row, ok := psRow(table, "Expenses", blk.ccy)
+		if !ok {
+			t.Fatalf("%s block: Expenses placeholder subtotal row missing", blk.ccy)
+		}
+		if row.Kind != reports.RowSubtotal {
+			t.Errorf("%s Expenses parent kind = %v, want RowSubtotal", blk.ccy, row.Kind)
+		}
+		if row.Indent != 0 {
+			t.Errorf("%s Expenses parent indent = %d, want 0 (top-level section parent)", blk.ccy, row.Indent)
+		}
+		if row.Cells[gen].Minor != blk.wantExp {
+			t.Errorf("%s Expenses subtotal General = %d, want %d (Σ children)", blk.ccy, row.Cells[gen].Minor, blk.wantExp)
+		}
+		if row.Cells[gen].Drill != nil {
+			t.Errorf("%s Expenses subtotal cell is drillable; a rollup must not drill", blk.ccy)
+		}
+		// The in-currency leaf is present and nests one level deeper (Indent parent+1); the
+		// out-of-currency leaf is ABSENT from this block.
+		leaf, ok := psRow(table, blk.leafIn, blk.ccy)
+		if !ok {
+			t.Fatalf("%s block: leaf %q missing", blk.ccy, blk.leafIn)
+		}
+		if leaf.Indent != row.Indent+1 {
+			t.Errorf("%s leaf %q indent = %d, want parent+1 (%d)", blk.ccy, blk.leafIn, leaf.Indent, row.Indent+1)
+		}
+		if leaf.Cells[gen].Minor != blk.leafAmt {
+			t.Errorf("%s leaf %q General = %d, want %d", blk.ccy, blk.leafIn, leaf.Cells[gen].Minor, blk.leafAmt)
+		}
+		if _, present := psRow(table, blk.leafOutOf, blk.ccy); present {
+			t.Errorf("%s block leaks out-of-currency leaf %q (per-currency fold broke)", blk.ccy, blk.leafOutOf)
+		}
+	}
+}
+
+// TestProgramStatementNestedSubtotal (p29.15): a MULTI-LEVEL placeholder parent (a grouping
+// account nested UNDER the Expenses section) renders as a nested subtotal — at depth 2,
+// contiguous ABOVE its own children — whose per-program cell == the sum of its SAME-CURRENCY
+// leaves. The base fixture R/E tree is FLAT (section -> leaves), so this path is exercised
+// inline: create "Field Ops" (placeholder) under Expenses with a USD and an MXN leaf, post an
+// expense to each (General program), and assert the nested rollup arithmetic + depth + order.
+func TestProgramStatementNestedSubtotal(t *testing.T) {
+	f := fixture.New(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	rep := psReport(t)
+
+	prog := "program"
+	// "Field Ops" is a placeholder EXPENSE parent under the Expenses section (no leaf txns
+	// of its own), with a USD leaf (Fuel) and an MXN leaf (Rations) under it.
+	fieldOps, err := f.Store.CreateAccount(ctx, store.CreateAccountInput{
+		ParentID: &f.IDs.Expenses, Type: "expense", DefaultCurrency: "USD",
+		Names: map[string]string{"en": "Field Ops", "es": "Operaciones de campo"}, Subsidiaries: []int64{f.IDs.Root, f.IDs.US, f.IDs.MX},
+	})
+	if err != nil {
+		t.Fatalf("create Field Ops: %v", err)
+	}
+	fuel, err := f.Store.CreateAccount(ctx, store.CreateAccountInput{
+		ParentID: &fieldOps, Type: "expense", DefaultCurrency: "USD", FunctionalClass: &prog,
+		Names: map[string]string{"en": "Fuel", "es": "Combustible"}, Subsidiaries: []int64{f.IDs.Root, f.IDs.US, f.IDs.MX},
+	})
+	if err != nil {
+		t.Fatalf("create Fuel: %v", err)
+	}
+	rations, err := f.Store.CreateAccount(ctx, store.CreateAccountInput{
+		ParentID: &fieldOps, Type: "expense", DefaultCurrency: "MXN", FunctionalClass: &prog,
+		Names: map[string]string{"en": "Rations", "es": "Raciones"}, Subsidiaries: []int64{f.IDs.Root, f.IDs.US, f.IDs.MX},
+	})
+	if err != nil {
+		t.Fatalf("create Rations: %v", err)
+	}
+
+	// DR Fuel 400.00 USD (program General), CR Checking US. DR Rations 900.00 MXN, CR
+	// Checking MX. Each is a balanced R/E expense carrying the General program (D24).
+	if _, err := f.Store.PostTransaction(ctx, store.PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: f.IDs.US, Currency: "USD", Memo: "test fuel",
+		Splits: []store.SplitInput{
+			{AccountID: fuel, Amount: 40_000, ProgramID: &f.IDs.General},
+			{AccountID: f.IDs.CheckingUS, Amount: -40_000},
+		},
+	}); err != nil {
+		t.Fatalf("post fuel txn: %v", err)
+	}
+	if _, err := f.Store.PostTransaction(ctx, store.PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: f.IDs.MX, Currency: "MXN", Memo: "test rations",
+		Splits: []store.SplitInput{
+			{AccountID: rations, Amount: 90_000, ProgramID: &f.IDs.General},
+			{AccountID: f.IDs.CheckingMX, Amount: -90_000},
+		},
+	}); err != nil {
+		t.Fatalf("post rations txn: %v", err)
+	}
+
+	p := psParams(f)
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	gen := psColIndex(t, table, "General")
+
+	// USD block: Field Ops (nested placeholder) subtotal == Fuel leaf (400.00 = 40,000).
+	foUSD, ok := psRow(table, "Field Ops", "USD")
+	if !ok {
+		t.Fatalf("USD block: Field Ops nested subtotal missing")
+	}
+	if foUSD.Kind != reports.RowSubtotal {
+		t.Errorf("Field Ops USD kind = %v, want RowSubtotal", foUSD.Kind)
+	}
+	// Nested one level below the Expenses section parent (Indent 0) -> Indent 1.
+	if foUSD.Indent != 1 {
+		t.Errorf("Field Ops USD indent = %d, want 1 (nested under Expenses)", foUSD.Indent)
+	}
+	fuelUSD, ok := psRow(table, "Fuel", "USD")
+	if !ok {
+		t.Fatalf("USD block: Fuel leaf missing")
+	}
+	if fuelUSD.Indent != foUSD.Indent+1 {
+		t.Errorf("Fuel indent = %d, want Field Ops+1 (%d)", fuelUSD.Indent, foUSD.Indent+1)
+	}
+	if foUSD.Cells[gen].Minor != 40_000 || fuelUSD.Cells[gen].Minor != 40_000 {
+		t.Errorf("Field Ops USD subtotal = %d, Fuel = %d, want both 40,000 (rollup == same-currency child)",
+			foUSD.Cells[gen].Minor, fuelUSD.Cells[gen].Minor)
+	}
+	// The MXN-only Rations leaf must NOT appear in the USD block (per-currency fold).
+	if _, present := psRow(table, "Rations", "USD"); present {
+		t.Errorf("USD block leaks MXN-only Rations leaf")
+	}
+
+	// MXN block: Field Ops subtotal == Rations leaf (900.00 = 90,000); Fuel (USD) absent.
+	foMXN, ok := psRow(table, "Field Ops", "MXN")
+	if !ok {
+		t.Fatalf("MXN block: Field Ops nested subtotal missing")
+	}
+	if foMXN.Cells[gen].Minor != 90_000 {
+		t.Errorf("Field Ops MXN subtotal General = %d, want 90,000 (== Rations)", foMXN.Cells[gen].Minor)
+	}
+	if _, present := psRow(table, "Fuel", "MXN"); present {
+		t.Errorf("MXN block leaks USD-only Fuel leaf")
+	}
+
+	// CONTIGUITY (the treetable data-depth contract): Field Ops (depth 1) must be
+	// IMMEDIATELY followed by its deeper children (depth 2) until a row at depth <= 1 — no
+	// same-or-shallower row interleaves. Walk the USD block's rows from Field Ops.
+	idx := -1
+	for i, row := range table.Rows {
+		if len(row.Cells) >= 2 && row.Cells[0].Text == "Field Ops" && row.Cells[1].Text == "USD" {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		t.Fatalf("Field Ops USD row not located for contiguity check")
+	}
+	// The immediately following row is its child (deeper): Fuel at Indent 2.
+	next := table.Rows[idx+1]
+	if next.Indent <= foUSD.Indent {
+		t.Errorf("row after Field Ops has indent %d <= parent %d — subtree not contiguous", next.Indent, foUSD.Indent)
+	}
+}
+
 // --- helpers ----------------------------------------------------------------
 
 // psAccountNames returns account id -> resolved (en) name from the store tree.

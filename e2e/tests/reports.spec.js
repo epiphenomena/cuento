@@ -759,6 +759,26 @@ async function createExpenseAccount(page, name) {
   await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
 }
 
+// createChildExpenseAccount makes a leaf EXPENSE account nested under an existing expense
+// PARENT (parentName), so the program statement's collapsible account tree has a
+// placeholder-parent subtotal (the parent) over an indented leaf (this child). The parent
+// becomes a placeholder once it has a child, so its own row is a roll-up subtotal.
+async function createChildExpenseAccount(page, name, parentName) {
+  await openNewAccount(page);
+  await page.locator('#af-type').selectOption('expense');
+  await expect(page.locator('#af-func')).toBeVisible();
+  await page.locator('#af-name-en').fill(name);
+  await expect(async () => {
+    await page.locator('#af-parent').selectOption({ label: parentName });
+    await expect(page.locator('#af-parent')).not.toHaveValue('0');
+  }).toPass({ timeout: 5000 });
+  const rootSub = page.locator('input[name="sub_1"]');
+  if (!(await rootSub.isChecked())) await rootSub.check();
+  await page.locator('#af-func').selectOption('program');
+  await saveAccount(page);
+  await expect(page.locator('tr.acct-row', { hasText: name })).toBeVisible();
+}
+
 // createFund makes a restricted fund scoped to the root subsidiary via the /funds form.
 async function createFund(page, name, funder) {
   await page.goto('/funds');
@@ -970,10 +990,13 @@ test('reports: open the program statement (comparative), see program columns + a
 }) => {
   await login(page, server);
 
-  // --- seed: a child program, a cash asset, an expense account, and a program-tagged expense ---
+  // --- seed: a child program, a cash asset, a NESTED expense account (a placeholder parent
+  // over a leaf, so the collapsible account tree has a subtotal), and a program-tagged
+  // expense on the leaf ---
   await createProgram(page, 'PS Outreach E2E');
   await createAsset(page, 'PS Cash E2E');
-  await createExpenseAccount(page, 'PS Cost E2E'); // default functional class program
+  await createExpenseAccount(page, 'PS Expenses E2E'); // becomes a placeholder parent below
+  await createChildExpenseAccount(page, 'PS Cost E2E', 'PS Expenses E2E'); // leaf under it
 
   // An expense: DR PS Cost 80.00 (fund none), CR PS Cash 80.00. The expense split needs a
   // program (rule 7 R/E dimension, D24); assign the seeded child program so the comparative
@@ -981,7 +1004,8 @@ test('reports: open the program statement (comparative), see program columns + a
   await page.goto('/transactions/new');
   await expect(page.locator('form#txn-form')).toBeVisible();
   await page.locator('#txn-main-account').selectOption({ label: 'PS Cash E2E' });
-  await page.locator('#txn-account-0').selectOption({ label: 'PS Cost E2E' });
+  // The child leaf's split-option label is its DOTTED PATH (p26.1: parent.child).
+  await page.locator('#txn-account-0').selectOption({ label: 'PS Expenses E2E.PS Cost E2E' });
   // p26.41: the combined program/class control -- pick the program node by label (its value
   // is p:<id>, which decodes to program=PS Outreach + class=program on this expense row).
   await expect(page.locator('#txn-progclass-0')).toBeVisible();
@@ -1019,6 +1043,31 @@ test('reports: open the program statement (comparative), see program columns + a
   await expect(page.locator('table.report-table tr.report-total')).not.toHaveCount(0);
   // The account cells are DRILL links (program×account drill).
   await expect(page.locator('a.report-drill-link').first()).toBeVisible();
+
+  // --- p29.15: the statement is now a COLLAPSIBLE ACCOUNT TREE (reusing the p26.25
+  // treetable control). The "Expenses" section renders as a placeholder-parent SUBTOTAL
+  // row (data-depth 0) over its indented leaf accounts (data-depth 1); the collapse/expand
+  // controls hide/reveal the leaves. The seeded expense (PS Cost E2E) sits under Expenses.
+  const treeTable = page.locator('table.report-table.tree-table');
+  await expect(treeTable).toBeVisible();
+  // "PS Expenses E2E" is a depth-0 placeholder-parent SUBTOTAL; PS Cost E2E is its depth-1
+  // leaf (nested one level deeper).
+  const expensesRow = treeTable.locator('tr.report-row.report-subtotal', { hasText: 'PS Expenses E2E' });
+  const costRow = treeTable.locator('tr.report-row', { hasText: 'PS Cost E2E' });
+  await expect(expensesRow).toHaveAttribute('data-depth', '0');
+  await expect(costRow).toHaveAttribute('data-depth', '1');
+  await expect(costRow).toBeVisible();
+
+  // The tree controls are present + revealed by treetable.js (they ship `hidden`).
+  const psCollapseAll = page.locator('.report-controls .tree-collapse-all');
+  await expect(psCollapseAll).toBeVisible();
+  // Collapse all -> the leaf (PS Cost E2E) hides; its Expenses parent stays.
+  await psCollapseAll.click();
+  await expect(costRow).toBeHidden();
+  await expect(expensesRow).toBeVisible();
+  // Expand all -> the leaf reappears.
+  await page.locator('.report-controls .tree-expand-all').click();
+  await expect(costRow).toBeVisible();
 
   // --- pick the SINGLE program -> the subtree statement (Account | Currency | Amount) ---
   // p26.90: the report AUTO-APPLIES on change; navigate the equivalent GET (no-JS round

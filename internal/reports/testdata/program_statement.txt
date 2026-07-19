@@ -1,23 +1,29 @@
    Account                   Currency          General        Educacion     Food Pantry
 -  ------------------------  --------  ---------------  ---------------  --------------
-   Revenue
-   Contributions             USD        USD $52,750.00        USD $0.00       USD $0.00
+   Revenue                   MXN
+>  Revenue                   MXN       MXN $100,000.00  MXN $100,000.00       MXN $0.00
    Government Grants         MXN       MXN $100,000.00  MXN $100,000.00       MXN $0.00
+>  Total revenue             MXN       MXN $100,000.00  MXN $100,000.00       MXN $0.00
+   Expenses                  MXN
+>  Expenses                  MXN         MXN $8,600.00    MXN $5,000.00   MXN $1,500.00
+   Program Supplies          MXN         MXN $5,000.00    MXN $5,000.00       MXN $0.00
+   Food Purchases            MXN         MXN $3,600.00        MXN $0.00   MXN $1,500.00
+>  Total expenses            MXN         MXN $8,600.00    MXN $5,000.00   MXN $1,500.00
+=  Net (revenue − expenses)  MXN        MXN $91,400.00   MXN $95,000.00  MXN -$1,500.00
+   Revenue                   USD
+>  Revenue                   USD        USD $58,950.00    USD $3,200.00       USD $0.00
+   Contributions             USD        USD $52,750.00        USD $0.00       USD $0.00
    Government Grants         USD         USD $2,000.00    USD $2,000.00       USD $0.00
    Program Service Fees      USD         USD $1,200.00    USD $1,200.00       USD $0.00
    Event Income              USD         USD $3,000.00        USD $0.00       USD $0.00
->  Total revenue             MXN       MXN $100,000.00  MXN $100,000.00       MXN $0.00
 >  Total revenue             USD        USD $58,950.00    USD $3,200.00       USD $0.00
-   Expenses
+   Expenses                  USD
+>  Expenses                  USD        USD $23,275.00    USD $1,500.00       USD $0.00
    Salaries                  USD        USD $16,500.00        USD $0.00       USD $0.00
-   Program Supplies          MXN         MXN $5,000.00    MXN $5,000.00       MXN $0.00
    Program Supplies          USD         USD $2,100.00    USD $1,500.00       USD $0.00
-   Food Purchases            MXN         MXN $3,600.00        MXN $0.00   MXN $1,500.00
    Occupancy                 USD         USD $3,050.00        USD $0.00       USD $0.00
    Insurance                 USD           USD $600.00        USD $0.00       USD $0.00
    Bank Fees                 USD            USD $25.00        USD $0.00       USD $0.00
    Event Costs               USD         USD $1,000.00        USD $0.00       USD $0.00
->  Total expenses            MXN         MXN $8,600.00    MXN $5,000.00   MXN $1,500.00
 >  Total expenses            USD        USD $23,275.00    USD $1,500.00       USD $0.00
-=  Net (revenue − expenses)  MXN        MXN $91,400.00   MXN $95,000.00  MXN -$1,500.00
 =  Net (revenue − expenses)  USD        USD $35,675.00    USD $1,700.00       USD $0.00
