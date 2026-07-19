@@ -191,15 +191,15 @@ func fundStatementTable(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 	// The spendable-asset account set = every asset account EXCEPT the ones this fund
 	// capitalized into (the Building) — the accounts whose as-of sum is the spendable
 	// Opening/Closing, drillable.
-	spendableIDs := make([]int64, 0, len(assetIDs))
+	spendableIDs := make([]AccountID, 0, len(assetIDs))
 	for _, id := range assetIDs {
 		if !st.CapitalAccounts[AccountID(id)] {
 			spendableIDs = append(spendableIDs, id)
 		}
 	}
-	capitalIDs := make([]int64, 0, len(st.CapitalAccounts))
+	capitalIDs := make([]AccountID, 0, len(st.CapitalAccounts))
 	for id := range st.CapitalAccounts {
-		capitalIDs = append(capitalIDs, int64(id))
+		capitalIDs = append(capitalIDs, id)
 	}
 	sort.Slice(capitalIDs, func(i, j int) bool { return capitalIDs[i] < capitalIDs[j] })
 
@@ -260,7 +260,7 @@ func statementRow(_ Table, labelKey, ccy string, minor int64, kind RowKind, d *D
 // nonExpenseDrill drills the non-expense-applied cell to the fund's capital-asset
 // splits (the Building) over the period. When the fund capitalized nothing (a cash-only
 // fund), there is nothing to drill (nil) — the cell renders as a plain zero.
-func nonExpenseDrill(p Params, capitalIDs []int64, ccy string, fund *FundID) *Drill {
+func nonExpenseDrill(p Params, capitalIDs []AccountID, ccy string, fund *FundID) *Drill {
 	if len(capitalIDs) == 0 {
 		return nil
 	}
@@ -274,7 +274,7 @@ func nonExpenseDrill(p Params, capitalIDs []int64, ccy string, fund *FundID) *Dr
 // contributions/grants INTO the fund. Liability draws also count as received but the
 // fixture has none, so the drill lists the revenue splits (the reconciling set for the
 // common case). A store read error yields an empty set (an empty, harmless drill).
-func revenueAndLiabilityDrill(ctx context.Context, tk *Toolkit) []int64 {
+func revenueAndLiabilityDrill(ctx context.Context, tk *Toolkit) []AccountID {
 	ids, err := revenueAccountIDs(ctx, tk.Store())
 	if err != nil {
 		return nil
@@ -336,30 +336,30 @@ func restrictionKey(kind string) string {
 
 // assetAccountIDs returns every asset account id (sorted) — the drill target for a
 // fund's all-asset as-of balance (the LIST cell and the reconciliation line).
-func assetAccountIDs(ctx context.Context, st *store.Store) ([]int64, error) {
+func assetAccountIDs(ctx context.Context, st *store.Store) ([]AccountID, error) {
 	return accountIDsOfType(ctx, st, "asset")
 }
 
 // expenseAccountIDs returns every expense account id (sorted) — the drill target for a
 // fund's expense-applied figure.
-func expenseAccountIDs(ctx context.Context, st *store.Store) ([]int64, error) {
+func expenseAccountIDs(ctx context.Context, st *store.Store) ([]AccountID, error) {
 	return accountIDsOfType(ctx, st, "expense")
 }
 
 // revenueAccountIDs returns every revenue account id (sorted) — the drill target for a
 // fund's received figure.
-func revenueAccountIDs(ctx context.Context, st *store.Store) ([]int64, error) {
+func revenueAccountIDs(ctx context.Context, st *store.Store) ([]AccountID, error) {
 	return accountIDsOfType(ctx, st, "revenue")
 }
 
 // accountIDsOfType returns the sorted ids of every account of the given type, read from
 // the account tree once. Bounded reference data.
-func accountIDsOfType(ctx context.Context, st *store.Store, typ string) ([]int64, error) {
+func accountIDsOfType(ctx context.Context, st *store.Store, typ string) ([]AccountID, error) {
 	tree, err := st.Tree(ctx, "en", nil)
 	if err != nil {
 		return nil, err
 	}
-	var out []int64
+	var out []AccountID
 	for _, r := range tree {
 		if r.Type == typ {
 			out = append(out, r.ID)

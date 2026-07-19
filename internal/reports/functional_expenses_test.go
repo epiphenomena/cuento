@@ -328,7 +328,7 @@ func TestFunctionalExpensesLeafOverride(t *testing.T) {
 		t.Errorf("Bank Fees effective code = %q, want IX.11g (own override)", eff[reports.AccountID(f.IDs.BankFees)])
 	}
 	// Its siblings under Expenses inherit IX.24e (no own code).
-	for _, id := range []int64{f.IDs.ProgramSupplies, f.IDs.FoodPurchases, f.IDs.Insurance, f.IDs.EventCosts} {
+	for _, id := range []reports.AccountID{f.IDs.ProgramSupplies, f.IDs.FoodPurchases, f.IDs.Insurance, f.IDs.EventCosts} {
 		if eff[reports.AccountID(id)] != "IX.24e" {
 			t.Errorf("account %d effective code = %q, want IX.24e (inherited)", id, eff[reports.AccountID(id)])
 		}

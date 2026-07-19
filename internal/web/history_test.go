@@ -246,7 +246,7 @@ func TestDuplicatePrefillsNewEntry(t *testing.T) {
 		t.Errorf("duplicate should copy the source memo")
 	}
 	// The source accounts are prefilled (salaries selected in a row).
-	if !strings.Contains(body, `value="`+itoa(e.salaries)+`"`) {
+	if !strings.Contains(body, `value="`+itoa(int64(e.salaries))+`"`) {
 		t.Errorf("duplicate should prefill the source account")
 	}
 }

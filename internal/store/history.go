@@ -102,7 +102,7 @@ type HistHeaderState struct {
 // carries the prior-version value of each changed field (for the struck old value).
 type HistSplitState struct {
 	SplitID         ids.SplitID
-	AccountID       int64
+	AccountID       ids.AccountID
 	Amount          int64
 	FundID          sql.NullInt64
 	ProgramID       sql.NullInt64

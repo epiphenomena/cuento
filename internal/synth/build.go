@@ -53,8 +53,8 @@ func buildOrg(ctx context.Context, s *store.Store, ids *IDs) error {
 
 // acctSpec is one account to create (concise, named fields).
 type acctSpec struct {
-	dst          *int64
-	parent       *int64
+	dst          *entids.AccountID
+	parent       *entids.AccountID
 	typ          string
 	nameEN       string
 	nameES       string

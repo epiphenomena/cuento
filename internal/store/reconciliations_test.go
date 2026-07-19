@@ -22,12 +22,12 @@ type reconEnv struct {
 	d     *sql.DB
 	subUS ids.SubsidiaryID
 
-	checking int64      // asset, US, RECONCILABLE
-	other    int64      // asset, US, reconcilable (a different account, for Z8 mismatch)
-	expense  int64      // expense
-	revenue  int64      // revenue
-	equity   int64      // equity
-	fund     ids.FundID // restricted fund scoped to US
+	checking ids.AccountID // asset, US, RECONCILABLE
+	other    ids.AccountID // asset, US, reconcilable (a different account, for Z8 mismatch)
+	expense  ids.AccountID // expense
+	revenue  ids.AccountID // revenue
+	equity   ids.AccountID // equity
+	fund     ids.FundID    // restricted fund scoped to US
 }
 
 func newReconEnv(t *testing.T) reconEnv {
@@ -69,10 +69,10 @@ func newReconEnv(t *testing.T) reconEnv {
 func strp(s string) *string { return &s }
 
 // checkingSplitID returns the id of the Checking split on a transaction.
-func checkingSplitID(t *testing.T, d *sql.DB, txnID ids.TransactionID, checking int64) ids.SplitID {
+func checkingSplitID(t *testing.T, d *sql.DB, txnID ids.TransactionID, checking ids.AccountID) ids.SplitID {
 	t.Helper()
 	var id ids.SplitID
-	if err := d.QueryRow(`SELECT id FROM splits WHERE transaction_id = ? AND account_id = ?`, int64(txnID), checking).Scan(&id); err != nil {
+	if err := d.QueryRow(`SELECT id FROM splits WHERE transaction_id = ? AND account_id = ?`, int64(txnID), int64(checking)).Scan(&id); err != nil {
 		t.Fatalf("checkingSplitID(txn %d): %v", txnID, err)
 	}
 	return id
@@ -796,7 +796,7 @@ func TestReconciliationWorkspaceReads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReconcilableAccounts: %v", err)
 	}
-	got := map[int64]string{}
+	got := map[ids.AccountID]string{}
 	for _, a := range accts {
 		got[a.ID] = a.DefaultCurrency
 	}

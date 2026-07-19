@@ -25,8 +25,8 @@ import (
 // balances it against cash.
 type reviewReportEnv struct {
 	reportID  int64
-	expense   int64
-	cash      int64
+	expense   ids.AccountID
+	cash      ids.AccountID
 	submitter ids.UserID
 }
 
@@ -103,11 +103,11 @@ func TestReviewPostCreatesBalancedTxnAndConverts(t *testing.T) {
 	unbalanced.Set("currency", "USD")
 	unbalanced.Set("date", "2025-06-01")
 	unbalanced.Set("rows", "2")
-	unbalanced.Set("account_0", itoa(env.expense))
+	unbalanced.Set("account_0", itoa(int64(env.expense)))
 	unbalanced.Set("amount_0", "20.00")
 	unbalanced.Set("program_0", "1")
 	unbalanced.Set("progclass_0", "p:1") // p26.41 combined control encoding
-	unbalanced.Set("account_1", itoa(env.cash))
+	unbalanced.Set("account_1", itoa(int64(env.cash)))
 	unbalanced.Set("amount_1", "-15.00") // does not balance
 	rec = asUser(t, h, sm, book, http.MethodPost, "/expenses/review/post/"+itoa(env.reportID), unbalanced)
 	if rec.Code != http.StatusUnprocessableEntity {
@@ -126,11 +126,11 @@ func TestReviewPostCreatesBalancedTxnAndConverts(t *testing.T) {
 	balanced.Set("currency", "USD")
 	balanced.Set("date", "2025-06-01")
 	balanced.Set("rows", "2")
-	balanced.Set("account_0", itoa(env.expense))
+	balanced.Set("account_0", itoa(int64(env.expense)))
 	balanced.Set("amount_0", "20.00")
 	balanced.Set("program_0", "1")
 	balanced.Set("progclass_0", "p:1") // p26.41 combined control encoding
-	balanced.Set("account_1", itoa(env.cash))
+	balanced.Set("account_1", itoa(int64(env.cash)))
 	balanced.Set("amount_1", "-20.00")
 	rec = asUser(t, h, sm, book, http.MethodPost, "/expenses/review/post/"+itoa(env.reportID), balanced)
 	if rec.Code != http.StatusSeeOther {
@@ -182,11 +182,11 @@ func TestReviewPostImmutableConverted(t *testing.T) {
 		form.Set("currency", "USD")
 		form.Set("date", "2025-06-01")
 		form.Set("rows", "2")
-		form.Set("account_0", itoa(env.expense))
+		form.Set("account_0", itoa(int64(env.expense)))
 		form.Set("amount_0", "20.00")
 		form.Set("program_0", "1")
 		form.Set("progclass_0", "p:1") // p26.41 combined control encoding
-		form.Set("account_1", itoa(env.cash))
+		form.Set("account_1", itoa(int64(env.cash)))
 		form.Set("amount_1", "-20.00")
 		asUser(t, h, sm, book, http.MethodPost, "/expenses/review/post/"+itoa(env.reportID), form)
 	}

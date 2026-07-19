@@ -261,9 +261,9 @@ func (s *server) prefillExpenseRows(r *http.Request, model txnEditorModel, rep s
 		defaultProgram int64
 		defaultClass   string
 	}
-	meta := make(map[int64]acctMeta, len(model.Accounts))
+	meta := make(map[ids.AccountID]acctMeta, len(model.Accounts))
 	for _, a := range model.Accounts {
-		meta[a.ID] = acctMeta{typ: a.Type, defaultProgram: a.DefaultProgram, defaultClass: a.DefaultClass}
+		meta[ids.AccountID(a.ID)] = acctMeta{typ: a.Type, defaultProgram: a.DefaultProgram, defaultClass: a.DefaultClass}
 	}
 
 	rows := make([]txnRowModel, 0, len(lines)+1)
@@ -271,7 +271,7 @@ func (s *server) prefillExpenseRows(r *http.Request, model txnEditorModel, rep s
 		m := meta[l.AccountID]
 		row := txnRowModel{
 			Index:   i,
-			Account: l.AccountID,
+			Account: int64(l.AccountID),
 			Amount:  money.Format(l.Amount, exp, fmtOpts),
 			// p26.19: carry the line's free-text description into the review editor row so
 			// it round-trips (description_i -> parseSplitForms -> SplitInput.Description)

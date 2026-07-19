@@ -251,7 +251,7 @@ func (s *server) buildImportUpload(r *http.Request) (importUploadModel, error) {
 	// All leaf+active accounts (union across subsidiaries). AccountEditorOptions is
 	// per-subsidiary; a nil-safe union is built by iterating each subsidiary once,
 	// de-duplicating by account id.
-	seen := make(map[int64]bool)
+	seen := make(map[ids.AccountID]bool)
 	for _, sub := range model.Subsidiaries {
 		opts, err := s.store.AccountEditorOptions(ctx, lang, ids.SubsidiaryID(sub.ID))
 		if err != nil {
@@ -263,7 +263,7 @@ func (s *server) buildImportUpload(r *http.Request) (importUploadModel, error) {
 			}
 			seen[o.ID] = true
 			model.Accounts = append(model.Accounts, importAccountOption{
-				ID: o.ID, Name: o.Name, Path: o.Path, SubsidiaryIDs: o.SubsidiaryIDs,
+				ID: int64(o.ID), Name: o.Name, Path: o.Path, SubsidiaryIDs: o.SubsidiaryIDs,
 			})
 		}
 	}
@@ -349,7 +349,7 @@ func (s *server) importPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accountID := parseID(r.FormValue("account_id"))
+	accountID := ids.AccountID(parseID(r.FormValue("account_id")))
 	subsidiaryID := parseID(r.FormValue("subsidiary_id"))
 
 	// LEGACY path: a typed *_col field means the old index-based form (tests only).
@@ -428,7 +428,7 @@ func hasLegacyColumnFields(r *http.Request) bool {
 // all-Ignore), and co-renders the selects with a preview when the required roles are
 // mapped and the file parses. Bad/incomplete mapping shows the selects only -- never a
 // workspace-wiping 422.
-func (s *server) importMapPreview(w http.ResponseWriter, r *http.Request, raw []byte, filename string, accountID, subsidiaryID int64) {
+func (s *server) importMapPreview(w http.ResponseWriter, r *http.Request, raw []byte, filename string, accountID ids.AccountID, subsidiaryID int64) {
 	ctx := r.Context()
 	lang := langOf(ctx)
 
@@ -457,7 +457,7 @@ func (s *server) importMapPreview(w http.ResponseWriter, r *http.Request, raw []
 	cfg := bankimport.ConfigFromRoles(roles, delim, hasHeader, mode, signFlip, dateFmt)
 
 	model := importPreviewModel{
-		AccountID:     accountID,
+		AccountID:     int64(accountID),
 		AccountName:   s.accountName(ctx, accountID, lang),
 		SubsidiaryID:  subsidiaryID,
 		SubsidiaryNm:  s.subsidiaryName(ctx, ids.SubsidiaryID(subsidiaryID)),
@@ -533,7 +533,7 @@ func requiredRolesMapped(cfg bankimport.Config) bool {
 // parseImportPreview parses raw under cfg for the account's currency exponent and
 // builds the preview model, or returns a (key, arg) error to render at 422. It
 // rejects the WHOLE file if any row has a parse error (all-or-nothing).
-func (s *server) parseImportPreview(r *http.Request, raw []byte, accountID, subsidiaryID int64, cfg bankimport.Config) (importPreviewModel, string, string) {
+func (s *server) parseImportPreview(r *http.Request, raw []byte, accountID ids.AccountID, subsidiaryID int64, cfg bankimport.Config) (importPreviewModel, string, string) {
 	ctx := r.Context()
 	u := currentUser(ctx)
 	lang := langOf(ctx)
@@ -563,7 +563,7 @@ func (s *server) parseImportPreview(r *http.Request, raw []byte, accountID, subs
 	opts := formatOptsFor(u)
 	df := dateFormatFor(u)
 	model := importPreviewModel{
-		AccountID:    accountID,
+		AccountID:    int64(accountID),
 		AccountName:  s.accountName(ctx, accountID, lang),
 		SubsidiaryID: subsidiaryID,
 		SubsidiaryNm: s.subsidiaryName(ctx, ids.SubsidiaryID(subsidiaryID)),
@@ -610,7 +610,7 @@ func (s *server) importConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accountID := parseID(r.FormValue("account_id"))
+	accountID := ids.AccountID(parseID(r.FormValue("account_id")))
 	subsidiaryID := parseID(r.FormValue("subsidiary_id"))
 	cfg := importMapping(r)
 

@@ -25,15 +25,15 @@ SELECT anc.id FROM anc
 // Self + transitive ancestor chain of an account (walk parent_id upward).
 // Propagation adds an assigned subsidiary to every strict ancestor; the store
 // skips self.
-func (q *Queries) AccountAncestors(ctx context.Context, id int64) ([]int64, error) {
+func (q *Queries) AccountAncestors(ctx context.Context, id ids.AccountID) ([]ids.AccountID, error) {
 	rows, err := q.db.QueryContext(ctx, accountAncestors, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []int64
+	var items []ids.AccountID
 	for rows.Next() {
-		var id int64
+		var id ids.AccountID
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
@@ -61,15 +61,15 @@ SELECT des.id FROM des
 // Self + transitive closure of an account (walk children downward). The store's
 // move cycle check (new parent must not be self nor any descendant) relies on
 // self being included.
-func (q *Queries) AccountDescendants(ctx context.Context, id int64) ([]int64, error) {
+func (q *Queries) AccountDescendants(ctx context.Context, id ids.AccountID) ([]ids.AccountID, error) {
 	rows, err := q.db.QueryContext(ctx, accountDescendants, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []int64
+	var items []ids.AccountID
 	for rows.Next() {
-		var id int64
+		var id ids.AccountID
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
@@ -92,7 +92,7 @@ ORDER BY subsidiary_id
 
 // The subsidiary id set an account currently maps (order-insensitive; the store
 // builds a set).
-func (q *Queries) AccountSubsidiaries(ctx context.Context, accountID int64) ([]ids.SubsidiaryID, error) {
+func (q *Queries) AccountSubsidiaries(ctx context.Context, accountID ids.AccountID) ([]ids.SubsidiaryID, error) {
 	rows, err := q.db.QueryContext(ctx, accountSubsidiaries, accountID)
 	if err != nil {
 		return nil, err
@@ -139,7 +139,7 @@ ORDER BY tree.path
 `
 
 type AccountTreeRow struct {
-	ID           int64
+	ID           ids.AccountID
 	ParentID     sql.NullInt64
 	Type         string
 	Active       int64
@@ -226,7 +226,7 @@ type AccountTreeBySubsidiaryParams struct {
 }
 
 type AccountTreeBySubsidiaryRow struct {
-	ID           int64
+	ID           ids.AccountID
 	ParentID     sql.NullInt64
 	Type         string
 	Active       int64
@@ -288,7 +288,7 @@ ORDER BY id
 `
 
 type AllAccountCodesRow struct {
-	ID          int64
+	ID          ids.AccountID
 	ParentID    sql.NullInt64
 	Form990Code sql.NullString
 }
@@ -352,7 +352,7 @@ WHERE account_id = ? AND subsidiary_id = ?
 `
 
 type DeleteAccountSubsidiaryParams struct {
-	AccountID    int64
+	AccountID    ids.AccountID
 	SubsidiaryID ids.SubsidiaryID
 }
 
@@ -376,7 +376,7 @@ WHERE id = ?
 // ADDed last by 00008; current_cash + open_item ADDed last by 00027), so sqlc maps
 // the result to the sqlc.Account model rather than a bespoke GetAccountRow --
 // accounts.go depends on GetAccount returning Account.
-func (q *Queries) GetAccount(ctx context.Context, id int64) (Account, error) {
+func (q *Queries) GetAccount(ctx context.Context, id ids.AccountID) (Account, error) {
 	row := q.db.QueryRowContext(ctx, getAccount, id)
 	var i Account
 	err := row.Scan(
@@ -406,7 +406,7 @@ WHERE account_id = ? AND lang = ?
 `
 
 type GetAccountNameParams struct {
-	AccountID int64
+	AccountID ids.AccountID
 	Lang      string
 }
 
@@ -446,7 +446,7 @@ WHERE account_id = ? AND subsidiary_id = ?
 `
 
 type HasAccountSubsidiaryParams struct {
-	AccountID    int64
+	AccountID    ids.AccountID
 	SubsidiaryID ids.SubsidiaryID
 }
 
@@ -504,7 +504,7 @@ type InsertAccountParams struct {
 // functional-class-expense-only) are validated in the store BEFORE this runs and
 // backstopped by triggers. default_program_id is validated in the store as R/E-only
 // (D24). Returns the new id for the store to snapshot + return.
-func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) (int64, error) {
+func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) (ids.AccountID, error) {
 	row := q.db.QueryRowContext(
 		ctx, insertAccount,
 		arg.ParentID,
@@ -522,7 +522,7 @@ func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) (i
 		arg.OpenItem,
 		arg.Notes,
 	)
-	var id int64
+	var id ids.AccountID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -538,7 +538,7 @@ WHERE c.id = ? AND an.account_id = ? AND an.lang = ?
 type InsertAccountNameVersionParams struct {
 	Op        string
 	ID        ids.ChangeID
-	AccountID int64
+	AccountID ids.AccountID
 	Lang      string
 }
 
@@ -563,7 +563,7 @@ VALUES (?, ?)
 `
 
 type InsertAccountSubsidiaryParams struct {
-	AccountID    int64
+	AccountID    ids.AccountID
 	SubsidiaryID ids.SubsidiaryID
 }
 
@@ -585,7 +585,7 @@ WHERE c.id = ? AND asub.account_id = ? AND asub.subsidiary_id = ?
 type InsertAccountSubsidiaryVersionParams struct {
 	Op           string
 	ID           ids.ChangeID
-	AccountID    int64
+	AccountID    ids.AccountID
 	SubsidiaryID ids.SubsidiaryID
 }
 
@@ -622,7 +622,7 @@ WHERE c.id = ? AND a.id = ?
 type InsertAccountVersionParams struct {
 	Op   string
 	ID   ids.ChangeID
-	ID_2 int64
+	ID_2 ids.AccountID
 }
 
 // Snapshot-from-live version append for accounts (STANDARD single-column entity,
@@ -648,15 +648,15 @@ ORDER BY id
 // IntercompanyNet sums these accounts' balances per currency across a consolidated
 // scope to assert they net to zero (a nonzero residual becomes a warning row).
 // Ordered by id for deterministic iteration.
-func (q *Queries) IntercompanyAccountIDs(ctx context.Context) ([]int64, error) {
+func (q *Queries) IntercompanyAccountIDs(ctx context.Context) ([]ids.AccountID, error) {
 	rows, err := q.db.QueryContext(ctx, intercompanyAccountIDs)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []int64
+	var items []ids.AccountID
 	for rows.Next() {
-		var id int64
+		var id ids.AccountID
 		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
@@ -736,7 +736,7 @@ type UpdateAccountParams struct {
 	CurrentCash      int64
 	OpenItem         int64
 	Notes            sql.NullString
-	ID               int64
+	ID               ids.AccountID
 }
 
 // Live update: move (parent) / flags / default currency / functional default /
@@ -774,7 +774,7 @@ ON CONFLICT (account_id, lang) DO UPDATE SET name = excluded.name
 `
 
 type UpsertAccountNameParams struct {
-	AccountID int64
+	AccountID ids.AccountID
 	Lang      string
 	Name      string
 }

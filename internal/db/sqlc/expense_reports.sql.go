@@ -144,7 +144,7 @@ RETURNING id
 
 type InsertExpenseReportLineParams struct {
 	ReportID    ids.ExpenseReportID
-	AccountID   int64
+	AccountID   ids.AccountID
 	Amount      int64
 	FundID      sql.NullInt64
 	ProgramID   sql.NullInt64
@@ -410,7 +410,7 @@ WHERE id = ?
 `
 
 type UpdateExpenseReportLineParams struct {
-	AccountID   int64
+	AccountID   ids.AccountID
 	Amount      int64
 	FundID      sql.NullInt64
 	ProgramID   sql.NullInt64

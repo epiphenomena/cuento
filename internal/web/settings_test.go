@@ -53,7 +53,7 @@ func TestFormatsFollowUserSettings(t *testing.T) {
 		DisplayMode: "dr_cr", NegStyle: "minus", Theme: "auto",
 	})
 
-	regURL := "/accounts/" + itoa(e.checking) + "/register"
+	regURL := "/accounts/" + itoa(int64(e.checking)) + "/register"
 	bodyA := asUser(t, e.h, e.sm, userA, http.MethodGet, regURL, nil).Body.String()
 	bodyB := asUser(t, e.h, e.sm, userB, http.MethodGet, regURL, nil).Body.String()
 

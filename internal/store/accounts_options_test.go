@@ -8,8 +8,8 @@ import (
 )
 
 // idSet turns a slice of ints into a set for membership assertions.
-func optIDs(opts []ParentOption) map[int64]bool {
-	m := make(map[int64]bool, len(opts))
+func optIDs(opts []ParentOption) map[ids.AccountID]bool {
+	m := make(map[ids.AccountID]bool, len(opts))
 	for _, o := range opts {
 		m[o.ID] = true
 	}
@@ -124,7 +124,7 @@ func TestAccountEditorOptionsPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AccountEditorOptions: %v", err)
 	}
-	paths := map[int64]string{}
+	paths := map[ids.AccountID]string{}
 	for _, o := range opts {
 		paths[o.ID] = o.Path
 		if o.Path == "" || o.Path[len(o.Path)-len(o.Name):] != o.Name {
@@ -176,7 +176,7 @@ func TestAccountEditorOptionsIncludeInactive(t *testing.T) {
 	}
 
 	// Include the inactive account: it appears, marked Unavailable, with real metadata.
-	withInc, err := s.AccountEditorOptionsWith(mutCtx(), "en", rootID, []int64{acct})
+	withInc, err := s.AccountEditorOptionsWith(mutCtx(), "en", rootID, []ids.AccountID{acct})
 	if err != nil {
 		t.Fatalf("AccountEditorOptionsWith: %v", err)
 	}
@@ -208,7 +208,7 @@ func TestAccountEditorOptionsIncludeInactive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create active: %v", err)
 	}
-	withActive, err := s.AccountEditorOptionsWith(mutCtx(), "en", rootID, []int64{active})
+	withActive, err := s.AccountEditorOptionsWith(mutCtx(), "en", rootID, []ids.AccountID{active})
 	if err != nil {
 		t.Fatalf("AccountEditorOptionsWith(active): %v", err)
 	}
@@ -256,7 +256,7 @@ func TestSubsidiaryFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Tree(subA): %v", err)
 	}
-	in := map[int64]bool{}
+	in := map[ids.AccountID]bool{}
 	for _, r := range rows {
 		in[r.ID] = true
 	}

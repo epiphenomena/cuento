@@ -68,37 +68,37 @@ type IDs struct {
 	FoodPantry ids.ProgramID
 
 	// Asset accounts.
-	CheckingUS int64
-	CheckingMX int64
-	Savings    int64
-	CashMXN    int64
-	Building   int64
-	DueFromMX  int64 // intercompany
-	FXClearing int64
+	CheckingUS ids.AccountID
+	CheckingMX ids.AccountID
+	Savings    ids.AccountID
+	CashMXN    ids.AccountID
+	Building   ids.AccountID
+	DueFromMX  ids.AccountID // intercompany
+	FXClearing ids.AccountID
 
 	// Liability accounts.
-	CreditCard int64
-	DueToIntl  int64 // intercompany
+	CreditCard ids.AccountID
+	DueToIntl  ids.AccountID // intercompany
 
 	// Equity accounts.
-	OpeningBalances int64
+	OpeningBalances ids.AccountID
 
 	// Revenue accounts (placeholder parent + leaves).
-	Revenue          int64 // placeholder
-	Contributions    int64 // VIII.1f
-	GovernmentGrants int64 // VIII.1e
-	ProgramFees      int64 // VIII.2, default program Educacion
-	EventIncome      int64 // DELIBERATELY UNMAPPED (Z19 + Unmapped bucket)
+	Revenue          ids.AccountID // placeholder
+	Contributions    ids.AccountID // VIII.1f
+	GovernmentGrants ids.AccountID // VIII.1e
+	ProgramFees      ids.AccountID // VIII.2, default program Educacion
+	EventIncome      ids.AccountID // DELIBERATELY UNMAPPED (Z19 + Unmapped bucket)
 
 	// Expense accounts (placeholder parent + leaves).
-	Expenses        int64 // placeholder, code IX.24e (inherited by leaves)
-	Salaries        int64 // default class program
-	ProgramSupplies int64 // default class program, default program Educacion
-	FoodPurchases   int64 // default class program, default program Food Pantry
-	Occupancy       int64 // IX.16 own code, class management
-	Insurance       int64 // class management
-	BankFees        int64 // IX.11g LEAF OVERRIDE, class management
-	EventCosts      int64 // class fundraising
+	Expenses        ids.AccountID // placeholder, code IX.24e (inherited by leaves)
+	Salaries        ids.AccountID // default class program
+	ProgramSupplies ids.AccountID // default class program, default program Educacion
+	FoodPurchases   ids.AccountID // default class program, default program Food Pantry
+	Occupancy       ids.AccountID // IX.16 own code, class management
+	Insurance       ids.AccountID // class management
+	BankFees        ids.AccountID // IX.11g LEAF OVERRIDE, class management
+	EventCosts      ids.AccountID // class fundraising
 
 	// Funds.
 	BecaAgua     ids.FundID // purpose, subs {MX, US}, program Educacion
@@ -124,11 +124,11 @@ type IDs struct {
 	// fund whose revenue is partly deployed into a LAND purchase and a FIXED-ASSET
 	// (construction) purchase across several quarters, leaving an unspent restricted
 	// (spendable) balance -- the Capital Campaign report's data.
-	Campaign     ids.FundID // the restricted capital-campaign fund
-	FixedAssets  int64      // placeholder parent for the campaign's capital accounts
-	CampaignLand int64      // "Land" leaf under Fixed Assets
-	Construction int64      // fixed-asset leaf under Fixed Assets
-	ConstrLoan   int64      // liability: a construction loan that financed a purchase
+	Campaign     ids.FundID    // the restricted capital-campaign fund
+	FixedAssets  ids.AccountID // placeholder parent for the campaign's capital accounts
+	CampaignLand ids.AccountID // "Land" leaf under Fixed Assets
+	Construction ids.AccountID // fixed-asset leaf under Fixed Assets
+	ConstrLoan   ids.AccountID // liability: a construction loan that financed a purchase
 
 	// --- Sample budget-PLAN seam (ExtendSampleBudgetPlan, opt-in) --------------
 	// Zero until ExtendSampleBudgetPlan is called. A SAMPLE budget PLAN (the p27.2

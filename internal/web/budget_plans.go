@@ -305,7 +305,7 @@ func (s *server) buildBudgetPlanDetailModel(w http.ResponseWriter, r *http.Reque
 		s.serverError(w)
 		return budgetPlanDetailModel{}, false
 	}
-	var include []int64
+	var include []ids.AccountID
 	for _, sp := range splits {
 		include = append(include, sp.AccountID)
 	}
@@ -335,7 +335,7 @@ func (s *server) buildBudgetPlanDetailModel(w http.ResponseWriter, r *http.Reque
 			ID:          int64(sp.ID),
 			Description: sp.Description,
 			DateInput:   money.FormatDate(parseISOForDisplay(sp.Date), df),
-			AccountID:   sp.AccountID,
+			AccountID:   int64(sp.AccountID),
 			AmountInput: money.Format(displayAmount(sp.Amount), exp, opts),
 		}
 		if sp.FundID.Valid {
@@ -358,7 +358,7 @@ func (s *server) buildBudgetPlanDetailModel(w http.ResponseWriter, r *http.Reque
 // sheet account is never offered, and the store rejects one out of band); funds =
 // ActiveFunds(sub); programs = all active. Mirrors expenseLineOptions but with the
 // wider account gate.
-func (s *server) budgetSplitOptions(ctx context.Context, sub ids.SubsidiaryID, include ...int64) (accounts []expenseAccountOption, funds, programs []txnOption, err error) {
+func (s *server) budgetSplitOptions(ctx context.Context, sub ids.SubsidiaryID, include ...ids.AccountID) (accounts []expenseAccountOption, funds, programs []txnOption, err error) {
 	lang := langOf(ctx)
 	accts, err := s.store.AccountEditorOptionsWith(ctx, lang, sub, include)
 	if err != nil {
@@ -370,7 +370,7 @@ func (s *server) budgetSplitOptions(ctx context.Context, sub ids.SubsidiaryID, i
 		if !a.Unavailable && !offerable {
 			continue
 		}
-		accounts = append(accounts, expenseAccountOption{ID: a.ID, Name: a.Name, Path: a.Path, Type: a.Type, Unavailable: a.Unavailable})
+		accounts = append(accounts, expenseAccountOption{ID: int64(a.ID), Name: a.Name, Path: a.Path, Type: a.Type, Unavailable: a.Unavailable})
 	}
 	fs, err := s.store.ActiveFunds(ctx, int64(sub))
 	if err != nil {
@@ -400,7 +400,7 @@ func (s *server) budgetSplitOptions(ctx context.Context, sub ids.SubsidiaryID, i
 // budgetSplitAccountOffered reports whether acctID is an offered (R/E or open_item A/L)
 // leaf in sub -- the web-edge gate mirroring what the grid showed, so a bad account is a
 // per-row error rather than a store 500.
-func (s *server) budgetSplitAccountOffered(ctx context.Context, sub ids.SubsidiaryID, acctID int64) bool {
+func (s *server) budgetSplitAccountOffered(ctx context.Context, sub ids.SubsidiaryID, acctID ids.AccountID) bool {
 	if acctID == 0 {
 		return false
 	}
@@ -409,7 +409,7 @@ func (s *server) budgetSplitAccountOffered(ctx context.Context, sub ids.Subsidia
 		return false
 	}
 	for _, a := range accts {
-		if a.ID == acctID {
+		if ids.AccountID(a.ID) == acctID {
 			return true
 		}
 	}
@@ -449,7 +449,7 @@ func (s *server) budgetSplitsSave(w http.ResponseWriter, r *http.Request) {
 		si := strconv.Itoa(i)
 		desc := strings.TrimSpace(r.PostFormValue("description_" + si))
 		dateStr := strings.TrimSpace(r.PostFormValue("date_" + si))
-		acct := parseID(r.PostFormValue("account_" + si))
+		acct := ids.AccountID(parseID(r.PostFormValue("account_" + si)))
 		fund := parseID(r.PostFormValue("fund_" + si))
 		prog := parseID(r.PostFormValue("program_" + si))
 		amountStr := strings.TrimSpace(r.PostFormValue("amount_" + si))
@@ -461,7 +461,7 @@ func (s *server) budgetSplitsSave(w http.ResponseWriter, r *http.Request) {
 		}
 		echoIdx := len(echo)
 		echo = append(echo, budgetSplitRow{
-			Description: desc, DateInput: dateStr, AccountID: acct,
+			Description: desc, DateInput: dateStr, AccountID: int64(acct),
 			FundID: fund, ProgramID: prog, AmountInput: amountStr,
 		})
 
@@ -619,10 +619,10 @@ func (s *server) budgetPlanImport(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	acctByName := make(map[string]int64, len(accts)*2)
+	acctByName := make(map[string]ids.AccountID, len(accts)*2)
 	for _, a := range accts {
-		acctByName[strings.ToLower(a.Name)] = a.ID
-		acctByName[strings.ToLower(a.Path)] = a.ID
+		acctByName[strings.ToLower(a.Name)] = ids.AccountID(a.ID)
+		acctByName[strings.ToLower(a.Path)] = ids.AccountID(a.ID)
 	}
 	fundByName := make(map[string]ids.FundID, len(funds))
 	for _, f := range funds {

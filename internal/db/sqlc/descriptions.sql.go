@@ -28,7 +28,7 @@ type PrefillDescriptionParams struct {
 }
 
 type PrefillDescriptionRow struct {
-	AccountID       int64
+	AccountID       ids.AccountID
 	Amount          int64
 	FundID          sql.NullInt64
 	ProgramID       sql.NullInt64

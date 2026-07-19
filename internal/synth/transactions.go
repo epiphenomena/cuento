@@ -13,7 +13,7 @@ import (
 // class on expense splits from the account, so we usually leave them nil and let
 // the defaults apply -- except where a scenario needs a non-default program/fund.
 type sp struct {
-	acct   int64
+	acct   entids.AccountID
 	amount int64 // minor units, net-debit sign (D2)
 	fund   *entids.FundID
 	prog   *entids.ProgramID

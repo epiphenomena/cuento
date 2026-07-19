@@ -68,7 +68,7 @@ type Drill struct {
 	// AccountIDs is the account set the figure sums over. One id for a leaf-account
 	// cell (the trial-balance retrofit); a subtree's account ids for a rollup cell a
 	// later report may drill. Empty = no accounts => an empty drill (renders nothing).
-	AccountIDs []int64
+	AccountIDs []AccountID
 
 	// Currency is the native ISO currency of the cell (REQUIRED for a money cell):
 	// the drill filters t.currency to it so a multi-currency account's per-currency
@@ -125,7 +125,7 @@ func (d Drill) Encode() string {
 	if len(d.AccountIDs) > 0 {
 		ids := make([]string, len(d.AccountIDs))
 		for i, id := range d.AccountIDs {
-			ids[i] = strconv.FormatInt(id, 10)
+			ids[i] = strconv.FormatInt(int64(id), 10)
 		}
 		q.Set("accts", strings.Join(ids, ","))
 	}
@@ -190,7 +190,7 @@ func DecodeDrill(q url.Values) Drill {
 	if v := strings.TrimSpace(q.Get("accts")); v != "" {
 		for _, part := range strings.Split(v, ",") {
 			if id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64); err == nil && id != 0 {
-				d.AccountIDs = append(d.AccountIDs, id)
+				d.AccountIDs = append(d.AccountIDs, AccountID(id))
 			}
 		}
 		sort.Slice(d.AccountIDs, func(i, j int) bool { return d.AccountIDs[i] < d.AccountIDs[j] })

@@ -80,7 +80,7 @@ var (
 // (>=1); memberships propagate up the ancestor chain. FunctionalClass and
 // Form990Code are optional (nil = none).
 type CreateAccountInput struct {
-	ParentID        *int64
+	ParentID        *ids.AccountID
 	Type            string
 	DefaultCurrency string
 	Names           map[string]string
@@ -109,7 +109,7 @@ type CreateAccountInput struct {
 // ParentID moves the account (validated against cycle / cross-type-class /
 // sub-mismatch). A non-nil Form990Code is validated against the account's type.
 type UpdateAccountInput struct {
-	ParentID        *int64
+	ParentID        *ids.AccountID
 	DefaultCurrency *string
 	FunctionalClass *string
 	Form990Code     *string
@@ -132,7 +132,7 @@ type UpdateAccountInput struct {
 // propagated up the ancestor chain) under ONE change, and returns the new id.
 // All the version rows (account, each name, each membership incl. propagated
 // ancestors) share that change.
-func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (int64, error) {
+func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (ids.AccountID, error) {
 	if len(in.Subsidiaries) == 0 {
 		return 0, ErrNoSubsidiary
 	}
@@ -154,7 +154,7 @@ func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (int64
 		return 0, err
 	}
 
-	var newID int64
+	var newID ids.AccountID
 	_, err := s.write(ctx, "account.create", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			// Validate the parent (if any): it must exist and be type-compatible
@@ -193,7 +193,7 @@ func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (int64
 			}
 
 			id, err := q.InsertAccount(ctx, sqlc.InsertAccountParams{
-				ParentID:         nullInt64Ptr(in.ParentID),
+				ParentID:         ids.Null(in.ParentID),
 				Type:             in.Type,
 				DefaultCurrency:  in.DefaultCurrency,
 				FunctionalClass:  nullStringPtr(in.FunctionalClass),
@@ -245,7 +245,7 @@ func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (int64
 // cross-type-class (ErrCrossTypeClass), or sub-mismatch (ErrSubMismatch); a 990
 // code is rejected on type mismatch (Err990TypeMismatch). The version append
 // reflects the NEW values (it runs after the live update).
-func (s *Store) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInput) error {
+func (s *Store) UpdateAccount(ctx context.Context, id ids.AccountID, in UpdateAccountInput) error {
 	_, err := s.write(ctx, "account.update", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			cur, err := q.GetAccount(ctx, id)
@@ -318,7 +318,7 @@ func (s *Store) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInp
 				if err := s.validateMove(ctx, q, id, cur, *in.ParentID); err != nil {
 					return err
 				}
-				next.ParentID = sql.NullInt64{Int64: *in.ParentID, Valid: true}
+				next.ParentID = ids.Null(in.ParentID)
 			}
 
 			// next := cur copied DefaultProgramID, so an unrelated update carries
@@ -353,7 +353,7 @@ func (s *Store) UpdateAccount(ctx context.Context, id int64, in UpdateAccountInp
 // validateMove checks a reparent: not root-self/descendant (ErrCycle), parent
 // type-compatible (ErrCrossTypeClass), and the new parent's subsidiary set covers
 // the mover's (ErrSubMismatch). A move never propagates subs -- it only rejects.
-func (s *Store) validateMove(ctx context.Context, q *sqlc.Queries, id int64, cur sqlc.Account, newParent int64) error {
+func (s *Store) validateMove(ctx context.Context, q *sqlc.Queries, id ids.AccountID, cur sqlc.Account, newParent ids.AccountID) error {
 	// Descendants includes self as its base case, so this one membership test
 	// covers move-under-self and move-under-descendant alike.
 	desc, err := q.AccountDescendants(ctx, id)
@@ -396,7 +396,7 @@ func (s *Store) validateMove(ctx context.Context, q *sqlc.Queries, id int64, cur
 
 // SetAccountName upserts one (account_id, lang) name under one change. The op is
 // create the first time that (account, lang) is written, update thereafter.
-func (s *Store) SetAccountName(ctx context.Context, id int64, lang, name string) error {
+func (s *Store) SetAccountName(ctx context.Context, id ids.AccountID, lang, name string) error {
 	_, err := s.write(ctx, "account.name", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if _, err := q.GetAccount(ctx, id); err != nil {
@@ -424,7 +424,7 @@ func (s *Store) SetAccountName(ctx context.Context, id int64, lang, name string)
 // under one change, honoring the superset invariant + ancestor auto-propagation
 // (D18). Additions cascade UP (each ancestor missing the sub gains it); removals
 // are local and blocked while a child still maps the sub (ErrSubInUseByChild).
-func (s *Store) SetAccountSubsidiaries(ctx context.Context, id int64, subs []ids.SubsidiaryID) error {
+func (s *Store) SetAccountSubsidiaries(ctx context.Context, id ids.AccountID, subs []ids.SubsidiaryID) error {
 	_, err := s.write(ctx, "account.subsidiaries", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			if _, err := q.GetAccount(ctx, id); err != nil {
@@ -450,7 +450,7 @@ func (s *Store) SetAccountSubsidiaries(ctx context.Context, id int64, subs []ids
 					continue
 				}
 				n, err := q.CountChildAccountsWithSub(ctx, sqlc.CountChildAccountsWithSubParams{
-					ParentID:     sql.NullInt64{Int64: id, Valid: true},
+					ParentID:     ids.Null(&id),
 					SubsidiaryID: sid,
 				})
 				if err != nil {
@@ -492,7 +492,7 @@ func (s *Store) SetAccountSubsidiaries(ctx context.Context, id int64, subs []ids
 
 // DeactivateAccount sets active=0, op='update' (NOT 'delete' -- the entity
 // persists; delete-op is reserved for transaction soft-delete, rule 14).
-func (s *Store) DeactivateAccount(ctx context.Context, id int64) error {
+func (s *Store) DeactivateAccount(ctx context.Context, id ids.AccountID) error {
 	_, err := s.write(ctx, "account.deactivate", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
 			cur, err := q.GetAccount(ctx, id)
@@ -534,7 +534,7 @@ func (s *Store) DeactivateAccount(ctx context.Context, id int64) error {
 // en -> any), this reports the raw per-language row, so the account form's edit
 // prefill shows an empty box for a language that has no name yet rather than
 // echoing the en name into a foreign-language input (p11.4). Read; sqlc.
-func (s *Store) AccountName(ctx context.Context, id int64, lang string) (string, error) {
+func (s *Store) AccountName(ctx context.Context, id ids.AccountID, lang string) (string, error) {
 	row, err := s.q.GetAccountName(ctx, sqlc.GetAccountNameParams{AccountID: id, Lang: lang})
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
@@ -546,7 +546,7 @@ func (s *Store) AccountName(ctx context.Context, id int64, lang string) (string,
 }
 
 // GetAccount returns the current live row for one account (read; sqlc).
-func (s *Store) GetAccount(ctx context.Context, id int64) (sqlc.Account, error) {
+func (s *Store) GetAccount(ctx context.Context, id ids.AccountID) (sqlc.Account, error) {
 	row, err := s.q.GetAccount(ctx, id)
 	if err != nil {
 		return sqlc.Account{}, fmt.Errorf("store: get account %d: %w", id, err)
@@ -559,8 +559,8 @@ func (s *Store) GetAccount(ctx context.Context, id int64) (sqlc.Account, error) 
 // new-transaction entry (a parent account's register offers no New-transaction action,
 // and the editor never prefills a parent header). Reuses the same AccountIsLeaf query
 // the write-side split validation runs, so the UI gate and the store rule can't drift.
-func (s *Store) AccountIsLeaf(ctx context.Context, id int64) (bool, error) {
-	leaf, err := s.q.AccountIsLeaf(ctx, sql.NullInt64{Int64: id, Valid: true})
+func (s *Store) AccountIsLeaf(ctx context.Context, id ids.AccountID) (bool, error) {
+	leaf, err := s.q.AccountIsLeaf(ctx, ids.Null(&id))
 	if err != nil {
 		return false, fmt.Errorf("store: account is-leaf %d: %w", id, err)
 	}
@@ -573,7 +573,7 @@ func (s *Store) AccountIsLeaf(ctx context.Context, id int64) (bool, error) {
 // the merge will move (including soft-deleted-txn splits -- see the query
 // comment); a count is len() of this, guaranteeing preview == effect by
 // construction rather than a second COUNT query that could drift (p11.2).
-func (s *Store) SplitIDsForAccount(ctx context.Context, accountID int64) ([]ids.SplitID, error) {
+func (s *Store) SplitIDsForAccount(ctx context.Context, accountID ids.AccountID) ([]ids.SplitID, error) {
 	sids, err := s.q.SplitIdsByAccount(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("store: split ids for account %d: %w", accountID, err)
@@ -586,7 +586,7 @@ func (s *Store) SplitIDsForAccount(ctx context.Context, accountID int64) ([]ids.
 // consequences preview, how many reconciled splits would BLOCK the merge (the p22.5
 // block-guard rejects the merge when this is > 0); the store enforces the same guard
 // on write (ErrMergeSourceReconciled). Read; sqlc.
-func (s *Store) ReconciledSplitCount(ctx context.Context, accountID int64) (int, error) {
+func (s *Store) ReconciledSplitCount(ctx context.Context, accountID ids.AccountID) (int, error) {
 	n, err := s.q.CountReconciledSplitsForAccount(ctx, accountID)
 	if err != nil {
 		return 0, fmt.Errorf("store: reconciled split count for account %d: %w", accountID, err)
@@ -597,7 +597,7 @@ func (s *Store) ReconciledSplitCount(ctx context.Context, accountID int64) (int,
 // TreeRow is one account in tree order with its name resolved for the requested
 // lang (empty when that lang has no name -- the en->any fallback is p05.3).
 type TreeRow struct {
-	ID           int64
+	ID           ids.AccountID
 	ParentID     sql.NullInt64
 	Type         string
 	Active       int64
@@ -645,18 +645,18 @@ func (s *Store) Tree(ctx context.Context, lang string, subFilter *ids.Subsidiary
 // column "does not exist"), so the walk lives here. The chart is small; the walk
 // is O(n * depth). Accounts with no code anywhere on the chain are absent from
 // the map (unmapped, D25).
-func (s *Store) Effective990Codes(ctx context.Context) (map[int64]string, error) {
+func (s *Store) Effective990Codes(ctx context.Context) (map[ids.AccountID]string, error) {
 	rows, err := s.q.AllAccountCodes(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("store: effective 990 codes: %w", err)
 	}
-	own := make(map[int64]sql.NullString, len(rows))
-	parent := make(map[int64]sql.NullInt64, len(rows))
+	own := make(map[ids.AccountID]sql.NullString, len(rows))
+	parent := make(map[ids.AccountID]sql.NullInt64, len(rows))
 	for _, r := range rows {
 		own[r.ID] = r.Form990Code
 		parent[r.ID] = r.ParentID
 	}
-	eff := make(map[int64]string, len(rows))
+	eff := make(map[ids.AccountID]string, len(rows))
 	for id := range own {
 		// Walk id -> parent -> ... until a node has an own code (nearest wins).
 		for n, valid := id, true; valid; {
@@ -668,7 +668,7 @@ func (s *Store) Effective990Codes(ctx context.Context) (map[int64]string, error)
 			if !p.Valid {
 				break // reached a root with no code on the chain
 			}
-			n = p.Int64
+			n = ids.AccountID(p.Int64)
 			// Guard against a malformed cycle (should never happen; moves reject
 			// cycles): stop if we somehow revisit the origin.
 			if n == id {
@@ -711,7 +711,7 @@ func checkFlagTypes(accountType string, currentCash, openItem bool) error {
 }
 
 // subSet returns an account's current subsidiary id set.
-func subSet(ctx context.Context, q *sqlc.Queries, accountID int64) (map[ids.SubsidiaryID]bool, error) {
+func subSet(ctx context.Context, q *sqlc.Queries, accountID ids.AccountID) (map[ids.SubsidiaryID]bool, error) {
 	subs, err := q.AccountSubsidiaries(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("load subsidiaries of %d: %w", accountID, err)
@@ -744,7 +744,7 @@ func check990Type(ctx context.Context, q *sqlc.Queries, code, accountType string
 // ancestor missing it (D18 auto-propagation). Each newly-added membership (self
 // or ancestor) gets its own op='create' version row; an account already holding
 // the sub is a no-op with no version row (the PK forbids a duplicate).
-func addSubWithPropagation(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, accountID int64, sid ids.SubsidiaryID) error {
+func addSubWithPropagation(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, accountID ids.AccountID, sid ids.SubsidiaryID) error {
 	anc, err := q.AccountAncestors(ctx, accountID)
 	if err != nil {
 		return fmt.Errorf("load ancestors of %d: %w", accountID, err)
@@ -779,7 +779,7 @@ func addSubWithPropagation(ctx context.Context, q *sqlc.Queries, changeID ids.Ch
 // captured BEFORE the live row is deleted, or there is nothing left to snapshot.
 // This is the one place the account ops depart from subsidiaries.go's order; the
 // comment is deliberate.
-func removeSub(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, accountID int64, sid ids.SubsidiaryID) error {
+func removeSub(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, accountID ids.AccountID, sid ids.SubsidiaryID) error {
 	if err := q.InsertAccountSubsidiaryVersion(ctx, sqlc.InsertAccountSubsidiaryVersionParams{
 		Op: "delete", ID: changeID, AccountID: accountID, SubsidiaryID: sid,
 	}); err != nil {
@@ -792,7 +792,7 @@ func removeSub(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, acco
 }
 
 // upsertAccountName writes one (account_id, lang) name live then versions it.
-func upsertAccountName(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, accountID int64, lang, name, op string) error {
+func upsertAccountName(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, accountID ids.AccountID, lang, name, op string) error {
 	if err := q.UpsertAccountName(ctx, sqlc.UpsertAccountNameParams{AccountID: accountID, Lang: lang, Name: name}); err != nil {
 		return fmt.Errorf("upsert name (%d,%s): %w", accountID, lang, err)
 	}
@@ -807,19 +807,11 @@ func upsertAccountName(ctx context.Context, q *sqlc.Queries, changeID ids.Change
 // insertAccountVersion appends the accounts snapshot-from-live version row. It
 // hides the generated positional-param names (ID=change_id, ID_2=entity_id)
 // behind one call site. MUST run after the live write.
-func insertAccountVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID int64) error {
+func insertAccountVersion(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID, op string, entityID ids.AccountID) error {
 	if err := q.InsertAccountVersion(ctx, sqlc.InsertAccountVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append account version (entity %d, op %s): %w", entityID, op, err)
 	}
 	return nil
-}
-
-// nullInt64Ptr maps a *int64 to sql.NullInt64 (nil -> NULL).
-func nullInt64Ptr(p *int64) sql.NullInt64 {
-	if p == nil {
-		return sql.NullInt64{}
-	}
-	return sql.NullInt64{Int64: *p, Valid: true}
 }
 
 // nullStringPtr maps a *string to sql.NullString (nil or "" -> NULL).

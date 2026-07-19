@@ -135,7 +135,7 @@ type InsertBudgetSplitParams struct {
 	PlanID      ids.BudgetPlanID
 	Description string
 	Date        string
-	AccountID   int64
+	AccountID   ids.AccountID
 	FundID      sql.NullInt64
 	ProgramID   sql.NullInt64
 	Amount      int64
@@ -300,7 +300,7 @@ WHERE id = ?
 type UpdateBudgetSplitParams struct {
 	Description string
 	Date        string
-	AccountID   int64
+	AccountID   ids.AccountID
 	FundID      sql.NullInt64
 	ProgramID   sql.NullInt64
 	Amount      int64

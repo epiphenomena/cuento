@@ -207,7 +207,7 @@ func (s *server) renderHistory(ctx context.Context, u *store.CurrentUser, lang s
 type histResolver struct {
 	lang     string
 	df       money.DateFormat
-	accounts map[int64]string
+	accounts map[ids.AccountID]string
 	funds    map[ids.FundID]string
 	subs     map[int64]string
 	programs map[int64]string
@@ -347,11 +347,11 @@ func (r histResolver) classLabel(c sql.NullString) string {
 
 // nameOr returns the mapped name for a valid id, else "" (an unset/invalid id --
 // e.g. the Unrestricted fund, which callers handle before reaching here).
-func nameOr(m map[int64]string, id sql.NullInt64) string {
+func nameOr[K ~int64](m map[K]string, id sql.NullInt64) string {
 	if !id.Valid {
 		return ""
 	}
-	return m[id.Int64]
+	return m[K(id.Int64)]
 }
 
 // dateOnly trims an RFC3339Nano timestamp to its YYYY-MM-DD prefix so the money date

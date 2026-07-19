@@ -21,7 +21,7 @@ import (
 // seedExpenseReportEnv builds the minimal env for report tests: a submitter user, a
 // reviewer, a subsidiary (the seeded root, id 1), an account, and returns the store,
 // db, a submitter-actor context, and the ids.
-func seedExpenseReportEnv(t *testing.T) (*Store, *sql.DB, context.Context, ids.UserID, int64) {
+func seedExpenseReportEnv(t *testing.T) (*Store, *sql.DB, context.Context, ids.UserID, ids.AccountID) {
 	t.Helper()
 	d := testutil.NewDB(t)
 	s := New(d)
@@ -646,7 +646,7 @@ func latestVersionCanSubmit(t *testing.T, d *sql.DB, userID ids.UserID) int64 {
 // seedPostedTxn posts a minimal balanced 2-split transaction and returns its id, so
 // ConvertExpenseReport has a real txn to link (the reviewer builds the real txn in
 // p20.3; here the store just links an EXISTING one).
-func seedPostedTxn(t *testing.T, s *Store, expenseAcct int64) ids.TransactionID {
+func seedPostedTxn(t *testing.T, s *Store, expenseAcct ids.AccountID) ids.TransactionID {
 	t.Helper()
 	sysCtx := WithActor(context.Background(), Actor{ID: 1})
 	cash, err := s.CreateAccount(sysCtx, CreateAccountInput{

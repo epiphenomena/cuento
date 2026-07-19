@@ -30,7 +30,7 @@ func TestDrillRoundTrip(t *testing.T) {
 			name: "asof single account",
 			d: reports.Drill{
 				Scope:      1,
-				AccountIDs: []int64{42},
+				AccountIDs: []reports.AccountID{42},
 				Currency:   "MXN",
 				Mode:       reports.DrillAsOf,
 				AsOf:       "2026-06-30",
@@ -40,7 +40,7 @@ func TestDrillRoundTrip(t *testing.T) {
 			name: "asof multi account with fund",
 			d: reports.Drill{
 				Scope:      3,
-				AccountIDs: []int64{10, 11, 12},
+				AccountIDs: []reports.AccountID{10, 11, 12},
 				Currency:   "USD",
 				FundID:     &fund,
 				Mode:       reports.DrillAsOf,
@@ -51,7 +51,7 @@ func TestDrillRoundTrip(t *testing.T) {
 			name: "period with fund SET (p15.9 released)",
 			d: reports.Drill{
 				Scope:      1,
-				AccountIDs: []int64{5, 6, 7},
+				AccountIDs: []reports.AccountID{5, 6, 7},
 				Currency:   "USD",
 				FundIDs:    []reports.FundID{2, 3},
 				Mode:       reports.DrillPeriod,
@@ -63,7 +63,7 @@ func TestDrillRoundTrip(t *testing.T) {
 			name: "period with program and class",
 			d: reports.Drill{
 				Scope:      1,
-				AccountIDs: []int64{5},
+				AccountIDs: []reports.AccountID{5},
 				Currency:   "USD",
 				ProgramID:  &prog,
 				Class:      &class,
@@ -76,7 +76,7 @@ func TestDrillRoundTrip(t *testing.T) {
 			name: "period with program SET (p15.10 rollup cell)",
 			d: reports.Drill{
 				Scope:      1,
-				AccountIDs: []int64{5, 6},
+				AccountIDs: []reports.AccountID{5, 6},
 				Currency:   "USD",
 				ProgramIDs: []reports.ProgramID{1, 2, 3},
 				Mode:       reports.DrillPeriod,
@@ -129,7 +129,7 @@ func TestCellDrillOptIn(t *testing.T) {
 		t.Errorf("plain MoneyCell is drillable (Drill=%+v), want nil", plain.Drill)
 	}
 
-	d := &reports.Drill{Scope: 1, AccountIDs: []int64{42}, Currency: "USD", Mode: reports.DrillAsOf, AsOf: "2026-06-30"}
+	d := &reports.Drill{Scope: 1, AccountIDs: []reports.AccountID{42}, Currency: "USD", Mode: reports.DrillAsOf, AsOf: "2026-06-30"}
 	drillable := reports.MoneyCell(1234, "USD").WithDrill(d)
 	if drillable.Drill != d {
 		t.Errorf("WithDrill did not attach the drill descriptor")

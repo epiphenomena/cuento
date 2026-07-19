@@ -339,10 +339,10 @@ func (s *server) accountLedgerOptions(ctx context.Context, lang string) ([]acctO
 	if err != nil {
 		return nil, err
 	}
-	isParent := make(map[int64]bool, len(tree))
+	isParent := make(map[ids.AccountID]bool, len(tree))
 	for _, r := range tree {
 		if r.ParentID.Valid {
-			isParent[r.ParentID.Int64] = true
+			isParent[ids.AccountID(r.ParentID.Int64)] = true
 		}
 	}
 	paths, err := s.store.AccountPaths(ctx, lang)
@@ -354,7 +354,7 @@ func (s *server) accountLedgerOptions(ctx context.Context, lang string) ([]acctO
 		if isParent[r.ID] {
 			continue // placeholder parent: not a split target
 		}
-		out = append(out, acctOption{ID: r.ID, Name: r.Name, Path: paths[r.ID], Type: r.Type})
+		out = append(out, acctOption{ID: int64(r.ID), Name: r.Name, Path: paths[r.ID], Type: r.Type})
 	}
 	return out, nil
 }

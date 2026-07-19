@@ -78,7 +78,7 @@ func TestDrillReconcilesToToolkit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BalancesAsOf: %v", err)
 	}
-	native := func(acct int64, ccy string) int64 {
+	native := func(acct entids.AccountID, ccy string) int64 {
 		for _, a := range balances[reports.AccountID(acct)] {
 			if a.Currency == ccy {
 				return a.Minor
@@ -91,7 +91,7 @@ func TestDrillReconcilesToToolkit(t *testing.T) {
 	// --- per-cell drill sums reconcile to the native figure.
 	cells := []struct {
 		name string
-		acct int64
+		acct entids.AccountID
 		ccy  string
 	}{
 		{"Checking MX / MXN (single-ccy)", ids.CheckingMX, "MXN"},
@@ -211,7 +211,7 @@ func TestDrillRouteRendersRows(t *testing.T) {
 
 	d := reports.Drill{
 		Scope:      ids.Root,
-		AccountIDs: []int64{ids.CheckingMX},
+		AccountIDs: []reports.AccountID{ids.CheckingMX},
 		Currency:   "MXN",
 		Mode:       reports.DrillAsOf,
 		AsOf:       "2026-06-30",
@@ -284,7 +284,7 @@ func TestDrillProgramScopeClamp(t *testing.T) {
 
 	base := reports.Drill{
 		Scope:      ids.Root,
-		AccountIDs: []int64{ids.FoodPurchases},
+		AccountIDs: []reports.AccountID{ids.FoodPurchases},
 		Currency:   "MXN",
 		Mode:       reports.DrillPeriod,
 		From:       "2025-01-01",
@@ -293,7 +293,7 @@ func TestDrillProgramScopeClamp(t *testing.T) {
 
 	// In-scope: Educacion Program Supplies has MXN activity -> the scoped user drills it.
 	inScope := base
-	inScope.AccountIDs = []int64{ids.ProgramSupplies}
+	inScope.AccountIDs = []reports.AccountID{ids.ProgramSupplies}
 	inScope.ProgramID = &edu
 	rec := asUser(t, h, sm, uid, http.MethodGet, drillPath(inScope), nil)
 	if rec.Code != http.StatusOK {
@@ -392,7 +392,7 @@ func TestBalanceSheetDrillReconciles(t *testing.T) {
 	// sum equals the STORED native figure (the balance sheet's sign-normalization of
 	// liabilities does not change the drilled splits -- the drill lists the raw splits,
 	// whose sum is the stored net-debit balance).
-	nativeFor := func(acct int64, ccy string) (int64, bool) {
+	nativeFor := func(acct reports.AccountID, ccy string) (int64, bool) {
 		for _, a := range balances[reports.AccountID(acct)] {
 			if a.Currency == ccy {
 				return a.Minor, true
@@ -472,7 +472,7 @@ func TestIncomeStatementDrillReconciles(t *testing.T) {
 	// nativeActivity returns the toolkit's NATIVE Activity figure for (account, currency)
 	// over [pf,pt] at root scope -- the reconciliation oracle (never the drill's output).
 	tk := reports.NewToolkit(st, p)
-	nativeActivity := func(acct int64, ccy, pf, pt string) (int64, bool) {
+	nativeActivity := func(acct reports.AccountID, ccy, pf, pt string) (int64, bool) {
 		act, err := tk.Activity(ctx, reports.Scope{Sub: reports.SubsidiaryID(ids.Root)}, pf, pt, reports.ConvertOpts{Mode: reports.RateNone})
 		if err != nil {
 			t.Fatalf("Activity native: %v", err)

@@ -26,8 +26,8 @@ type reviewEnv struct {
 	st       *store.Store
 	rowID    ids.ImportRowID
 	batchID  ids.ImportBatchID
-	checking int64
-	expense  int64
+	checking ids.AccountID
+	expense  ids.AccountID
 }
 
 func stageReviewBatch(t *testing.T, st *store.Store, description, memo string) reviewEnv {
@@ -139,9 +139,9 @@ func TestImportRowPostCreatesTxnAndLinks(t *testing.T) {
 	form.Set("rows", "2")
 	// Row 0: the bank line (checking, -42.00). Row 1: the expense counter (+42.00,
 	// class program). subsidiary is locked -> ignored server-side (uses the batch's).
-	form.Set("account_0", strconv.FormatInt(env.checking, 10))
+	form.Set("account_0", strconv.FormatInt(int64(env.checking), 10))
 	form.Set("amount_0", "-42.00")
-	form.Set("account_1", strconv.FormatInt(env.expense, 10))
+	form.Set("account_1", strconv.FormatInt(int64(env.expense), 10))
 	form.Set("amount_1", "42.00")
 	form.Set("progclass_1", "p:1") // p26.41 combined control: program node (root) -> class program on expense
 
@@ -198,9 +198,9 @@ func TestImportRowPostUnbalancedRerenders422(t *testing.T) {
 	form.Set("currency", "USD")
 	form.Set("date", "2025-01-15")
 	form.Set("rows", "2")
-	form.Set("account_0", strconv.FormatInt(env.checking, 10))
+	form.Set("account_0", strconv.FormatInt(int64(env.checking), 10))
 	form.Set("amount_0", "-42.00")
-	form.Set("account_1", strconv.FormatInt(env.expense, 10))
+	form.Set("account_1", strconv.FormatInt(int64(env.expense), 10))
 	form.Set("amount_1", "40.00")  // does not balance
 	form.Set("progclass_1", "p:1") // p26.41 combined control: program node (root) -> class program on expense
 

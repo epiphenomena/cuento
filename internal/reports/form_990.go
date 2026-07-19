@@ -179,7 +179,7 @@ func (b *f990Builder) subtotalRow(key, ccy string, minor int64, kind RowKind) {
 // drillable. accts is the line's contributing account ids; ccys is the set of native
 // currencies those accounts posted in. The drill carries the accounts + the ONE native
 // currency; the drilled native splits' signed sum equals the pre-conversion native figure.
-func (b *f990Builder) periodLineDrill(accts []int64, ccys map[string]bool) *Drill {
+func (b *f990Builder) periodLineDrill(accts []AccountID, ccys map[string]bool) *Drill {
 	if len(accts) == 0 || len(ccys) != 1 {
 		return nil
 	}
@@ -246,14 +246,14 @@ func (b *f990Builder) programTypeLines(
 	typ, labelKey string, sign int64,
 ) {
 	byCcy := map[string]int64{}
-	acctsByCcy := map[string][]int64{}
+	acctsByCcy := map[string][]AccountID{}
 	for acct, amts := range byAcct {
 		if types[acct] != typ {
 			continue
 		}
 		for _, a := range amts {
 			byCcy[a.Currency] += a.Minor
-			acctsByCcy[a.Currency] = append(acctsByCcy[a.Currency], int64(acct))
+			acctsByCcy[a.Currency] = append(acctsByCcy[a.Currency], acct)
 		}
 	}
 	for _, ccy := range sortedKeys(byCcy) {
@@ -313,7 +313,7 @@ func (b *f990Builder) partVIII(ctx context.Context) error {
 	// Revenue leaf map (net-debit minor, target currency) for Group990. type=="revenue"
 	// only (NOT reAccounts, which is R+E).
 	leaf := map[AccountID]int64{}
-	acctsByCode := map[string][]int64{}
+	acctsByCode := map[string][]AccountID{}
 	ccysByCode := map[string]map[string]bool{}
 	eff, err := b.tk.EffectiveCodes(ctx)
 	if err != nil {
@@ -327,7 +327,7 @@ func (b *f990Builder) partVIII(ctx context.Context) error {
 			leaf[acct] += a.Minor
 		}
 		code := eff[acct]
-		acctsByCode[code] = append(acctsByCode[code], int64(acct))
+		acctsByCode[code] = append(acctsByCode[code], acct)
 		if ccysByCode[code] == nil {
 			ccysByCode[code] = map[string]bool{}
 		}
@@ -406,14 +406,14 @@ func (b *f990Builder) partIX(ctx context.Context) error {
 	// Per effective code: the line total (Σ classes, all converted to target) + the
 	// contributing accounts + their native currency set (for the drill). "" == Unmapped.
 	byCode := map[string]int64{}
-	acctsByCode := map[string][]int64{}
+	acctsByCode := map[string][]AccountID{}
 	ccysByCode := map[string]map[string]bool{}
 	for acct, byClass := range conv {
 		code := eff[acct]
 		for _, amts := range byClass {
 			byCode[code] += classMinor(amts, target)
 		}
-		acctsByCode[code] = append(acctsByCode[code], int64(acct))
+		acctsByCode[code] = append(acctsByCode[code], acct)
 		if ccysByCode[code] == nil {
 			ccysByCode[code] = map[string]bool{}
 		}
@@ -477,7 +477,7 @@ func (b *f990Builder) partX(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	icAccts := map[int64]bool{}
+	icAccts := map[AccountID]bool{}
 	if consolidated {
 		ids, err := b.tk.store.IntercompanyAccountIDs(ctx)
 		if err != nil {
@@ -591,7 +591,7 @@ func (b *f990Builder) balanceAccountLine(ctx context.Context, l bsLine, asOf, ta
 	var d *Drill
 	if l.acctID != 0 && len(l.byCcy) == 1 {
 		for ccy := range l.byCcy {
-			d = &Drill{Scope: b.p.Scope, AccountIDs: []int64{l.acctID}, Currency: ccy, Mode: DrillAsOf, AsOf: asOf}
+			d = &Drill{Scope: b.p.Scope, AccountIDs: []AccountID{l.acctID}, Currency: ccy, Mode: DrillAsOf, AsOf: asOf}
 		}
 	}
 	b.lineRowText(l.name, target, conv, d, 2)
@@ -613,7 +613,7 @@ func (b *f990Builder) unmappedBalanceBucket(ctx context.Context, lines []bsLine)
 		return
 	}
 	var total int64
-	var accts []int64
+	var accts []AccountID
 	single := true
 	var ccy string
 	for _, l := range lines {
@@ -682,12 +682,12 @@ func (tk *Toolkit) accountTypes(ctx context.Context) (map[AccountID]string, erro
 
 // dedupSortInts returns a sorted, de-duplicated copy of ids (a drill's account set is
 // built by appending per-currency, so a multi-currency account can appear twice).
-func dedupSortInts(ids []int64) []int64 {
+func dedupSortInts(ids []AccountID) []AccountID {
 	if len(ids) == 0 {
 		return nil
 	}
-	seen := map[int64]bool{}
-	out := make([]int64, 0, len(ids))
+	seen := map[AccountID]bool{}
+	out := make([]AccountID, 0, len(ids))
 	for _, id := range ids {
 		if !seen[id] {
 			seen[id] = true

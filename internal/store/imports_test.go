@@ -286,8 +286,8 @@ type importEnv struct {
 	s        *Store
 	subUS    ids.SubsidiaryID
 	subOther ids.SubsidiaryID
-	checking int64
-	equity   int64
+	checking ids.AccountID
+	equity   ids.AccountID
 	profile  ids.MappingProfileID
 }
 

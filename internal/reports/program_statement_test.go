@@ -267,7 +267,7 @@ func TestProgramStatementRollupCorrectness(t *testing.T) {
 	// Independently sum the RAW oracle per (account, currency) across ALL programs — since
 	// General is the root, its rolled column must equal this org-wide raw sum.
 	type ac struct {
-		acct int64
+		acct ids.AccountID
 		ccy  string
 	}
 	rawTotal := map[ac]int64{}
@@ -746,13 +746,13 @@ func TestProgramStatementNestedSubtotal(t *testing.T) {
 // --- helpers ----------------------------------------------------------------
 
 // psAccountNames returns account id -> resolved (en) name from the store tree.
-func psAccountNames(t *testing.T, f *fixture.Fixture) map[int64]string {
+func psAccountNames(t *testing.T, f *fixture.Fixture) map[ids.AccountID]string {
 	t.Helper()
 	tree, err := f.Store.Tree(context.Background(), "en", nil)
 	if err != nil {
 		t.Fatalf("tree: %v", err)
 	}
-	m := make(map[int64]string, len(tree))
+	m := make(map[ids.AccountID]string, len(tree))
 	for _, r := range tree {
 		m[r.ID] = r.Name
 	}

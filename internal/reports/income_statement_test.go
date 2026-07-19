@@ -303,7 +303,7 @@ func TestIncomeStatementNativeNet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("activity native: %v", err)
 	}
-	reIDs := []int64{
+	reIDs := []reports.AccountID{
 		f.IDs.Contributions, f.IDs.GovernmentGrants, f.IDs.ProgramFees, f.IDs.EventIncome,
 		f.IDs.Salaries, f.IDs.ProgramSupplies, f.IDs.FoodPurchases, f.IDs.Occupancy,
 		f.IDs.Insurance, f.IDs.BankFees, f.IDs.EventCosts,

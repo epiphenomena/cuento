@@ -284,7 +284,7 @@ func seedSampleBudgetPlan(ctx context.Context, st *store.Store) (bool, error) {
 	// (materialized cadence). Amounts are SYNTHETIC round figures; each split's
 	// currency is its account's default currency, so it always exists in `currencies`.
 	type split struct {
-		account int64
+		account ids.AccountID
 		date    string
 		amount  int64
 		ccy     string
@@ -316,7 +316,7 @@ func seedSampleBudgetPlan(ctx context.Context, st *store.Store) (bool, error) {
 
 // leafAccount is a resolved leaf account: its id and default currency.
 type leafAccount struct {
-	id       int64
+	id       ids.AccountID
 	currency string
 }
 
@@ -378,10 +378,10 @@ func firstLeafAccountInSub(ctx context.Context, st *store.Store, subID ids.Subsi
 	if err != nil {
 		return leafAccount{}, fmt.Errorf("account tree: %w", err)
 	}
-	isParent := make(map[int64]bool, len(full))
+	isParent := make(map[ids.AccountID]bool, len(full))
 	for _, r := range full {
 		if r.ParentID.Valid {
-			isParent[r.ParentID.Int64] = true
+			isParent[ids.AccountID(r.ParentID.Int64)] = true
 		}
 	}
 	inSub, err := st.Tree(ctx, "en", &subID)

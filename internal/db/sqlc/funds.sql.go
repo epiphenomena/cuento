@@ -108,7 +108,7 @@ type FundLedgerRow struct {
 	SubsidiaryID    ids.SubsidiaryID
 	Currency        string
 	Amount          int64
-	AccountID       int64
+	AccountID       ids.AccountID
 	IsAsset         int64
 	ProgramID       sql.NullInt64
 	FunctionalClass sql.NullString

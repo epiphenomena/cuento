@@ -412,7 +412,7 @@ func TestAccountLedgerMidRangeOnlyCurrency(t *testing.T) {
 
 	// Root subsidiary is seeded id 1 (migration 00004); EUR is a seeded currency.
 	const rootSub = ids.SubsidiaryID(1)
-	mkAcct := func(name, typ string) int64 {
+	mkAcct := func(name, typ string) ids.AccountID {
 		t.Helper()
 		id, err := s.CreateAccount(ctx, store.CreateAccountInput{
 			Type: typ, DefaultCurrency: "EUR", Names: map[string]string{"en": name},
@@ -547,7 +547,7 @@ func assertLine(t *testing.T, row reports.Row, wantFund string, wantAmount, want
 
 // expectedBalance returns the fixture's hand-computed as-of balance for (account,
 // currency) from Expected.AccountBalances (the ROOT-scope oracle).
-func expectedBalance(t *testing.T, f *fixture.Fixture, account int64, ccy string) int64 {
+func expectedBalance(t *testing.T, f *fixture.Fixture, account ids.AccountID, ccy string) int64 {
 	t.Helper()
 	for _, b := range f.Expected.AccountBalances {
 		if b.Account == account && b.Currency == ccy {

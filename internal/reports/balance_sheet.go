@@ -74,7 +74,7 @@ func registerBalanceSheet(reg *Registry) {
 // liabilities and net assets shown as positive balances).
 type bsLine struct {
 	name   string
-	acctID int64
+	acctID AccountID
 	byCcy  map[string]int64
 }
 
@@ -119,7 +119,7 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 
 	// R/E account ids, straight from the tree we already fetched (no extra query) — used
 	// to derive the net surplus from `balances` below instead of re-scanning the ledger.
-	reReport := map[int64]bool{}
+	reReport := map[AccountID]bool{}
 	for _, node := range tree {
 		if node.Type == "revenue" || node.Type == "expense" {
 			reReport[node.ID] = true
@@ -140,7 +140,7 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	if err != nil {
 		return Table{}, err
 	}
-	icAccts := map[int64]bool{}
+	icAccts := map[AccountID]bool{}
 	if consolidated {
 		ids, err := tk.store.IntercompanyAccountIDs(ctx)
 		if err != nil {
@@ -161,8 +161,8 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	// assetLeaf / liabLeaf index each in-section leaf by account id (for the p26.53
 	// tree walk, scoped per section); assets/liabilities keep the flat ordered lists
 	// the section TOTALS sum over.
-	assetLeaf := map[int64]bsLine{}
-	liabLeaf := map[int64]bsLine{}
+	assetLeaf := map[AccountID]bsLine{}
+	liabLeaf := map[AccountID]bsLine{}
 	var assets, liabilities []bsLine
 	for _, node := range tree {
 		amts, ok := balances[AccountID(node.ID)]
@@ -231,7 +231,7 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	// CREDIT, negative); present it as a positive surplus.
 	surplus := map[string]int64{}
 	for acct, amts := range balances {
-		if !reReport[int64(acct)] {
+		if !reReport[acct] {
 			continue
 		}
 		for _, a := range amts {
@@ -259,7 +259,7 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 		// consolidated elimination, so it is exactly the intercompany set.
 		icByCcy := map[string]int64{}
 		for acct, amts := range balances {
-			if icAccts[int64(acct)] {
+			if icAccts[acct] {
 				for _, a := range amts {
 					icByCcy[a.Currency] += a.Minor
 				}
@@ -433,14 +433,14 @@ func (b *bsBuilder) sectionHeader(key string) {
 // leaves (already sign-normalized + intercompany-eliminated); a placeholder with no
 // in-section leaf beneath it is skipped (empty chart branch).
 func (b *bsBuilder) emitSectionTree(
-	children map[int64][]int64, roots []int64, isPlaceholder map[int64]bool,
-	name map[int64]string, depth map[int64]int, leaf map[int64]bsLine,
+	children map[AccountID][]AccountID, roots []AccountID, isPlaceholder map[AccountID]bool,
+	name map[AccountID]string, depth map[AccountID]int, leaf map[AccountID]bsLine,
 ) {
 	// hasLeaf marks a node whose subtree carries an in-section leaf (so empty
 	// placeholder branches drop out). A leaf qualifies iff it is in `leaf`.
-	hasLeaf := map[int64]bool{}
-	var mark func(id int64) bool
-	mark = func(id int64) bool {
+	hasLeaf := map[AccountID]bool{}
+	var mark func(id AccountID) bool
+	mark = func(id AccountID) bool {
 		if !isPlaceholder[id] {
 			_, ok := leaf[id]
 			hasLeaf[id] = ok
@@ -459,8 +459,8 @@ func (b *bsBuilder) emitSectionTree(
 		mark(r)
 	}
 
-	var walk func(id int64)
-	walk = func(id int64) {
+	var walk func(id AccountID)
+	walk = func(id AccountID) {
 		if !hasLeaf[id] {
 			return
 		}
@@ -483,11 +483,11 @@ func (b *bsBuilder) emitSectionTree(
 // intercompany elimination and sign normalization already live in the leaf bsLines, so a
 // parent's rollup inherits them (an eliminated child is simply absent from `leaf`, D19).
 func (b *bsBuilder) subtreeByCcy(
-	id int64, children map[int64][]int64, isPlaceholder map[int64]bool, leaf map[int64]bsLine,
+	id AccountID, children map[AccountID][]AccountID, isPlaceholder map[AccountID]bool, leaf map[AccountID]bsLine,
 ) map[string]int64 {
 	out := map[string]int64{}
-	var add func(n int64)
-	add = func(n int64) {
+	var add func(n AccountID)
+	add = func(n AccountID) {
 		if !isPlaceholder[n] {
 			if l, ok := leaf[n]; ok {
 				for ccy, v := range l.byCcy {
@@ -687,7 +687,7 @@ func (b *bsBuilder) accountDrill(l bsLine, ccy string) *Drill {
 	}
 	return &Drill{
 		Scope:      b.p.Scope,
-		AccountIDs: []int64{l.acctID},
+		AccountIDs: []AccountID{l.acctID},
 		Currency:   ccy,
 		Mode:       DrillAsOf,
 		AsOf:       b.p.AsOf,

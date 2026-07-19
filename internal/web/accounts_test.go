@@ -63,7 +63,7 @@ func mkUser(t *testing.T, st *store.Store, username, perm string, admin bool) id
 }
 
 // countAccounts / accountByName help assertions against the created accounts.
-func accountIDByName(t *testing.T, st *store.Store, name string) int64 {
+func accountIDByName(t *testing.T, st *store.Store, name string) ids.AccountID {
 	t.Helper()
 	rows, err := st.Tree(context.Background(), "en", nil)
 	if err != nil {
@@ -166,7 +166,7 @@ func TestAccountEditFormFullPage(t *testing.T) {
 		t.Fatalf("seed account: %v", err)
 	}
 
-	rec := asUser(t, h, sm, book, http.MethodGet, "/accounts/"+itoa(id)+"/edit", nil)
+	rec := asUser(t, h, sm, book, http.MethodGet, "/accounts/"+itoa(int64(id))+"/edit", nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GET /accounts/%d/edit status = %d, want 200; body: %s", id, rec.Code, rec.Body.String())
 	}
@@ -221,7 +221,7 @@ func TestAccountsRowRegisterLinkAndReconcile(t *testing.T) {
 	h, st, sm := accountsApp(t)
 	book := mkUser(t, st, "book_recon", "write", false)
 
-	mkAcct := func(name string, reconcilable bool) int64 {
+	mkAcct := func(name string, reconcilable bool) ids.AccountID {
 		form := url.Values{}
 		form.Set("type", "asset")
 		form.Set("currency", "USD")
@@ -243,17 +243,17 @@ func TestAccountsRowRegisterLinkAndReconcile(t *testing.T) {
 	body := asUser(t, h, sm, book, http.MethodGet, "/accounts", nil).Body.String()
 
 	// The name is the register link.
-	if !strings.Contains(body, `href="/accounts/`+itoa(reconID)+`/register">Bank Recon</a>`) {
+	if !strings.Contains(body, `href="/accounts/`+itoa(int64(reconID))+`/register">Bank Recon</a>`) {
 		t.Errorf("reconcilable account name is not a register link:\n%s", body)
 	}
-	if !strings.Contains(body, `href="/accounts/`+itoa(plainID)+`/register">Plain Asset</a>`) {
+	if !strings.Contains(body, `href="/accounts/`+itoa(int64(plainID))+`/register">Plain Asset</a>`) {
 		t.Errorf("plain account name is not a register link:\n%s", body)
 	}
 	// The reconcilable account shows the Reconcile affordance; the plain one does not.
-	if !strings.Contains(body, `href="/reconciliations#recon-acct-`+itoa(reconID)+`"`) {
+	if !strings.Contains(body, `href="/reconciliations#recon-acct-`+itoa(int64(reconID))+`"`) {
 		t.Errorf("reconcilable account missing the Reconcile link:\n%s", body)
 	}
-	if strings.Contains(body, `href="/reconciliations#recon-acct-`+itoa(plainID)+`"`) {
+	if strings.Contains(body, `href="/reconciliations#recon-acct-`+itoa(int64(plainID))+`"`) {
 		t.Errorf("non-reconcilable account should not show the Reconcile link:\n%s", body)
 	}
 }
@@ -279,7 +279,7 @@ func TestAccountsEditHappyPath(t *testing.T) {
 	form.Set("name_es", "Efectivo")
 	form.Set("sub_1", "1")
 
-	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/"+itoa(id), form)
+	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/"+itoa(int64(id)), form)
 	if rec.Code >= 400 {
 		t.Fatalf("edit returned %d, body: %s", rec.Code, rec.Body.String())
 	}
@@ -302,7 +302,7 @@ func TestAccountsDeactivate(t *testing.T) {
 		t.Fatalf("seed account: %v", err)
 	}
 
-	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/"+itoa(id)+"/deactivate", url.Values{})
+	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/"+itoa(int64(id))+"/deactivate", url.Values{})
 	if rec.Code >= 400 {
 		t.Fatalf("deactivate returned %d, body: %s", rec.Code, rec.Body.String())
 	}
@@ -441,18 +441,18 @@ func TestAccountsEditErrorReRenderExcludesSelf(t *testing.T) {
 	form.Set("type", "asset")
 	form.Set("currency", "USD")
 	form.Set("name_en", "") // blank -> ErrNameRequired via SetAccountName? No: edit
-	form.Set("parent_id", itoa(parent))
+	form.Set("parent_id", itoa(int64(parent)))
 	form.Set("sub_1", "1")
 	// Force a 990-type mismatch to trigger the 422 (an asset can't take a revenue
 	// line); this is a store typed error mapped to a field, re-rendering the form.
 	form.Set("form990_code", "VIII.1f")
 
-	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/"+itoa(child), form)
+	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/"+itoa(int64(child)), form)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("edit error status = %d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
 	// The child's own id must NOT be offered as a parent option in the re-render.
-	if strings.Contains(rec.Body.String(), `value="`+itoa(child)+`"`) {
+	if strings.Contains(rec.Body.String(), `value="`+itoa(int64(child))+`"`) {
 		t.Errorf("re-rendered parent select offers the account's own id %d; body: %s", child, rec.Body.String())
 	}
 }
@@ -531,11 +531,11 @@ func TestSubAssignmentPropagation(t *testing.T) {
 	form.Set("type", "asset")
 	form.Set("currency", "USD")
 	form.Set("name_en", "Cash")
-	form.Set("parent_id", itoa(parent))
+	form.Set("parent_id", itoa(int64(parent)))
 	form.Set("sub_1", "1")
 	form.Set("sub_"+itoa(int64(subA)), itoa(int64(subA)))
 
-	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/"+itoa(child), form)
+	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/"+itoa(int64(child)), form)
 	if rec.Code >= 400 {
 		t.Fatalf("edit child returned %d, body: %s", rec.Code, rec.Body.String())
 	}
@@ -591,7 +591,7 @@ func TestBalancesColumnMatchesQuery(t *testing.T) {
 	}
 	wantMap := map[[2]string]int64{}
 	for _, b := range want {
-		wantMap[[2]string{itoa(b.AccountID), b.Currency}] = b.Amount
+		wantMap[[2]string{itoa(int64(b.AccountID)), b.Currency}] = b.Amount
 	}
 
 	got, err := balancesByAccount(ctx, st, asof, 1)
@@ -601,7 +601,7 @@ func TestBalancesColumnMatchesQuery(t *testing.T) {
 	gotMap := map[[2]string]int64{}
 	for acct, cells := range got {
 		for _, c := range cells {
-			gotMap[[2]string{itoa(acct), c.Currency}] = c.Minor
+			gotMap[[2]string{itoa(int64(acct)), c.Currency}] = c.Minor
 		}
 	}
 

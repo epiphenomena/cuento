@@ -359,7 +359,7 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 	if model.Editable {
 		// Force-include every account a live line references (p26.10) so a line whose
 		// account is now inactive / out-of-sub still renders as a SELECTED option.
-		var include []int64
+		var include []ids.AccountID
 		for _, l := range lines {
 			include = append(include, l.AccountID)
 		}
@@ -384,7 +384,7 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 	for _, l := range lines {
 		row := expenseLineRow{
 			ID:          int64(l.ID),
-			AccountID:   l.AccountID,
+			AccountID:   int64(l.AccountID),
 			AcctName:    acctNames[l.AccountID],
 			AmountFmt:   money.FormatMoney(displayAmount(l.Amount), ccy, exp, opts),
 			Description: l.Description,
@@ -457,7 +457,7 @@ func (s *server) reportCurrency(ctx context.Context, rep sqlc.ExpenseReport) str
 // out of band); funds = ActiveFunds(sub); programs = all active (not sub-scoped, like
 // the txn/budget editors). It is shared by the detail render and the 422 re-render so
 // the options always match the report's subsidiary.
-func (s *server) expenseLineOptions(ctx context.Context, sub ids.SubsidiaryID, include ...int64) (accounts []expenseAccountOption, funds, programs []txnOption, err error) {
+func (s *server) expenseLineOptions(ctx context.Context, sub ids.SubsidiaryID, include ...ids.AccountID) (accounts []expenseAccountOption, funds, programs []txnOption, err error) {
 	lang := langOf(ctx)
 
 	accts, err := s.store.AccountEditorOptionsWith(ctx, lang, sub, include)
@@ -471,7 +471,7 @@ func (s *server) expenseLineOptions(ctx context.Context, sub ids.SubsidiaryID, i
 		if !a.Unavailable && a.Type != "revenue" && a.Type != "expense" {
 			continue
 		}
-		accounts = append(accounts, expenseAccountOption{ID: a.ID, Name: a.Name, Path: a.Path, Type: a.Type, Unavailable: a.Unavailable})
+		accounts = append(accounts, expenseAccountOption{ID: int64(a.ID), Name: a.Name, Path: a.Path, Type: a.Type, Unavailable: a.Unavailable})
 	}
 
 	fs, err := s.store.ActiveFunds(ctx, int64(sub))
@@ -503,7 +503,7 @@ func (s *server) expenseLineOptions(ctx context.Context, sub ids.SubsidiaryID, i
 // reportAccountType returns an account's type and whether it is one of the R/E leaves
 // offered for the report's subsidiary. Reuses AccountEditorOptions (the SAME set the
 // grid offers), so the gate can never disagree with what the picker showed.
-func (s *server) reportAccountType(ctx context.Context, sub ids.SubsidiaryID, acctID int64) (string, bool) {
+func (s *server) reportAccountType(ctx context.Context, sub ids.SubsidiaryID, acctID ids.AccountID) (string, bool) {
 	if acctID == 0 {
 		return "", false
 	}
@@ -512,7 +512,7 @@ func (s *server) reportAccountType(ctx context.Context, sub ids.SubsidiaryID, ac
 		return "", false
 	}
 	for _, a := range accts {
-		if a.ID == acctID && (a.Type == "revenue" || a.Type == "expense") {
+		if ids.AccountID(a.ID) == acctID && (a.Type == "revenue" || a.Type == "expense") {
 			return a.Type, true
 		}
 	}
@@ -555,7 +555,7 @@ func (s *server) expenseLinesSave(w http.ResponseWriter, r *http.Request) {
 	badRow := -1
 	for i := 0; i < n; i++ {
 		si := strconv.Itoa(i)
-		acct := parseID(r.PostFormValue("account_" + si))
+		acct := ids.AccountID(parseID(r.PostFormValue("account_" + si)))
 		amountStr := strings.TrimSpace(r.PostFormValue("amount_" + si))
 		// Skip fully-empty rows (no account AND blank amount): the trailing scaffold row.
 		if acct == 0 && amountStr == "" {
@@ -573,7 +573,7 @@ func (s *server) expenseLinesSave(w http.ResponseWriter, r *http.Request) {
 		echoIdx := len(echo)
 		echo = append(echo, expenseLineRow{
 			ID:          lineID,
-			AccountID:   acct,
+			AccountID:   int64(acct),
 			FundID:      fund,
 			ProgramID:   prog,
 			AmountInput: amountStr,

@@ -22,7 +22,7 @@ import (
 
 // AccountCurrencyAmount is one (account, currency) balance or activity cell.
 type AccountCurrencyAmount struct {
-	AccountID int64
+	AccountID ids.AccountID
 	Currency  string
 	Amount    int64 // signed minor units (net-debit, D2)
 }
@@ -38,7 +38,7 @@ type FundCurrencyAmount struct {
 // FunctionalCell is one (expense account, functional class, currency) activity
 // cell (D21). Only expense splits carry a class.
 type FunctionalCell struct {
-	AccountID       int64
+	AccountID       ids.AccountID
 	FunctionalClass string
 	Currency        string
 	Amount          int64
@@ -49,7 +49,7 @@ type FunctionalCell struct {
 // the tree rollup is the report layer's job.
 type ProgramCell struct {
 	ProgramID ids.ProgramID
-	AccountID int64
+	AccountID ids.AccountID
 	Currency  string
 	Amount    int64
 }
@@ -58,7 +58,7 @@ type ProgramCell struct {
 // (D19), id-ordered. The report toolkit's IntercompanyNet sums these accounts'
 // balances per currency across a consolidated scope to assert they net to zero;
 // a nonzero residual renders as a warning row.
-func (s *Store) IntercompanyAccountIDs(ctx context.Context) ([]int64, error) {
+func (s *Store) IntercompanyAccountIDs(ctx context.Context) ([]ids.AccountID, error) {
 	ids, err := s.q.IntercompanyAccountIDs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("store: intercompany account ids: %w", err)
@@ -176,7 +176,7 @@ func (s *Store) FunctionalActivity(ctx context.Context, from, to string, scopeSu
 // currency) activity cell -- FunctionalCell plus the program dimension (D24). Used
 // only on the p27.4 program-scoped functional-expenses path.
 type FunctionalCellProgram struct {
-	AccountID       int64
+	AccountID       ids.AccountID
 	FunctionalClass string
 	ProgramID       ids.ProgramID
 	Currency        string
@@ -245,7 +245,7 @@ func (s *Store) ProgramActivity(ctx context.Context, from, to string, scopeSub i
 // its own date (discrete, no pro-rata) exactly as it buckets budget occurrences.
 type BudgetKeyCell struct {
 	SubsidiaryID ids.SubsidiaryID
-	AccountID    int64
+	AccountID    ids.AccountID
 	FundID       ids.FundID // 0 = unrestricted
 	ProgramID    ids.ProgramID
 	Currency     string
@@ -316,8 +316,8 @@ type RegisterRow struct {
 	Date            string
 	SubsidiaryID    ids.SubsidiaryID
 	Currency        string
-	AccountID       int64 // the split's OWN account (a descendant leaf for a parent rollup)
-	Amount          int64 // signed minor units (net-debit, D2)
+	AccountID       ids.AccountID // the split's OWN account (a descendant leaf for a parent rollup)
+	Amount          int64         // signed minor units (net-debit, D2)
 	FundID          *ids.FundID
 	ProgramID       *ids.ProgramID
 	FunctionalClass *string
@@ -349,7 +349,7 @@ type RegisterRow struct {
 // is treated as "no limit" (single page of everything after the cursor).
 func (s *Store) RegisterPage(
 	ctx context.Context,
-	accountID int64,
+	accountID ids.AccountID,
 	cursor RegisterCursor,
 	filters RegisterFilters,
 	limit int,
@@ -455,7 +455,7 @@ type FundLedgerRow struct {
 	SubsidiaryID    ids.SubsidiaryID
 	Currency        string
 	Amount          int64 // signed minor units (net-debit, D2)
-	AccountID       int64
+	AccountID       ids.AccountID
 	IsAsset         bool
 	ProgramID       *ids.ProgramID
 	FunctionalClass *string
@@ -513,7 +513,7 @@ func (s *Store) FundLedger(ctx context.Context, fundID ids.FundID, asof string) 
 // instead; Fund/Program/Class narrow further (nil = no filter on that dimension).
 type DrillFilter struct {
 	Scope     ids.SubsidiaryID // subsidiary; consolidated with ALL descendants (D18)
-	AccountID int64            // the leaf account the figure sums (0 = none => empty result)
+	AccountID ids.AccountID    // the leaf account the figure sums (0 = none => empty result)
 	Currency  string           // native currency of the cell (per-currency reconciliation)
 
 	// Date bound. When AsOf != "" the figure is cumulative (t.date <= AsOf); else
@@ -623,8 +623,8 @@ func derefOr0(p *int64) int64 {
 	return *p
 }
 
-// nullInt64ToPtr maps a nullable column to *int64 (invalid -> nil). Inverse of
-// accounts.go's nullInt64Ptr; the string inverse (nullStringToPtr) already exists.
+// nullInt64ToPtr maps a nullable column to *int64 (invalid -> nil). The string
+// inverse (nullStringToPtr) already exists.
 func nullInt64ToPtr(n sql.NullInt64) *int64 {
 	if !n.Valid {
 		return nil

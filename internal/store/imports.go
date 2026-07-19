@@ -143,7 +143,7 @@ func (s *Store) DeactivateMappingProfile(ctx context.Context, id ids.MappingProf
 // (ErrBatchSubsidiaryMismatch, TestBatchSubValidated) inside the funnel fn so a
 // rejection rolls the change row back and leaves no audit trace. Non-versioned:
 // funnel, no version append. uploadedAt is an RFC3339 timestamp string.
-func (s *Store) CreateImportBatch(ctx context.Context, filename string, accountID int64, subsidiaryID ids.SubsidiaryID, profileID ids.MappingProfileID, uploadedAt string) (ids.ImportBatchID, error) {
+func (s *Store) CreateImportBatch(ctx context.Context, filename string, accountID ids.AccountID, subsidiaryID ids.SubsidiaryID, profileID ids.MappingProfileID, uploadedAt string) (ids.ImportBatchID, error) {
 	actor, ok := ActorFrom(ctx)
 	if !ok {
 		return 0, ErrNoActor
@@ -208,7 +208,7 @@ type StagedRow struct {
 // rows are the bankimport.ParsedRow values from a SUCCESSFUL parse -- callers reject
 // the whole upload upstream if ANY row has a parse error (there is no 'error' status
 // in the schema; a staged row always carries a parsed date+amount).
-func (s *Store) StageImportRows(ctx context.Context, batchID ids.ImportBatchID, accountID int64, rows []bankimport.ParsedRow) ([]StagedRow, error) {
+func (s *Store) StageImportRows(ctx context.Context, batchID ids.ImportBatchID, accountID ids.AccountID, rows []bankimport.ParsedRow) ([]StagedRow, error) {
 	// Build the two duplicate-lookup sets ONCE, outside the write (reads).
 	existing, err := s.existingDedupeSet(ctx, accountID)
 	if err != nil {
@@ -268,7 +268,7 @@ func (s *Store) StageImportRows(ctx context.Context, batchID ids.ImportBatchID, 
 // split memo, falling back to the transaction memo when the split memo is empty, and
 // the split's per-line description (empty when absent) -- documented in DECISIONS p17.2
 // (the description replaces the retired payee name as of p26.20).
-func (s *Store) existingDedupeSet(ctx context.Context, accountID int64) (map[string]bool, error) {
+func (s *Store) existingDedupeSet(ctx context.Context, accountID ids.AccountID) (map[string]bool, error) {
 	set := make(map[string]bool)
 
 	hashes, err := s.q.PendingOrPostedDedupeHashes(ctx, accountID)
@@ -335,7 +335,7 @@ func (s *Store) ImportRowsForBatch(ctx context.Context, batchID ids.ImportBatchI
 type ImportBatch struct {
 	ID           ids.ImportBatchID
 	Filename     string
-	AccountID    int64
+	AccountID    ids.AccountID
 	SubsidiaryID ids.SubsidiaryID
 }
 
@@ -417,7 +417,7 @@ func (s *Store) ImportRowsForBatchFlagged(ctx context.Context, batchID ids.Impor
 type ImportRow struct {
 	ID           ids.ImportRowID
 	BatchID      ids.ImportBatchID
-	AccountID    int64
+	AccountID    ids.AccountID
 	SubsidiaryID ids.SubsidiaryID // the batch's subsidiary (locked in the editor)
 	AmountMinor  int64
 	Date         string

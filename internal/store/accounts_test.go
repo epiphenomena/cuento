@@ -29,7 +29,7 @@ func newSub(t *testing.T, s *Store, parent ids.SubsidiaryID, name string) ids.Su
 func enName(n string) map[string]string { return map[string]string{"en": n} }
 
 // getAccount reads an account's current live row directly for assertions.
-func getAccount(t *testing.T, s *Store, id int64) (parent sql.NullInt64, typ, ccy string, active int64) {
+func getAccount(t *testing.T, s *Store, id ids.AccountID) (parent sql.NullInt64, typ, ccy string, active int64) {
 	t.Helper()
 	row, err := s.GetAccount(context.Background(), id)
 	if err != nil {
@@ -39,9 +39,9 @@ func getAccount(t *testing.T, s *Store, id int64) (parent sql.NullInt64, typ, cc
 }
 
 // accountSubs returns the current subsidiary id set mapped to an account.
-func accountSubs(t *testing.T, d *sql.DB, accountID int64) map[int64]bool {
+func accountSubs(t *testing.T, d *sql.DB, accountID ids.AccountID) map[int64]bool {
 	t.Helper()
-	rows, err := d.Query(`SELECT subsidiary_id FROM account_subsidiaries WHERE account_id = ?`, accountID)
+	rows, err := d.Query(`SELECT subsidiary_id FROM account_subsidiaries WHERE account_id = ?`, int64(accountID))
 	if err != nil {
 		t.Fatalf("accountSubs(%d): %v", accountID, err)
 	}
@@ -92,14 +92,14 @@ func TestCreateAccountVersioned(t *testing.T) {
 	}
 
 	// Account row versioned op=create.
-	testutil.AssertVersioned(t, d, "accounts", id, "create")
+	testutil.AssertVersioned(t, d, "accounts", int64(id), "create")
 	// Both names versioned op=create.
-	testutil.AssertVersionedName(t, d, id, "en", "create")
-	testutil.AssertVersionedName(t, d, id, "es", "create")
+	testutil.AssertVersionedName(t, d, int64(id), "en", "create")
+	testutil.AssertVersionedName(t, d, int64(id), "es", "create")
 	// The child's own membership versioned create.
-	testutil.AssertVersionedSub(t, d, id, int64(subA), "create")
+	testutil.AssertVersionedSub(t, d, int64(id), int64(subA), "create")
 	// The propagated PARENT-ACCOUNT membership versioned create.
-	testutil.AssertVersionedSub(t, d, parent, int64(subA), "create")
+	testutil.AssertVersionedSub(t, d, int64(parent), int64(subA), "create")
 
 	// Live memberships: the child maps subA; the parent now also maps subA.
 	if !accountSubs(t, d, id)[int64(subA)] {
@@ -295,15 +295,15 @@ func TestAssignSubPropagatesToAncestors(t *testing.T) {
 		t.Fatalf("SetAccountSubsidiaries: %v", err)
 	}
 
-	for _, acct := range []int64{leaf, parent, gp} {
+	for _, acct := range []ids.AccountID{leaf, parent, gp} {
 		subs := accountSubs(t, d, acct)
 		if !subs[int64(subA1)] {
 			t.Errorf("account %d missing propagated sub A1; got %v", acct, subs)
 		}
 	}
 	// Each ancestor gained the membership -> versioned create for the added ones.
-	testutil.AssertVersionedSub(t, d, parent, int64(subA1), "create")
-	testutil.AssertVersionedSub(t, d, gp, int64(subA1), "create")
+	testutil.AssertVersionedSub(t, d, int64(parent), int64(subA1), "create")
+	testutil.AssertVersionedSub(t, d, int64(gp), int64(subA1), "create")
 }
 
 // TestRemoveSubBlockedByChildOrSplits: removing a subsidiary from an account is
@@ -396,7 +396,7 @@ func TestRemoveSubSucceedsWhenUnused(t *testing.T) {
 		t.Errorf("account still maps A after removal")
 	}
 	// The removal is versioned op=delete (snapshot captured before the live delete).
-	testutil.AssertVersionedSub(t, d, acct, int64(subA), "delete")
+	testutil.AssertVersionedSub(t, d, int64(acct), int64(subA), "delete")
 }
 
 // TestDeactivate: DeactivateAccount sets active=0 and appends op='update' (NOT
@@ -418,7 +418,7 @@ func TestDeactivate(t *testing.T) {
 	if active != 0 {
 		t.Errorf("live active = %d, want 0", active)
 	}
-	testutil.AssertVersioned(t, d, "accounts", acct, "update")
+	testutil.AssertVersioned(t, d, "accounts", int64(acct), "update")
 }
 
 // TestTreeOrdering: Tree returns accounts in tree (pre-order) order, resolving
@@ -453,11 +453,11 @@ func TestTreeOrdering(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Tree: %v", err)
 	}
-	got := make([]int64, len(rows))
+	got := make([]ids.AccountID, len(rows))
 	for i, r := range rows {
 		got[i] = r.ID
 	}
-	want := []int64{b, a, a1}
+	want := []ids.AccountID{b, a, a1}
 	if len(got) != len(want) {
 		t.Fatalf("Tree order = %v, want %v", got, want)
 	}
@@ -500,7 +500,7 @@ func TestTreeSubsidiaryFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Tree(subFilter A): %v", err)
 	}
-	got := map[int64]bool{}
+	got := map[ids.AccountID]bool{}
 	for _, r := range rows {
 		got[r.ID] = true
 	}
@@ -514,7 +514,7 @@ func TestTreeSubsidiaryFilter(t *testing.T) {
 
 // treeName returns the resolved name for account id in a Tree result, failing if
 // the account is absent.
-func treeName(t *testing.T, rows []TreeRow, id int64) string {
+func treeName(t *testing.T, rows []TreeRow, id ids.AccountID) string {
 	t.Helper()
 	for _, r := range rows {
 		if r.ID == id {
@@ -624,7 +624,7 @@ func TestAccountNameAsOf(t *testing.T) {
 	if err := s.SetAccountName(mutCtx(), acct, "en", "New Name"); err != nil {
 		t.Fatalf("SetAccountName: %v", err)
 	}
-	testutil.AssertVersionedName(t, d, acct, "en", "update")
+	testutil.AssertVersionedName(t, d, int64(acct), "en", "update")
 
 	// Current name is "New Name".
 	var cur string
@@ -645,7 +645,7 @@ func TestAccountNameAsOf(t *testing.T) {
 // nameAsOf reconstructs an account name at time T from account_names_versions
 // (D4): the row with the greatest valid_from <= at for that (account_id, lang),
 // excluded if op='delete'. Raw SQL is fine in a test.
-func nameAsOf(t *testing.T, d *sql.DB, accountID int64, lang, at string) string {
+func nameAsOf(t *testing.T, d *sql.DB, accountID ids.AccountID, lang, at string) string {
 	t.Helper()
 	var name, op string
 	err := d.QueryRow(
@@ -760,7 +760,7 @@ func TestCreateFunctionalClassNonExpense(t *testing.T) {
 }
 
 // accountFlags reads an account's current_cash / open_item live flags.
-func accountFlags(t *testing.T, s *Store, id int64) (currentCash, openItem bool) {
+func accountFlags(t *testing.T, s *Store, id ids.AccountID) (currentCash, openItem bool) {
 	t.Helper()
 	row, err := s.GetAccount(context.Background(), id)
 	if err != nil {
@@ -787,7 +787,7 @@ func TestCreateAccountFlagsVersioned(t *testing.T) {
 	if !cc || !oi {
 		t.Fatalf("live flags = (cc=%v, oi=%v), want both true", cc, oi)
 	}
-	testutil.AssertVersioned(t, d, "accounts", id, "create")
+	testutil.AssertVersioned(t, d, "accounts", int64(id), "create")
 	// The version snapshot must carry the flags too (Z3 backstop).
 	var vcc, voi int64
 	if err := d.QueryRow(`SELECT current_cash, open_item FROM accounts_versions
@@ -800,7 +800,7 @@ func TestCreateAccountFlagsVersioned(t *testing.T) {
 }
 
 // accountNotes reads an account's current live notes ("" when NULL).
-func accountNotes(t *testing.T, s *Store, id int64) string {
+func accountNotes(t *testing.T, s *Store, id ids.AccountID) string {
 	t.Helper()
 	row, err := s.GetAccount(context.Background(), id)
 	if err != nil {
@@ -827,7 +827,7 @@ func TestAccountNotesRoundTrip(t *testing.T) {
 	if got := accountNotes(t, s, id); got != note {
 		t.Fatalf("notes after create = %q, want %q", got, note)
 	}
-	testutil.AssertVersioned(t, d, "accounts", id, "create")
+	testutil.AssertVersioned(t, d, "accounts", int64(id), "create")
 	// The version snapshot must carry notes too (Z3 backstop).
 	var vnotes sql.NullString
 	if err := d.QueryRow(`SELECT notes FROM accounts_versions

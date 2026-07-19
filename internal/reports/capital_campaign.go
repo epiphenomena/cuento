@@ -118,7 +118,7 @@ func runCapitalCampaign(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 	if err != nil {
 		return Table{}, err
 	}
-	acctName := make(map[int64]string, len(tree))
+	acctName := make(map[AccountID]string, len(tree))
 	for _, r := range tree {
 		acctName[r.ID] = r.Name
 	}
@@ -170,7 +170,7 @@ func runCapitalCampaign(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 	// As-of-report-date capital position per account (the detail section), native --
 	// summed over exactly the FundStatement capital accounts so the detail reconciles to
 	// the Capitalized column.
-	capByAccount := map[int64]map[string]int64{}
+	capByAccount := map[AccountID]map[string]int64{}
 	for _, r := range rows {
 		if !fullSt.CapitalAccounts[AccountID(r.AccountID)] || r.Date > p.To {
 			continue
@@ -345,11 +345,11 @@ func (b *campaignBuilder) totalRow(cumRev, cumExp, cap, rna map[string]int64) er
 // section header, then one row per capital account keyed by its NAME (a proper noun),
 // its as-of balance in the Capitalized column (other columns blank). Accounts are
 // ordered by id for determinism.
-func (b *campaignBuilder) capitalDetail(byAccount map[int64]map[string]int64, name map[int64]string) error {
+func (b *campaignBuilder) capitalDetail(byAccount map[AccountID]map[string]int64, name map[AccountID]string) error {
 	if len(byAccount) == 0 {
 		return nil
 	}
-	ids := make([]int64, 0, len(byAccount))
+	ids := make([]AccountID, 0, len(byAccount))
 	for id := range byAccount {
 		ids = append(ids, id)
 	}

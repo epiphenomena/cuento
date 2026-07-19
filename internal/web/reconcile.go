@@ -153,7 +153,7 @@ func (s *server) reconList(w http.ResponseWriter, r *http.Request) {
 	model := reconListModel{}
 	for _, a := range accts {
 		row := reconAccountRow{
-			AccountID:   a.ID,
+			AccountID:   int64(a.ID),
 			AccountName: s.accountName(ctx, a.ID, lang),
 			Currency:    a.DefaultCurrency,
 		}
@@ -177,7 +177,7 @@ func (s *server) reconList(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		row.StartForm = reconStartForm{
-			AccountID:   a.ID,
+			AccountID:   int64(a.ID),
 			AccountName: row.AccountName,
 			Currency:    a.DefaultCurrency,
 		}
@@ -236,13 +236,13 @@ func (s *server) reconStart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	accountID := parseID(r.PostFormValue("account_id"))
+	accountID := ids.AccountID(parseID(r.PostFormValue("account_id")))
 	currency := r.PostFormValue("currency")
 	dayStr := r.PostFormValue("statement_date")
 	balStr := r.PostFormValue("balance")
 
 	form := reconStartForm{
-		AccountID:    accountID,
+		AccountID:    int64(accountID),
 		AccountName:  s.accountName(ctx, accountID, lang),
 		Currency:     currency,
 		StatementDay: dayStr,

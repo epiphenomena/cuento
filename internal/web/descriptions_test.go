@@ -120,7 +120,7 @@ func TestDescriptionsPrefill(t *testing.T) {
 	if !strings.Contains(body, `data-found="1"`) {
 		t.Fatalf("expected a match\n%s", body)
 	}
-	if !strings.Contains(body, `data-account="`+itoa(e.salaries)+`"`) {
+	if !strings.Contains(body, `data-account="`+itoa(int64(e.salaries))+`"`) {
 		t.Fatalf("account not carried\n%s", body)
 	}
 	if !strings.Contains(body, `data-amount="90.00"`) {

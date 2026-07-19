@@ -85,8 +85,8 @@ func runTrialBalance(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 		nat  int64
 		conv int64
 	}
-	leafCells := make(map[int64][]curConv, len(balances)) // acct -> sorted per-ccy
-	convSubtree := make(map[int64]int64)                  // acct -> own+descendant converted
+	leafCells := make(map[AccountID][]curConv, len(balances)) // acct -> sorted per-ccy
+	convSubtree := make(map[AccountID]int64)                  // acct -> own+descendant converted
 	for acctID, amts := range balances {
 		cur := make([]CurAmt, len(amts))
 		copy(cur, amts)
@@ -99,8 +99,8 @@ func runTrialBalance(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 					return Table{}, err
 				}
 			}
-			leafCells[int64(acctID)] = append(leafCells[int64(acctID)], curConv{ccy: a.Currency, nat: a.Minor, conv: conv})
-			convSubtree[int64(acctID)] += conv
+			leafCells[acctID] = append(leafCells[acctID], curConv{ccy: a.Currency, nat: a.Minor, conv: conv})
+			convSubtree[acctID] += conv
 		}
 	}
 
@@ -108,9 +108,9 @@ func runTrialBalance(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	// converted amounts (mirrors the income-statement/balance-sheet rollup). hasAct
 	// marks whether a node's subtree carries ANY in-scope balance, so empty
 	// placeholders (a chart branch with no activity in this scope) drop out entirely.
-	hasAct := make(map[int64]bool)
-	var fold func(id int64) (int64, bool)
-	fold = func(id int64) (int64, bool) {
+	hasAct := make(map[AccountID]bool)
+	var fold func(id AccountID) (int64, bool)
+	fold = func(id AccountID) (int64, bool) {
 		if !isPlaceholder[id] {
 			_, ok := leafCells[id]
 			hasAct[id] = ok
@@ -144,8 +144,8 @@ func runTrialBalance(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	// nested subtotal row carrying its rolled-up converted total (native/currency
 	// blank: a mixed-currency subtree has no single native figure). Each leaf emits one
 	// data row per (account, currency), as before, at its tree depth.
-	var walk func(id int64)
-	walk = func(id int64) {
+	var walk func(id AccountID)
+	walk = func(id AccountID) {
 		if !hasAct[id] {
 			return
 		}
@@ -176,7 +176,7 @@ func runTrialBalance(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 			// via the same Drill (which still lists native splits).
 			nativeDrill := &Drill{
 				Scope:      p.Scope,
-				AccountIDs: []int64{id},
+				AccountIDs: []AccountID{id},
 				Currency:   a.ccy,
 				Mode:       DrillAsOf,
 				AsOf:       p.AsOf,

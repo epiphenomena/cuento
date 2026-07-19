@@ -45,7 +45,7 @@ func newMatrixApp(t *testing.T) (http.Handler, []Route, *store.Store, *sql.DB, *
 	// Its id is not asserted; the routes only need SOME account to exist so an
 	// authorized persona reaches the handler rather than a legitimate 404.
 	seedCtx := store.WithActor(context.Background(), store.Actor{ID: 1})
-	seedAcct := func(name string, reconcilable bool) int64 {
+	seedAcct := func(name string, reconcilable bool) ids.AccountID {
 		id, err := st.CreateAccount(seedCtx, store.CreateAccountInput{
 			Type: "asset", DefaultCurrency: "USD",
 			Names: map[string]string{"en": name}, Subsidiaries: []ids.SubsidiaryID{1},

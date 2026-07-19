@@ -29,9 +29,9 @@ LIMIT 1
 // splits row (position 0) so the returned account reflects the transaction's current
 // header account. Returns no rows when the actor has entered no (non-deleted)
 // transaction. Param: the actor's user id.
-func (q *Queries) LastHeaderAccountForActor(ctx context.Context, actorID ids.UserID) (int64, error) {
+func (q *Queries) LastHeaderAccountForActor(ctx context.Context, actorID ids.UserID) (ids.AccountID, error) {
 	row := q.db.QueryRowContext(ctx, lastHeaderAccountForActor, actorID)
-	var account_id int64
+	var account_id ids.AccountID
 	err := row.Scan(&account_id)
 	return account_id, err
 }

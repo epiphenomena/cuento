@@ -48,7 +48,7 @@ func TestReconSpansFunds(t *testing.T) {
 	).Scan(&acct, &currency, &status, &bal); err != nil {
 		t.Fatalf("load recon: %v", err)
 	}
-	if status != "finalized" || acct != f.IDs.CheckingUS || currency != "USD" {
+	if status != "finalized" || acct != int64(f.IDs.CheckingUS) || currency != "USD" {
 		t.Errorf("recon = {acct %d, %s, %s}, want {%d, USD, finalized}", acct, currency, status, f.IDs.CheckingUS)
 	}
 	if bal != recon.StatementBalance {

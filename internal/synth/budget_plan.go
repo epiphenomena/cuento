@@ -49,7 +49,7 @@ func ExtendSampleBudgetPlan(ctx context.Context, s *store.Store, ids *IDs) error
 	splits := []struct {
 		desc    string
 		date    string
-		account int64
+		account entids.AccountID
 		fund    *entids.FundID
 		program *entids.ProgramID // nil => rely on account default (R/E) or none (A/L)
 		amount  int64

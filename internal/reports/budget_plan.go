@@ -107,7 +107,7 @@ func (tk *Toolkit) planSplitsResolved(ctx context.Context, planID BudgetPlanID) 
 		typ      string
 		openItem bool
 	}
-	info := make(map[int64]acctInfo, len(tree))
+	info := make(map[AccountID]acctInfo, len(tree))
 	for _, r := range tree {
 		info[r.ID] = acctInfo{typ: r.Type, openItem: r.OpenItem}
 	}

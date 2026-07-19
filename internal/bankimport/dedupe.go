@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"strconv"
 	"strings"
+
+	"cuento/internal/ids"
 )
 
 // dedupe_hash is the natural key of a bank-statement line, used to FLAG (never
@@ -44,9 +46,9 @@ const (
 // DedupeHash computes the natural-key hash for one bank-statement line. Both the
 // staging path and the ledger-split path call this, guaranteeing an identical hash
 // for the same (account, date, amount, description/memo) event.
-func DedupeHash(accountID int64, date string, amountMinor int64, description, memo string) string {
+func DedupeHash(accountID ids.AccountID, date string, amountMinor int64, description, memo string) string {
 	key := strings.Join([]string{
-		strconv.FormatInt(accountID, 10),
+		strconv.FormatInt(int64(accountID), 10),
 		date,
 		strconv.FormatInt(amountMinor, 10),
 		Normalize(description) + pairSep + Normalize(memo),

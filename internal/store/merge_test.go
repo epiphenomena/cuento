@@ -17,17 +17,17 @@ import (
 // (newTxnEnv, mkAcct, mutCtx, countChanges, txnSplits, splitVersionCount).
 
 // liveSplitAccount reads one split's current live account_id.
-func liveSplitAccount(t *testing.T, d *sql.DB, splitID ids.SplitID) int64 {
+func liveSplitAccount(t *testing.T, d *sql.DB, splitID ids.SplitID) ids.AccountID {
 	t.Helper()
 	var acct int64
 	if err := d.QueryRow(`SELECT account_id FROM splits WHERE id = ?`, int64(splitID)).Scan(&acct); err != nil {
 		t.Fatalf("liveSplitAccount(%d): %v", splitID, err)
 	}
-	return acct
+	return ids.AccountID(acct)
 }
 
 // countSplitsOnAccount counts live splits currently pointing at an account.
-func countSplitsOnAccount(t *testing.T, d *sql.DB, accountID int64) int {
+func countSplitsOnAccount(t *testing.T, d *sql.DB, accountID ids.AccountID) int {
 	t.Helper()
 	var n int
 	if err := d.QueryRow(`SELECT COUNT(*) FROM splits WHERE account_id = ?`, accountID).Scan(&n); err != nil {
@@ -37,7 +37,7 @@ func countSplitsOnAccount(t *testing.T, d *sql.DB, accountID int64) int {
 }
 
 // accountActive reads an account's live active flag.
-func accountActive(t *testing.T, d *sql.DB, accountID int64) int64 {
+func accountActive(t *testing.T, d *sql.DB, accountID ids.AccountID) int64 {
 	t.Helper()
 	var a int64
 	if err := d.QueryRow(`SELECT active FROM accounts WHERE id = ?`, accountID).Scan(&a); err != nil {
@@ -48,7 +48,7 @@ func accountActive(t *testing.T, d *sql.DB, accountID int64) int64 {
 
 // postExpense posts a balanced expense txn (debit `expense`, credit `checking`)
 // and returns the txn id plus its two live splits.
-func (e txnEnv) postExpense(t *testing.T, expense int64, amount int64) (ids.TransactionID, []SplitState) {
+func (e txnEnv) postExpense(t *testing.T, expense ids.AccountID, amount int64) (ids.TransactionID, []SplitState) {
 	t.Helper()
 	mgmt := "management"
 	id, err := e.s.PostTransaction(mutCtx(), PostTransactionInput{
@@ -65,7 +65,7 @@ func (e txnEnv) postExpense(t *testing.T, expense int64, amount int64) (ids.Tran
 }
 
 // splitOnAccount returns the one split (from a list) that sits on account acct.
-func splitOnAccount(t *testing.T, sps []SplitState, acct int64) SplitState {
+func splitOnAccount(t *testing.T, sps []SplitState, acct ids.AccountID) SplitState {
 	t.Helper()
 	for _, sp := range sps {
 		if sp.AccountID == acct {
@@ -315,7 +315,7 @@ func TestMergeFunctionDefaultKept(t *testing.T) {
 	if a := accountActive(t, e.d, src); a != 0 {
 		t.Errorf("src active = %d, want 0 (source deactivated)", a)
 	}
-	testutil.AssertVersioned(t, e.d, "accounts", src, "update")
+	testutil.AssertVersioned(t, e.d, "accounts", int64(src), "update")
 }
 
 // --- history intact ------------------------------------------------------

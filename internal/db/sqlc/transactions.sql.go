@@ -39,7 +39,7 @@ SELECT COUNT(*) FROM splits WHERE account_id = ? AND reconciliation_id IS NOT NU
 // open recon; the 00014 finalized-lock trigger ABORTs for a finalized one), so the
 // store refuses the merge when this count is > 0 (ErrMergeSourceReconciled). Full
 // recon repointing stays backlog; this closes the integrity hole cleanly.
-func (q *Queries) CountReconciledSplitsForAccount(ctx context.Context, accountID int64) (int64, error) {
+func (q *Queries) CountReconciledSplitsForAccount(ctx context.Context, accountID ids.AccountID) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countReconciledSplitsForAccount, accountID)
 	var count int64
 	err := row.Scan(&count)
@@ -103,7 +103,7 @@ SELECT EXISTS (
 `
 
 type HasAccountSubsidiaryMapParams struct {
-	AccountID    int64
+	AccountID    ids.AccountID
 	SubsidiaryID ids.SubsidiaryID
 }
 
@@ -147,7 +147,7 @@ RETURNING id
 
 type InsertSplitParams struct {
 	TransactionID   ids.TransactionID
-	AccountID       int64
+	AccountID       ids.AccountID
 	Amount          int64
 	FundID          sql.NullInt64
 	ProgramID       sql.NullInt64
@@ -338,7 +338,7 @@ UPDATE splits SET account_id = ? WHERE id = ?
 `
 
 type RepointSplitAccountParams struct {
-	AccountID int64
+	AccountID ids.AccountID
 	ID        ids.SplitID
 }
 
@@ -399,7 +399,7 @@ SELECT id FROM splits WHERE account_id = ? ORDER BY id
 // (splits on active leaves) would otherwise still see splits stranded on the
 // deactivated source. Captured BEFORE any repoint write so the moved rows are not
 // confused with the destination's pre-existing splits.
-func (q *Queries) SplitIdsByAccount(ctx context.Context, accountID int64) ([]ids.SplitID, error) {
+func (q *Queries) SplitIdsByAccount(ctx context.Context, accountID ids.AccountID) ([]ids.SplitID, error) {
 	rows, err := q.db.QueryContext(ctx, splitIdsByAccount, accountID)
 	if err != nil {
 		return nil, err
@@ -432,7 +432,7 @@ SELECT EXISTS (
 `
 
 type SplitUsesAccountInSubsidiaryParams struct {
-	AccountID    int64
+	AccountID    ids.AccountID
 	SubsidiaryID ids.SubsidiaryID
 }
 
@@ -489,7 +489,7 @@ type SplitVersionHistoryRow struct {
 	ChangeID        ids.ChangeID
 	Op              string
 	ValidFrom       string
-	AccountID       int64
+	AccountID       ids.AccountID
 	Amount          int64
 	FundID          sql.NullInt64
 	ProgramID       sql.NullInt64
@@ -562,7 +562,7 @@ type SplitVersionsAsOfRow struct {
 	EntityID        ids.SplitID
 	Op              string
 	TransactionID   ids.TransactionID
-	AccountID       int64
+	AccountID       ids.AccountID
 	Amount          int64
 	FundID          sql.NullInt64
 	ProgramID       sql.NullInt64
@@ -620,7 +620,7 @@ ORDER BY s.id
 `
 
 type SplitsByAccountCurrencyParams struct {
-	AccountID int64
+	AccountID ids.AccountID
 	Currency  string
 }
 
@@ -876,7 +876,7 @@ WHERE id = ?
 `
 
 type UpdateSplitParams struct {
-	AccountID       int64
+	AccountID       ids.AccountID
 	Amount          int64
 	FundID          sql.NullInt64
 	ProgramID       sql.NullInt64

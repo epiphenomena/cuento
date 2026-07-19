@@ -365,7 +365,7 @@ func TestAccountDefaultProgramREOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateAccount revenue with default program: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "accounts", rev, "create")
+	testutil.AssertVersioned(t, d, "accounts", int64(rev), "create")
 
 	if got := accountDefaultProgram(t, d, rev); !got.Valid || got.Int64 != int64(prog) {
 		t.Errorf("live default_program_id = %+v, want %d", got, prog)
@@ -429,7 +429,7 @@ func TestAccountDefaultProgramREOnly(t *testing.T) {
 }
 
 // accountDefaultProgram reads an account's live default_program_id directly.
-func accountDefaultProgram(t *testing.T, d *sql.DB, accountID int64) sql.NullInt64 {
+func accountDefaultProgram(t *testing.T, d *sql.DB, accountID ids.AccountID) sql.NullInt64 {
 	t.Helper()
 	var v sql.NullInt64
 	if err := d.QueryRow(`SELECT default_program_id FROM accounts WHERE id = ?`, accountID).Scan(&v); err != nil {
@@ -440,7 +440,7 @@ func accountDefaultProgram(t *testing.T, d *sql.DB, accountID int64) sql.NullInt
 
 // latestAccountVersionDefaultProgram reads the newest accounts_versions snapshot's
 // default_program_id for an account (proves the ripple carried it).
-func latestAccountVersionDefaultProgram(t *testing.T, d *sql.DB, accountID int64) sql.NullInt64 {
+func latestAccountVersionDefaultProgram(t *testing.T, d *sql.DB, accountID ids.AccountID) sql.NullInt64 {
 	t.Helper()
 	var v sql.NullInt64
 	if err := d.QueryRow(

@@ -34,8 +34,8 @@ type mergeEnv struct {
 	st   *store.Store
 	sm   *scs.SessionManager
 	book ids.UserID
-	src  int64
-	dst  int64
+	src  ids.AccountID
+	dst  ids.AccountID
 }
 
 func seedMergeEnv(t *testing.T) mergeEnv {
@@ -88,7 +88,7 @@ func seedMergeEnv(t *testing.T) mergeEnv {
 }
 
 // liveSplitAccountWeb reads a split's live account_id via the store's read helper.
-func liveSplitAccountWeb(t *testing.T, st *store.Store, srcAccount int64) int {
+func liveSplitAccountWeb(t *testing.T, st *store.Store, srcAccount ids.AccountID) int {
 	t.Helper()
 	ids, err := st.SplitIDsForAccount(context.Background(), srcAccount)
 	if err != nil {
@@ -103,8 +103,8 @@ func TestMergeHappyPath(t *testing.T) {
 	e := seedMergeEnv(t)
 
 	form := url.Values{}
-	form.Set("src", itoa(e.src))
-	form.Set("dst", itoa(e.dst))
+	form.Set("src", itoa(int64(e.src)))
+	form.Set("dst", itoa(int64(e.dst)))
 	form.Set("confirm", "1")
 
 	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/accounts/merge", form)
@@ -131,8 +131,8 @@ func TestMergeConfirmRequired(t *testing.T) {
 	e := seedMergeEnv(t)
 
 	form := url.Values{}
-	form.Set("src", itoa(e.src))
-	form.Set("dst", itoa(e.dst))
+	form.Set("src", itoa(int64(e.src)))
+	form.Set("dst", itoa(int64(e.dst)))
 	// no confirm flag
 
 	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/accounts/merge", form)
@@ -160,8 +160,8 @@ func TestMergeConsequencesSummarized(t *testing.T) {
 	e := seedMergeEnv(t)
 
 	form := url.Values{}
-	form.Set("src", itoa(e.src))
-	form.Set("dst", itoa(e.dst))
+	form.Set("src", itoa(int64(e.src)))
+	form.Set("dst", itoa(int64(e.dst)))
 
 	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/accounts/merge", form)
 	if rec.Code != http.StatusOK {
@@ -208,8 +208,8 @@ func TestMergeSubCoverageSurfaced(t *testing.T) {
 	}
 
 	form := url.Values{}
-	form.Set("src", itoa(src))
-	form.Set("dst", itoa(dst))
+	form.Set("src", itoa(int64(src)))
+	form.Set("dst", itoa(int64(dst)))
 	form.Set("confirm", "1")
 
 	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/merge", form)
@@ -280,8 +280,8 @@ func TestMergeReconciledSourceSurfaced(t *testing.T) {
 	}
 
 	form := url.Values{}
-	form.Set("src", itoa(src))
-	form.Set("dst", itoa(dst))
+	form.Set("src", itoa(int64(src)))
+	form.Set("dst", itoa(int64(dst)))
 	form.Set("confirm", "1")
 
 	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/merge", form)
@@ -320,8 +320,8 @@ func TestMergeCrossTypeSurfaced(t *testing.T) {
 	}
 
 	form := url.Values{}
-	form.Set("src", itoa(rev))
-	form.Set("dst", itoa(exp))
+	form.Set("src", itoa(int64(rev)))
+	form.Set("dst", itoa(int64(exp)))
 	form.Set("confirm", "1")
 
 	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/merge", form)

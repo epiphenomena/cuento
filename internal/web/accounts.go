@@ -41,7 +41,7 @@ type balanceCell struct {
 // it is testable directly against the p08.4 query without scraping HTML or
 // depending on time.Now. The numbers come STRAIGHT from SubtreeBalancesAsOf; this
 // only attaches each currency's exponent for rendering.
-func balancesByAccount(ctx context.Context, st *store.Store, asof string, scopeSub int64) (map[int64][]balanceCell, error) {
+func balancesByAccount(ctx context.Context, st *store.Store, asof string, scopeSub int64) (map[ids.AccountID][]balanceCell, error) {
 	rows, err := st.SubtreeBalancesAsOf(ctx, asof, ids.SubsidiaryID(scopeSub))
 	if err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func balancesByAccount(ctx context.Context, st *store.Store, asof string, scopeS
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[int64][]balanceCell)
+	out := make(map[ids.AccountID][]balanceCell)
 	for _, r := range rows {
 		out[r.AccountID] = append(out[r.AccountID], balanceCell{
 			Currency: r.Currency,
@@ -372,7 +372,7 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		ar := acctRow{
-			ID:           row.ID,
+			ID:           int64(row.ID),
 			Name:         row.Name,
 			Type:         row.Type,
 			Active:       row.Active != 0,
@@ -415,11 +415,11 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 // treeDepths computes each account's indent depth from the pre-ordered tree rows
 // (root accounts depth 0). It walks parent ids, which are all present earlier in
 // pre-order.
-func treeDepths(rows []store.TreeRow) map[int64]int {
-	depth := make(map[int64]int, len(rows))
+func treeDepths(rows []store.TreeRow) map[ids.AccountID]int {
+	depth := make(map[ids.AccountID]int, len(rows))
 	for _, r := range rows {
 		if r.ParentID.Valid {
-			depth[r.ID] = depth[r.ParentID.Int64] + 1
+			depth[r.ID] = depth[ids.AccountID(r.ParentID.Int64)] + 1
 		} else {
 			depth[r.ID] = 0
 		}
@@ -633,7 +633,7 @@ func overlayFormValues(form *accountForm, r *http.Request) {
 // from the account's current state, on its own full-shell page (p26.7).
 func (s *server) accountEditForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
+	id := ids.AccountID(parseID(r.PathValue("id")))
 	acct, err := s.store.GetAccount(ctx, id)
 	if err != nil {
 		http.NotFound(w, r)
@@ -685,7 +685,7 @@ func (s *server) accountEditForm(w http.ResponseWriter, r *http.Request) {
 
 // accountName reads an account's name in a given language WITH the p05.3 fallback
 // (en -> any) via Tree -- used where a display name is wanted (merge preview).
-func (s *server) accountName(ctx context.Context, id int64, lang string) string {
+func (s *server) accountName(ctx context.Context, id ids.AccountID, lang string) string {
 	rows, err := s.store.Tree(ctx, lang, nil)
 	if err != nil {
 		return ""
@@ -701,7 +701,7 @@ func (s *server) accountName(ctx context.Context, id int64, lang string) string 
 // accountNameExact reads an account's name in EXACTLY the given language (no
 // fallback), for prefilling the per-language edit inputs (p11.4). "" on any error
 // or when that language has no name yet.
-func (s *server) accountNameExact(ctx context.Context, id int64, lang string) string {
+func (s *server) accountNameExact(ctx context.Context, id ids.AccountID, lang string) string {
 	name, err := s.store.AccountName(ctx, id, lang)
 	if err != nil {
 		return ""
@@ -713,9 +713,9 @@ func (s *server) accountNameExact(ctx context.Context, id int64, lang string) st
 // The 990 lines are filtered to the type (D25), the parent options exclude the
 // account's own descendants + wrong-class targets (D11), and the effective 990
 // code (inherited) is resolved for the placeholder (D25).
-func (s *server) buildAccountForm(ctx context.Context, id int64, typ string) (accountForm, error) {
+func (s *server) buildAccountForm(ctx context.Context, id ids.AccountID, typ string) (accountForm, error) {
 	form := accountForm{
-		ID:                 id,
+		ID:                 int64(id),
 		Type:               typ,
 		CheckedSubs:        map[int64]bool{},
 		IsExpense:          typ == "expense",
@@ -860,7 +860,7 @@ func (s *server) accountCreate(w http.ResponseWriter, r *http.Request) {
 // (UpdateAccount: move/990/program) runs first so its typed error maps cleanly.
 func (s *server) accountUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
+	id := ids.AccountID(parseID(r.PathValue("id")))
 	form, in, err := s.parseAccountForm(r, id)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -948,7 +948,7 @@ func redirectAfterForm(w http.ResponseWriter, r *http.Request, to string) {
 // deactivate (active=0, history intact). Redirects back to the list.
 func (s *server) accountDeactivate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
+	id := ids.AccountID(parseID(r.PathValue("id")))
 	if err := s.store.DeactivateAccount(s.actorCtx(ctx), id); err != nil {
 		if errors.Is(err, store.ErrAccountNotFound) {
 			http.NotFound(w, r)
@@ -965,7 +965,7 @@ func (s *server) accountDeactivate(w http.ResponseWriter, r *http.Request) {
 type parsedAccountForm struct {
 	typ             string
 	currency        string
-	parentID        int64
+	parentID        ids.AccountID
 	names           map[string]string // lang -> submitted name, for each enabled language (p11.4)
 	reconcilable    bool
 	intercompany    bool
@@ -985,7 +985,7 @@ type parsedAccountForm struct {
 // code -- exactly as the initial edit GET does. It rebuilds the option lists so a
 // 422 re-render shows the same selects, and does NOT validate business rules --
 // the store owns that (rule: don't duplicate validation).
-func (s *server) parseAccountForm(r *http.Request, id int64) (accountForm, parsedAccountForm, error) {
+func (s *server) parseAccountForm(r *http.Request, id ids.AccountID) (accountForm, parsedAccountForm, error) {
 	if err := r.ParseForm(); err != nil {
 		return accountForm{}, parsedAccountForm{}, err
 	}
@@ -993,7 +993,7 @@ func (s *server) parseAccountForm(r *http.Request, id int64) (accountForm, parse
 	in := parsedAccountForm{
 		typ:             typ,
 		currency:        r.PostFormValue("currency"),
-		parentID:        parseID(r.PostFormValue("parent_id")),
+		parentID:        ids.AccountID(parseID(r.PostFormValue("parent_id"))),
 		names:           map[string]string{},
 		reconcilable:    r.PostFormValue("reconcilable") != "",
 		intercompany:    r.PostFormValue("intercompany") != "",
@@ -1030,7 +1030,7 @@ func (s *server) parseAccountForm(r *http.Request, id int64) (accountForm, parse
 	}
 	// Echo submitted values back so a 422 re-render keeps what the user entered.
 	form.Currency = in.currency
-	form.ParentID = in.parentID
+	form.ParentID = int64(in.parentID)
 	form.Reconcilable = in.reconcilable
 	form.Intercompany = in.intercompany
 	form.CurrentCash = in.currentCash

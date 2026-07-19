@@ -44,7 +44,7 @@ func mkSubmitter(t *testing.T, st *store.Store, username string) ids.UserID {
 
 // seedREAccount creates a leaf revenue/expense account in the root subsidiary and
 // returns its id (for expense-report line data).
-func seedREAccount(t *testing.T, st *store.Store, typ, name string) int64 {
+func seedREAccount(t *testing.T, st *store.Store, typ, name string) ids.AccountID {
 	t.Helper()
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	id, err := st.CreateAccount(ctx, store.CreateAccountInput{
@@ -339,7 +339,7 @@ func TestExpenseLineBadAccountFieldError(t *testing.T) {
 	}
 	// A non-R/E (asset) account in a grid row -> per-row error (422).
 	rec = asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+repID+"/lines", url.Values{
-		"rows": {"1"}, "account_0": {itoa(asset)}, "amount_0": {"10.00"},
+		"rows": {"1"}, "account_0": {itoa(int64(asset))}, "amount_0": {"10.00"},
 	})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("non-R/E account row: status=%d, want 422; body: %s", rec.Code, rec.Body.String())
@@ -353,8 +353,8 @@ func TestExpenseLineBadAccountFieldError(t *testing.T) {
 	rev := seedREAccount(t, st, "revenue", "Grants Rev Echo")
 	rec = asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+repID+"/lines", url.Values{
 		"rows":      {"2"},
-		"account_0": {itoa(rev)}, "amount_0": {"77.77"},
-		"account_1": {itoa(asset)}, "amount_1": {"5.00"}, // asset -> row error
+		"account_0": {itoa(int64(rev))}, "amount_0": {"77.77"},
+		"account_1": {itoa(int64(asset))}, "amount_1": {"5.00"}, // asset -> row error
 	})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("mixed valid/invalid grid: status=%d, want 422; body: %s", rec.Code, rec.Body.String())
@@ -427,12 +427,12 @@ func reportIDFromRedirect(t *testing.T, rec *httptest.ResponseRecorder) int64 {
 // helper first reads the report's current lines and re-posts them (round-tripping each
 // line_id + its positive display magnitude) alongside the new row, so calling addLine
 // repeatedly accumulates lines like the old one-at-a-time form did. Fails on a non-redirect.
-func addLine(t *testing.T, h http.Handler, st *store.Store, sm *scs.SessionManager, submitter ids.UserID, reportID, account int64, amount string) {
+func addLine(t *testing.T, h http.Handler, st *store.Store, sm *scs.SessionManager, submitter ids.UserID, reportID int64, account ids.AccountID, amount string) {
 	t.Helper()
 	form := gridFormFromLines(t, st, reportID)
 	idx := existingRowCount(t, st, reportID)
 	si := itoa64(idx)
-	form.Set("account_"+si, itoa(account))
+	form.Set("account_"+si, itoa(int64(account)))
 	form.Set("amount_"+si, amount)
 	form.Set("rows", itoa64(idx+1))
 	rec := asUser(t, h, sm, submitter, http.MethodPost, "/expenses/"+itoa(reportID)+"/lines", form)
@@ -455,7 +455,7 @@ func gridFormFromLines(t *testing.T, st *store.Store, reportID int64) url.Values
 	for i, l := range lines {
 		si := itoa64(int64(i))
 		form.Set("line_id_"+si, itoa64(int64(l.ID)))
-		form.Set("account_"+si, itoa64(l.AccountID))
+		form.Set("account_"+si, itoa64(int64(l.AccountID)))
 		mag := l.Amount
 		if mag < 0 {
 			mag = -mag

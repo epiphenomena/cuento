@@ -37,13 +37,13 @@ type regEnv struct {
 	root       ids.SubsidiaryID // root subsidiary
 	subA, subB ids.SubsidiaryID // two children (so a >1-sub account exists)
 
-	checking int64      // reconcilable, mapped to subA only (1 sub -> no badge)
-	multiSub int64      // mapped to subA + subB (badge), NOT reconcilable
-	clearing int64      // mapped to all subs, USD+MXN (multi-currency running bal)
-	expense  int64      // an expense account (counter-account target)
-	otherExp int64      // a second expense (to make a >2-split txn -> "Split")
-	revenue  int64      // revenue account
-	fund     ids.FundID // a restricted fund scoped to subA
+	checking ids.AccountID // reconcilable, mapped to subA only (1 sub -> no badge)
+	multiSub ids.AccountID // mapped to subA + subB (badge), NOT reconcilable
+	clearing ids.AccountID // mapped to all subs, USD+MXN (multi-currency running bal)
+	expense  ids.AccountID // an expense account (counter-account target)
+	otherExp ids.AccountID // a second expense (to make a >2-split txn -> "Split")
+	revenue  ids.AccountID // revenue account
+	fund     ids.FundID    // a restricted fund scoped to subA
 }
 
 func newRegEnv(t *testing.T) *regEnv {
@@ -68,7 +68,7 @@ func newRegEnv(t *testing.T) *regEnv {
 		t.Fatalf("create subB: %v", err)
 	}
 
-	mkAcct := func(name, typ, ccy string, recon bool, subs []ids.SubsidiaryID) int64 {
+	mkAcct := func(name, typ, ccy string, recon bool, subs []ids.SubsidiaryID) ids.AccountID {
 		in := store.CreateAccountInput{
 			Type:            typ,
 			DefaultCurrency: ccy,
@@ -109,16 +109,16 @@ const generalProgram ids.ProgramID = 1
 // post2 posts a simple balanced 2-split txn (debit `debit`, credit `credit`) in
 // USD on subA, with an optional fund on both splits and program on R/E splits. desc
 // (when non-empty) is set as the debit split's per-line description.
-func (e *regEnv) post2(t *testing.T, ctx context.Context, date string, amount int64, debit, credit int64, fund *ids.FundID, desc string) ids.TransactionID {
+func (e *regEnv) post2(t *testing.T, ctx context.Context, date string, amount int64, debit, credit ids.AccountID, fund *ids.FundID, desc string) ids.TransactionID {
 	t.Helper()
-	prog := func(acct int64) *ids.ProgramID {
+	prog := func(acct ids.AccountID) *ids.ProgramID {
 		if acct == e.expense || acct == e.otherExp || acct == e.revenue {
 			p := generalProgram
 			return &p
 		}
 		return nil
 	}
-	fclass := func(acct int64) *string {
+	fclass := func(acct ids.AccountID) *string {
 		if acct == e.expense || acct == e.otherExp {
 			c := "program"
 			return &c
@@ -349,7 +349,7 @@ func TestRegisterDescriptionColumn(t *testing.T) {
 	}
 
 	opts := formatOptsFor(nil)
-	rowsFor := func(acct int64) []regRow {
+	rowsFor := func(acct ids.AccountID) []regRow {
 		rows, _, _, err := registerRows(ctx, e.st, acct, store.RegisterCursor{}, store.RegisterFilters{}, 0, "en", opts)
 		if err != nil {
 			t.Fatalf("registerRows: %v", err)
@@ -594,7 +594,7 @@ func TestRegisterNewTxnLeafOnly(t *testing.T) {
 
 	const newTxnMark = `/transactions/new?from=/accounts/`
 	leafHTML := renderRegisterHTML(t, e, e.book, leaf)
-	if !strings.Contains(leafHTML, newTxnMark+strconv.FormatInt(leaf, 10)+"/register") {
+	if !strings.Contains(leafHTML, newTxnMark+strconv.FormatInt(int64(leaf), 10)+"/register") {
 		t.Errorf("leaf account register should offer the New-transaction action")
 	}
 	parentHTML := renderRegisterHTML(t, e, e.book, parent)
@@ -623,9 +623,9 @@ func TestRegisterReconColumnGating(t *testing.T) {
 }
 
 // renderRegisterHTML fetches the full register page HTML for an account as `user`.
-func renderRegisterHTML(t *testing.T, e *regEnv, user ids.UserID, acctID int64) string {
+func renderRegisterHTML(t *testing.T, e *regEnv, user ids.UserID, acctID ids.AccountID) string {
 	t.Helper()
-	path := "/accounts/" + strconv.FormatInt(acctID, 10) + "/register"
+	path := "/accounts/" + strconv.FormatInt(int64(acctID), 10) + "/register"
 	rec := asUser(t, e.h, e.sm, user, http.MethodGet, path, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("register HTML for %d: status=%d body=%s", acctID, rec.Code, rec.Body.String())
@@ -641,7 +641,7 @@ func TestRegisterPerms(t *testing.T) {
 	e := newRegEnv(t)
 	reader := mkUser(t, e.st, "regreader", "read", false)
 
-	path := "/accounts/" + strconv.FormatInt(e.checking, 10) + "/register"
+	path := "/accounts/" + strconv.FormatInt(int64(e.checking), 10) + "/register"
 
 	// TxnRead can view.
 	rec := asUser(t, e.h, e.sm, reader, http.MethodGet, path, nil)
@@ -667,7 +667,7 @@ func TestRegisterHtmxPaging(t *testing.T) {
 		e.post2(t, ctx, d, int64((i+1)*100), e.checking, e.expense, nil, "")
 	}
 	reader := mkUser(t, e.st, "regpager", "read", false)
-	base := "/accounts/" + strconv.FormatInt(e.checking, 10) + "/register"
+	base := "/accounts/" + strconv.FormatInt(int64(e.checking), 10) + "/register"
 
 	// Page 1 is a full page (a full document with the filter form).
 	first := asUser(t, e.h, e.sm, reader, http.MethodGet, base, nil)

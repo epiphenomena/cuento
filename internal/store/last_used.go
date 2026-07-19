@@ -19,7 +19,7 @@ import (
 // most-recently-created (non-deleted) transaction, or 0 when they have none. Recency is
 // by create-change id (insertion order), not the transaction's business date, so a
 // backdated entry does not win.
-func (s *Store) LastHeaderAccountForActor(ctx context.Context, actorID ids.UserID) (int64, error) {
+func (s *Store) LastHeaderAccountForActor(ctx context.Context, actorID ids.UserID) (ids.AccountID, error) {
 	if actorID == 0 {
 		return 0, nil
 	}

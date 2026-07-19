@@ -38,9 +38,9 @@ func importApp(t *testing.T) (http.Handler, *store.Store, *scs.SessionManager, *
 
 // importFields is the mapping + target the import form carries. The defaults map a
 // date,amount,desc,memo CSV with a header, comma delimiter, single signed amount.
-func importFields(accountID, subsidiaryID int64) map[string]string {
+func importFields(accountID ids.AccountID, subsidiaryID int64) map[string]string {
 	return map[string]string{
-		"account_id":    strconv.FormatInt(accountID, 10),
+		"account_id":    strconv.FormatInt(int64(accountID), 10),
 		"subsidiary_id": strconv.FormatInt(subsidiaryID, 10),
 		"delimiter":     ",",
 		"has_header":    "1",
@@ -84,7 +84,7 @@ func uploadImportCSV(t *testing.T, h http.Handler, sm *scs.SessionManager, userI
 
 // importChart creates an asset account mapped to the root subsidiary (id 1) and
 // returns its id.
-func importChart(t *testing.T, st *store.Store) int64 {
+func importChart(t *testing.T, st *store.Store) ids.AccountID {
 	t.Helper()
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	id, err := st.CreateAccount(ctx, store.CreateAccountInput{

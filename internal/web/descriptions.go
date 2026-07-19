@@ -82,7 +82,7 @@ func (s *server) descriptionsPrefill(w http.ResponseWriter, r *http.Request) {
 	model := descPrefillModel{Found: pf.Found}
 	if pf.Found {
 		exp := s.currencyExponent(ctx, pf.Currency)
-		model.AccountID = pf.AccountID
+		model.AccountID = int64(pf.AccountID)
 		model.AmountInput = money.Format(pf.Amount, exp, money.FormatOpts{Number: numberFormatFor(u)})
 		model.FundID = int64(pf.FundID)
 		model.ProgramID = int64(pf.ProgramID)

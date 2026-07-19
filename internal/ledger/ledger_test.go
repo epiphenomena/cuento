@@ -41,13 +41,13 @@ type world struct {
 	prog         ids.ProgramID
 	fund         ids.FundID
 
-	checkingUS int64 // asset, US
-	salaries   int64 // expense (class management, prog root), US, 990-coded
-	contrib    int64 // revenue (prog root), US, 990-coded
-	equity     int64 // equity, US
-	dueFrom    int64 // asset, intercompany, US
-	dueTo      int64 // liability, intercompany, MX
-	checkingMX int64 // asset, MX
+	checkingUS ids.AccountID // asset, US
+	salaries   ids.AccountID // expense (class management, prog root), US, 990-coded
+	contrib    ids.AccountID // revenue (prog root), US, 990-coded
+	equity     ids.AccountID // equity, US
+	dueFrom    ids.AccountID // asset, intercompany, US
+	dueTo      ids.AccountID // liability, intercompany, MX
+	checkingMX ids.AccountID // asset, MX
 
 	txPlain ids.TransactionID // a simple balanced US txn (salaries/checking)
 	txFund  ids.TransactionID // a restricted-fund receipt in US
@@ -164,14 +164,14 @@ type acct struct {
 	typ          string
 	name         string
 	subs         []ids.SubsidiaryID
-	parent       *int64
+	parent       *ids.AccountID
 	fclass       *string
 	defProg      *ids.ProgramID
 	code990      *string
 	intercompany bool
 }
 
-func mkAcct(t *testing.T, s *store.Store, a acct) int64 {
+func mkAcct(t *testing.T, s *store.Store, a acct) ids.AccountID {
 	t.Helper()
 	in := store.CreateAccountInput{
 		ParentID: a.parent, Type: a.typ, DefaultCurrency: "USD",

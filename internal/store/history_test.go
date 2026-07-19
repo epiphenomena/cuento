@@ -249,7 +249,7 @@ func TestHistoryUpdateShowsRemovedSplit(t *testing.T) {
 	// The removed line carries its old-side account (supplies) -- one-sided.
 	found := false
 	for _, d := range removed.Fields {
-		if d.Field == FieldAccount && d.Old.ID.Valid && d.Old.ID.Int64 == e.supplies {
+		if d.Field == FieldAccount && d.Old.ID.Valid && d.Old.ID.Int64 == int64(e.supplies) {
 			found = true
 		}
 	}
@@ -312,7 +312,7 @@ func TestHistoryVoidVisibleAfterDelete(t *testing.T) {
 }
 
 // findSplitState returns the HistSplitState for a given account in a version's state.
-func findSplitState(t *testing.T, e HistoryEntry, accountID int64) HistSplitState {
+func findSplitState(t *testing.T, e HistoryEntry, accountID ids.AccountID) HistSplitState {
 	t.Helper()
 	for _, sp := range e.State.Splits {
 		if sp.AccountID == accountID {
@@ -538,7 +538,7 @@ func TestHistoryMissingTransaction(t *testing.T) {
 
 // post2 posts a balanced 2-split transaction and returns its id. debitAcct must
 // carry (or default) any required program/class -- newTxnEnv's salaries has both.
-func post2(t *testing.T, e txnEnv, sub ids.SubsidiaryID, debitAcct int64, debitAmt int64, creditAcct, creditAmt int64) ids.TransactionID {
+func post2(t *testing.T, e txnEnv, sub ids.SubsidiaryID, debitAcct ids.AccountID, debitAmt int64, creditAcct ids.AccountID, creditAmt int64) ids.TransactionID {
 	t.Helper()
 	id, err := e.s.PostTransaction(mutCtx(), PostTransactionInput{
 		Date: "2025-03-01", SubsidiaryID: sub, Currency: "USD",

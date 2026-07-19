@@ -61,7 +61,7 @@ type Expected struct {
 
 	// UnmappedRevenueLeaf is the account id deliberately left without an effective
 	// 990 code (Event Income) -- the single Z19 warning + the Unmapped bucket.
-	UnmappedRevenueLeaf int64
+	UnmappedRevenueLeaf ids.AccountID
 
 	// EditedMidAsOf is the RFC3339Nano timestamp of edit 1 to IDs.EditedTxn -- an
 	// as-of read (store.TransactionAsOf) at this instant reconstructs the MIDDLE
@@ -116,9 +116,9 @@ type SampleBudgetPlanExpected struct {
 // balance since the fund opens at 0.
 type CampaignExpected struct {
 	Fund          ids.FundID
-	LandAccount   int64
-	ConstrAccount int64
-	FixedAssets   int64
+	LandAccount   ids.AccountID
+	ConstrAccount ids.AccountID
+	FixedAssets   ids.AccountID
 	From          string // campaign start (first-activity default)
 	To            string // report as-of date
 
@@ -142,7 +142,7 @@ type CampaignExpected struct {
 // two transactions deliberately left uncleared.
 type ReconciliationExpected struct {
 	ID               ids.ReconciliationID
-	Account          int64
+	Account          ids.AccountID
 	Currency         string
 	StatementDate    string
 	StatementBalance int64
@@ -196,7 +196,7 @@ type ConvertedFundBalance struct {
 
 // AccountBalance is one expected (account, currency) balance.
 type AccountBalance struct {
-	Account  int64
+	Account  ids.AccountID
 	Currency string
 	Amount   int64
 }
@@ -211,7 +211,7 @@ type FundBalance struct {
 
 // FunctionalCell is one expected (expense account, class, currency) activity cell.
 type FunctionalCell struct {
-	Account  int64
+	Account  ids.AccountID
 	Class    string
 	Currency string
 	Amount   int64
@@ -220,7 +220,7 @@ type FunctionalCell struct {
 // ProgramCell is one expected (program, account, currency) activity cell.
 type ProgramCell struct {
 	Program  ids.ProgramID
-	Account  int64
+	Account  ids.AccountID
 	Currency string
 	Amount   int64
 }

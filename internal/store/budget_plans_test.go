@@ -21,7 +21,7 @@ import (
 // open_item receivable account, a program, and a fund scoped to the sub.
 type splitSetup struct {
 	sub                          ids.SubsidiaryID
-	expense, revenue, receivable int64
+	expense, revenue, receivable ids.AccountID
 	prog                         ids.ProgramID
 	fund                         ids.FundID
 	plan                         ids.BudgetPlanID

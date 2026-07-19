@@ -82,7 +82,7 @@ var (
 // The recon spans ALL funds -- splitting by fund is deliberately not a parameter
 // (D13/D20). Versioned op='create'. All validation runs inside fn on the tx-bound
 // q so a rejection rolls the change back (no audit trace).
-func (s *Store) StartReconciliation(ctx context.Context, accountID int64, currency, statementDate string, statementBalance int64) (ids.ReconciliationID, error) {
+func (s *Store) StartReconciliation(ctx context.Context, accountID ids.AccountID, currency, statementDate string, statementBalance int64) (ids.ReconciliationID, error) {
 	if !validDate(statementDate) {
 		return 0, ErrBadDate
 	}
@@ -523,7 +523,7 @@ func (s *Store) ReconciliationWorkspaceSplits(ctx context.Context, reconID ids.R
 // ReconcilableAccount is one row of the recon LIST source: an active reconcilable
 // account's id and its default (statement) currency.
 type ReconcilableAccount struct {
-	ID              int64
+	ID              ids.AccountID
 	DefaultCurrency string
 }
 
@@ -545,7 +545,7 @@ func (s *Store) ReconcilableAccounts(ctx context.Context) ([]ReconcilableAccount
 // currencies, open + finalized), newest statement first -- the recon LIST uses this
 // to find the last finalized statement (opening prefill) and any open recon (a
 // "continue" link) per currency.
-func (s *Store) ReconciliationsForAccount(ctx context.Context, accountID int64) ([]sqlc.Reconciliation, error) {
+func (s *Store) ReconciliationsForAccount(ctx context.Context, accountID ids.AccountID) ([]sqlc.Reconciliation, error) {
 	rows, err := s.q.ListReconciliationsForAccount(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("store: reconciliations for account %d: %w", accountID, err)
@@ -617,7 +617,7 @@ type FinalizedReconciliation struct {
 // of completed reconciliations. Each carries the finalized-at timestamp from its
 // version twin (the finalize event's valid_from). An account with none returns an
 // empty slice.
-func (s *Store) FinalizedReconciliationsForAccount(ctx context.Context, accountID int64) ([]FinalizedReconciliation, error) {
+func (s *Store) FinalizedReconciliationsForAccount(ctx context.Context, accountID ids.AccountID) ([]FinalizedReconciliation, error) {
 	rows, err := s.q.FinalizedReconciliationsForAccount(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("store: finalized reconciliations for account %d: %w", accountID, err)

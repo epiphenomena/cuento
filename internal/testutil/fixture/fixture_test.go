@@ -63,7 +63,7 @@ func TestFixtureIntegrity(t *testing.T) {
 
 	// Z19's detail must name the unmapped Event Income account id.
 	found := false
-	want := itoa(f.Expected.UnmappedRevenueLeaf)
+	want := itoa(int64(f.Expected.UnmappedRevenueLeaf))
 	for _, w := range warns {
 		if w.Rule == "Z19" && contains(w.Detail, want) {
 			found = true
@@ -132,12 +132,12 @@ func TestFixtureKnownAggregates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FundBalancesAsOf(root): %v", err)
 	}
-	gotFund := map[key]int64{}
+	gotFund := map[fundkey]int64{}
 	for _, b := range fbals {
-		gotFund[key{int64(b.FundID), b.Currency}] = b.Amount
+		gotFund[fundkey{b.FundID, b.Currency}] = b.Amount
 	}
 	for _, want := range exp.FundBalances {
-		got, ok := gotFund[key{int64(want.Fund), want.Currency}]
+		got, ok := gotFund[fundkey{want.Fund, want.Currency}]
 		if !ok {
 			t.Errorf("fund %d/%s missing from fund balances", want.Fund, want.Currency)
 			continue
@@ -292,19 +292,24 @@ func assert990Rollup(t *testing.T, f *fixture.Fixture) {
 func rootScope(f *fixture.Fixture) ids.SubsidiaryID { return f.IDs.Root }
 
 type key struct {
-	id  int64
+	id  ids.AccountID
+	ccy string
+}
+
+type fundkey struct {
+	id  ids.FundID
 	ccy string
 }
 
 type fkey struct {
-	acct  int64
+	acct  ids.AccountID
 	class string
 	ccy   string
 }
 
 type pkey struct {
 	prog ids.ProgramID
-	acct int64
+	acct ids.AccountID
 	ccy  string
 }
 

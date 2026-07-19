@@ -225,7 +225,7 @@ func (s *server) txnNewForm(w http.ResponseWriter, r *http.Request) {
 		// via the hidden main_* inputs on hx-include). The header account keeps its value even
 		// if it left the new sub (the store re-validates on save; the p26.10 inject shows it).
 		if mh, ok := parseMainHeader(r); ok {
-			model.MainAccount = mh.AccountID
+			model.MainAccount = int64(mh.AccountID)
 			model.MainDescription = mh.Description
 			model.MainMemo = mh.Memo
 			model.MainProgram = mh.ProgramID
@@ -244,7 +244,7 @@ func (s *server) txnNewForm(w http.ResponseWriter, r *http.Request) {
 		// (?from=/accounts/<id>/register) use THAT register's account; from the top nav (no
 		// register origin) use the user's last-used header account (0 = none -> leave blank).
 		// injectMainAccount makes it selectable even if it is now inactive / out-of-sub (p26.10).
-		model.MainAccount = s.prefillHeaderAccount(ctx, u, model.Origin)
+		model.MainAccount = int64(s.prefillHeaderAccount(ctx, u, model.Origin))
 		s.injectMainAccount(ctx, &model)
 	}
 	s.renderEditor(w, r, model)
@@ -255,7 +255,7 @@ func (s *server) txnNewForm(w http.ResponseWriter, r *http.Request) {
 // /accounts/<id>/register), else -- entering from the top nav with no register origin --
 // the user's last-used header account from the store. Returns 0 (leave blank) when
 // neither applies (no origin + no prior transaction, or a lookup miss).
-func (s *server) prefillHeaderAccount(ctx context.Context, u *store.CurrentUser, origin string) int64 {
+func (s *server) prefillHeaderAccount(ctx context.Context, u *store.CurrentUser, origin string) ids.AccountID {
 	id := accountIDFromRegisterPath(origin)
 	if id == 0 && u != nil {
 		if last, err := s.store.LastHeaderAccountForActor(ctx, u.ID); err == nil {
@@ -279,7 +279,7 @@ func (s *server) prefillHeaderAccount(ctx context.Context, u *store.CurrentUser,
 // exact form "/accounts/<id>/register" (the shape the register's new/edit links thread as
 // ?from=, already sanitized by sanitizeOrigin). Returns 0 for any other path (an unrelated
 // origin never prefills a header account).
-func accountIDFromRegisterPath(origin string) int64 {
+func accountIDFromRegisterPath(origin string) ids.AccountID {
 	const prefix = "/accounts/"
 	const suffix = "/register"
 	if !strings.HasPrefix(origin, prefix) || !strings.HasSuffix(origin, suffix) {
@@ -289,7 +289,7 @@ func accountIDFromRegisterPath(origin string) int64 {
 	if mid == "" {
 		return 0
 	}
-	return parseID(mid)
+	return ids.AccountID(parseID(mid))
 }
 
 // echoRowsFromQuery rebuilds the editor rows from the GET query (the subsidiary
@@ -402,7 +402,7 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 		row := txnRowModel{
 			Index:       idx,
 			SplitID:     strconv.FormatInt(int64(sp.ID), 10),
-			Account:     sp.AccountID,
+			Account:     int64(sp.AccountID),
 			Amount:      money.Format(sp.Amount, exp, fmtOpts),
 			Description: sp.Description,
 			Memo:        sp.Memo,
@@ -427,7 +427,7 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 	if model.MainPresent && len(splits) > 0 {
 		// Header = split0; body = split1..n (re-indexed 0-based body rows).
 		m := splits[0]
-		model.MainAccount = m.AccountID
+		model.MainAccount = int64(m.AccountID)
 		model.MainDescription = m.Description
 		model.MainMemo = m.Memo
 		model.MainSplitID = strconv.FormatInt(int64(m.ID), 10)
@@ -592,7 +592,7 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID ids.Tra
 	// submit gets the normal 303 (handler redirect, distinct from the enforcement 302).
 	dest := "/accounts"
 	if len(splits) > 0 {
-		dest = "/accounts/" + strconv.FormatInt(splits[0].AccountID, 10) + "/register"
+		dest = "/accounts/" + strconv.FormatInt(int64(splits[0].AccountID), 10) + "/register"
 	}
 	// p26.50: when the editor was opened FROM a reconciliation workspace (`from`), Save
 	// returns to THAT workspace -- the new/edited split then appears in the uncleared
@@ -682,7 +682,7 @@ func (s *server) attributeRowError(model *txnEditorModel, err error, splits []st
 		errors.Is(err, store.ErrAccountMissing):
 		// The offending row's account is NOT in the offered (leaf+active+in-sub) set.
 		for i, sp := range splits {
-			if !inSub[sp.AccountID] {
+			if !inSub[int64(sp.AccountID)] {
 				return i
 			}
 		}
@@ -693,7 +693,7 @@ func (s *server) attributeRowError(model *txnEditorModel, err error, splits []st
 		// A fund-scope violation belongs to a row that carries a fund. Prefer an R/E
 		// row (the program-scope case) but any funded row is a safe landing.
 		for i, sp := range splits {
-			if sp.FundID != nil && isRERow(acctType[sp.AccountID]) {
+			if sp.FundID != nil && isRERow(acctType[int64(sp.AccountID)]) {
 				return i
 			}
 		}
@@ -706,7 +706,7 @@ func (s *server) attributeRowError(model *txnEditorModel, err error, splits []st
 		errors.Is(err, store.ErrNonExpenseFunction):
 		// Structural: an expense row missing a class, or a non-expense row with one.
 		for i, sp := range splits {
-			isExp := acctType[sp.AccountID] == "expense"
+			isExp := acctType[int64(sp.AccountID)] == "expense"
 			hasClass := sp.FunctionalClass != nil && *sp.FunctionalClass != ""
 			if isExp && !hasClass {
 				return i
@@ -719,7 +719,7 @@ func (s *server) attributeRowError(model *txnEditorModel, err error, splits []st
 		errors.Is(err, store.ErrInactiveProgram),
 		errors.Is(err, store.ErrProgramMissing):
 		for i, sp := range splits {
-			t := acctType[sp.AccountID]
+			t := acctType[int64(sp.AccountID)]
 			if !isRERow(t) && sp.ProgramID != nil {
 				return i // A/L/E row carrying a program
 			}
@@ -851,7 +851,7 @@ func (s *server) parseSplitForms(r *http.Request, exp int, acctType map[int64]st
 		}
 
 		sp := store.SplitInput{
-			AccountID:   acct,
+			AccountID:   ids.AccountID(acct),
 			Amount:      amount,
 			Memo:        memo,
 			Description: desc,
@@ -986,7 +986,7 @@ func autoBalanceMain(main mainHeaderInput, body []store.SplitInput) ([]store.Spl
 			continue // fund already balanced within the body: no main split needed
 		}
 		sp := store.SplitInput{
-			AccountID:   main.AccountID,
+			AccountID:   ids.AccountID(main.AccountID),
 			Amount:      amt,
 			Memo:        main.Memo,
 			Description: main.Description,
@@ -1010,7 +1010,7 @@ func autoBalanceMain(main mainHeaderInput, body []store.SplitInput) ([]store.Spl
 	// (and rejects an unbalanced / accountless / too-few-splits txn rather than silently
 	// dropping the header). amount 0 -> the store's balance check rejects.
 	if len(mains) == 0 {
-		sp := store.SplitInput{AccountID: main.AccountID, Amount: 0, Memo: main.Memo, Description: main.Description}
+		sp := store.SplitInput{AccountID: ids.AccountID(main.AccountID), Amount: 0, Memo: main.Memo, Description: main.Description}
 		if main.ProgramID != 0 {
 			p := ids.ProgramID(main.ProgramID)
 			sp.ProgramID = &p
@@ -1141,7 +1141,7 @@ func toTxnAccountOptions(accts []store.AccountEditorOption) []txnAccountOption {
 	out := make([]txnAccountOption, 0, len(accts))
 	for _, a := range accts {
 		opt := txnAccountOption{
-			ID: a.ID, Name: a.Name, Path: a.Path, Type: a.Type,
+			ID: int64(a.ID), Name: a.Name, Path: a.Path, Type: a.Type,
 			DefaultClass: a.DefaultClass, SubsCSV: idsCSV(a.SubsidiaryIDs),
 			Unavailable: a.Unavailable,
 		}
@@ -1171,14 +1171,14 @@ func (s *server) injectRowAccounts(ctx context.Context, model *txnEditorModel) e
 	for _, a := range model.Accounts {
 		offered[a.ID] = true
 	}
-	var include []int64
+	var include []ids.AccountID
 	seen := make(map[int64]bool)
 	for _, row := range model.Rows {
 		if row.Account == 0 || offered[row.Account] || seen[row.Account] {
 			continue
 		}
 		seen[row.Account] = true
-		include = append(include, row.Account)
+		include = append(include, ids.AccountID(row.Account))
 	}
 	if len(include) == 0 {
 		return nil
@@ -1205,7 +1205,7 @@ func (s *server) injectMainAccount(ctx context.Context, model *txnEditorModel) {
 			return // already offered
 		}
 	}
-	accts, err := s.store.AccountEditorOptionsWith(ctx, langOf(ctx), ids.SubsidiaryID(model.Subsidiary), []int64{model.MainAccount})
+	accts, err := s.store.AccountEditorOptionsWith(ctx, langOf(ctx), ids.SubsidiaryID(model.Subsidiary), []ids.AccountID{ids.AccountID(model.MainAccount)})
 	if err != nil {
 		return
 	}

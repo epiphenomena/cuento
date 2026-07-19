@@ -198,7 +198,7 @@ func (s *Store) ListBudgetPlans(ctx context.Context) ([]sqlc.BudgetPlan, error) 
 type BudgetSplitInput struct {
 	Description string
 	Date        string
-	AccountID   int64
+	AccountID   ids.AccountID
 	FundID      *ids.FundID
 	ProgramID   *ids.ProgramID
 	Amount      int64
@@ -471,7 +471,7 @@ func resolveBudgetSplit(ctx context.Context, q *sqlc.Queries, planID ids.BudgetP
 	}
 
 	// Account is a leaf (D11).
-	leaf, err := q.AccountIsLeaf(ctx, sql.NullInt64{Int64: in.AccountID, Valid: true})
+	leaf, err := q.AccountIsLeaf(ctx, ids.Null(&in.AccountID))
 	if err != nil {
 		return resolvedBudgetSplit{}, fmt.Errorf("budget split leaf check %d: %w", in.AccountID, err)
 	}

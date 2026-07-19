@@ -48,7 +48,7 @@ func (s *Store) SuggestDescriptions(ctx context.Context, q string, sub ids.Subsi
 // formats Amount consistently with how the editor renders split amounts.
 type DescriptionPrefill struct {
 	Found     bool
-	AccountID int64
+	AccountID ids.AccountID
 	Amount    int64         // signed minor units (net-debit sign, D1/D2)
 	FundID    ids.FundID    // 0 == unrestricted
 	ProgramID ids.ProgramID // 0 == none

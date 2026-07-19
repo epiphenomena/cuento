@@ -24,22 +24,22 @@ import (
 // carries this path so the combobox's fuzzy ranking (combofilter.js) sees the same
 // hierarchy at every site. The type-group is layered on separately as an <optgroup>
 // (presentation only), never folded into this string.
-func accountPathFunc(full []TreeRow) func(int64) string {
-	parentOf := make(map[int64]sql.NullInt64, len(full))
-	nameOf := make(map[int64]string, len(full))
+func accountPathFunc(full []TreeRow) func(ids.AccountID) string {
+	parentOf := make(map[ids.AccountID]sql.NullInt64, len(full))
+	nameOf := make(map[ids.AccountID]string, len(full))
 	for _, r := range full {
 		parentOf[r.ID] = r.ParentID
 		nameOf[r.ID] = r.Name
 	}
-	return func(id int64) string {
+	return func(id ids.AccountID) string {
 		var seg []string
 		for n, valid := id, true; valid; {
 			seg = append(seg, nameOf[n])
 			p := parentOf[n]
-			if !p.Valid || p.Int64 == n {
+			if !p.Valid || ids.AccountID(p.Int64) == n {
 				break
 			}
-			n = p.Int64
+			n = ids.AccountID(p.Int64)
 		}
 		for i, j := 0, len(seg)-1; i < j; i, j = i+1, j-1 {
 			seg[i], seg[j] = seg[j], seg[i]
@@ -53,13 +53,13 @@ func accountPathFunc(full []TreeRow) func(int64) string {
 // path onto the non-grid account pickers (merge, account-ledger report filter,
 // account parent, import) that previously showed a flat name, so the shared combobox
 // fuzzy-ranks them exactly like the entry-grid account selects. Read via Tree (rule 2).
-func (s *Store) AccountPaths(ctx context.Context, lang string) (map[int64]string, error) {
+func (s *Store) AccountPaths(ctx context.Context, lang string) (map[ids.AccountID]string, error) {
 	full, err := s.Tree(ctx, lang, nil)
 	if err != nil {
 		return nil, err
 	}
 	pathOf := accountPathFunc(full)
-	out := make(map[int64]string, len(full))
+	out := make(map[ids.AccountID]string, len(full))
 	for _, r := range full {
 		out[r.ID] = pathOf(r.ID)
 	}
@@ -115,7 +115,7 @@ func csvContains(csv, want string) bool {
 // its id and resolved name plus its type (so the template can group/label). Only
 // type-compatible, non-self, non-descendant accounts appear.
 type ParentOption struct {
-	ID   int64
+	ID   ids.AccountID
 	Name string
 	Type string
 	// Path (p28.2) is the account's dotted ancestor chain; the account-form parent
@@ -133,13 +133,13 @@ type ParentOption struct {
 // excludeID <= 0 means "new account, nothing to exclude" (create form): only the
 // type filter applies. The result never includes leaf-vs-placeholder distinctions
 // -- any type-compatible account may be a parent (it simply stops being a leaf).
-func (s *Store) ParentOptions(ctx context.Context, lang, accountType string, excludeID int64) ([]ParentOption, error) {
+func (s *Store) ParentOptions(ctx context.Context, lang, accountType string, excludeID ids.AccountID) ([]ParentOption, error) {
 	rows, err := s.q.AccountTree(ctx, lang)
 	if err != nil {
 		return nil, fmt.Errorf("store: parent options tree: %w", err)
 	}
 
-	excluded := map[int64]bool{}
+	excluded := map[ids.AccountID]bool{}
 	if excludeID > 0 {
 		desc, err := s.q.AccountDescendants(ctx, excludeID)
 		if err != nil {
@@ -153,21 +153,21 @@ func (s *Store) ParentOptions(ctx context.Context, lang, accountType string, exc
 	// Path builder over the FULL tree (p28.2): every candidate parent's option label
 	// carries its dotted ancestor chain so the shared combobox fuzzy-ranks it. Built
 	// from these same (unfiltered) tree rows -- no extra query.
-	parentOf := make(map[int64]sql.NullInt64, len(rows))
-	nameOf := make(map[int64]string, len(rows))
+	parentOf := make(map[ids.AccountID]sql.NullInt64, len(rows))
+	nameOf := make(map[ids.AccountID]string, len(rows))
 	for _, r := range rows {
 		parentOf[r.ID] = r.ParentID
 		nameOf[r.ID] = r.Name
 	}
-	pathOf := func(id int64) string {
+	pathOf := func(id ids.AccountID) string {
 		var seg []string
 		for n, valid := id, true; valid; {
 			seg = append(seg, nameOf[n])
 			p := parentOf[n]
-			if !p.Valid || p.Int64 == n {
+			if !p.Valid || ids.AccountID(p.Int64) == n {
 				break
 			}
-			n = p.Int64
+			n = ids.AccountID(p.Int64)
 		}
 		for i, j := 0, len(seg)-1; i < j; i, j = i+1, j-1 {
 			seg[i], seg[j] = seg[j], seg[i]
@@ -192,7 +192,7 @@ func (s *Store) ParentOptions(ctx context.Context, lang, accountType string, exc
 // so the form's subsidiary checklist can pre-check the account's memberships. It
 // wraps the AccountSubsidiaries query directly (read; no ordering guarantee is
 // needed -- the caller builds a set).
-func (s *Store) AccountSubsidiaryIDs(ctx context.Context, id int64) ([]ids.SubsidiaryID, error) {
+func (s *Store) AccountSubsidiaryIDs(ctx context.Context, id ids.AccountID) ([]ids.SubsidiaryID, error) {
 	subs, err := s.q.AccountSubsidiaries(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("store: account %d subsidiaries: %w", id, err)
@@ -231,7 +231,7 @@ func (s *Store) ListFunds(ctx context.Context) ([]sqlc.Fund, error) {
 // pure re-filter (txngrid.js) can flag rows that go out of scope when the header
 // subsidiary changes (Appendix C: never silent-clear).
 type AccountEditorOption struct {
-	ID   int64
+	ID   ids.AccountID
 	Name string
 	// Path is the account's dotted ancestor chain ending in its own name (e.g.
 	// "Cash.BOA"; a top-level account's Path is just its name). It is joined from
@@ -273,17 +273,17 @@ func (s *Store) AccountEditorOptions(ctx context.Context, lang string, subID ids
 // result is byte-for-byte the normal offered set (the NEW-transaction case is
 // unchanged). All names/paths come from the SAME lang-resolved full tree, so an
 // injected option's label matches a normal one's.
-func (s *Store) AccountEditorOptionsWith(ctx context.Context, lang string, subID ids.SubsidiaryID, include []int64) ([]AccountEditorOption, error) {
+func (s *Store) AccountEditorOptionsWith(ctx context.Context, lang string, subID ids.SubsidiaryID, include []ids.AccountID) ([]AccountEditorOption, error) {
 	// Full tree (unfiltered) -> which ids are placeholders (have children).
 	full, err := s.Tree(ctx, lang, nil)
 	if err != nil {
 		return nil, err
 	}
-	hasChild := make(map[int64]bool, len(full))
-	nameOf := make(map[int64]string, len(full))
+	hasChild := make(map[ids.AccountID]bool, len(full))
+	nameOf := make(map[ids.AccountID]string, len(full))
 	for _, r := range full {
 		if r.ParentID.Valid {
-			hasChild[r.ParentID.Int64] = true
+			hasChild[ids.AccountID(r.ParentID.Int64)] = true
 		}
 		nameOf[r.ID] = r.Name
 	}
@@ -335,7 +335,7 @@ func (s *Store) AccountEditorOptionsWith(ctx context.Context, lang string, subID
 	// render blank (the "missing accounts" bug). Append each such id as an Unavailable
 	// option with its real metadata, so the row can render it SELECTED and marked.
 	if len(include) > 0 {
-		offered := make(map[int64]bool, len(out))
+		offered := make(map[ids.AccountID]bool, len(out))
 		for _, o := range out {
 			offered[o.ID] = true
 		}

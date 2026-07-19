@@ -305,8 +305,8 @@ func (b *psBuilder) section(ccy string, la map[AccountID][]int64, typ, sectionKe
 		}
 		return false
 	}
-	var fold func(id int64) []int64
-	fold = func(id int64) []int64 {
+	var fold func(id AccountID) []int64
+	fold = func(id AccountID) []int64 {
 		sums := make([]int64, n)
 		if !isPlaceholder[id] {
 			if typeOf[id] == typ {
@@ -337,8 +337,8 @@ func (b *psBuilder) section(ccy string, la map[AccountID][]int64, typ, sectionKe
 	b.headerRow(ccy, sectionKey)
 
 	sectionSum := make([]int64, n)
-	var walk func(id int64)
-	walk = func(id int64) {
+	var walk func(id AccountID)
+	walk = func(id AccountID) {
 		if !inSection[AccountID(id)] {
 			return
 		}
@@ -402,7 +402,7 @@ func (b *psBuilder) cellDrill(acct AccountID, ccy string, c progCol, raw int64) 
 	}
 	d := &Drill{
 		Scope:      b.p.Scope,
-		AccountIDs: []int64{int64(acct)},
+		AccountIDs: []AccountID{acct},
 		Currency:   ccy,
 		Mode:       DrillPeriod,
 		From:       b.p.From,

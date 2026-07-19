@@ -32,7 +32,7 @@ type balEnv struct {
 	educ         ids.ProgramID
 	grant        ids.FundID
 
-	checking, fxclear, contrib, salaries int64
+	checking, fxclear, contrib, salaries ids.AccountID
 
 	// checking split ids in post order, for cursor assertions.
 	t1check, t2check, t5check, t3check, t6check ids.SplitID
@@ -124,7 +124,7 @@ func newBalEnv(t *testing.T) balEnv {
 
 // split is a compact split spec for the test builder.
 type split struct {
-	acct   int64
+	acct   ids.AccountID
 	amount int64
 	fund   *ids.FundID
 	prog   *ids.ProgramID
@@ -229,7 +229,7 @@ func wantCell[T ~int64](t *testing.T, m map[string]int64, id T, ccy string, want
 	}
 }
 
-func wantNoCell(t *testing.T, m map[string]int64, id int64, ccy string) {
+func wantNoCell[T ~int64](t *testing.T, m map[string]int64, id T, ccy string) {
 	t.Helper()
 	if got, ok := m[key2(id, ccy)]; ok {
 		t.Errorf("cell %d/%s = %d present, want absent", id, ccy, got)
@@ -457,7 +457,7 @@ func TestProgramActivity(t *testing.T) {
 	// Key by (program, account, currency).
 	type pk struct {
 		prog ids.ProgramID
-		acct int64
+		acct ids.AccountID
 		ccy  string
 	}
 	m := make(map[pk]int64, len(cells))
@@ -757,8 +757,9 @@ func TestRegisterParentRollup(t *testing.T) {
 	// the merged descendant sequence (each row's value unchanged), so the top row shows
 	// the latest combined balance (15000).
 	want := []struct {
-		split                 ids.SplitID
-		amount, running, acct int64
+		split           ids.SplitID
+		amount, running int64
+		acct            ids.AccountID
 	}{
 		{wf2, 3000, 15000, wf},
 		{boa2, -3000, 12000, boa},

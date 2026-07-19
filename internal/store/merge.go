@@ -70,7 +70,7 @@ var (
 // comment above). Validation runs inside fn on the tx-bound q (p08.2's TOCTOU
 // discipline). dst is never written; src's splits are repointed (each versioned
 // op='update') and src is deactivated (op='update').
-func (s *Store) MergeAccount(ctx context.Context, src, dst int64) error {
+func (s *Store) MergeAccount(ctx context.Context, src, dst ids.AccountID) error {
 	if src == dst {
 		return ErrMergeSelf
 	}
@@ -92,7 +92,7 @@ func (s *Store) MergeAccount(ctx context.Context, src, dst int64) error {
 			}
 
 			// src must be a leaf (no children) -- only leaves merge (D11).
-			srcLeaf, err := q.AccountIsLeaf(ctx, sql.NullInt64{Int64: src, Valid: true})
+			srcLeaf, err := q.AccountIsLeaf(ctx, ids.Null(&src))
 			if err != nil {
 				return fmt.Errorf("leaf check source %d: %w", src, err)
 			}
@@ -100,7 +100,7 @@ func (s *Store) MergeAccount(ctx context.Context, src, dst int64) error {
 				return ErrMergeNotLeaf
 			}
 			// dst must be a leaf too -- a placeholder holds no splits (D11).
-			dstLeaf, err := q.AccountIsLeaf(ctx, sql.NullInt64{Int64: dst, Valid: true})
+			dstLeaf, err := q.AccountIsLeaf(ctx, ids.Null(&dst))
 			if err != nil {
 				return fmt.Errorf("leaf check destination %d: %w", dst, err)
 			}

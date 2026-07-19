@@ -32,7 +32,7 @@ type reconWebEnv struct {
 	writer ids.UserID
 	reader ids.UserID
 
-	checking int64
+	checking ids.AccountID
 	spDep    ids.SplitID       // +250 checking split
 	spExp    ids.SplitID       // -400 checking split
 	txnDep   ids.TransactionID // the deposit transaction (owns spDep)
@@ -106,7 +106,7 @@ func newReconWebEnv(t *testing.T) reconWebEnv {
 
 // splitOnAccount returns the id of the split on `account` within `txn` (test helper,
 // direct SQL against the throwaway db).
-func splitOnAccount(t *testing.T, db *sql.DB, txn ids.TransactionID, account int64) ids.SplitID {
+func splitOnAccount(t *testing.T, db *sql.DB, txn ids.TransactionID, account ids.AccountID) ids.SplitID {
 	t.Helper()
 	var id ids.SplitID
 	if err := db.QueryRow(`SELECT id FROM splits WHERE transaction_id = ? AND account_id = ?`, int64(txn), account).Scan(&id); err != nil {
@@ -403,7 +403,7 @@ func TestReconPermsReadCannotAct(t *testing.T) {
 func TestReconStartFormErrorPartial(t *testing.T) {
 	e := newReconWebEnv(t)
 	form := url.Values{}
-	form.Set("account_id", strconv.FormatInt(e.checking, 10))
+	form.Set("account_id", strconv.FormatInt(int64(e.checking), 10))
 	form.Set("currency", "USD")
 	form.Set("statement_date", "2026-02-28")
 	form.Set("balance", "not-a-number")
@@ -635,7 +635,7 @@ func TestReconDiscardReleasesAndRemovesFromList(t *testing.T) {
 		t.Errorf("discarded recon still offered as Continue in the list; body:\n%s", listAfter)
 	}
 	// The account row now shows a START form again (a fresh recon can begin).
-	if !strings.Contains(listAfter, `id="recon-start-form-`+strconv.FormatInt(e.checking, 10)+`"`) {
+	if !strings.Contains(listAfter, `id="recon-start-form-`+strconv.FormatInt(int64(e.checking), 10)+`"`) {
 		t.Errorf("list should show a start form for the account after discard; body:\n%s", listAfter)
 	}
 
@@ -652,7 +652,7 @@ func TestReconDiscardReleasesAndRemovesFromList(t *testing.T) {
 
 	// (c) a fresh recon can be started for the same account+currency via the list POST.
 	start := asUser(t, e.h, e.sm, e.writer, http.MethodPost, "/reconciliations", url.Values{
-		"account_id":     {strconv.FormatInt(e.checking, 10)},
+		"account_id":     {strconv.FormatInt(int64(e.checking), 10)},
 		"currency":       {"USD"},
 		"statement_date": {"2026-04-30"},
 		"balance":        {"0.00"},

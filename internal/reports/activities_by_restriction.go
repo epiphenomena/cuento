@@ -94,9 +94,9 @@ func runActivitiesByRestriction(ctx context.Context, tk *Toolkit, p Params) (Tab
 	for acct, amts := range act {
 		for _, a := range amts {
 			switch {
-			case revSet[int64(acct)]:
+			case revSet[acct]:
 				revenueTotal[a.Currency] += -a.Minor
-			case expSet[int64(acct)]:
+			case expSet[acct]:
 				expenseTotal[a.Currency] += a.Minor
 			}
 		}
@@ -110,9 +110,9 @@ func runActivitiesByRestriction(ctx context.Context, tk *Toolkit, p Params) (Tab
 		return Table{}, err
 	}
 
-	revWith := abrColumn{}      // restricted-fund revenue receipts, POSITIVE, per currency
-	released := abrColumn{}     // restricted-fund applications (expense + non-expense), per ccy
-	capital := map[int64]bool{} // capital-asset accounts a restricted fund applied INTO
+	revWith := abrColumn{}          // restricted-fund revenue receipts, POSITIVE, per currency
+	released := abrColumn{}         // restricted-fund applications (expense + non-expense), per ccy
+	capital := map[AccountID]bool{} // capital-asset accounts a restricted fund applied INTO
 	for _, fund := range restricted {
 		st, err := tk.FundPeriodStatement(ctx, scope, FundID(fund), p.From, p.To)
 		if err != nil {
@@ -123,7 +123,7 @@ func runActivitiesByRestriction(ctx context.Context, tk *Toolkit, p Params) (Tab
 			released[ccy] += st.AppliedExpense[ccy] + st.AppliedNonExpense[ccy]
 		}
 		for id := range st.CapitalAccounts {
-			capital[int64(id)] = true
+			capital[id] = true
 		}
 	}
 	// The released line's application account set = expense accounts + the capital-asset
@@ -252,7 +252,7 @@ func (b *abrBuilder) releasedRow(labelKey, ccy string, released int64, d *Drill)
 // net-debit (negative) revenue figure — the drill lists the actual credit splits, whose
 // signed sum is the negated positive figure the cell shows (the p15.8 received-drill
 // convention).
-func (b *abrBuilder) revenueWithDrill(ccy string, revenueIDs []int64, funds []FundID) *Drill {
+func (b *abrBuilder) revenueWithDrill(ccy string, revenueIDs []AccountID, funds []FundID) *Drill {
 	if len(funds) == 0 || len(revenueIDs) == 0 {
 		return nil
 	}
@@ -267,7 +267,7 @@ func (b *abrBuilder) revenueWithDrill(ccy string, revenueIDs []int64, funds []Fu
 // fund splits on the same accounts (unrestricted expenses, the unrestricted Building
 // opening) are filtered out by the fund set, so the drilled sum equals the derived
 // released figure exactly.
-func (b *abrBuilder) releasedDrill(ccy string, appIDs []int64, funds []FundID) *Drill {
+func (b *abrBuilder) releasedDrill(ccy string, appIDs []AccountID, funds []FundID) *Drill {
 	if len(funds) == 0 || len(appIDs) == 0 {
 		return nil
 	}
@@ -305,7 +305,7 @@ func (tk *Toolkit) restrictedFundIDs(ctx context.Context) ([]FundID, error) {
 // targets (revenue for the With-revenue drill, expense for the released + expense drills).
 // (Drill filters by a concrete account set; a placeholder carries no splits, so including
 // it is harmless.)
-func revenueAndExpenseIDs(tree []store.TreeRow) (revenue, expense []int64) {
+func revenueAndExpenseIDs(tree []store.TreeRow) (revenue, expense []AccountID) {
 	for _, r := range tree {
 		switch r.Type {
 		case "revenue":
@@ -320,8 +320,8 @@ func revenueAndExpenseIDs(tree []store.TreeRow) (revenue, expense []int64) {
 }
 
 // setToSorted returns the sorted ids of a set.
-func setToSorted(m map[int64]bool) []int64 {
-	out := make([]int64, 0, len(m))
+func setToSorted(m map[AccountID]bool) []AccountID {
+	out := make([]AccountID, 0, len(m))
 	for id := range m {
 		out = append(out, id)
 	}
@@ -330,8 +330,8 @@ func setToSorted(m map[int64]bool) []int64 {
 }
 
 // idSet builds a membership set from an id slice.
-func idSet(ids []int64) map[int64]bool {
-	m := make(map[int64]bool, len(ids))
+func idSet(ids []AccountID) map[AccountID]bool {
+	m := make(map[AccountID]bool, len(ids))
 	for _, id := range ids {
 		m[id] = true
 	}
@@ -348,14 +348,14 @@ func drillFunds(fids []FundID) []FundID {
 
 // appendSorted merges two sorted id slices into one sorted, de-duplicated slice (the
 // released drill's account set = expense ∪ asset accounts).
-func appendSorted(a, b []int64) []int64 {
-	out := make([]int64, 0, len(a)+len(b))
+func appendSorted(a, b []AccountID) []AccountID {
+	out := make([]AccountID, 0, len(a)+len(b))
 	out = append(out, a...)
 	out = append(out, b...)
 	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
 	// De-dup (the two type sets are disjoint, but keep it robust).
 	dedup := out[:0]
-	var prev int64 = -1
+	var prev AccountID = -1
 	for i, v := range out {
 		if i == 0 || v != prev {
 			dedup = append(dedup, v)

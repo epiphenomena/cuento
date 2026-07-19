@@ -11,7 +11,7 @@ import (
 )
 
 type Account struct {
-	ID               int64
+	ID               ids.AccountID
 	ParentID         sql.NullInt64
 	Type             string
 	DefaultCurrency  string
@@ -29,14 +29,14 @@ type Account struct {
 }
 
 type AccountName struct {
-	AccountID int64
+	AccountID ids.AccountID
 	Lang      string
 	Name      string
 }
 
 type AccountNamesVersion struct {
 	ID        int64
-	EntityID  int64
+	EntityID  ids.AccountID
 	ChangeID  ids.ChangeID
 	ValidFrom string
 	Op        string
@@ -46,7 +46,7 @@ type AccountNamesVersion struct {
 
 type AccountSubsidiariesVersion struct {
 	ID           int64
-	EntityID     int64
+	EntityID     ids.AccountID
 	ChangeID     ids.ChangeID
 	ValidFrom    string
 	Op           string
@@ -54,13 +54,13 @@ type AccountSubsidiariesVersion struct {
 }
 
 type AccountSubsidiary struct {
-	AccountID    int64
+	AccountID    ids.AccountID
 	SubsidiaryID ids.SubsidiaryID
 }
 
 type AccountsVersion struct {
 	ID               int64
-	EntityID         int64
+	EntityID         ids.AccountID
 	ChangeID         ids.ChangeID
 	ValidFrom        string
 	Op               string
@@ -108,7 +108,7 @@ type BudgetSplit struct {
 	PlanID      ids.BudgetPlanID
 	Description string
 	Date        string
-	AccountID   int64
+	AccountID   ids.AccountID
 	FundID      sql.NullInt64
 	ProgramID   sql.NullInt64
 	Amount      int64
@@ -124,7 +124,7 @@ type BudgetSplitsVersion struct {
 	PlanID      ids.BudgetPlanID
 	Description string
 	Date        string
-	AccountID   int64
+	AccountID   ids.AccountID
 	FundID      sql.NullInt64
 	ProgramID   sql.NullInt64
 	Amount      int64
@@ -169,7 +169,7 @@ type ExpenseReport struct {
 type ExpenseReportLine struct {
 	ID          ids.ExpenseReportLineID
 	ReportID    ids.ExpenseReportID
-	AccountID   int64
+	AccountID   ids.AccountID
 	Amount      int64
 	FundID      sql.NullInt64
 	ProgramID   sql.NullInt64
@@ -184,7 +184,7 @@ type ExpenseReportLinesVersion struct {
 	ValidFrom   string
 	Op          string
 	ReportID    ids.ExpenseReportID
-	AccountID   int64
+	AccountID   ids.AccountID
 	Amount      int64
 	FundID      sql.NullInt64
 	ProgramID   sql.NullInt64
@@ -262,7 +262,7 @@ type FundsVersion struct {
 type ImportBatch struct {
 	ID           ids.ImportBatchID
 	Filename     string
-	AccountID    int64
+	AccountID    ids.AccountID
 	SubsidiaryID ids.SubsidiaryID
 	ProfileID    ids.MappingProfileID
 	UploadedBy   ids.UserID
@@ -272,7 +272,7 @@ type ImportBatch struct {
 type ImportRow struct {
 	ID                  ids.ImportRowID
 	BatchID             ids.ImportBatchID
-	AccountID           int64
+	AccountID           ids.AccountID
 	RawJson             string
 	ParsedDate          sql.NullString
 	ParsedAmount        sql.NullInt64
@@ -316,7 +316,7 @@ type ProgramsVersion struct {
 
 type Reconciliation struct {
 	ID               ids.ReconciliationID
-	AccountID        int64
+	AccountID        ids.AccountID
 	StatementDate    string
 	StatementBalance int64
 	Currency         string
@@ -330,7 +330,7 @@ type ReconciliationsVersion struct {
 	ChangeID         ids.ChangeID
 	ValidFrom        string
 	Op               string
-	AccountID        int64
+	AccountID        ids.AccountID
 	StatementDate    string
 	StatementBalance int64
 	Currency         string
@@ -352,7 +352,7 @@ type Session struct {
 type Split struct {
 	ID               ids.SplitID
 	TransactionID    ids.TransactionID
-	AccountID        int64
+	AccountID        ids.AccountID
 	Amount           int64
 	FundID           sql.NullInt64
 	ProgramID        sql.NullInt64
@@ -370,7 +370,7 @@ type SplitsVersion struct {
 	ValidFrom       string
 	Op              string
 	TransactionID   ids.TransactionID
-	AccountID       int64
+	AccountID       ids.AccountID
 	Amount          int64
 	FundID          sql.NullInt64
 	ProgramID       sql.NullInt64

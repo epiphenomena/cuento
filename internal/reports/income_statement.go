@@ -252,12 +252,12 @@ func (b *isBuilder) columns() {
 func (b *isBuilder) section(tree []treeNode, typ, sectionKey, totalKey string, sign int64) []int64 {
 	children, roots, isPlaceholder, name, depth, typeOf := indexTree(tree)
 
-	inSection := make(map[int64]bool)
-	colSum := make(map[int64][]int64) // [col] converted sum; col len(periods) = Total
+	inSection := make(map[AccountID]bool)
+	colSum := make(map[AccountID][]int64) // [col] converted sum; col len(periods) = Total
 	ncols := len(b.periods) + 1
 
-	var fold func(id int64) []int64
-	fold = func(id int64) []int64 {
+	var fold func(id AccountID) []int64
+	fold = func(id AccountID) []int64 {
 		sums := make([]int64, ncols)
 		if !isPlaceholder[id] {
 			_, hasActivity := b.total[AccountID(id)]
@@ -293,8 +293,8 @@ func (b *isBuilder) section(tree []treeNode, typ, sectionKey, totalKey string, s
 	b.sectionHeader(sectionKey)
 
 	sectionSum := make([]int64, ncols)
-	var walk func(id int64)
-	walk = func(id int64) {
+	var walk func(id AccountID)
+	walk = func(id AccountID) {
 		if !inSection[id] {
 			return
 		}
@@ -365,7 +365,7 @@ func (b *isBuilder) leafDrill(id AccountID, pr period) *Drill {
 	}
 	return &Drill{
 		Scope:      b.p.Scope,
-		AccountIDs: []int64{int64(id)},
+		AccountIDs: []AccountID{id},
 		Currency:   ccy,
 		Mode:       DrillPeriod,
 		From:       pr.from,
@@ -432,8 +432,8 @@ func (b *isBuilder) table() Table {
 // treeNode mirrors the fields income_statement reads from store.TreeRow, so this file
 // doesn't name the generated sqlc type. Built via toTreeNodes.
 type treeNode struct {
-	ID       int64
-	ParentID int64
+	ID       AccountID
+	ParentID AccountID
 	HasPar   bool
 	Type     string
 	Name     string
@@ -457,14 +457,14 @@ func LabelableName(name string) Cell { return TextCell(name) }
 // indexTree reduces a store account tree to the maps the section walk needs: children
 // (ordered), roots, placeholder set, name, depth, and type -- keyed by account id.
 func indexTree(tree []treeNode) (
-	children map[int64][]int64, roots []int64, isPlaceholder map[int64]bool,
-	name map[int64]string, depth map[int64]int, typeOf map[int64]string,
+	children map[AccountID][]AccountID, roots []AccountID, isPlaceholder map[AccountID]bool,
+	name map[AccountID]string, depth map[AccountID]int, typeOf map[AccountID]string,
 ) {
-	children = make(map[int64][]int64)
-	isPlaceholder = make(map[int64]bool)
-	name = make(map[int64]string)
-	typeOf = make(map[int64]string)
-	parentOf := make(map[int64]int64)
+	children = make(map[AccountID][]AccountID)
+	isPlaceholder = make(map[AccountID]bool)
+	name = make(map[AccountID]string)
+	typeOf = make(map[AccountID]string)
+	parentOf := make(map[AccountID]AccountID)
 	for _, r := range tree {
 		name[r.ID] = r.Name
 		typeOf[r.ID] = r.Type
@@ -478,7 +478,7 @@ func indexTree(tree []treeNode) (
 	for p := range children {
 		isPlaceholder[p] = true
 	}
-	depth = make(map[int64]int)
+	depth = make(map[AccountID]int)
 	for _, r := range tree {
 		d := 0
 		for n := r.ID; ; {
@@ -507,7 +507,7 @@ func toTreeNodes(rows []store.TreeRow) []treeNode {
 			HasPar: r.ParentID.Valid,
 		}
 		if r.ParentID.Valid {
-			out[i].ParentID = r.ParentID.Int64
+			out[i].ParentID = AccountID(r.ParentID.Int64)
 		}
 	}
 	return out

@@ -192,7 +192,7 @@ func (s *Store) DiscardExpenseReport(ctx context.Context, reportID ids.ExpenseRe
 // SIGNED minor-unit amount (the report need not balance), and optional fund/program
 // (nil = the reviewer resolves at convert) + a free-text memo.
 type ExpenseReportLineInput struct {
-	AccountID   int64
+	AccountID   ids.AccountID
 	Amount      int64
 	FundID      *ids.FundID
 	ProgramID   *ids.ProgramID

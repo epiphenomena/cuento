@@ -1737,10 +1737,10 @@ func TestCorrectionPostsBalancedAdjustment(t *testing.T) {
 	for _, l := range legs {
 		byAcct[l.acct] = l
 	}
-	if l, ok := byAcct[res.AccountIDs["Checking"]]; !ok || l.amount != 400000 {
+	if l, ok := byAcct[int64(res.AccountIDs["Checking"])]; !ok || l.amount != 400000 {
 		t.Errorf("Checking leg = %+v, want amount 400000", l)
 	}
-	if l, ok := byAcct[res.AccountIDs["Grant Revenue"]]; !ok || l.amount != -400000 {
+	if l, ok := byAcct[int64(res.AccountIDs["Grant Revenue"])]; !ok || l.amount != -400000 {
 		t.Errorf("Grant Revenue leg = %+v, want amount -400000", l)
 	} else if !l.prog.Valid || l.prog.Int64 != int64(res.ProgramIDs["Education"]) {
 		t.Errorf("Grant Revenue leg program = %v, want Education %d", l.prog, res.ProgramIDs["Education"])

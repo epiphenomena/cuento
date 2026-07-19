@@ -180,7 +180,7 @@ func (tk *Toolkit) periodActivityRows(ctx context.Context, from, to string, sub 
 	// granted subtree's programs; a sibling subtree's split is dropped BEFORE the sum,
 	// so it contributes to no cell (including a rolled account total downstream).
 	type key struct {
-		acct int64
+		acct AccountID
 		ccy  string
 	}
 	sum := make(map[key]int64, len(rows))
@@ -515,7 +515,7 @@ func (tk *Toolkit) functionalActivityRows(ctx context.Context, from, to string, 
 		return nil, err
 	}
 	type key struct {
-		acct  int64
+		acct  AccountID
 		class string
 		ccy   string
 	}
@@ -712,7 +712,7 @@ func (tk *Toolkit) Group990(ctx context.Context, part, currency string, leaf map
 	}
 	byCode := make(map[string]int64)
 	for acct, minor := range leaf {
-		byCode[eff[int64(acct)]] += minor // absent -> "" (Unmapped)
+		byCode[eff[acct]] += minor // absent -> "" (Unmapped)
 	}
 	// Order codes by the part's line sort order (form990_lines sort,code). Codes
 	// outside the part still render under their own code (sorted after known lines)

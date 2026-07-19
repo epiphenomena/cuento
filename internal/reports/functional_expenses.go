@@ -278,7 +278,7 @@ func (b *feBuilder) cellDrill(acct AccountID, cl Class, native []CurAmt) *Drill 
 	class := string(cl)
 	return &Drill{
 		Scope:      b.p.Scope,
-		AccountIDs: []int64{int64(acct)},
+		AccountIDs: []AccountID{acct},
 		Currency:   native[0].Currency,
 		Class:      &class,
 		Mode:       DrillPeriod,

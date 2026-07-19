@@ -88,7 +88,7 @@ var (
 // = a new split to insert).
 type SplitInput struct {
 	ID              *ids.SplitID
-	AccountID       int64
+	AccountID       ids.AccountID
 	Amount          int64
 	FundID          *ids.FundID
 	ProgramID       *ids.ProgramID
@@ -113,7 +113,7 @@ type PostTransactionInput struct {
 // (not raw input) so an omitted-but-already-defaulted field counts as unchanged.
 type resolvedSplit struct {
 	id              *ids.SplitID // existing split id, if any (update diff)
-	accountID       int64
+	accountID       ids.AccountID
 	amount          int64
 	fundID          sql.NullInt64
 	programID       sql.NullInt64
@@ -205,7 +205,7 @@ func (s *Store) UpdateTransaction(ctx context.Context, id ids.TransactionID, in 
 				return fmt.Errorf("load splits of %d: %w", id, err)
 			}
 			liveByID := make(map[ids.SplitID]sqlc.Split, len(live))
-			liveAccountByID := make(map[ids.SplitID]int64, len(live))
+			liveAccountByID := make(map[ids.SplitID]ids.AccountID, len(live))
 			for _, sp := range live {
 				liveByID[sp.ID] = sp
 				liveAccountByID[sp.ID] = sp.AccountID
@@ -434,7 +434,7 @@ type AccountSplitRef struct {
 // in `currency` and not soft-deleted, ordered by split id (deterministic). Read-only;
 // sqlc. It lets a caller enumerate an account's clearable splits without hand-written
 // SQL (rule 2): the demo reconciliation seam uses it to pick the splits to clear.
-func (s *Store) SplitsByAccountCurrency(ctx context.Context, accountID int64, currency string) ([]AccountSplitRef, error) {
+func (s *Store) SplitsByAccountCurrency(ctx context.Context, accountID ids.AccountID, currency string) ([]AccountSplitRef, error) {
 	rows, err := s.q.SplitsByAccountCurrency(ctx, sqlc.SplitsByAccountCurrencyParams{
 		AccountID: accountID,
 		Currency:  currency,
@@ -489,7 +489,7 @@ type TransactionState struct {
 // SplitState is one split as of a time.
 type SplitState struct {
 	ID              ids.SplitID
-	AccountID       int64
+	AccountID       ids.AccountID
 	Amount          int64
 	FundID          sql.NullInt64
 	ProgramID       sql.NullInt64
@@ -570,7 +570,7 @@ func (s *Store) TransactionAsOf(ctx context.Context, id ids.TransactionID, at ti
 // every other split still requires an active account. A map-miss (bogus/absent id)
 // -> false: the active-account check applies, and the missing id is caught later as
 // ErrSplitNotFound.
-func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in PostTransactionInput, liveAccountByID map[ids.SplitID]int64) ([]resolvedSplit, error) {
+func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in PostTransactionInput, liveAccountByID map[ids.SplitID]ids.AccountID) ([]resolvedSplit, error) {
 	if len(in.Splits) < 2 {
 		return nil, ErrTooFewSplits
 	}
@@ -680,7 +680,7 @@ func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID ids.Sub
 	}
 
 	// Account is a leaf (D11) -- clean typed error before the trigger fires.
-	leaf, err := q.AccountIsLeaf(ctx, sql.NullInt64{Int64: in.AccountID, Valid: true})
+	leaf, err := q.AccountIsLeaf(ctx, ids.Null(&in.AccountID))
 	if err != nil {
 		return resolvedSplit{}, fmt.Errorf("leaf check %d: %w", in.AccountID, err)
 	}
@@ -804,7 +804,7 @@ func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID ids.Sub
 
 // accountSplitInSubsidiary reports whether a non-deleted split on accountID lives
 // in a transaction of subsidiary S (completes SetAccountSubsidiaries' p08 guard).
-func accountSplitInSubsidiary(ctx context.Context, q *sqlc.Queries, accountID int64, subID ids.SubsidiaryID) (bool, error) {
+func accountSplitInSubsidiary(ctx context.Context, q *sqlc.Queries, accountID ids.AccountID, subID ids.SubsidiaryID) (bool, error) {
 	inUse, err := q.SplitUsesAccountInSubsidiary(ctx, sqlc.SplitUsesAccountInSubsidiaryParams{AccountID: accountID, SubsidiaryID: subID})
 	if err != nil {
 		return false, fmt.Errorf("split-use of account %d in sub %d: %w", accountID, subID, err)

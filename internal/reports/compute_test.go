@@ -62,7 +62,7 @@ func TestBalancesAsOfRootVsLeafScope(t *testing.T) {
 		t.Fatalf("BalancesAsOf leaf: %v", err)
 	}
 	// MX-only accounts: identical native balance at leaf scope (scope-invariant).
-	mxOnly := map[int64]struct {
+	mxOnly := map[ids.AccountID]struct {
 		ccy    string
 		amount int64
 	}{
@@ -78,7 +78,7 @@ func TestBalancesAsOfRootVsLeafScope(t *testing.T) {
 	}
 	// US-only accounts must be ABSENT from the MX-leaf scope (descendant closure of
 	// MX does not include US).
-	for _, usOnly := range []int64{f.IDs.CheckingUS, f.IDs.Building, f.IDs.DueFromMX, f.IDs.CreditCard} {
+	for _, usOnly := range []ids.AccountID{f.IDs.CheckingUS, f.IDs.Building, f.IDs.DueFromMX, f.IDs.CreditCard} {
 		if _, ok := leaf[reports.AccountID(usOnly)]; ok {
 			t.Errorf("leaf(MX) unexpectedly contains US-only account %d", usOnly)
 		}
@@ -267,7 +267,7 @@ func TestProgramActivity(t *testing.T) {
 	}
 	// General (root) rollup: hand-computed folded totals for the discriminating cells.
 	type gc struct {
-		acct int64
+		acct ids.AccountID
 		ccy  string
 		want int64
 	}

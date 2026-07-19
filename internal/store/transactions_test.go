@@ -26,12 +26,12 @@ type txnEnv struct {
 	d     *sql.DB
 	subUS ids.SubsidiaryID
 
-	checking int64 // asset, US
-	credit   int64 // liability, US
-	salaries int64 // expense, default class=management, default program=root
-	supplies int64 // expense, NO default class, default program=root
-	contrib  int64 // revenue, default program=root
-	equity   int64 // equity, US
+	checking ids.AccountID // asset, US
+	credit   ids.AccountID // liability, US
+	salaries ids.AccountID // expense, default class=management, default program=root
+	supplies ids.AccountID // expense, NO default class, default program=root
+	contrib  ids.AccountID // revenue, default program=root
+	equity   ids.AccountID // equity, US
 
 	educ ids.ProgramID // program under root
 }
@@ -65,7 +65,7 @@ var rootProgramMarker ids.ProgramID = rootProgramID
 
 // mkAcct creates a leaf account of the given type mapped to subs, optionally with a
 // default functional class and default program, and returns its id.
-func mkAcct(t *testing.T, s *Store, typ, name string, subs []ids.SubsidiaryID, fClass *string, defProg *ids.ProgramID) int64 {
+func mkAcct(t *testing.T, s *Store, typ, name string, subs []ids.SubsidiaryID, fClass *string, defProg *ids.ProgramID) ids.AccountID {
 	t.Helper()
 	in := CreateAccountInput{
 		Type: typ, DefaultCurrency: "USD", Names: enName(name), Subsidiaries: subs,
@@ -1190,7 +1190,7 @@ func mkFund(t *testing.T, s *Store, name string, subs []ids.SubsidiaryID, prog *
 }
 
 // mkAcctDefProg creates a leaf account with a default program (no functional class).
-func mkAcctDefProg(t *testing.T, s *Store, typ, name string, subs []ids.SubsidiaryID, defProg ids.ProgramID) int64 {
+func mkAcctDefProg(t *testing.T, s *Store, typ, name string, subs []ids.SubsidiaryID, defProg ids.ProgramID) ids.AccountID {
 	t.Helper()
 	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: typ, DefaultCurrency: "USD", Names: enName(name), Subsidiaries: subs,
@@ -1272,7 +1272,7 @@ func TestAccountMissingRejectedEveryPath(t *testing.T) {
 
 // mkAcctFull creates a leaf expense account with an explicit default functional
 // class and default program.
-func mkAcctFull(t *testing.T, s *Store, typ, name string, subs []ids.SubsidiaryID, fClass string, defProg ids.ProgramID) int64 {
+func mkAcctFull(t *testing.T, s *Store, typ, name string, subs []ids.SubsidiaryID, fClass string, defProg ids.ProgramID) ids.AccountID {
 	t.Helper()
 	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: typ, DefaultCurrency: "USD", Names: enName(name), Subsidiaries: subs,

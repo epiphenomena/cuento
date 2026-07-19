@@ -69,7 +69,7 @@ type regRow struct {
 func registerRows(
 	ctx context.Context,
 	st *store.Store,
-	accountID int64,
+	accountID ids.AccountID,
 	cursor store.RegisterCursor,
 	filters store.RegisterFilters,
 	limit int,
@@ -107,7 +107,7 @@ func registerRows(
 	// this degrades to the previous per-txn behavior.
 	type counterKey struct {
 		txnID ids.TransactionID
-		acct  int64
+		acct  ids.AccountID
 	}
 	counters := make(map[counterKey]counterAccount, len(page))
 
@@ -170,7 +170,7 @@ type counterAccount struct {
 // whose non-self splits happen to share one account (common under D20 mixed-fund
 // splitting) still reads as "Split". A 1-split txn cannot exist (the store rejects
 // it).
-func resolveCounterAccount(ctx context.Context, st *store.Store, txnID ids.TransactionID, selfAccount int64, names map[int64]string) (counterAccount, error) {
+func resolveCounterAccount(ctx context.Context, st *store.Store, txnID ids.TransactionID, selfAccount ids.AccountID, names map[ids.AccountID]string) (counterAccount, error) {
 	splits, err := st.TransactionSplits(ctx, txnID)
 	if err != nil {
 		return counterAccount{}, err
@@ -188,12 +188,12 @@ func resolveCounterAccount(ctx context.Context, st *store.Store, txnID ids.Trans
 // accountNameMap returns id->resolved-name for every account (name fallback for
 // lang, p05.3), the counter-account and (unused here) label lookups the register
 // needs. Built from AccountTree so the same fallback the tree uses applies.
-func accountNameMap(ctx context.Context, st *store.Store, lang string) (map[int64]string, error) {
+func accountNameMap(ctx context.Context, st *store.Store, lang string) (map[ids.AccountID]string, error) {
 	rows, err := st.Tree(ctx, lang, nil)
 	if err != nil {
 		return nil, err
 	}
-	m := make(map[int64]string, len(rows))
+	m := make(map[ids.AccountID]string, len(rows))
 	for _, r := range rows {
 		m[r.ID] = r.Name
 	}
@@ -236,7 +236,7 @@ func dateFormatForLang(ctx context.Context) money.DateFormat {
 // accountShowsSubBadge reports whether an account maps to MORE THAN ONE subsidiary,
 // which is the gate for rendering the per-row subsidiary badge (D18): a single-sub
 // account has no ambiguity, so the badge is noise.
-func accountShowsSubBadge(ctx context.Context, st *store.Store, accountID int64) (bool, error) {
+func accountShowsSubBadge(ctx context.Context, st *store.Store, accountID ids.AccountID) (bool, error) {
 	ids, err := st.AccountSubsidiaryIDs(ctx, accountID)
 	if err != nil {
 		return false, err
@@ -300,7 +300,7 @@ func (s *server) registerPage(w http.ResponseWriter, r *http.Request) {
 	u := currentUser(ctx)
 	lang := langOf(ctx)
 
-	id := parseID(r.PathValue("id"))
+	id := ids.AccountID(parseID(r.PathValue("id")))
 	acct, err := s.store.GetAccount(ctx, id)
 	if err != nil {
 		http.NotFound(w, r)
@@ -333,7 +333,7 @@ func (s *server) registerPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	model := registerPageModel{
-		AccountID:    id,
+		AccountID:    int64(id),
 		AccountName:  s.accountName(ctx, id, lang),
 		ShowSubBadge: badge,
 		Reconcilable: acct.Reconcilable != 0,

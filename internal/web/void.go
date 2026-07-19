@@ -198,7 +198,7 @@ func (s *server) txnDuplicate(w http.ResponseWriter, r *http.Request) {
 		row := txnRowModel{
 			Index:   i,
 			SplitID: "",
-			Account: sp.AccountID,
+			Account: int64(sp.AccountID),
 			Amount:  money.Format(sp.Amount, exp, fmtOpts),
 			Memo:    sp.Memo,
 		}

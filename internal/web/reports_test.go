@@ -46,7 +46,7 @@ func reportsApp(t *testing.T) (http.Handler, *store.Store, *sql.DB, *scs.Session
 	// Seed a couple of accounts + a balanced posted transaction so the smoke report
 	// (SubtreeBalancesAsOf at root scope) returns non-empty typed cells.
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
-	mkAcct := func(name string) int64 {
+	mkAcct := func(name string) ids.AccountID {
 		id, err := st.CreateAccount(ctx, store.CreateAccountInput{
 			Type: "asset", DefaultCurrency: "USD",
 			Names: map[string]string{"en": name}, Subsidiaries: []ids.SubsidiaryID{1},
@@ -830,7 +830,7 @@ func TestAccountLedgerReportRenders(t *testing.T) {
 
 	// Run the ledger for Cash over a range covering the seeded 2025-06-01 +250.00 posting.
 	url := "/reports/" + reports.AccountLedgerReportID +
-		"?account=" + itoa(cash) + "&from=2025-06-01&to=2025-06-30"
+		"?account=" + itoa(int64(cash)) + "&from=2025-06-01&to=2025-06-30"
 	rec = asUser(t, h, sm, admin, http.MethodGet, url, nil)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("account ledger (Cash) status = %d, want 200", rec.Code)

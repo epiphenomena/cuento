@@ -44,7 +44,7 @@ WHERE r.id = ?
 type GetImportRowRow struct {
 	ID                  ids.ImportRowID
 	BatchID             ids.ImportBatchID
-	AccountID           int64
+	AccountID           ids.AccountID
 	RawJson             string
 	ParsedDate          sql.NullString
 	ParsedAmount        sql.NullInt64
@@ -142,7 +142,7 @@ RETURNING id
 
 type InsertImportBatchParams struct {
 	Filename     string
-	AccountID    int64
+	AccountID    ids.AccountID
 	SubsidiaryID ids.SubsidiaryID
 	ProfileID    ids.MappingProfileID
 	UploadedBy   ids.UserID
@@ -175,7 +175,7 @@ RETURNING id
 
 type InsertImportRowParams struct {
 	BatchID      ids.ImportBatchID
-	AccountID    int64
+	AccountID    ids.AccountID
 	RawJson      string
 	ParsedDate   sql.NullString
 	ParsedAmount sql.NullInt64
@@ -265,7 +265,7 @@ type LedgerSplitDedupeKeysRow struct {
 // memo as the fallback when the split memo is empty (documented in the store);
 // description is the split's per-line free text (p26.20 -- it replaces the retired
 // payee name; the bank-import write path sets it on the bank-account split).
-func (q *Queries) LedgerSplitDedupeKeys(ctx context.Context, accountID int64) ([]LedgerSplitDedupeKeysRow, error) {
+func (q *Queries) LedgerSplitDedupeKeys(ctx context.Context, accountID ids.AccountID) ([]LedgerSplitDedupeKeysRow, error) {
 	rows, err := q.db.QueryContext(ctx, ledgerSplitDedupeKeys, accountID)
 	if err != nil {
 		return nil, err
@@ -381,7 +381,7 @@ WHERE account_id = ? AND status IN ('pending','posted')
 // (pending) or posted on this account -- across ALL batches (a re-upload is a new
 // batch), which is what makes cross-batch duplicate flagging work. Discarded rows
 // are excluded (a discarded row is not a live duplicate to re-flag against).
-func (q *Queries) PendingOrPostedDedupeHashes(ctx context.Context, accountID int64) ([]string, error) {
+func (q *Queries) PendingOrPostedDedupeHashes(ctx context.Context, accountID ids.AccountID) ([]string, error) {
 	rows, err := q.db.QueryContext(ctx, pendingOrPostedDedupeHashes, accountID)
 	if err != nil {
 		return nil, err

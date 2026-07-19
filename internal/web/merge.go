@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -89,10 +90,10 @@ func (s *server) buildMergeForm(r *http.Request) (mergeForm, error) {
 		return mergeForm{}, err
 	}
 	// A leaf is an account with no children among the tree rows.
-	hasChild := map[int64]bool{}
+	hasChild := map[ids.AccountID]bool{}
 	for _, row := range rows {
 		if row.ParentID.Valid {
-			hasChild[row.ParentID.Int64] = true
+			hasChild[ids.AccountID(row.ParentID.Int64)] = true
 		}
 	}
 	paths, err := s.store.AccountPaths(ctx, langOf(ctx))
@@ -104,7 +105,7 @@ func (s *server) buildMergeForm(r *http.Request) (mergeForm, error) {
 		if row.Active == 0 || hasChild[row.ID] {
 			continue // only active leaves merge (src and dst are both leaves)
 		}
-		form.Leaves = append(form.Leaves, leafOption{ID: row.ID, Name: row.Name, Type: row.Type, Path: paths[row.ID]})
+		form.Leaves = append(form.Leaves, leafOption{ID: int64(row.ID), Name: row.Name, Type: row.Type, Path: paths[row.ID]})
 	}
 	form.Src = parseID(r.FormValue("src"))
 	form.Dst = parseID(r.FormValue("dst"))
@@ -120,8 +121,8 @@ func (s *server) merge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	src := parseID(r.PostFormValue("src"))
-	dst := parseID(r.PostFormValue("dst"))
+	src := ids.AccountID(parseID(r.PostFormValue("src")))
+	dst := ids.AccountID(parseID(r.PostFormValue("dst")))
 	confirmed := r.PostFormValue("confirm") != ""
 
 	// A missing selection is a client-side field error, not a store call.
@@ -151,8 +152,8 @@ func (s *server) merge(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		preview := mergePreview{
-			Src:             src,
-			Dst:             dst,
+			Src:             int64(src),
+			Dst:             int64(dst),
 			SrcName:         s.accountName(ctx, src, langOf(ctx)),
 			DstName:         s.accountName(ctx, dst, langOf(ctx)),
 			SplitCount:      len(ids),

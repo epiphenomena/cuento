@@ -192,7 +192,7 @@ func (s *server) prefillImportRows(ctx context.Context, u *store.CurrentUser, mo
 	// line's descriptive text as the split description (dedupe-hash source).
 	bank := txnRowModel{
 		Index:       0,
-		Account:     row.AccountID,
+		Account:     int64(row.AccountID),
 		Amount:      money.Format(row.AmountMinor, exp, fmtOpts),
 		Memo:        row.Memo,
 		Description: row.Description,
@@ -339,12 +339,12 @@ func (s *server) importRowDiscard(w http.ResponseWriter, r *http.Request) {
 
 // currencyExponentForAccount returns the minor-unit exponent for an account's default
 // currency (for amount format), defaulting to 2 on any miss.
-func (s *server) currencyExponentForAccount(ctx context.Context, accountID int64) int {
+func (s *server) currencyExponentForAccount(ctx context.Context, accountID ids.AccountID) int {
 	return s.currencyExponent(ctx, s.accountCurrency(ctx, accountID))
 }
 
 // accountCurrency returns an account's default currency code, or "USD" on any miss.
-func (s *server) accountCurrency(ctx context.Context, accountID int64) string {
+func (s *server) accountCurrency(ctx context.Context, accountID ids.AccountID) string {
 	acct, err := s.store.GetAccount(ctx, accountID)
 	if err != nil {
 		return "USD"

@@ -33,7 +33,7 @@ type BuildResult struct {
 	SubsidiaryIDs map[string]ids.SubsidiaryID // subsidiary name -> id (incl. renamed root)
 	ProgramIDs    map[string]ids.ProgramID    // program name -> id (incl. seeded root "General"? no -- created)
 	FundIDs       map[string]ids.FundID       // source donor -> fund id
-	AccountIDs    map[string]int64            // source_acct -> account id
+	AccountIDs    map[string]ids.AccountID    // source_acct -> account id
 	Warnings      []string
 
 	// CampusFundID is the id of the marker-driven "campus" fund (cfg.CampusFund),
@@ -44,7 +44,7 @@ type BuildResult struct {
 	// single-currency group, N for a decomposed multi-currency group).
 	tidTxns map[string][]ids.TransactionID
 	// splitAccounts is the set of account ids that received at least one split.
-	splitAccounts map[int64]bool
+	splitAccounts map[ids.AccountID]bool
 }
 
 func (r *BuildResult) txnCountForTid(tid string) int { return len(r.tidTxns[tid]) }
@@ -60,7 +60,7 @@ func (r *BuildResult) fundCount() int {
 	return n
 }
 
-func (r *BuildResult) accountHasSplit(id int64) bool { return r.splitAccounts[id] }
+func (r *BuildResult) accountHasSplit(id ids.AccountID) bool { return r.splitAccounts[id] }
 
 // rootSubsidiaryID is the seeded root subsidiary (migration id 1); build renames
 // it rather than creating a second root (single-root trigger, D18).
@@ -72,9 +72,9 @@ func newResult() *BuildResult {
 		SubsidiaryIDs: map[string]ids.SubsidiaryID{},
 		ProgramIDs:    map[string]ids.ProgramID{},
 		FundIDs:       map[string]ids.FundID{},
-		AccountIDs:    map[string]int64{},
+		AccountIDs:    map[string]ids.AccountID{},
 		tidTxns:       map[string][]ids.TransactionID{},
-		splitAccounts: map[int64]bool{},
+		splitAccounts: map[ids.AccountID]bool{},
 	}
 }
 
@@ -339,7 +339,7 @@ type builder struct {
 	// applied on the account types the store accepts it on (D21/D24) -- the source
 	// populates kls on non-expense lines too, and the store rejects a functional
 	// class on a non-expense split (ErrNonExpenseFunction).
-	acctType map[int64]string
+	acctType map[ids.AccountID]string
 }
 
 // subsidiaries renames the seeded root and creates one child per configured
@@ -531,11 +531,11 @@ func (b *builder) accounts(ctx context.Context, rows []AccountMap) error {
 		return err
 	}
 	if b.acctType == nil {
-		b.acctType = map[int64]string{}
+		b.acctType = map[ids.AccountID]string{}
 	}
 
 	for _, r := range ordered {
-		var parent *int64
+		var parent *ids.AccountID
 		if r.CuentoParent != "" {
 			pid, ok := b.res.AccountIDs[r.CuentoParent]
 			if !ok {
@@ -701,21 +701,21 @@ func (b *builder) reloadState(ctx context.Context, accMap []AccountMap) error {
 // -- proof the scaffold used this same mapping.
 func (b *builder) reloadAccounts(ctx context.Context, accMap []AccountMap) error {
 	if b.acctType == nil {
-		b.acctType = map[int64]string{}
+		b.acctType = map[ids.AccountID]string{}
 	}
 	rows, err := b.st.Tree(ctx, "en", nil)
 	if err != nil {
 		return fmt.Errorf("reload accounts: %w", err)
 	}
-	name := make(map[int64]string, len(rows))
-	parent := make(map[int64]sql.NullInt64, len(rows))
-	typ := make(map[int64]string, len(rows))
+	name := make(map[ids.AccountID]string, len(rows))
+	parent := make(map[ids.AccountID]sql.NullInt64, len(rows))
+	typ := make(map[ids.AccountID]string, len(rows))
 	for _, r := range rows {
 		name[r.ID] = r.Name
 		parent[r.ID] = r.ParentID
 		typ[r.ID] = r.Type
 	}
-	dbPath := make(map[string]int64, len(rows))
+	dbPath := make(map[string]ids.AccountID, len(rows))
 	for _, r := range rows {
 		k := typedAccountKey(r.Type, dbAccountPath(r.ID, name, parent))
 		if _, dup := dbPath[k]; dup {
@@ -757,7 +757,7 @@ func typedAccountKey(cuentoType, path string) string {
 }
 
 // dbAccountPath returns the NUL-joined name path root..self for a db account.
-func dbAccountPath(id int64, name map[int64]string, parent map[int64]sql.NullInt64) string {
+func dbAccountPath(id ids.AccountID, name map[ids.AccountID]string, parent map[ids.AccountID]sql.NullInt64) string {
 	var segs []string
 	for cur, depth := id, 0; depth < 1024; depth++ {
 		segs = append([]string{name[cur]}, segs...)
@@ -765,7 +765,7 @@ func dbAccountPath(id int64, name map[int64]string, parent map[int64]sql.NullInt
 		if !p.Valid {
 			break
 		}
-		cur = p.Int64
+		cur = ids.AccountID(p.Int64)
 	}
 	return strings.Join(segs, "\x00")
 }

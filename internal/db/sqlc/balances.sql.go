@@ -41,7 +41,7 @@ type BudgetKeyActivityParams struct {
 
 type BudgetKeyActivityRow struct {
 	SubsidiaryID ids.SubsidiaryID
-	AccountID    int64
+	AccountID    ids.AccountID
 	FundID       ids.FundID
 	ProgramID    sql.NullInt64
 	Currency     string
@@ -115,7 +115,7 @@ ORDER BY t.date, sp.id
 
 type DrillSplitsParams struct {
 	ID              int64
-	AccountID       int64
+	AccountID       ids.AccountID
 	Currency        string
 	Column4         interface{}
 	Date            string
@@ -254,7 +254,7 @@ type FunctionalActivityParams struct {
 }
 
 type FunctionalActivityRow struct {
-	AccountID       int64
+	AccountID       ids.AccountID
 	FunctionalClass sql.NullString
 	Currency        string
 	Activity        int64
@@ -318,7 +318,7 @@ type FunctionalActivityByProgramParams struct {
 }
 
 type FunctionalActivityByProgramRow struct {
-	AccountID       int64
+	AccountID       ids.AccountID
 	FunctionalClass sql.NullString
 	ProgramID       sql.NullInt64
 	Currency        string
@@ -506,7 +506,7 @@ type PeriodActivityParams struct {
 }
 
 type PeriodActivityRow struct {
-	AccountID int64
+	AccountID ids.AccountID
 	Currency  string
 	Activity  int64
 }
@@ -563,7 +563,7 @@ type ProgramActivityParams struct {
 
 type ProgramActivityRow struct {
 	ProgramID sql.NullInt64
-	AccountID int64
+	AccountID ids.AccountID
 	Currency  string
 	Activity  int64
 }
@@ -635,7 +635,7 @@ ORDER BY date DESC, split_id DESC
 `
 
 type RegisterPageParams struct {
-	AccountID    int64
+	AccountID    ids.AccountID
 	Column2      interface{}
 	Date         string
 	Column4      interface{}
@@ -658,7 +658,7 @@ type RegisterPageRow struct {
 	Date            string
 	SubsidiaryID    ids.SubsidiaryID
 	Currency        string
-	AccountID       int64
+	AccountID       ids.AccountID
 	Amount          int64
 	FundID          sql.NullInt64
 	ProgramID       sql.NullInt64
@@ -780,7 +780,7 @@ type SubtreeBalancesAsOfParams struct {
 }
 
 type SubtreeBalancesAsOfRow struct {
-	AccountID int64
+	AccountID ids.AccountID
 	Currency  string
 	Balance   int64
 }

@@ -40,11 +40,11 @@ type txnWebEnv struct {
 	sub1 ids.SubsidiaryID // child sub A
 	sub2 ids.SubsidiaryID // child sub B
 
-	checking int64 // asset, sub1 only
-	cashB    int64 // asset, sub2 only
-	salaries int64 // expense, default class program, sub1+sub2
-	grantRev int64 // revenue, sub1+sub2
-	supplies int64 // expense, no default class, sub1
+	checking ids.AccountID // asset, sub1 only
+	cashB    ids.AccountID // asset, sub2 only
+	salaries ids.AccountID // expense, default class program, sub1+sub2
+	grantRev ids.AccountID // revenue, sub1+sub2
+	supplies ids.AccountID // expense, no default class, sub1
 
 	progEdu  ids.ProgramID // program under root, the fund's scope
 	progRoot ids.ProgramID
@@ -75,7 +75,7 @@ func newTxnWebEnv(t *testing.T) *txnWebEnv {
 	e.progEdu, err = st.CreateProgram(ctx, store.CreateProgramInput{Name: "Educacion", ParentID: e.progRoot})
 	must(t, err, "prog edu")
 
-	mkAcct := func(name, typ string, subs []ids.SubsidiaryID, class string, defProg *ids.ProgramID) int64 {
+	mkAcct := func(name, typ string, subs []ids.SubsidiaryID, class string, defProg *ids.ProgramID) ids.AccountID {
 		in := store.CreateAccountInput{
 			Type: typ, DefaultCurrency: "USD",
 			Names: map[string]string{"en": name}, Subsidiaries: subs,
@@ -118,14 +118,14 @@ func (e *txnWebEnv) balancedForm(debitAmt, creditAmt string) url.Values {
 	// row 0: salaries (expense) debit -- p26.41 combined control: a program pick
 	// (p:<progRoot>) decodes to program=progRoot + class=program on the expense row.
 	f.Set("split_id_0", "")
-	f.Set("account_0", itoa(e.salaries))
+	f.Set("account_0", itoa(int64(e.salaries)))
 	f.Set("amount_0", debitAmt)
 	f.Set("fund_0", "")
 	f.Set("progclass_0", "p:"+itoa(int64(e.progRoot)))
 	f.Set("program_0", itoa(int64(e.progRoot)))
 	// row 1: checking (asset) credit
 	f.Set("split_id_1", "")
-	f.Set("account_1", itoa(e.checking))
+	f.Set("account_1", itoa(int64(e.checking)))
 	f.Set("amount_1", creditAmt)
 	f.Set("fund_1", "")
 	f.Set("rows", "2")
@@ -149,7 +149,7 @@ func TestTxnCreateRoundTrip(t *testing.T) {
 	if len(splits) != 2 {
 		t.Fatalf("want 2 splits, got %d", len(splits))
 	}
-	byAcct := map[int64]int64{}
+	byAcct := map[ids.AccountID]int64{}
 	for _, s := range splits {
 		byAcct[s.AccountID] = s.Amount
 	}
@@ -188,7 +188,7 @@ func TestTxnEditShowsInactiveSplitAccount(t *testing.T) {
 	// data-unavailable and SELECTED (so the combobox overlay shows it, not a blank box).
 	// Attribute order in the option is value ... data-unavailable ... selected, so match
 	// the whole node loosely.
-	re := regexp.MustCompile(`(?s)<option[^>]*value="` + itoa(e.checking) + `"[^>]*data-unavailable="1"[^>]*\bselected\b[^>]*>`)
+	re := regexp.MustCompile(`(?s)<option[^>]*value="` + itoa(int64(e.checking)) + `"[^>]*data-unavailable="1"[^>]*\bselected\b[^>]*>`)
 	if !re.MatchString(body) {
 		t.Fatalf("inactive checking account option is not present, marked, and SELECTED; body:\n%s", body)
 	}
@@ -221,7 +221,7 @@ func TestTxnDuplicateShowsInactiveSplitAccount(t *testing.T) {
 		t.Fatalf("duplicate GET: status=%d", rec.Code)
 	}
 	body := rec.Body.String()
-	re := regexp.MustCompile(`(?s)<option[^>]*value="` + itoa(e.checking) + `"[^>]*data-unavailable="1"[^>]*\bselected\b[^>]*>`)
+	re := regexp.MustCompile(`(?s)<option[^>]*value="` + itoa(int64(e.checking)) + `"[^>]*data-unavailable="1"[^>]*\bselected\b[^>]*>`)
 	if !re.MatchString(body) {
 		t.Fatalf("duplicate form: inactive checking account is not present, marked, and SELECTED; body:\n%s", body)
 	}
@@ -298,7 +298,7 @@ func TestTxnEditSplitIDRoundTrip(t *testing.T) {
 	rows := live
 	for i, s := range rows {
 		f.Set("split_id_"+itoa(int64(i)), itoa(int64(s.ID)))
-		f.Set("account_"+itoa(int64(i)), itoa(s.AccountID))
+		f.Set("account_"+itoa(int64(i)), itoa(int64(s.AccountID)))
 		f.Set("amount_"+itoa(int64(i)), signedStr(s.Amount))
 		if s.FundID.Valid {
 			f.Set("fund_"+itoa(int64(i)), itoa(s.FundID.Int64))
@@ -419,12 +419,12 @@ func TestTxnFundProgramScopeGoesToRow(t *testing.T) {
 	f.Set("date", "2025-03-01")
 	f.Set("currency", "USD")
 	f.Set("split_id_0", "")
-	f.Set("account_0", itoa(e.grantRev))
+	f.Set("account_0", itoa(int64(e.grantRev)))
 	f.Set("amount_0", "-100.00")
 	f.Set("fund_0", itoa(int64(e.fund)))
 	f.Set("program_0", itoa(int64(e.progRoot))) // outside the fund's Educación scope
 	f.Set("split_id_1", "")
-	f.Set("account_1", itoa(e.checking))
+	f.Set("account_1", itoa(int64(e.checking)))
 	f.Set("amount_1", "100.00")
 	f.Set("fund_1", itoa(int64(e.fund)))
 	f.Set("rows", "2")
@@ -454,12 +454,12 @@ func TestTxnAccountNotInSubGoesToRow(t *testing.T) {
 	f.Set("date", "2025-03-01")
 	f.Set("currency", "USD")
 	f.Set("split_id_0", "")
-	f.Set("account_0", itoa(e.salaries))
+	f.Set("account_0", itoa(int64(e.salaries)))
 	f.Set("amount_0", "100.00")
 	f.Set("class_0", "program")
 	f.Set("program_0", itoa(int64(e.progRoot)))
 	f.Set("split_id_1", "")
-	f.Set("account_1", itoa(e.cashB)) // not in sub1
+	f.Set("account_1", itoa(int64(e.cashB))) // not in sub1
 	f.Set("amount_1", "-100.00")
 	f.Set("rows", "2")
 
@@ -589,7 +589,7 @@ func TestTxnStableInputIDsAcrossAllSwaps(t *testing.T) {
 	q := url.Values{}
 	q.Set("subsidiary", itoa(int64(e.sub2)))
 	q.Set("rows", "2")
-	q.Set("account_0", itoa(e.checking))
+	q.Set("account_0", itoa(int64(e.checking)))
 	q.Set("amount_0", "10.00")
 	refilter := asHTMXUser(t, e, http.MethodGet, "/transactions/new?"+q.Encode(), nil)
 	if refilter.Code != http.StatusOK {
@@ -736,10 +736,10 @@ func TestTxnSubsidiaryFiltersOptions(t *testing.T) {
 	}
 	body := rec.Body.String()
 	// checking (sub1) present as an account option; cashB (sub2) absent.
-	if !strings.Contains(body, `value="`+itoa(e.checking)+`"`) {
+	if !strings.Contains(body, `value="`+itoa(int64(e.checking))+`"`) {
 		t.Fatalf("checking not offered as account option")
 	}
-	if strings.Contains(body, `data-account-option value="`+itoa(e.cashB)+`"`) {
+	if strings.Contains(body, `data-account-option value="`+itoa(int64(e.cashB))+`"`) {
 		t.Fatalf("cashB (sub2) leaked into sub1 account options")
 	}
 	// The fund scoped to sub1 is offered.
@@ -763,12 +763,12 @@ func TestTxnAccountOptionsCarryGatingMetadata(t *testing.T) {
 	}
 	body := rec.Body.String()
 
-	if !strings.Contains(body, `value="`+itoa(e.salaries)+`"`) ||
+	if !strings.Contains(body, `value="`+itoa(int64(e.salaries))+`"`) ||
 		!strings.Contains(body, `data-type="expense"`) ||
 		!strings.Contains(body, `data-default-class="program"`) {
 		t.Fatalf("salaries option missing expense gating metadata; body:\n%s", body)
 	}
-	if !strings.Contains(body, `value="`+itoa(e.grantRev)+`"`) || !strings.Contains(body, `data-type="revenue"`) {
+	if !strings.Contains(body, `value="`+itoa(int64(e.grantRev))+`"`) || !strings.Contains(body, `data-type="revenue"`) {
 		t.Fatalf("grantRev option missing revenue gating metadata")
 	}
 	// p26.41: the hidden program carrier + the combined program/class control render on row 0.
@@ -785,9 +785,9 @@ func TestTxnSubsidiaryReFilterEchoesRows(t *testing.T) {
 	q := url.Values{}
 	q.Set("subsidiary", itoa(int64(e.sub2)))
 	q.Set("rows", "2")
-	q.Set("account_0", itoa(e.checking)) // sub1-only -> invalid in sub2
+	q.Set("account_0", itoa(int64(e.checking))) // sub1-only -> invalid in sub2
 	q.Set("amount_0", "10.00")
-	q.Set("account_1", itoa(e.cashB)) // sub2 -> valid
+	q.Set("account_1", itoa(int64(e.cashB))) // sub2 -> valid
 	q.Set("amount_1", "-10.00")
 
 	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/new?"+q.Encode(), nil)
@@ -795,7 +795,7 @@ func TestTxnSubsidiaryReFilterEchoesRows(t *testing.T) {
 		t.Fatalf("re-filter GET: %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `value="`+itoa(e.cashB)+`"`) {
+	if !strings.Contains(body, `value="`+itoa(int64(e.cashB))+`"`) {
 		t.Fatalf("cashB not offered after re-filter to sub2")
 	}
 	if !strings.Contains(body, `data-row-error="0"`) {
@@ -877,7 +877,7 @@ func TestTxnPerms(t *testing.T) {
 // (store.SplitState omits it), so the p26.34 idempotency test can assert byte-identity.
 type splitFull struct {
 	ID              ids.SplitID
-	AccountID       int64
+	AccountID       ids.AccountID
 	Amount          int64
 	FundID          sql.NullInt64
 	ProgramID       sql.NullInt64
@@ -899,7 +899,7 @@ func mainHeaderForm(sub ids.SubsidiaryID, main splitFull, body []splitFull) url.
 	f.Set("date", "2025-03-01")
 	f.Set("currency", "USD")
 	f.Set("main_present", "1")
-	f.Set("main_account", itoa(main.AccountID))
+	f.Set("main_account", itoa(int64(main.AccountID)))
 	f.Set("main_description", main.Description)
 	f.Set("main_memo", main.Memo)
 	if main.ProgramID.Valid {
@@ -910,7 +910,7 @@ func mainHeaderForm(sub ids.SubsidiaryID, main splitFull, body []splitFull) url.
 	}
 	for i, b := range body {
 		si := itoa(int64(i))
-		f.Set("account_"+si, itoa(b.AccountID))
+		f.Set("account_"+si, itoa(int64(b.AccountID)))
 		f.Set("amount_"+si, signedStr(b.Amount))
 		if b.FundID.Valid {
 			f.Set("fund_"+si, itoa(b.FundID.Int64))
@@ -1001,7 +1001,7 @@ func TestTxnMainHeaderSingleFundIdempotent(t *testing.T) {
 		t.Fatalf("edit form did not round-trip the main split id in the header; body:\n%s", eb)
 	}
 	// The main (salaries) account is selected in the header account select.
-	reMainAcct := regexp.MustCompile(`(?s)id="txn-main-account".*?<option[^>]*value="` + itoa(main.AccountID) + `"[^>]*\bselected\b`)
+	reMainAcct := regexp.MustCompile(`(?s)id="txn-main-account".*?<option[^>]*value="` + itoa(int64(main.AccountID)) + `"[^>]*\bselected\b`)
 	if !reMainAcct.MatchString(eb) {
 		t.Fatalf("edit form header account not selected to salaries; body:\n%s", eb)
 	}
@@ -1168,7 +1168,7 @@ func TestTxnMultiFundReloadFlatFallback(t *testing.T) {
 	for i, s := range live {
 		si := itoa(int64(i))
 		f.Set("split_id_"+si, itoa(int64(s.ID)))
-		f.Set("account_"+si, itoa(s.AccountID))
+		f.Set("account_"+si, itoa(int64(s.AccountID)))
 		f.Set("amount_"+si, signedStr(s.Amount))
 		if s.FundID.Valid {
 			f.Set("fund_"+si, itoa(s.FundID.Int64))
@@ -1207,8 +1207,8 @@ func TestTxnMainHeaderBodyErrorLandsOnRow(t *testing.T) {
 	f.Set("date", "2025-03-01")
 	f.Set("currency", "USD")
 	f.Set("main_present", "1")
-	f.Set("main_account", itoa(e.checking))
-	f.Set("account_0", itoa(e.supplies)) // expense, no default class
+	f.Set("main_account", itoa(int64(e.checking)))
+	f.Set("account_0", itoa(int64(e.supplies))) // expense, no default class
 	f.Set("amount_0", "50.00")
 	f.Set("program_0", itoa(int64(e.progRoot)))
 	// class_0 deliberately omitted.
@@ -1235,7 +1235,7 @@ func TestTxnMainHeaderMissingAccount(t *testing.T) {
 	f.Set("currency", "USD")
 	f.Set("main_present", "1")
 	f.Set("main_account", "0") // header account not chosen
-	f.Set("account_0", itoa(e.checking))
+	f.Set("account_0", itoa(int64(e.checking)))
 	f.Set("amount_0", "50.00")
 	f.Set("rows", "1")
 
@@ -1416,7 +1416,7 @@ func TestTxnProgClassNonRootIdempotent(t *testing.T) {
 	f.Set("rows", "2")
 	// Row 0: salaries, Admin (c:management), program carrier = Educacion (the stored program).
 	f.Set("split_id_0", itoa(int64(sal.ID)))
-	f.Set("account_0", itoa(e.salaries))
+	f.Set("account_0", itoa(int64(e.salaries)))
 	f.Set("amount_0", "100.00")
 	f.Set("fund_0", "")
 	f.Set("progclass_0", "c:management")
@@ -1424,7 +1424,7 @@ func TestTxnProgClassNonRootIdempotent(t *testing.T) {
 	f.Set("memo_0", "Admin payroll")
 	// Row 1: checking, no program/class (asset).
 	f.Set("split_id_1", itoa(int64(before[1].ID)))
-	f.Set("account_1", itoa(e.checking))
+	f.Set("account_1", itoa(int64(e.checking)))
 	f.Set("amount_1", "-100.00")
 	f.Set("fund_1", "")
 

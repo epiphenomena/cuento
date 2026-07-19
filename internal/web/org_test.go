@@ -203,7 +203,7 @@ func TestAccountEditWritesEnabledLanguageNames(t *testing.T) {
 	form.Set("currency", "USD")
 	form.Set("sub_1", "1")
 
-	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/"+itoa(id), form)
+	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/"+itoa(int64(id)), form)
 	if rec.Code >= 400 {
 		t.Fatalf("POST /accounts/%d returned %d, body: %s", id, rec.Code, rec.Body.String())
 	}
@@ -214,7 +214,7 @@ func TestAccountEditWritesEnabledLanguageNames(t *testing.T) {
 
 // accountNameInLang reads an account's name in a given language via the store Tree
 // (name fallback: the exact-lang name when present).
-func accountNameInLang(t *testing.T, st *store.Store, id int64, lang string) string {
+func accountNameInLang(t *testing.T, st *store.Store, id ids.AccountID, lang string) string {
 	t.Helper()
 	rows, err := st.Tree(context.Background(), lang, nil)
 	if err != nil {

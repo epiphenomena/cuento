@@ -18,7 +18,7 @@ WHERE account_id = ? AND currency = ? AND status = 'open'
 `
 
 type CountOpenReconciliationsParams struct {
-	AccountID int64
+	AccountID ids.AccountID
 	Currency  string
 }
 
@@ -92,7 +92,7 @@ type FinalizedReconciliationsForAccountRow struct {
 // finalized_at column on reconciliations (00014), so the version twin is the only
 // audit source for WHEN a statement was finalized. Ordered so the history reads
 // newest-first. Param: account_id.
-func (q *Queries) FinalizedReconciliationsForAccount(ctx context.Context, accountID int64) ([]FinalizedReconciliationsForAccountRow, error) {
+func (q *Queries) FinalizedReconciliationsForAccount(ctx context.Context, accountID ids.AccountID) ([]FinalizedReconciliationsForAccountRow, error) {
 	rows, err := q.db.QueryContext(ctx, finalizedReconciliationsForAccount, accountID)
 	if err != nil {
 		return nil, err
@@ -152,7 +152,7 @@ WHERE s.id = ?
 
 type GetSplitForReconcileRow struct {
 	ID               ids.SplitID
-	AccountID        int64
+	AccountID        ids.AccountID
 	ReconciliationID sql.NullInt64
 	TransactionID    ids.TransactionID
 	Currency         string
@@ -188,7 +188,7 @@ SELECT EXISTS (
 `
 
 type HasLaterFinalizedReconciliationParams struct {
-	AccountID       int64
+	AccountID       ids.AccountID
 	Currency        string
 	StatementDate   string
 	StatementDate_2 string
@@ -223,7 +223,7 @@ RETURNING id
 `
 
 type InsertReconciliationParams struct {
-	AccountID        int64
+	AccountID        ids.AccountID
 	StatementDate    string
 	StatementBalance int64
 	Currency         string
@@ -304,7 +304,7 @@ ORDER BY sort_order, id
 `
 
 type ListReconcilableAccountsRow struct {
-	ID              int64
+	ID              ids.AccountID
 	DefaultCurrency string
 }
 
@@ -348,7 +348,7 @@ ORDER BY statement_date DESC, id DESC
 // last finalized statement (date + balance) for the opening prefill and any OPEN
 // recon to link straight to its workspace. Ordered so the caller can pick the
 // latest finalized / open per currency without a second query.
-func (q *Queries) ListReconciliationsForAccount(ctx context.Context, accountID int64) ([]Reconciliation, error) {
+func (q *Queries) ListReconciliationsForAccount(ctx context.Context, accountID ids.AccountID) ([]Reconciliation, error) {
 	rows, err := q.db.QueryContext(ctx, listReconciliationsForAccount, accountID)
 	if err != nil {
 		return nil, err
@@ -391,7 +391,7 @@ SELECT CAST(COALESCE((
 `
 
 type PriorFinalizedStatementBalanceParams struct {
-	AccountID       int64
+	AccountID       ids.AccountID
 	Currency        string
 	StatementDate   string
 	StatementDate_2 string
@@ -588,7 +588,7 @@ ORDER BY t.date, s.id
 `
 
 type WorkspaceSplitsParams struct {
-	AccountID        int64
+	AccountID        ids.AccountID
 	Currency         string
 	ReconciliationID sql.NullInt64
 }
