@@ -278,12 +278,15 @@ func TestAllCardsHaveDescription(t *testing.T) {
 	}
 }
 
-// TestAllLandingFoldsReportGroups (p28.13): the budget report group folds INTO the
-// budget section (nav.budgetplans) and the reconciliation report group folds INTO the
-// ledger/accounts section (nav.accounts), rather than trailing as their own report
-// sections. The other accounting report groups (financial/funds/programs/tax) stay as
-// distinct trailing report sections. Verified per-section by label + card hrefs on the
-// resolved model (an admin reaches every section and report).
+// TestAllLandingFoldsReportGroups (p28.13, reordered p29.10): each dimension's report
+// group folds INTO its functional home section — financial into a report-only Financial
+// section (no nav card), funds into the /funds section, programs into the /programs
+// section, reconciliation into Accounts, budget into Budget plans. Only the tax (990)
+// group stays a distinct trailing report section. The Accounts section no longer carries
+// the funds/programs cards (they have their own sections) and now carries the Import card.
+// Section ORDER is pinned: Accounts, then Financial, then Funds, then Programs, all ABOVE
+// Budget plans. Verified per-section by label + card hrefs on the resolved model (an admin
+// reaches every section and report).
 func TestAllLandingFoldsReportGroups(t *testing.T) {
 	app := newTestApp(t, Config{})
 	s := app.srv
@@ -295,7 +298,8 @@ func TestAllLandingFoldsReportGroups(t *testing.T) {
 
 	sections := s.allSections(ctx, admin)
 
-	// hrefs of the cards in the section whose Label equals the localized key.
+	// hrefs of the cards in the section whose Label equals the localized key, or nil when
+	// no such section exists (dropped as empty).
 	cardsIn := func(labelKey string) []string {
 		label := i18n.T("en", labelKey)
 		for _, sec := range sections {
@@ -317,6 +321,78 @@ func TestAllLandingFoldsReportGroups(t *testing.T) {
 		}
 		return false
 	}
+	// sectionIndex returns the position of the section with the given localized label, or
+	// -1 when absent, so we can assert relative order.
+	sectionIndex := func(labelKey string) int {
+		label := i18n.T("en", labelKey)
+		for i, sec := range sections {
+			if sec.Label == label {
+				return i
+			}
+		}
+		return -1
+	}
+	// sectionCount counts how many sections carry the given localized label. Because
+	// nav.funds and reports.group.funds both localize to "Funds" (likewise programs), a
+	// folded group and a stray trailing report section would share a label — so "folded,
+	// not trailing" is asserted as "exactly one section with that label" rather than by key.
+	sectionCount := func(labelKey string) int {
+		label := i18n.T("en", labelKey)
+		n := 0
+		for _, sec := range sections {
+			if sec.Label == label {
+				n++
+			}
+		}
+		return n
+	}
+
+	// Accounts now holds accounts + reconciliations + import, plus the folded reconciliation
+	// report cards — and NO longer the funds/programs cards (own sections now).
+	accounts := cardsIn("nav.accounts")
+	if !contains(accounts, "/accounts") || !contains(accounts, "/reconciliations") || !contains(accounts, "/import") {
+		t.Errorf("accounts section missing accounts/reconciliations/import: %v", accounts)
+	}
+	if !contains(accounts, "/reports/reconciliation_statement") {
+		t.Errorf("accounts section missing folded reconciliation report card: %v", accounts)
+	}
+	if contains(accounts, "/funds") || contains(accounts, "/programs") {
+		t.Errorf("accounts section should NOT contain funds/programs cards: %v", accounts)
+	}
+	if cardsIn("reports.group.reconciliation") != nil {
+		t.Errorf("reconciliation report group should be folded, not a trailing section")
+	}
+
+	// Financial is a report-only section (no nav card): it carries financial report cards
+	// and NO management page.
+	financial := cardsIn("reports.group.financial")
+	if !contains(financial, "/reports/balance_sheet") {
+		t.Errorf("financial section missing financial report card: %v", financial)
+	}
+	for _, h := range financial {
+		if !strings.HasPrefix(h, "/reports/") {
+			t.Errorf("financial section should be report-only, found nav card %q", h)
+		}
+	}
+
+	// Funds pairs the /funds management page with its report group folded in.
+	funds := cardsIn("nav.funds")
+	if !contains(funds, "/funds") || !contains(funds, "/reports/capital_campaign") {
+		t.Errorf("funds section missing /funds card or folded fund report: %v", funds)
+	}
+	// One "Funds" section only — the report group folds in, it does not also trail.
+	if n := sectionCount("nav.funds"); n != 1 {
+		t.Errorf("expected exactly one Funds section (folded, not trailing), got %d", n)
+	}
+
+	// Programs pairs the /programs management page with its report group folded in.
+	programs := cardsIn("nav.programs")
+	if !contains(programs, "/programs") || !contains(programs, "/reports/program_statement") {
+		t.Errorf("programs section missing /programs card or folded program report: %v", programs)
+	}
+	if n := sectionCount("nav.programs"); n != 1 {
+		t.Errorf("expected exactly one Programs section (folded, not trailing), got %d", n)
+	}
 
 	// Budget report cards fold into the budget-plans section (after the "make a budget"
 	// card), NOT into a standalone reports.group.budget section.
@@ -328,20 +404,23 @@ func TestAllLandingFoldsReportGroups(t *testing.T) {
 		t.Errorf("budget report group should be folded, not a trailing section")
 	}
 
-	// Reconciliation report cards fold into the accounts section.
-	accounts := cardsIn("nav.accounts")
-	if !contains(accounts, "/accounts") || !contains(accounts, "/reports/reconciliation_statement") {
-		t.Errorf("accounts section missing folded reconciliation report cards: %v", accounts)
-	}
-	if cardsIn("reports.group.reconciliation") != nil {
-		t.Errorf("reconciliation report group should be folded, not a trailing section")
+	// Tax (the 990 package) is the ONLY report group that stays a distinct trailing section.
+	if cardsIn("reports.group.tax") == nil {
+		t.Errorf("tax report group should remain a trailing section (not folded)")
 	}
 
-	// The other accounting report groups stay as distinct trailing sections.
-	for _, g := range []string{"financial", "funds", "programs", "tax"} {
-		if cardsIn("reports.group."+g) == nil {
-			t.Errorf("report group %q missing its trailing section (should NOT be folded)", g)
-		}
+	// Order: Accounts, then Financial (2nd), then Funds, then Programs, all ABOVE Budget plans.
+	iAcct := sectionIndex("nav.accounts")
+	iFin := sectionIndex("reports.group.financial")
+	iFunds := sectionIndex("nav.funds")
+	iProg := sectionIndex("nav.programs")
+	iBudget := sectionIndex("nav.budgetplans")
+	if iAcct >= iFin || iFin >= iFunds || iFunds >= iProg || iProg >= iBudget {
+		t.Errorf("section order wrong: accounts=%d financial=%d funds=%d programs=%d budget=%d (want strictly increasing)",
+			iAcct, iFin, iFunds, iProg, iBudget)
+	}
+	if iFin != iAcct+1 {
+		t.Errorf("Financial section should be immediately after Accounts: accounts=%d financial=%d", iAcct, iFin)
 	}
 }
 

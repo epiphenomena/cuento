@@ -496,9 +496,11 @@ type allCardGroup struct {
 	Cards    []hubCard
 }
 
-// allCardGroups is the ordered section→cards map for the "All" landing (p26.77). It
-// mirrors the nav structure: the ledger section (accounts + its dimensions), budgeting,
-// expenses, import, personal, and admin. Reports are appended SEPARATELY (they need
+// allCardGroups is the ordered section→cards map for the "All" landing (p26.77, reordered
+// p29.10): Accounts (accounts + reconciliations + import), a report-only Financial section
+// (empty nav-card list — its financial reports fold in), Funds (/funds), Programs
+// (/programs), Budget plans, Expenses, Personal, and Admin. Reports are appended SEPARATELY
+// (they need
 // per-report grant filtering, not a single section Perm) in allSections. Every card's
 // Perm matches its route's registry Perm, so visibleAllCards drops exactly what the
 // route would 403. The "All" self-card is intentionally absent (never link the page to
@@ -507,9 +509,22 @@ func allCardGroups() []allCardGroup {
 	return []allCardGroup{
 		{"nav.accounts", []hubCard{
 			{"nav.accounts", "/accounts", TxnRead, "all.desc.accounts", ""},
-			{"nav.funds", "/funds", TxnRead, "all.desc.funds", ""},
-			{"nav.programs", "/programs", TxnRead, "all.desc.programs", ""},
 			{"nav.reconciliations", "/reconciliations", TxnRead, "all.desc.reconciliations", ""},
+			{"nav.import", "/import", TxnWrite, "all.desc.import", ""},
+		}},
+		// p29.10: the Financial report group renders as its OWN section, positioned second
+		// (right after Accounts), with NO nav card — it is report-only. Its LabelKey is the
+		// financial report group's header key, so allSections folds reportCards["financial"]
+		// in via foldedReportGroups and then drops the (otherwise empty) section for any user
+		// without a financial-report grant. See the empty-Cards note on foldedReportGroups.
+		{"reports.group.financial", nil},
+		// p29.10: Funds and Programs are their OWN sections above Budget plans — each pairs
+		// its management page (its "settings") with its report group, folded in below.
+		{"nav.funds", []hubCard{
+			{"nav.funds", "/funds", TxnRead, "all.desc.funds", ""},
+		}},
+		{"nav.programs", []hubCard{
+			{"nav.programs", "/programs", TxnRead, "all.desc.programs", ""},
 		}},
 		{"nav.budgetplans", []hubCard{
 			{"nav.budgetplans", "/budget-plans", TxnRead, "all.desc.budgetplans", ""},
@@ -517,9 +532,6 @@ func allCardGroups() []allCardGroup {
 		{"nav.expenses", []hubCard{
 			{"nav.myexpenses", "/expenses", ExpenseSubmit, "all.desc.myexpenses", ""},
 			{"nav.expensereview", "/expenses/review", TxnWrite, "all.desc.expensereview", ""},
-		}},
-		{"nav.import", []hubCard{
-			{"nav.import", "/import", TxnWrite, "all.desc.import", ""},
 		}},
 		{"all.section.personal", []hubCard{
 			// p28.14: the Settings card carries the "gear" outline glyph (settings-type card).
@@ -598,16 +610,21 @@ func (s *server) reportCardsByGroup(ctx context.Context, u *store.CurrentUser) m
 }
 
 // foldedReportGroups maps a report GROUP onto the functional home-section it folds INTO
-// on the "All" landing (p28.13), rather than trailing as its own report section. It is
-// an EXPLICIT, ordered table (not reflection): the budget report group's cards go into
-// the budget section (nav.budgetplans, right after "make a budget"); the reconciliation
-// group's cards go into the ledger/accounts section (nav.accounts, near the
-// reconciliations card). TargetLabelKey MUST equal the LabelKey of an allCardGroups()
-// section — the fold appends to that group's cards (both target groups end with the
-// referenced card, so an append lands "right after" it). Every OTHER report group
-// (financial, funds, programs, tax) stays a distinct trailing report section — the owner
-// asked to keep the accounting reports grouped. Folded report cards still flow through
-// the same grant check (reportCardsByGroup), so a user without the grant never sees them.
+// on the "All" landing (p28.13, extended p29.10), rather than trailing as its own report
+// section. It is an EXPLICIT, ordered table (not reflection). TargetLabelKey MUST equal
+// the LabelKey of an allCardGroups() section — the fold appends to that group's cards, so
+// each report group lands under its matching functional section:
+//   - financial -> reports.group.financial (the report-only Financial section, no nav card)
+//   - funds     -> nav.funds     (the /funds management card + fund/campaign reports)
+//   - programs  -> nav.programs  (the /programs management card + program reports)
+//   - reconciliation -> nav.accounts (near the reconciliations card)
+//   - budget    -> nav.budgetplans (right after "make a budget")
+//
+// Only "tax" (the 990 package) stays UNMAPPED and thus a distinct trailing report section.
+// Folded report cards still flow through the same grant check (reportCardsByGroup), so a
+// user without the grant never sees them — and a folded section whose nav card AND report
+// cards are all empty is dropped by allSections (the Financial section's empty-card group
+// therefore appears iff the user has >=1 financial-report grant).
 func foldedReportGroups() []struct {
 	Group          string
 	TargetLabelKey string
@@ -616,8 +633,11 @@ func foldedReportGroups() []struct {
 		Group          string
 		TargetLabelKey string
 	}{
-		{"budget", "nav.budgetplans"},
+		{"financial", "reports.group.financial"},
+		{"funds", "nav.funds"},
+		{"programs", "nav.programs"},
 		{"reconciliation", "nav.accounts"},
+		{"budget", "nav.budgetplans"},
 	}
 }
 
@@ -629,14 +649,15 @@ type hubPageModel struct {
 	Sections []allSection
 }
 
-// allSections assembles the full ordered section list for the current user (p28.13):
-// the fixed nav-structure groups (allCardGroups, filtered to reachable cards) — with
-// the FOLDED report groups (budget, reconciliation) appended into their matching
-// functional section — followed by a distinct trailing section per REMAINING report
-// group (financial, funds, programs, tax), the accounting reports the owner asked to
-// keep grouped. An empty section is dropped AFTER folding, so a user with only a budget
-// report grant (but no /budget-plans access) still sees the budget section carrying just
-// the report cards, while a section with no reachable card at all is never shown.
+// allSections assembles the full ordered section list for the current user (p28.13,
+// reordered p29.10): the fixed nav-structure groups (allCardGroups, filtered to reachable
+// cards) — with the FOLDED report groups (financial, funds, programs, reconciliation,
+// budget) appended into their matching functional section — followed by a distinct
+// trailing section per REMAINING report group (only tax, the 990 package). An empty
+// section is dropped AFTER folding, so a user with only a budget report grant (but no
+// /budget-plans access) still sees the budget section carrying just the report cards, the
+// report-only Financial section appears iff the user holds a financial-report grant, and a
+// section with no reachable card at all is never shown.
 func (s *server) allSections(ctx context.Context, u *store.CurrentUser) []allSection {
 	lang := langOf(ctx)
 	reportCards := s.reportCardsByGroup(ctx, u)
