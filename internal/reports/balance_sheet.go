@@ -92,6 +92,22 @@ func (l *bsLine) add(ccy string, minor int64) {
 // split from fund tagging + the section plug, and emits the sections with converted
 // totals (and, under the detail toggle, per-currency lines).
 func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
+	// "Net assets with donor restrictions" needs a per-FUND scan (FundBalancesAsOf),
+	// independent of the per-account BalancesAsOf below. Run it CONCURRENTLY so its
+	// full-ledger scan overlaps BalancesAsOf's rather than running after it (p29.6 perf).
+	// Safe: the store is WAL with a pooled connection set and the toolkit holds no mutable
+	// state, so two toolkit reads run on two connections without contention. The channel
+	// is buffered (cap 1) so an early error return below never leaks the goroutine.
+	type rnaResult struct {
+		m   map[string]int64
+		err error
+	}
+	rnaCh := make(chan rnaResult, 1)
+	go func() {
+		m, err := tk.restrictedNetAssets(ctx, p.Scope, p.AsOf)
+		rnaCh <- rnaResult{m, err}
+	}()
+
 	balances, err := tk.BalancesAsOf(ctx, Scope{Sub: p.Scope}, p.AsOf, ConvertOpts{Mode: RateNone})
 	if err != nil {
 		return Table{}, err
@@ -99,6 +115,15 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	tree, err := tk.Store().Tree(ctx, p.LangOr(), nil)
 	if err != nil {
 		return Table{}, err
+	}
+
+	// R/E account ids, straight from the tree we already fetched (no extra query) — used
+	// to derive the net surplus from `balances` below instead of re-scanning the ledger.
+	reReport := map[int64]bool{}
+	for _, node := range tree {
+		if node.Type == "revenue" || node.Type == "expense" {
+			reReport[node.ID] = true
+		}
 	}
 
 	target := p.TargetCurrency
@@ -182,10 +207,11 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 		netAssetsTotal[ccy] -= v
 	}
 
-	withRestriction, err := tk.restrictedNetAssets(ctx, p.Scope, p.AsOf)
-	if err != nil {
-		return Table{}, err
+	rna := <-rnaCh
+	if rna.err != nil {
+		return Table{}, rna.err
 	}
+	withRestriction := rna.m
 	withoutRestriction := map[string]int64{}
 	for ccy, v := range netAssetsTotal {
 		withoutRestriction[ccy] = v - withRestriction[ccy]
@@ -198,11 +224,19 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	}
 
 	// Net surplus to date: cumulative R/E activity from inception to the as-of date.
-	// NetIncome is net-debit (a surplus is a net CREDIT, negative); present it as a
-	// positive surplus.
-	surplus, err := tk.netSurplusByCurrency(ctx, p.Scope, p.AsOf)
-	if err != nil {
-		return Table{}, err
+	// R/E accounts carry no opening balance, so an R/E account's balance AS OF the date
+	// IS its inception-to-date activity — already present in `balances`. Deriving it from
+	// there avoids a redundant full-ledger scan (the old netSurplusByCurrency re-ran
+	// Activity(inception, asof); p29.6 perf). NetIncome is net-debit (a surplus is a net
+	// CREDIT, negative); present it as a positive surplus.
+	surplus := map[string]int64{}
+	for acct, amts := range balances {
+		if !reReport[acct] {
+			continue
+		}
+		for _, a := range amts {
+			surplus[a.Currency] -= a.Minor
+		}
 	}
 
 	// Intercompany residual (D19): the flagged accounts, collapsed across the
@@ -219,10 +253,19 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	var icNet []CurAmt
 	var icSplit ICResidualSplit
 	if consolidated {
-		icNet, err = tk.IntercompanyNet(ctx, Scope{Sub: p.Scope}, p.AsOf)
-		if err != nil {
-			return Table{}, err
+		// IntercompanyNet is the intercompany-flagged accounts' balances summed per
+		// currency — the SAME SubtreeBalancesAsOf already in `balances`. Derive it here
+		// rather than re-running that scan (p29.6 perf). icAccts was built above for the
+		// consolidated elimination, so it is exactly the intercompany set.
+		icByCcy := map[string]int64{}
+		for acct, amts := range balances {
+			if icAccts[acct] {
+				for _, a := range amts {
+					icByCcy[a.Currency] += a.Minor
+				}
+			}
 		}
+		icNet = sortedCurAmts(icByCcy)
 		if hasNonzero(icNet) && target != "" {
 			icSplit, err = tk.IntercompanyResidualSplit(ctx, Scope{Sub: p.Scope}, p.AsOf, target)
 			if err != nil {
@@ -709,33 +752,6 @@ func (tk *Toolkit) restrictedNetAssets(ctx context.Context, scope int64, d strin
 	for _, r := range fb {
 		if r.FundID != 0 && restricted[r.FundID] {
 			out[r.Currency] += r.Amount
-		}
-	}
-	return out, nil
-}
-
-// netSurplusByCurrency returns the accumulated net surplus (revenue - expense) from
-// inception to d in the scope, per NATIVE currency, presented POSITIVE (a surplus).
-// NetIncome is net-debit signed (a surplus is a net credit, negative), so each
-// currency subtotal is negated. Inception is the earliest possible date ("" lower
-// bound via PeriodActivity is inclusive of everything on-or-before d); the fixture's
-// earliest txn is 2025-01-01, so a fixed early bound is cumulative-from-inception.
-func (tk *Toolkit) netSurplusByCurrency(ctx context.Context, scope int64, d string) (map[string]int64, error) {
-	act, err := tk.Activity(ctx, Scope{Sub: scope}, inceptionDate, d, ConvertOpts{Mode: RateNone})
-	if err != nil {
-		return nil, err
-	}
-	reReport, err := tk.reAccounts(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := map[string]int64{}
-	for acct, amts := range act {
-		if !reReport[acct] {
-			continue
-		}
-		for _, a := range amts {
-			out[a.Currency] -= a.Minor // net-debit -> positive surplus
 		}
 	}
 	return out, nil
