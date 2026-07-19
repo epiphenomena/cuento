@@ -282,6 +282,24 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .app-main-full {
   max-width: min(100%, 100% - 2 * var(--space-6));
 }
+/* p30.11: CENTER the report block when it's NARROWER than the full-viewport shell.
+   After p30.7 a comparative statement's table sizes to its CONTENT (width:auto), so an
+   annual Statement of Activities (~few columns) is much narrower than app-main-full's
+   near-full width and, left-aligned, stranded the table at the left with a wide empty
+   gutter + scrollbar on the right. Center the WHOLE report block as a unit so the title,
+   CSV link, tree controls, print-meta and table stay coherent (never a left-stranded
+   heading over a centered table): the results block shrinks to its content
+   (width:fit-content) and centers (margin-inline:auto), and the <h1> centers with it.
+   max-width:100% keeps the WIDE case correct — a weekly (52-column) statement exceeds
+   the viewport, fit-content collapses to 100%, and .report-scroll's overflow:auto still
+   scrolls it full-width with no clipping. Scoped to app-main-full so the centered-column
+   shells (app-main / app-main-wide: balance sheet, trial balance, …) are untouched. */
+.app-main-full > h1,
+.app-main-full > #report-results {
+  width: fit-content;
+  max-width: 100%;
+  margin-inline: auto;
+}
 
 .app-footer {
   padding: var(--space-4) var(--space-6);
