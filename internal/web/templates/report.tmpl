@@ -206,6 +206,28 @@
   {{if .Error}}
   <p class="report-error" role="alert">{{.Error}}</p>
   {{else}}
+  {{/* p29.17: a print/PDF-ONLY self-identifying header. A printed report is meant to be
+       a shareable, unchanging record, so the paper must carry WHAT it is (the <h1> title
+       already prints) and AS-OF WHEN. This block is HIDDEN on screen (.report-print-meta
+       is display:none; the dates already show in the on-screen filter bar) and SHOWN in
+       @media print. It lives INSIDE #report-results so an in-page as-of/period filter
+       change (which swaps only this fragment) keeps the printed dates in sync — a stale
+       snapshot is impossible. The date branches mirror the CSV preamble
+       (writeReportCSVPreamble): as-of reports print an "As of" line, period reports a
+       "From … To …" line; the scope subsidiary + target currency identify the state too.
+       Labels reuse the existing params catalog keys (no new i18n). */}}
+  <div class="report-print-meta" aria-hidden="true">
+    {{- if .Params.ShowAsOf}}
+    <p class="report-print-dates">{{t "reports.params.asof"}} {{.Params.AsOf}}</p>
+    {{- end}}
+    {{- if .Params.ShowPeriod}}
+    <p class="report-print-dates">{{t "reports.params.from"}} {{.Params.From}} · {{t "reports.params.to"}} {{.Params.To}}</p>
+    {{- end}}
+    <p class="report-print-scope">
+      {{- t "reports.params.scope"}}: {{range .Params.Scopes}}{{if .Selected}}{{.Name}}{{end}}{{end}}
+      {{- if .Params.ShowCurrency}} · {{t "reports.params.currency"}}: {{if .Params.Currency}}{{.Params.Currency}}{{else}}{{t "reports.currency.native"}}{{end}}{{end}}
+    </p>
+  </div>
   <p class="report-export">
     <a href="{{.CSVHref}}" class="report-csv-link" download>{{t "reports.export.csv"}}</a>
   </p>

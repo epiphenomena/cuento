@@ -88,6 +88,8 @@ bin/cuento serve -dev -addr :3390 -db bin/dev.db   # run (background it)
 
 Rebuild (`make build`) and restart the server after Go/template changes so the embedded assets refresh; static CSS/JS edits also require a rebuild (they are embedded). Log in as `admin` / `devpass123`.
 
+**Report print CSS (p29.17).** Reports carry report-oriented `@media print` CSS in `internal/web/static/app.css` so a printed / saved-as-PDF report is a clean, self-identifying, unchanging snapshot: the app chrome is stripped (top nav, filter/subnav bar, New-transaction / CSV / collapse-expand controls, updating indicator, footer), a print-only `.report-print-meta` header (hidden on screen, shown in print, rendered inside `#report-results` in `report.tmpl` so an in-page filter change keeps its dates in sync) identifies the record with the report title + as-of/period dates + subsidiary scope + currency, the table repeats its header on every page (`thead { display: table-header-group }`) and avoids mid-row breaks, and print forces the LIGHT theme (theme tokens remapped to ink-on-white on `html`) regardless of the user's on-screen theme. Known limitation: a very wide comparative statement (many period/program columns) may exceed portrait width — there is no reliable cross-browser pure-CSS shrink-to-fit, so the user picks Landscape / the browser's "fit to page". Per-report print refinements can extend this same block and MUST stay in app.css (strict CSP: no inline styles).
+
 ## Testing conventions
 
 - Table tests by default; property tests where PLAN.md names them.

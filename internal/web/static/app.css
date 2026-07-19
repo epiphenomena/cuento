@@ -788,6 +788,89 @@ input[aria-invalid="true"] {
   }
 }
 
+/* p29.17 report-oriented print CSS. Users print (or save-as-PDF) a report to keep a
+   shareable, unchanging snapshot of its current state, so @media print turns the app
+   page into a clean sheet: the app chrome is stripped, a print-only title+date header
+   identifies the record, the table repeats its header on every page and avoids
+   mid-row breaks, and the LIGHT theme is forced (ink on white) regardless of the
+   user's on-screen theme. All of this stays in app.css (strict CSP, rule 12 — no
+   inline style). Per-report print refinements can extend this same block.
+
+   The .report-print-meta element itself is hidden on screen (the dates already show
+   in the filter bar) and revealed only in print — see the two rules just below. */
+.report-print-meta { display: none; }
+
+@media print {
+  /* 1. STRIP THE CHROME. Hide every top-level body sibling that is NOT the report
+     <main> — this covers the top nav + New-transaction button + logout (.app-header),
+     the second-level filter/subnav bar (.app-subnav), the footer, the skip link, and
+     the flash region in one future-proof rule (a new chrome sibling is hidden too).
+     Inside <main>, hide the in-results chrome: the CSV/export link, the tree
+     collapse/expand controls, and the htmx "updating…" indicator. What remains is the
+     report title, its print date header, and the table. */
+  body > *:not(#main) { display: none !important; }
+  .report-export,
+  .report-controls,
+  .tree-controls,
+  .htmx-indicator,
+  .report-updating { display: none !important; }
+
+  /* 2. SELF-IDENTIFYING PRINT HEADER: hidden on screen, shown on paper so the sheet
+     carries what the report is (the <h1>) and as-of/period + scope/currency. */
+  .report-print-meta { display: block; margin: 0 0 var(--space-3); }
+  .report-print-meta p { margin: 0; }
+
+  /* 3a. FORCE THE LIGHT THEME by remapping the theme tokens to ink-on-white on the
+     root. Every existing var() — table text, the subtotal rule, the total's double
+     underline — then resolves to black/white for free, so a dark-theme user still
+     prints a legible black-on-white statement (browsers strip backgrounds in print,
+     and the accounting rules rest on borders + font-weight, not fills). */
+  /* The token declarations live on :root (specificity 0,1,0) and color-scheme is set
+     per html[data-theme="…"] (0,1,1); to WIN over both — including a dark-theme user —
+     the print override matches html[data-theme] (0,1,1) and, coming later in source
+     order, takes the tie. The values are absolute (#000/#fff), so they no longer
+     depend on color-scheme resolving light-dark(). */
+  html[data-theme] {
+    color-scheme: light;
+    --color-text: #000;
+    --color-text-muted: #333;
+    --color-surface: #fff;
+    --color-surface-alt: #fff;
+    --color-bg: #fff;
+    --color-border: #000;
+  }
+  body { background: #fff; color: #000; }
+
+  /* 3b. Give every page a sensible margin; leave portrait/landscape to the browser. */
+  @page { margin: 1.5cm; }
+
+  /* 3c. The report main fills the sheet (drop the reading-width cap). */
+  .app-main, .app-main-wide, .app-main-full { max-width: none; margin: 0; padding: 0; }
+
+  /* 3d. The table prints full width; repeat the header on every page; keep a row (and
+     the emphasized subtotal/total rows) from splitting across a page break; discourage
+     a section header from being orphaned at the foot of a page. The .report-scroll
+     max-height/overflow is @media screen-scoped, so it never clips the print. */
+  .report-table { width: 100%; }
+  /* Drillable cells (amounts / ledger lines) are <a> links on screen; a link takes its
+     color from the UA link rule, not var(--color-text), so it would print blue +
+     underlined. Force plain black text so a printed statement reads as figures, not
+     unfired hyperlinks. */
+  .report-table a,
+  .report-drill-link { color: #000; text-decoration: none; }
+  .report-table thead { display: table-header-group; }
+  .report-table tr,
+  .report-subtotal,
+  .report-total { break-inside: avoid; }
+  .report-subtotal,
+  .report-total { break-before: avoid; }
+
+  /* 3e. WIDE COMPARATIVE STATEMENTS (many period/program columns) can exceed portrait
+     width. There is no reliable cross-browser pure-CSS shrink-to-fit, so the table
+     stays full width and the user picks Landscape / the browser's "fit to page" for a
+     very wide statement — this is a documented, accepted limitation (see AGENTS.md). */
+}
+
 /* p16.3 reconciliation workspace. The sticky summary keeps the difference chip in
    view while scrolling long split lists; the difference goes green at zero (the
    finalize gate). The cleared toggle is a plain focusable button (Space activates it

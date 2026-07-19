@@ -529,6 +529,51 @@ func TestReportCSVMetadataPreamble(t *testing.T) {
 	})
 }
 
+// TestReportPrintMeta (p29.17): the report page renders a print-only self-identifying
+// header (.report-print-meta) INSIDE #report-results carrying the resolved date context,
+// so a printed/PDF'd report is a self-describing snapshot. It is hidden on screen via CSS
+// only, so the element + its date text are in the server render. An as-of report prints an
+// "As of <date>" line; a period report a "From <date> · To <date>" line. The date is the
+// RESOLVED, user-formatted value (ISO for the default-format test user).
+func TestReportPrintMeta(t *testing.T) {
+	h, st, _, sm := reportsApp(t)
+	admin := mkUser(t, st, "admin", "none", true)
+
+	t.Run("asof", func(t *testing.T) {
+		rec := asUser(t, h, sm, admin, http.MethodGet,
+			"/reports/"+reports.BalanceSheetReportID+"?scope=1&asof=2026-06-30", nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("balance sheet status = %d, want 200", rec.Code)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, `report-print-meta`) {
+			t.Fatalf("report page missing the .report-print-meta print header; body:\n%s", body)
+		}
+		asofLabel := i18n.T("en", "reports.params.asof")
+		if !strings.Contains(body, asofLabel+" 2026-06-30") {
+			t.Errorf("print-meta missing the resolved as-of date %q %q; body:\n%s", asofLabel, "2026-06-30", body)
+		}
+	})
+
+	t.Run("period", func(t *testing.T) {
+		rec := asUser(t, h, sm, admin, http.MethodGet,
+			"/reports/"+reports.IncomeStatementReportID+"?scope=1&from=2026-01-01&to=2026-06-30", nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("income statement status = %d, want 200", rec.Code)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, `report-print-meta`) {
+			t.Fatalf("report page missing the .report-print-meta print header; body:\n%s", body)
+		}
+		fromLabel := i18n.T("en", "reports.params.from")
+		toLabel := i18n.T("en", "reports.params.to")
+		if !strings.Contains(body, fromLabel+" 2026-01-01") || !strings.Contains(body, toLabel+" 2026-06-30") {
+			t.Errorf("print-meta missing the resolved from/to dates (%q 2026-01-01, %q 2026-06-30); body:\n%s",
+				fromLabel, toLabel, body)
+		}
+	})
+}
+
 // parseCSVBody parses a downloaded report CSV, tolerating the ragged 1-2 field
 // metadata preamble rows (FieldsPerRecord = -1) that precede the fixed-width table.
 func parseCSVBody(t *testing.T, body string) [][]string {
