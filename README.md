@@ -49,8 +49,8 @@ Full documentation site: **[GitHub Pages site](site/index.md)** (see
   financial position), income statement (statement of activities), functional
   expenses (990 Part IX), fund balances and activity, activities by restriction,
   the program statement, the Form 990 package (Parts III / VIII / IX / X), the
-  account ledger, a capital-campaign statement, the reconciliation statement,
-  and budget reports. Every report figure is drillable to its contributing
+  account ledger, the reconciliation statement, and budget reports. Every
+  report figure is drillable to its contributing
   splits.
 - **Bank-CSV import** with horizontal column mapping, reusable profiles,
   deduplication, and a staged review queue that posts through the same ledger

@@ -94,8 +94,6 @@ underlying splits. Each report also exports to CSV.
   opening/closing chain for a finalized reconciliation.
 - **Budget reports** — forecast, actuals-vs-budget, and cashflow projection,
   bucketed by period and broken out per fund.
-- **Capital campaign** — a quarterly capital-campaign statement scoped to one
-  restricted fund.
 
 ## Bank-CSV import
 

@@ -42,7 +42,6 @@ func Default() *Registry {
 	registerReconciliationStatement(reg)
 	registerCashflowProjection(reg)
 	registerBudgetVariance(reg)
-	registerCapitalCampaign(reg)
 	return reg
 }
 

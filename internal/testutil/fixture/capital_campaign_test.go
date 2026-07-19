@@ -9,11 +9,11 @@ import (
 )
 
 // TestExtendCapitalCampaignSeamOptIn proves the p26.51 capital-campaign seam is
-// OPT-IN: New leaves no campaign (the Expected zero value), so the default fixture
-// is unchanged and no "Restore the Way" fund exists.
+// OPT-IN: New leaves no campaign (the zero fund id), so the default fixture is
+// unchanged and no "Restore the Way" fund exists.
 func TestExtendCapitalCampaignSeamOptIn(t *testing.T) {
 	f := fixture.New(t)
-	if f.Expected.Campaign.Fund != 0 {
+	if f.IDs.Campaign != 0 {
 		t.Fatalf("campaign populated before ExtendCapitalCampaign; seam should be opt-in")
 	}
 	var n int
@@ -32,7 +32,7 @@ func TestExtendCapitalCampaignLedgerClean(t *testing.T) {
 	f := fixture.New(t)
 	f.ExtendCapitalCampaign(t)
 
-	if f.Expected.Campaign.Fund == 0 {
+	if f.IDs.Campaign == 0 {
 		t.Fatalf("seam did not populate the campaign fund")
 	}
 

@@ -270,12 +270,12 @@ func TestAllCardsHaveDescription(t *testing.T) {
 			}
 		}
 	}
-	// Guard the guard: an admin must resolve the full grid (15 section cards + 13 report
-	// cards; p27.3 merged the old budgets+schedules cards into one budget-plans card).
-	// If the card model ever changes, this pins that the loop actually exercised every
-	// card rather than silently iterating an empty set.
-	if cardCount < 28 {
-		t.Errorf("admin resolved only %d cards; expected the full grid (>=28)", cardCount)
+	// Guard the guard: an admin must resolve the full grid (15 section cards + 12 report
+	// cards; p27.3 merged the old budgets+schedules cards into one budget-plans card, and
+	// p30.1 removed the capital-campaign report). If the card model ever changes, this pins
+	// that the loop actually exercised every card rather than silently iterating an empty set.
+	if cardCount < 27 {
+		t.Errorf("admin resolved only %d cards; expected the full grid (>=27)", cardCount)
 	}
 }
 
@@ -378,7 +378,7 @@ func TestAllLandingFoldsReportGroups(t *testing.T) {
 
 	// Funds pairs the /funds management page with its report group folded in.
 	funds := cardsIn("nav.funds")
-	if !contains(funds, "/funds") || !contains(funds, "/reports/capital_campaign") {
+	if !contains(funds, "/funds") || !contains(funds, "/reports/fund_activity") {
 		t.Errorf("funds section missing /funds card or folded fund report: %v", funds)
 	}
 	// One "Funds" section only — the report group folds in, it does not also trail.

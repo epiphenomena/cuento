@@ -83,12 +83,6 @@ type Expected struct {
 	// finalized 2026-05-31 Checking US (USD) reconciliation's expected state.
 	Reconciliation ReconciliationExpected
 
-	// Campaign is the p26.51 capital-campaign seam, populated ONLY after
-	// (*Fixture).ExtendCapitalCampaign(t) is called; the zero value (Fund 0) means
-	// the seam has not been applied and no campaign exists. It captures the
-	// restricted campaign fund's hand-derived per-currency campaign figures.
-	Campaign CampaignExpected
-
 	// SampleBudgetPlan is the p27.2 sample budget-PLAN seam (the NEW split-derived
 	// model), populated ONLY after (*Fixture).ExtendSampleBudgetPlan(t) is called;
 	// the zero value (Plan 0) means the seam has not been applied. It captures the
@@ -106,33 +100,6 @@ type SampleBudgetPlanExpected struct {
 	From   string // earliest split date (the reports' default window start)
 	To     string // latest split date (the reports' default window end)
 	Splits int    // number of budget-splits the seam created
-}
-
-// CampaignExpected holds the p26.51 capital-campaign seam's expectations: the ids
-// the seam created and the hand-derived per-currency campaign figures (native minor
-// units) the Capital Campaign report asserts against. The RNA (restricted net
-// assets) figure equals GrossRevenue - GrossExpense - Land - Construction per
-// currency (campus.py's identity), which is exactly the fund's spendable Closing
-// balance since the fund opens at 0.
-type CampaignExpected struct {
-	Fund          ids.FundID
-	LandAccount   ids.AccountID
-	ConstrAccount ids.AccountID
-	FixedAssets   ids.AccountID
-	From          string // campaign start (first-activity default)
-	To            string // report as-of date
-
-	GrossRevenueUSD int64
-	GrossExpenseUSD int64
-	LandUSD         int64
-	ConstructionUSD int64
-	RNAUSD          int64
-
-	GrossRevenueMXN int64
-	GrossExpenseMXN int64
-	LandMXN         int64
-	ConstructionMXN int64
-	RNAMXN          int64
 }
 
 // ReconciliationExpected holds the p16 reconciliation seam's expectations: the
