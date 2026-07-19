@@ -64,6 +64,7 @@
             <th>{{t "history.field.fund"}}</th>
             <th>{{t "history.field.program"}}</th>
             <th>{{t "history.field.functional_class"}}</th>
+            <th>{{t "history.field.description"}}</th>
             <th>{{t "history.field.memo"}}</th>
           </tr>
         </thead>
@@ -84,6 +85,7 @@
             {{template "hist-split-cell" (splitCell .Fund (index $cells "fund"))}}
             {{template "hist-split-cell" (splitCell .Program (index $cells "program"))}}
             {{template "hist-split-cell" (splitCell .Class (index $cells "functional_class"))}}
+            {{template "hist-split-cell" (splitCell .Description (index $cells "description"))}}
             {{template "hist-split-cell" (splitCell .Memo (index $cells "memo"))}}
           </tr>
           {{end}}
