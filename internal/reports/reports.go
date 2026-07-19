@@ -46,6 +46,15 @@ type Report struct {
 	// empty Table, not an error.
 	Run func(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 
+	// WideMatrix marks a COMPARATIVE statement whose table fans out into many columns
+	// (p29.11): the monthly/quarterly Statement of Activities (income_statement) and the
+	// per-program comparative Program statement. The web layer renders these in a
+	// FULL-VIEWPORT-WIDTH shell (app-main-full, no 100rem reading cap — just the page
+	// gutter) so every period/program column shows without horizontal scroll. Narrow
+	// reports (trial balance, 2–3 columns) leave it false and keep the ordinary wide
+	// shell, so they don't stretch sparsely across a monitor.
+	WideMatrix bool
+
 	// Tree marks a report whose table PRESENTS A NESTED ACCOUNT HIERARCHY (p26.26):
 	// its rows are a pre-order tree (a parent row's Indent is shallower than its
 	// following child rows, structural header/total rows sit at Indent 0), so the web

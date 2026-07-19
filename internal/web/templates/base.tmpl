@@ -173,7 +173,7 @@
   <a class="skip-link" href="#main">{{t "common.skip_to_content"}}</a>
   {{template "shell-nav" .}}
   <div class="flash" role="status" aria-live="polite"></div>
-  <main id="main" class="app-main{{if .Shell.Wide}} app-main-wide{{end}}">
+  <main id="main" class="app-main{{if .Shell.Wide}} app-main-wide{{end}}{{if .Shell.FullWidth}} app-main-full{{end}}">
 {{- end}}
 
 {{define "shell-close" -}}

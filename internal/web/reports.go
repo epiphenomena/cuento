@@ -712,6 +712,11 @@ type reportPageModel struct {
 	// collapse/expand tree-controls above the table, and loads treetable.js to enhance
 	// it. False leaves the report table byte-identical (no controls, no data-depth).
 	Tree bool
+	// FullWidth (p29.11) mirrors reports.Report.WideMatrix: a comparative statement
+	// (monthly Statement of Activities, per-program statement) that fans into many
+	// columns renders in the FULL-viewport-width shell (app-main-full) so no column
+	// truncates/scrolls. False keeps the ordinary wide shell (100rem reading cap).
+	FullWidth bool
 }
 
 // renderedTable is a Table prepared for the HTML template: localized column headers
@@ -911,9 +916,10 @@ func (s *server) reportPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	model := reportPageModel{
-		Title:  i18n.T(lang, rep.TitleKey),
-		Params: form,
-		Tree:   rep.Tree, // p26.26: nested-account reports emit data-depth + tree controls.
+		Title:     i18n.T(lang, rep.TitleKey),
+		Params:    form,
+		Tree:      rep.Tree,       // p26.26: nested-account reports emit data-depth + tree controls.
+		FullWidth: rep.WideMatrix, // p29.11: comparative statements use the full-viewport shell.
 	}
 
 	table, err := rep.Run(ctx, reports.NewToolkit(s.store, params), params)
@@ -966,6 +972,10 @@ func (s *server) renderReportResults(w http.ResponseWriter, r *http.Request, mod
 	// controls still render in the second-level nav (SubNavControls="report").
 	page := s.newWideShellPage(r, model)
 	page.Shell.SubNavControls = "report"
+	// p29.11: comparative statements (income_statement, program_statement) opt into the
+	// FULL-viewport-width shell so their many period/program columns show without a
+	// horizontal scroll; other reports keep the ordinary wide (100rem-capped) shell.
+	page.Shell.FullWidth = model.FullWidth
 	s.render(w, r, http.StatusOK, "report.tmpl", page)
 }
 

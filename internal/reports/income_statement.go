@@ -53,6 +53,9 @@ func registerIncomeStatement(reg *Registry) {
 		ParamsSpec: ParamsSpec{Period: true, Granularity: true, Currency: true},
 		Run:        runIncomeStatement,
 		Tree:       true, // p26.26: the R/E tree nests placeholder parents over leaves.
+		// p29.11: the monthly/quarterly comparative statement fans into many period
+		// columns -> render full-viewport-width so none truncate/scroll.
+		WideMatrix: true,
 		// p27.4: R/E activity carries a program, so this is grant-subtree filterable.
 		ProgramDimensioned: true,
 	})

@@ -347,6 +347,34 @@ func TestTrialBalanceReportRenders(t *testing.T) {
 	}
 }
 
+// TestWideMatrixReportsFullWidth (p29.11): a comparative statement (income_statement,
+// program_statement) renders in the FULL-viewport shell (app-main-full) so its many
+// period/program columns show without a horizontal scroll; a narrow report (trial
+// balance) keeps the ordinary wide shell (no app-main-full, so it stays 100rem-capped).
+func TestWideMatrixReportsFullWidth(t *testing.T) {
+	h, st, _, sm := reportsApp(t)
+	admin := mkUser(t, st, "admin", "none", true)
+
+	for _, id := range []string{reports.IncomeStatementReportID, reports.ProgramStatementReportID} {
+		rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+id, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", id, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "app-main-full") {
+			t.Errorf("%s: comparative statement missing app-main-full (full-viewport opt-out)", id)
+		}
+	}
+
+	// A narrow report keeps the ordinary wide shell: wide, but NOT full-viewport.
+	rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.TrialBalanceReportID, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("trial balance status = %d, want 200", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "app-main-full") {
+		t.Errorf("trial balance should NOT be full-viewport (a narrow report keeps the 100rem cap)")
+	}
+}
+
 // TestTrialBalanceReportCSV: the CSV endpoint returns text/csv, an attachment
 // filename, and a parseable body whose header + rows reflect the report (proving the
 // CSV renderer is wired through the route with the same params).

@@ -273,6 +273,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .app-main-wide {
   max-width: min(100rem, 100% - 2 * var(--space-6));
 }
+/* Full-viewport opt-out (p29.11): a many-column comparative statement (the monthly
+   Statement of Activities, the per-program statement) drops even the 100rem cap so
+   every period/program column shows without a horizontal scroll, keeping only the
+   page gutter. Layered over app-main-wide (both classes are present). */
+.app-main-full {
+  max-width: min(100%, 100% - 2 * var(--space-6));
+}
 
 .app-footer {
   padding: var(--space-4) var(--space-6);

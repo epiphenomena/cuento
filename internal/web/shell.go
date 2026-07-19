@@ -351,6 +351,11 @@ type baseData struct {
 	// transaction editor, p23.2) can use the full horizontal width. Set via
 	// newWideShellPage; default false keeps the comfortable reading column.
 	Wide bool
+	// FullWidth (p29.11) drops even the wide shell's 100rem cap so a many-column
+	// comparative statement (monthly Statement of Activities, per-program statement)
+	// spans the full viewport minus the page gutter. Layered on top of Wide (a
+	// FullWidth page is always Wide too); default false keeps the 100rem cap.
+	FullWidth bool
 	// DateFormat is the user's date-format code ("ISO"/"US"/"EU"), stamped on <body>
 	// so the global date-field module (datefield.js, p23.4) can format/parse every
 	// date input per the user's setting without each page re-emitting it.

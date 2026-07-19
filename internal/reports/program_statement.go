@@ -59,6 +59,9 @@ func registerProgramStatement(reg *Registry) {
 		Group:      "programs",
 		ParamsSpec: ParamsSpec{Period: true, Program: true, CurrencyOptional: true},
 		Run:        runProgramStatement,
+		// p29.11: the per-program comparative statement fans into one column per program
+		// -> render full-viewport-width so none truncate/scroll.
+		WideMatrix: true,
 		// p27.4: rows are keyed by program, so a program-scoped grant filters them to
 		// the granted subtree (resolveParams -> Params.ProgramScope, honored below).
 		ProgramDimensioned: true,
