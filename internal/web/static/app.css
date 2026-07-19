@@ -392,7 +392,7 @@ input[aria-invalid="true"] {
 /* p26.29: horizontal-ROW layout for the schedule + budget-line entry forms.
    Both are htmx-swapped partials (stable ids preserved -- CSS-only, no template
    restructuring) whose fields normally stack vertically. Here they flow as a
-   wrapping inline row of labelled controls, mirroring .txn-header.
+   wrapping inline row of labelled controls, mirroring .txn-main-header.
 
    The schedule form has kind-specific `.kind-block` wrappers that budgetkind.js
    shows/hides via the `hidden` attribute. We must NOT fight that: the layout is
@@ -993,41 +993,12 @@ input[aria-invalid="true"] {
 
 .txn-editor { margin-top: var(--space-4); }
 
-/* Header: subsidiary / date / memo laid out in a wrapping row of labelled
-   fields, each taking a sensible share of the width. */
-.txn-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--space-3) var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  margin-bottom: var(--space-3);
-  background: var(--color-surface);
-  border: var(--border);
-  border-radius: var(--radius);
-}
-.txn-header .txn-field { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; }
-.txn-header .txn-field > label { font-weight: 600; font-size: 0.85rem; color: var(--color-text-muted); }
-.txn-header .txn-field input,
-.txn-header .txn-field select { min-width: 10rem; }
-.txn-header .txn-date { min-width: 8rem; }
-.txn-header .txn-memo-header { min-width: 14rem; }
-/* p26.23: with the payee + apply-fund controls gone, the header memo grows to fill the
-   freed horizontal space (a long, near-full-width memo field). The wrapping flex header
-   stays responsive: the grow field simply takes the remaining row width, and wraps to its
-   own line at narrow widths. */
-.txn-header .txn-field-grow { flex: 1 1 20rem; }
-.txn-header .txn-field-grow .txn-memo-header { width: 100%; }
-/* p26.36: the main-split description moved up into the header row (date -> description ->
-   memo). It is a grow field whose .desc-field wrapper + input fill the column width, matching
-   the memo-header grow behaviour. */
-.txn-header .txn-main-desc-field .desc-field { width: 100%; position: relative; }
-.txn-header .txn-main-desc-field .txn-desc { width: 100%; }
-
-/* p26.34 main-split header: the position-0 split presented at the transaction level
-   (description + account, and the auto-balanced residual amount, display-only). It mirrors
-   the .txn-header band but is visually accented (primary left rule) so it reads as THE
-   transaction line the body splits balance against. */
+/* p30.2 grouped transaction header: ONE cohesive block (.txn-main-header) holds BOTH the
+   transaction-level fields (subsidiary / date / main-description / memo + hidden carriers)
+   AND the main-split header (account + auto-balanced display-only amount), plus a status
+   band (per-fund chips + balance error) below them. A wrapping row of labelled fields,
+   accented with a primary left rule so it reads as THE transaction line the body splits
+   balance against. (Was two adjacent bands, .txn-header + .txn-main-header, pre-p30.2.) */
 .txn-main-header {
   display: flex;
   flex-wrap: wrap;
@@ -1044,9 +1015,19 @@ input[aria-invalid="true"] {
 .txn-main-header .txn-field > label { font-weight: 600; font-size: 0.85rem; color: var(--color-text-muted); }
 .txn-main-header .txn-field input,
 .txn-main-header .txn-field select { min-width: 10rem; }
+.txn-main-header .txn-date { min-width: 8rem; }
+.txn-main-header .txn-memo-header { min-width: 14rem; }
+/* p26.23: with the payee + apply-fund controls gone, the header memo grows to fill the
+   freed horizontal space (a long, near-full-width memo field). The wrapping flex header
+   stays responsive: the grow field takes the remaining row width, wrapping at narrow widths. */
 .txn-main-header .txn-field-grow { flex: 1 1 20rem; }
-.txn-main-header .txn-field-grow .desc-field { width: 100%; }
+.txn-main-header .txn-field-grow .txn-memo-header { width: 100%; }
+.txn-main-header .txn-field-grow .desc-field { width: 100%; position: relative; }
 .txn-main-header .txn-field-grow .txn-desc { width: 100%; }
+/* p26.36: the main-split description is a grow field whose .desc-field wrapper + input fill
+   the column width, matching the memo-header grow behaviour. */
+.txn-main-header .txn-main-desc-field .desc-field { width: 100%; position: relative; }
+.txn-main-header .txn-main-desc-field .txn-desc { width: 100%; }
 /* The balancing amount is a read-only display figure: right-aligned, muted, non-editable
    look so it never reads as a fillable field (the server computes it). */
 .txn-main-header .txn-main-amount {
@@ -1057,6 +1038,15 @@ input[aria-invalid="true"] {
   cursor: default;
 }
 .txn-main-header .txn-main-amount-field { flex: 0 0 auto; }
+/* p30.2 status band: the per-fund imbalance chips + the balance-error slot, on their own
+   full-width row at the foot of the grouped header (flex-basis 100% forces the wrap). */
+.txn-main-header .txn-status {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
 
 /* The split grid: a real table with collapsed borders so every column is ruled. */
 .txn-grid {
@@ -1361,25 +1351,9 @@ input[aria-invalid="true"] {
 
 .txn-actions { margin: var(--space-3) 0; }
 
-/* Totals bar: sticks to the bottom of the viewport so the running imbalance is
-   always visible while editing long split lists — no scroll to check the balance. */
-.txn-totals {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  margin-top: var(--space-3);
-  /* Tinted status strip, deliberately NOT the white input surface, so an empty
-     (balanced) bar never reads as a stray text field. */
-  background: var(--color-surface-alt);
-  border: var(--border);
-  border-radius: var(--radius);
-  min-height: 2.25rem;
-}
+/* p30.2: the per-fund chips + balance error render in the grouped header's .txn-status band
+   (the old sticky-bottom .txn-totals bar was removed). The chip + error styling below is
+   class-based and applies unchanged at the new location. */
 .txn-fund-chips { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
 /* p28/p29.5: a per-fund chip is NEUTRAL by default (a running per-fund sum is not a
    problem) -- muted theme surface + text, NOT the red error token. Only a genuine

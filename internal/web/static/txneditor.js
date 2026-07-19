@@ -542,7 +542,7 @@ function initEditor(form) {
   if (grid) {
     grid.addEventListener('keydown', (evt) => {
       // Scope: only handle keys fired from a real grid input/select. The subsidiary/date
-      // inputs live in .txn-header (outside .txn-grid), so they keep their own handlers.
+      // inputs live in .txn-main-header (outside .txn-grid), so they keep their own handlers.
       // The per-row description input (#txn-desc-<i>) IS a grid cell (Tab traverses it),
       // but while its suggestion listbox is open descfield.js stopPropagation's the
       // ↑/↓/Enter/Esc keys so they never reach this handler (pick != move/save/cancel).

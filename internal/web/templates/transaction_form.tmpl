@@ -199,7 +199,14 @@
       data-chip-unrestricted="{{t "txn.fund.unrestricted"}}"
       data-drcr="{{if .DisplayDRCR}}1{{else}}0{{end}}">
 
-  <div class="txn-header">
+  {{/* p30.2: the transaction-header fields (subsidiary / date / main-description / memo /
+       hidden carriers) and the main-split header (account + auto-balanced amount) are now
+       ONE grouped block (.txn-main-header) so they read + style as a single cohesive header
+       unit above the split grid. The OUTER container renders UNCONDITIONALLY (import /
+       expense-review / multi-fund flat all need subsidiary + date + the hidden currency/from
+       carriers); only the main-split-specific parts (the main-description field and the
+       main_* carriers + main account/amount) stay gated on .MainPresent. */}}
+  <div class="txn-main-header" id="txn-main-header">
     <div class="txn-field">
       <label for="txn-subsidiary">{{t "txn.subsidiary"}}</label>
       {{if or .ImportRowID .ExpenseReportID}}
@@ -230,9 +237,9 @@
     </div>
     {{/* p26.36: the main-split DESCRIPTION field sits immediately after the date (date ->
          description -> memo), so it reads left-to-right in transaction-header order and its
-         header autocomplete/prefill drives all splits. Same id/name/wiring as before (only
-         moved out of .txn-main-header); the hidden main_* carriers + the main account/amount
-         stay below. Rendered only in the normal editor (MainPresent). */}}
+         header autocomplete/prefill drives all splits. Same id/name/wiring as before; the
+         hidden main_* carriers + the main account/amount stay below (all in the p30.2 grouped
+         header now). Rendered only in the normal editor (MainPresent). */}}
     {{if .MainPresent}}
     <div class="txn-field txn-field-grow txn-main-desc-field">
       <label for="txn-main-desc">{{t "txn.main.description"}}</label>
@@ -260,18 +267,17 @@
          with the form (survives a 422) and rides the subsidiary re-filter via hx-include.
          Server-sanitized to a same-site path; empty => Cancel falls back to /accounts. */}}
     <input type="hidden" name="from" id="txn-origin" value="{{.Origin}}">
-  </div>
 
-  {{/* p26.34 main-split header: the position-0 split presented at the transaction level.
-       p26.36: its DESCRIPTION now lives up in the .txn-header row (date -> description ->
-       memo); this block holds the hidden main_* carriers plus the visible ACCOUNT and the
-       DISPLAY-ONLY balancing AMOUNT (the auto-balanced per-fund residual of the body splits;
-       no name -> never submitted; the server recomputes it authoritatively). The main
-       program/class/memo/split-id ride as hidden fields so the reconstruction loses nothing
-       (idempotent load->save). Rendered only in the normal editor (MainPresent); import /
-       expense-review and the multi-fund flat fallback keep the flat grid (main_present=0). */}}
-  {{if .MainPresent}}
-  <div class="txn-main-header" id="txn-main-header">
+    {{/* p26.34 main-split header: the position-0 split presented at the transaction level.
+         p26.36: its DESCRIPTION lives up in the header row (date -> description -> memo);
+         this holds the hidden main_* carriers plus the visible ACCOUNT and the DISPLAY-ONLY
+         balancing AMOUNT (the auto-balanced per-fund residual of the body splits; no name ->
+         never submitted; the server recomputes it authoritatively). The main program/class/
+         memo/split-id ride as hidden fields so the reconstruction loses nothing (idempotent
+         load->save). p30.2: these now sit INSIDE the grouped header block, but stay gated on
+         MainPresent -- import / expense-review and the multi-fund flat fallback keep the flat
+         grid (main_present=0) yet still get the subsidiary/date/memo header above. */}}
+    {{if .MainPresent}}
     <input type="hidden" name="main_present" value="1">
     <input type="hidden" name="main_split_id" id="txn-main-splitid" value="{{.MainSplitID}}">
     <input type="hidden" name="main_memo" id="txn-main-memo" value="{{.MainMemo}}">
@@ -298,8 +304,20 @@
            residual. The client keeps this in sync as a live preview. */}}
       <input type="text" id="txn-main-amount" class="txn-amount amount txn-main-amount" value="{{.MainAmount}}" readonly tabindex="-1" aria-live="polite">
     </div>
+    {{end}}
+
+    {{/* p30.2: the per-fund imbalance CHIPS + the balance-ERROR slot moved here (from the
+         removed .txn-totals bar). The chips (populated client-side by txnfund.js via
+         #txn-fund-chips) show which fund is off; the server's authoritative imbalance error
+         (ErrUnbalanced / ErrFundUnbalanced, trap 5) lands in #txn-totals-error. Both ids are
+         unchanged so txneditor.js (#txn-fund-chips) + the Go handler tests (#txn-totals-error
+         string) keep working; only the container moved. This status band spans the full
+         header width (its own flex row) below the header fields. */}}
+    <div class="txn-status" aria-live="polite">
+      <span class="txn-fund-chips" id="txn-fund-chips"></span>
+      {{if .TotalsError}}<span class="field-error txn-totals-error" id="txn-totals-error" role="alert"{{if eq $.Page.FirstErrorRow -1}} autofocus{{end}}>{{t .TotalsError}}</span>{{else}}<span class="txn-totals-error" id="txn-totals-error"></span>{{end}}
+    </div>
   </div>
-  {{end}}
 
   {{/* p26.32 two-row split layout: each split is its OWN <tbody class="txn-row"> (see
        "txn-row"), so the grid's rows are tbodies, not a single wrapping tbody.
@@ -338,16 +356,8 @@
        auto-appends a fresh trailing row as soon as the last row is edited; the trailing
        empty row is dropped server-side on submit. */}}
 
-  {{/* Sticky totals bar (Appendix C): the live PER-FUND imbalance chips (which fund is
-       off) are populated client-side (display only); the server's authoritative imbalance
-       error lands in the totals-error slot (trap 5). p29.5: the overall Total chip is gone
-       -- a transaction is enforced zero-sum per fund AND overall, so the balancing main
-       split makes the overall total always 0 (a redundant display). The per-fund chips and
-       all submit-time validation are unchanged. */}}
-  <div class="txn-totals" id="txn-totals" aria-live="polite">
-    <span class="txn-fund-chips" id="txn-fund-chips"></span>
-    {{if .TotalsError}}<span class="field-error txn-totals-error" id="txn-totals-error" role="alert"{{if eq $.Page.FirstErrorRow -1}} autofocus{{end}}>{{t .TotalsError}}</span>{{else}}<span class="txn-totals-error" id="txn-totals-error"></span>{{end}}
-  </div>
+  {{/* p30.2: the per-fund imbalance chips + balance-error slot (the old sticky .txn-totals
+       bar) moved UP into the grouped header (.txn-main-header) as the .txn-status band. */}}
 
   {{/* p24.2 transaction-level notes: a longer multiline explanation (distinct from
        the short per-split memos). Full-width below the grid so it never crowds the
