@@ -36,13 +36,14 @@ import (
 	"syscall"
 
 	"cuento/internal/db"
+	"cuento/internal/ids"
 	"cuento/internal/ledger"
 	"cuento/internal/store"
 )
 
 // systemActorID is the seeded system user (id 1). The importer posts as it -- a
 // local one-shot tool has no interactive user (D22/D26).
-const systemActorID = int64(1)
+const systemActorID = ids.UserID(1)
 
 func main() {
 	if len(os.Args) < 2 {

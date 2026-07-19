@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"cuento/internal/i18n"
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -113,7 +114,7 @@ func (s *server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		if id := s.sessions.GetInt64(ctx, sessionUserKey); id != 0 {
-			cu, err := s.store.UserByID(ctx, id)
+			cu, err := s.store.UserByID(ctx, ids.UserID(id))
 			switch {
 			case err == nil && !cu.Disabled:
 				ctx = context.WithValue(ctx, ctxKeyUser, &cu)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -31,7 +32,7 @@ type regEnv struct {
 	h    http.Handler
 	st   *store.Store
 	sm   *scs.SessionManager
-	book int64 // bookkeeper (txn write) user id
+	book ids.UserID // bookkeeper (txn write) user id
 
 	root       int64 // root subsidiary
 	subA, subB int64 // two children (so a >1-sub account exists)
@@ -621,7 +622,7 @@ func TestRegisterReconColumnGating(t *testing.T) {
 }
 
 // renderRegisterHTML fetches the full register page HTML for an account as `user`.
-func renderRegisterHTML(t *testing.T, e *regEnv, user, acctID int64) string {
+func renderRegisterHTML(t *testing.T, e *regEnv, user ids.UserID, acctID int64) string {
 	t.Helper()
 	path := "/accounts/" + strconv.FormatInt(acctID, 10) + "/register"
 	rec := asUser(t, e.h, e.sm, user, http.MethodGet, path, nil)

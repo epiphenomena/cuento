@@ -166,7 +166,7 @@ func (s *server) authenticate(r *http.Request, username, password string) (ok bo
 	if verr != nil || !match || !real {
 		return false, 0
 	}
-	return true, creds.ID
+	return true, int64(creds.ID)
 }
 
 // logout destroys the session (clearing the server-side row and expiring the

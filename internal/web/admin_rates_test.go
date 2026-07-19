@@ -10,6 +10,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -18,7 +19,7 @@ import (
 // (the first in the app) -- the CSV import is only reachable this way. No Origin
 // header is set, so the stdlib cross-origin protection treats it as same-origin (a
 // real browser upload from the app's own page).
-func uploadCSV(t *testing.T, h http.Handler, sm *scs.SessionManager, userID int64, csv string) *httptest.ResponseRecorder {
+func uploadCSV(t *testing.T, h http.Handler, sm *scs.SessionManager, userID ids.UserID, csv string) *httptest.ResponseRecorder {
 	t.Helper()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)

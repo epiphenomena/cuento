@@ -55,7 +55,7 @@ func importFields(accountID, subsidiaryID int64) map[string]string {
 
 // uploadImportCSV posts the multipart preview form (CSV + mapping fields) to
 // /import/preview as userID.
-func uploadImportCSV(t *testing.T, h http.Handler, sm *scs.SessionManager, userID int64, csv string, fields map[string]string) *httptest.ResponseRecorder {
+func uploadImportCSV(t *testing.T, h http.Handler, sm *scs.SessionManager, userID ids.UserID, csv string, fields map[string]string) *httptest.ResponseRecorder {
 	t.Helper()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)

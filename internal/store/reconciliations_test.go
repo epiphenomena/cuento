@@ -367,7 +367,7 @@ func TestReconciliationReopenAudited(t *testing.T) {
 	if err := e.s.Reopen(reopenCtx, recon); err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
-	if actor := testutil.LatestVersionActor(t, e.d, "reconciliations", int64(recon)); actor != reopener {
+	if actor := testutil.LatestVersionActor(t, e.d, "reconciliations", int64(recon)); actor != int64(reopener) {
 		t.Errorf("reopen version actor = %d, want %d", actor, reopener)
 	}
 }

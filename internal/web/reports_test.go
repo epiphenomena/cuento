@@ -12,6 +12,7 @@ import (
 	"github.com/alexedwards/scs/v2"
 
 	"cuento/internal/i18n"
+	"cuento/internal/ids"
 	"cuento/internal/reports"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
@@ -74,7 +75,7 @@ func reportsApp(t *testing.T) (http.Handler, *store.Store, *sql.DB, *scs.Session
 
 // grantGroup gives userID a read grant on group via direct SQL (grant writers are
 // p13.2; raw SQL in tests is in-convention). The group must already be synced (FK).
-func grantGroup(t *testing.T, db *sql.DB, userID int64, group string) {
+func grantGroup(t *testing.T, db *sql.DB, userID ids.UserID, group string) {
 	t.Helper()
 	if _, err := db.ExecContext(context.Background(),
 		`INSERT INTO user_report_grants (user_id, group_name) VALUES (?, ?)`,

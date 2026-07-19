@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"cuento/internal/auth"
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -92,7 +93,7 @@ func (s *server) buildUsersPage(r *http.Request) (usersPageModel, error) {
 			names = append(names, g.Group)
 		}
 		model.Rows = append(model.Rows, adminUserRow{
-			ID: u.ID, Username: u.Username, DisplayName: u.DisplayName,
+			ID: int64(u.ID), Username: u.Username, DisplayName: u.DisplayName,
 			IsAdmin: u.IsAdmin, TxnPerm: u.TxnPerm, Disabled: u.Disabled, Grants: names,
 		})
 	}
@@ -190,7 +191,7 @@ func (s *server) userCreate(w http.ResponseWriter, r *http.Request) {
 // last enabled admin; on a guard the list re-renders at 422 with the localized
 // message (no execution), mirroring the subsidiaries deactivate path.
 func (s *server) userDisable(w http.ResponseWriter, r *http.Request) {
-	id := parseID(r.PathValue("id"))
+	id := ids.UserID(parseID(r.PathValue("id")))
 	if err := s.store.DisableUser(s.actorCtx(r.Context()), id); err != nil {
 		s.renderUsersGuard(w, r, err)
 		return
@@ -202,7 +203,7 @@ func (s *server) userDisable(w http.ResponseWriter, r *http.Request) {
 // new argon2id hash via the shared auth path. The system user is refused
 // (ErrSystemUser -> page guard). A blank password is a 422 on the list.
 func (s *server) userResetPassword(w http.ResponseWriter, r *http.Request) {
-	id := parseID(r.PathValue("id"))
+	id := ids.UserID(parseID(r.PathValue("id")))
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -259,4 +260,4 @@ func (s *server) renderUsersPageError(w http.ResponseWriter, r *http.Request, ke
 
 // systemUserWebID mirrors the store's system-user id for the web-side reset guard
 // (the store also refuses it; this avoids a needless hash + write).
-const systemUserWebID int64 = 1
+const systemUserWebID ids.UserID = 1

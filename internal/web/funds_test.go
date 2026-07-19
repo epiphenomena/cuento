@@ -9,6 +9,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
 	"cuento/internal/testutil/fixture"
@@ -23,7 +24,7 @@ import (
 
 // fundsFixtureApp builds an app over the synthetic fixture and a write-capable user,
 // returning the handler, store, session manager, ids, and the user id.
-func fundsFixtureApp(t *testing.T) (http.Handler, *store.Store, *scs.SessionManager, fixture.IDs, int64) {
+func fundsFixtureApp(t *testing.T) (http.Handler, *store.Store, *scs.SessionManager, fixture.IDs, ids.UserID) {
 	t.Helper()
 	fx := fixture.New(t)
 	app := NewApp(Config{Version: "test"}, fx.DB, fx.Store)

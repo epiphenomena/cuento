@@ -9,6 +9,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -32,7 +33,7 @@ type mergeEnv struct {
 	h    http.Handler
 	st   *store.Store
 	sm   *scs.SessionManager
-	book int64
+	book ids.UserID
 	src  int64
 	dst  int64
 }

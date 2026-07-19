@@ -103,7 +103,7 @@ RETURNING id
 `
 
 type InsertExpenseReportParams struct {
-	SubmitterID  int64
+	SubmitterID  ids.UserID
 	SubsidiaryID int64
 	CreatedAt    string
 }
@@ -312,7 +312,7 @@ ORDER BY id DESC
 `
 
 // A submitter's own reports, newest first (the p20.2 my-reports list).
-func (q *Queries) ListExpenseReportsBySubmitter(ctx context.Context, submitterID int64) ([]ExpenseReport, error) {
+func (q *Queries) ListExpenseReportsBySubmitter(ctx context.Context, submitterID ids.UserID) ([]ExpenseReport, error) {
 	rows, err := q.db.QueryContext(ctx, listExpenseReportsBySubmitter, submitterID)
 	if err != nil {
 		return nil, err

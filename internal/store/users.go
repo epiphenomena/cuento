@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // User operations (p06.1). CreateUser is the MINIMAL write needed to prove the
@@ -26,7 +27,7 @@ import (
 // systemUserID is the seeded machine actor (id 1, migration 00002). It is never
 // an operator: the admin surface refuses to disable, perm-change, grant, or reset
 // it. Named here so the guard reads intent, not a magic number.
-const systemUserID int64 = 1
+const systemUserID ids.UserID = 1
 
 // CreateUserInput is the desired state of a NEW user. PasswordHash is optional
 // (nil = a passwordless user, like the system user). TxnPerm defaults to "none"
@@ -45,13 +46,13 @@ type CreateUserInput struct {
 // is snapshot-from-live and omits password_hash by construction (rule 5): the
 // secret is stored only in the live users table and never enters the audit
 // trail. This is the critical path the version-omits-hash test exercises.
-func (s *Store) CreateUser(ctx context.Context, in CreateUserInput) (int64, error) {
+func (s *Store) CreateUser(ctx context.Context, in CreateUserInput) (ids.UserID, error) {
 	txnPerm := in.TxnPerm
 	if txnPerm == "" {
 		txnPerm = "none"
 	}
 
-	var newID int64
+	var newID ids.UserID
 	_, err := s.write(ctx, "user.create", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			id, err := q.InsertUser(ctx, sqlc.InsertUserParams{
@@ -110,7 +111,7 @@ var ErrUserNotFound = errors.New("store: user not found")
 // version append is the SAME snapshot-from-live query CreateUser uses, so it
 // omits password_hash by construction (rule 5): the new secret enters only the
 // live table, never the audit trail.
-func (s *Store) SetUserPassword(ctx context.Context, userID int64, passwordHash string) error {
+func (s *Store) SetUserPassword(ctx context.Context, userID ids.UserID, passwordHash string) error {
 	_, err := s.write(ctx, "user.passwd", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			if err := q.SetUserPassword(ctx, sqlc.SetUserPasswordParams{
@@ -151,7 +152,7 @@ var ErrLastAdmin = errors.New("store: cannot disable the last admin")
 // last ENABLED admin (ErrLastAdmin) -- else no one could reach /admin/**. Both
 // are checked BEFORE the write so a blocked disable leaves no trace. A non-admin
 // user is never subject to the last-admin guard.
-func (s *Store) DisableUser(ctx context.Context, userID int64) error {
+func (s *Store) DisableUser(ctx context.Context, userID ids.UserID) error {
 	if userID == systemUserID {
 		return ErrSystemUser
 	}
@@ -205,7 +206,7 @@ func validTxnPerm(p string) bool { return p == "none" || p == "read" || p == "wr
 // {none,read,write} first (ErrInvalidTxnPerm); the system user (id 1) is refused
 // (ErrSystemUser) -- its perm is irrelevant machinery and must not be audited as an
 // operator change.
-func (s *Store) SetUserTxnPerm(ctx context.Context, userID int64, perm string) error {
+func (s *Store) SetUserTxnPerm(ctx context.Context, userID ids.UserID, perm string) error {
 	if userID == systemUserID {
 		return ErrSystemUser
 	}
@@ -232,7 +233,7 @@ func (s *Store) SetUserTxnPerm(ctx context.Context, userID int64, perm string) e
 // capability is INDEPENDENT of txn_perm -- a submitter may have txn_perm='none'. The
 // system user (id 1) is refused (ErrSystemUser): its capabilities are irrelevant
 // machinery and must not be audited as an operator change.
-func (s *Store) SetUserCanSubmitExpenses(ctx context.Context, userID int64, can bool) error {
+func (s *Store) SetUserCanSubmitExpenses(ctx context.Context, userID ids.UserID, can bool) error {
 	if userID == systemUserID {
 		return ErrSystemUser
 	}
@@ -255,7 +256,7 @@ func (s *Store) SetUserCanSubmitExpenses(ctx context.Context, userID int64, can 
 // list and per-user editor read. Excludes the system user by construction (the
 // ListUsers query filters id <> 1). A read projection, not a live entity.
 type AdminUser struct {
-	ID          int64
+	ID          ids.UserID
 	Username    string
 	DisplayName string
 	IsAdmin     bool
@@ -286,7 +287,7 @@ func (s *Store) ListUsers(ctx context.Context) ([]AdminUser, error) {
 // AdminUserByID returns one manageable user for the per-user admin detail page
 // (p13.2). The system user (id 1) is refused (ErrSystemUser) -- it is not an
 // operator; a missing id returns ErrUserNotFound. A read.
-func (s *Store) AdminUserByID(ctx context.Context, userID int64) (AdminUser, error) {
+func (s *Store) AdminUserByID(ctx context.Context, userID ids.UserID) (AdminUser, error) {
 	if userID == systemUserID {
 		return AdminUser{}, ErrSystemUser
 	}
@@ -308,7 +309,7 @@ func (s *Store) AdminUserByID(ctx context.Context, userID int64) (AdminUser, err
 // (which take a username but the versioned store methods take an id). A missing
 // username returns ErrUserNotFound. This is a read (rule 2 permits reads outside
 // the write funnel via sqlc).
-func (s *Store) UserIDByUsername(ctx context.Context, username string) (int64, error) {
+func (s *Store) UserIDByUsername(ctx context.Context, username string) (ids.UserID, error) {
 	id, err := s.q.UserIDByUsername(ctx, username)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, ErrUserNotFound
@@ -335,7 +336,7 @@ func (s *Store) CountHumanUsers(ctx context.Context) (int64, error) {
 // system user), whether the account is disabled, and the UI locale to bind after
 // a successful login. It is a read projection, not a live entity.
 type Credentials struct {
-	ID           int64
+	ID           ids.UserID
 	PasswordHash *string
 	Disabled     bool
 	Locale       string
@@ -346,7 +347,7 @@ type Credentials struct {
 // templates read. It is deliberately small — contexts carry the actor, and this
 // read carries only what request handling needs (AGENTS Style).
 type CurrentUser struct {
-	ID       int64
+	ID       ids.UserID
 	Username string
 	Disabled bool
 	TxnPerm  string
@@ -396,7 +397,7 @@ func (s *Store) CredentialsByUsername(ctx context.Context, username string) (Cre
 // Used by the auth middleware on every authenticated request; a missing id
 // returns sql.ErrNoRows (a stale/forged session), which the middleware treats as
 // anonymous.
-func (s *Store) UserByID(ctx context.Context, id int64) (CurrentUser, error) {
+func (s *Store) UserByID(ctx context.Context, id ids.UserID) (CurrentUser, error) {
 	row, err := s.q.UserByID(ctx, id)
 	if err != nil {
 		return CurrentUser{}, err
@@ -490,7 +491,7 @@ type UserSettingsInput struct {
 // bad id is a clean 422, not an FK-triggered 500); nil clears it (NULL). A non-nil
 // DefaultProgramID is existence-checked the same way (p26.5). The version append is
 // the same snapshot-from-live query CreateUser uses, so every column is captured.
-func (s *Store) UpdateUserSettings(ctx context.Context, userID int64, in UserSettingsInput, localeOK func(string) bool) error {
+func (s *Store) UpdateUserSettings(ctx context.Context, userID ids.UserID, in UserSettingsInput, localeOK func(string) bool) error {
 	if !localeOK(in.Locale) ||
 		!validDateFormat(in.DateFormat) ||
 		!validNumberFormat(in.NumberFormat) ||
@@ -546,7 +547,7 @@ func (s *Store) UpdateUserSettings(ctx context.Context, userID int64, in UserSet
 // validated against ValidTheme first so a bad value never reaches the db. The
 // version append is the same snapshot-from-live query CreateUser uses (theme IS
 // in the snapshot), so the change is audited.
-func (s *Store) SetUserTheme(ctx context.Context, userID int64, theme string) error {
+func (s *Store) SetUserTheme(ctx context.Context, userID ids.UserID, theme string) error {
 	if !ValidTheme(theme) {
 		return ErrInvalidTheme
 	}
@@ -567,7 +568,7 @@ func (s *Store) SetUserTheme(ctx context.Context, userID int64, theme string) er
 // the generated positional-param names (ID=change_id, ID_2=entity_id) behind one
 // call site. It MUST run after the live insert so the snapshot captures the new
 // row -- and by design the query omits password_hash (rule 5).
-func insertUserVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID int64) error {
+func insertUserVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.UserID) error {
 	if err := q.InsertUserVersion(ctx, sqlc.InsertUserVersionParams{Op: op, ID: changeID, ID_2: entityID}); err != nil {
 		return fmt.Errorf("append user version (entity %d, op %s): %w", entityID, op, err)
 	}

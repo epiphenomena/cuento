@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -96,7 +97,7 @@ func (m userDetailModel) ErrorField() string { return m.errorField }
 // userDetailPage handles GET /admin/users/{id} (Admin): the per-user perm editor.
 // A missing / system user id is a 404 (the store refuses id 1 and unknown ids).
 func (s *server) userDetailPage(w http.ResponseWriter, r *http.Request) {
-	id := parseID(r.PathValue("id"))
+	id := ids.UserID(parseID(r.PathValue("id")))
 	model, err := s.buildUserDetail(r, id)
 	if err != nil {
 		// The system user is not manageable -> back to the list (not a 404: it exists,
@@ -118,7 +119,7 @@ func (s *server) userDetailPage(w http.ResponseWriter, r *http.Request) {
 
 // buildUserDetail loads the subject user, its current grants, and the full report-
 // group set, marking which groups the user holds.
-func (s *server) buildUserDetail(r *http.Request, id int64) (userDetailModel, error) {
+func (s *server) buildUserDetail(r *http.Request, id ids.UserID) (userDetailModel, error) {
 	ctx := r.Context()
 	u, err := s.store.AdminUserByID(ctx, id)
 	if err != nil {
@@ -156,7 +157,7 @@ func (s *server) buildUserDetail(r *http.Request, id int64) (userDetailModel, er
 	pdGroups := s.reports.ProgramDimensionedGroups()
 
 	model := userDetailModel{
-		ID: u.ID, Username: u.Username, DisplayName: u.DisplayName,
+		ID: int64(u.ID), Username: u.Username, DisplayName: u.DisplayName,
 		IsAdmin: u.IsAdmin, Disabled: u.Disabled, TxnPerm: u.TxnPerm,
 		TxnPerms:          txnPermOptions(),
 		CanSubmitExpenses: u.CanSubmitExpenses,
@@ -178,7 +179,7 @@ func (s *server) buildUserDetail(r *http.Request, id int64) (userDetailModel, er
 // <select>) is a 422 re-render; the system user is unreachable (the store refuses
 // id 1). Success 303-redirects back to the detail page with a saved notice (PRG).
 func (s *server) userSetTxnPerm(w http.ResponseWriter, r *http.Request) {
-	id := parseID(r.PathValue("id"))
+	id := ids.UserID(parseID(r.PathValue("id")))
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -197,7 +198,7 @@ func (s *server) userSetTxnPerm(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	http.Redirect(w, r, userDetailURL(id), http.StatusSeeOther)
+	http.Redirect(w, r, userDetailURL(int64(id)), http.StatusSeeOther)
 }
 
 // userSetGrants handles POST /admin/users/{id}/grants (Admin): the checkbox set is
@@ -207,7 +208,7 @@ func (s *server) userSetTxnPerm(w http.ResponseWriter, r *http.Request) {
 // real report-group set is considered), so a crafted box cannot create a bogus
 // grant. Success 303-redirects back with a saved notice.
 func (s *server) userSetGrants(w http.ResponseWriter, r *http.Request) {
-	id := parseID(r.PathValue("id"))
+	id := ids.UserID(parseID(r.PathValue("id")))
 	ctx := r.Context()
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -294,7 +295,7 @@ func (s *server) userSetGrants(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	http.Redirect(w, r, userDetailURL(id), http.StatusSeeOther)
+	http.Redirect(w, r, userDetailURL(int64(id)), http.StatusSeeOther)
 }
 
 // parseProgramScope resolves a submitted "program_<group>" value to a program id,
@@ -334,7 +335,7 @@ func sameScope(a, b *int64) bool {
 // Success 303-redirects back with a saved notice (PRG). This is the p20.1-deferred
 // admin UI for the ExpenseSubmit right.
 func (s *server) userSetCanSubmit(w http.ResponseWriter, r *http.Request) {
-	id := parseID(r.PathValue("id"))
+	id := ids.UserID(parseID(r.PathValue("id")))
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
@@ -366,12 +367,12 @@ func (s *server) userSetCanSubmit(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	http.Redirect(w, r, userDetailURL(id), http.StatusSeeOther)
+	http.Redirect(w, r, userDetailURL(int64(id)), http.StatusSeeOther)
 }
 
 // renderUserDetailError re-renders the detail page at 422 with a field error (the
 // crafted-bad-perm path). It reloads the page model so the current state is shown.
-func (s *server) renderUserDetailError(w http.ResponseWriter, r *http.Request, id int64, field, key string) {
+func (s *server) renderUserDetailError(w http.ResponseWriter, r *http.Request, id ids.UserID, field, key string) {
 	model, err := s.buildUserDetail(r, id)
 	if err != nil {
 		s.serverError(w)

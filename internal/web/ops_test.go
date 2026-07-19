@@ -154,7 +154,7 @@ func TestOpsBackupWritesAuditChange(t *testing.T) {
 	if after != before+1 {
 		t.Fatalf("ops.backup change count = %d, want %d (exactly one new change)", after, before+1)
 	}
-	if actor := latestChangeActorByKind(t, db, "ops.backup"); actor != admin {
+	if actor := latestChangeActorByKind(t, db, "ops.backup"); actor != int64(admin) {
 		t.Errorf("ops.backup actor = %d, want the admin %d", actor, admin)
 	}
 }

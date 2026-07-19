@@ -158,7 +158,7 @@ type ExchangeRate struct {
 
 type ExpenseReport struct {
 	ID                  ids.ExpenseReportID
-	SubmitterID         int64
+	SubmitterID         ids.UserID
 	SubsidiaryID        int64
 	Status              string
 	ReviewNotes         string
@@ -198,7 +198,7 @@ type ExpenseReportsVersion struct {
 	ChangeID            int64
 	ValidFrom           string
 	Op                  string
-	SubmitterID         int64
+	SubmitterID         ids.UserID
 	SubsidiaryID        int64
 	Status              string
 	ReviewNotes         string
@@ -265,7 +265,7 @@ type ImportBatch struct {
 	AccountID    int64
 	SubsidiaryID int64
 	ProfileID    ids.MappingProfileID
-	UploadedBy   int64
+	UploadedBy   ids.UserID
 	UploadedAt   string
 }
 
@@ -427,7 +427,7 @@ type TransactionsVersion struct {
 }
 
 type User struct {
-	ID                  int64
+	ID                  ids.UserID
 	Username            string
 	DisplayName         string
 	CreatedAt           string
@@ -447,14 +447,14 @@ type User struct {
 }
 
 type UserReportGrant struct {
-	UserID    int64
+	UserID    ids.UserID
 	GroupName string
 	ProgramID sql.NullInt64
 }
 
 type UserReportGrantsVersion struct {
 	ID        int64
-	EntityID  int64
+	EntityID  ids.UserID
 	ChangeID  int64
 	ValidFrom string
 	Op        string
@@ -464,7 +464,7 @@ type UserReportGrantsVersion struct {
 
 type UsersVersion struct {
 	ID                  int64
-	EntityID            int64
+	EntityID            ids.UserID
 	ChangeID            int64
 	ValidFrom           string
 	Op                  string

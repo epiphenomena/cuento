@@ -29,8 +29,8 @@ type reconWebEnv struct {
 	st *store.Store
 	sm *scs.SessionManager
 
-	writer int64
-	reader int64
+	writer ids.UserID
+	reader ids.UserID
 
 	checking int64
 	spDep    int64 // +250 checking split

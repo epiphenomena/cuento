@@ -11,6 +11,7 @@ import (
 	"github.com/alexedwards/scs/v2"
 
 	"cuento/internal/i18n"
+	"cuento/internal/ids"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
 )
@@ -709,7 +710,7 @@ func newDevApp(t *testing.T) (http.Handler, *store.Store, *scs.SessionManager) {
 
 // setLocale updates a user's locale column directly (settings writers land in
 // p13.1; raw SQL in tests is in-convention, mirroring routes_test.go's grant).
-func setLocale(t *testing.T, db *sql.DB, userID int64, locale string) {
+func setLocale(t *testing.T, db *sql.DB, userID ids.UserID, locale string) {
 	t.Helper()
 	if _, err := db.ExecContext(context.Background(), `UPDATE users SET locale = ? WHERE id = ?`, locale, userID); err != nil {
 		t.Fatalf("set locale: %v", err)

@@ -27,7 +27,7 @@ import (
 
 // mkSubmitter creates a pure submitter (txn_perm=none + can_submit_expenses=true) and
 // returns its id.
-func mkSubmitter(t *testing.T, st *store.Store, username string) int64 {
+func mkSubmitter(t *testing.T, st *store.Store, username string) ids.UserID {
 	t.Helper()
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	id, err := st.CreateUser(ctx, store.CreateUserInput{
@@ -377,7 +377,7 @@ func TestAdminCanSubmitToggle(t *testing.T) {
 		t.Fatalf("target before grant: status=%d, want 403", rec.Code)
 	}
 	// Admin grants can_submit_expenses.
-	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(target)+"/can-submit", url.Values{
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/can-submit", url.Values{
 		"can_submit_expenses": {"1"},
 	})
 	if rec.Code >= 400 {
@@ -396,7 +396,7 @@ func TestAdminCanSubmitToggle(t *testing.T) {
 		t.Errorf("CanSubmitExpenses = false after admin grant")
 	}
 	// A non-admin cannot use the toggle (403).
-	if rec := asUser(t, h, sm, target, http.MethodPost, "/admin/users/"+itoa(target)+"/can-submit", url.Values{"can_submit_expenses": {"1"}}); rec.Code != http.StatusForbidden {
+	if rec := asUser(t, h, sm, target, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/can-submit", url.Values{"can_submit_expenses": {"1"}}); rec.Code != http.StatusForbidden {
 		t.Errorf("non-admin using toggle: status=%d, want 403", rec.Code)
 	}
 }
@@ -427,7 +427,7 @@ func reportIDFromRedirect(t *testing.T, rec *httptest.ResponseRecorder) int64 {
 // helper first reads the report's current lines and re-posts them (round-tripping each
 // line_id + its positive display magnitude) alongside the new row, so calling addLine
 // repeatedly accumulates lines like the old one-at-a-time form did. Fails on a non-redirect.
-func addLine(t *testing.T, h http.Handler, st *store.Store, sm *scs.SessionManager, submitter, reportID, account int64, amount string) {
+func addLine(t *testing.T, h http.Handler, st *store.Store, sm *scs.SessionManager, submitter ids.UserID, reportID, account int64, amount string) {
 	t.Helper()
 	form := gridFormFromLines(t, st, reportID)
 	idx := existingRowCount(t, st, reportID)

@@ -11,6 +11,7 @@ import (
 	"github.com/alexedwards/scs/v2"
 
 	"cuento/internal/bankimport"
+	"cuento/internal/ids"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
 )
@@ -305,13 +306,13 @@ const grantedReportGroup = "financial"
 // scs session row (user_id bound under the SAME key authMiddleware reads) and
 // returning its cookie. A fresh session per call means logout's Destroy can never
 // poison a later request in the sweep, and no login/argon2/rate-limit is involved.
-func mintCookie(t *testing.T, sm *scs.SessionManager, userID int64) *http.Cookie {
+func mintCookie(t *testing.T, sm *scs.SessionManager, userID ids.UserID) *http.Cookie {
 	t.Helper()
 	ctx, err := sm.Load(context.Background(), "") // empty token => brand-new session
 	if err != nil {
 		t.Fatalf("session load: %v", err)
 	}
-	sm.Put(ctx, sessionUserKey, userID)
+	sm.Put(ctx, sessionUserKey, int64(userID))
 	token, _, err := sm.Commit(ctx) // persists the row, returns its token
 	if err != nil {
 		t.Fatalf("session commit: %v", err)

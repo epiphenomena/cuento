@@ -10,6 +10,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
 )
@@ -28,7 +29,7 @@ func accountsApp(t *testing.T) (http.Handler, *store.Store, *scs.SessionManager)
 
 // asUser mints a session cookie for userID and issues req through h, returning the
 // recorder. Mirrors the matrix's mintCookie/doAs, generalized to any method+body.
-func asUser(t *testing.T, h http.Handler, sm *scs.SessionManager, userID int64, method, path string, form url.Values) *httptest.ResponseRecorder {
+func asUser(t *testing.T, h http.Handler, sm *scs.SessionManager, userID ids.UserID, method, path string, form url.Values) *httptest.ResponseRecorder {
 	t.Helper()
 	var body *strings.Reader
 	if form != nil {
@@ -49,7 +50,7 @@ func asUser(t *testing.T, h http.Handler, sm *scs.SessionManager, userID int64, 
 }
 
 // mkUser creates a user with the given txn perm (or admin) and returns its id.
-func mkUser(t *testing.T, st *store.Store, username, perm string, admin bool) int64 {
+func mkUser(t *testing.T, st *store.Store, username, perm string, admin bool) ids.UserID {
 	t.Helper()
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	id, err := st.CreateUser(ctx, store.CreateUserInput{

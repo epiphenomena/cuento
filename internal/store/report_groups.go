@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // Report groups are code-declared reference data (D10): the set lives in code
@@ -54,7 +55,7 @@ type ReportGrant struct {
 // permits reads outside the funnel via sqlc), used by the permission-enforcement
 // middleware ONLY for routes whose Perm is ReportGroup (and by the report row-scope
 // resolver) -- so the anonymous / non-report hot path never pays for it.
-func (s *Store) ReportGrants(ctx context.Context, userID int64) ([]ReportGrant, error) {
+func (s *Store) ReportGrants(ctx context.Context, userID ids.UserID) ([]ReportGrant, error) {
 	rows, err := s.q.ReportGrantsForUser(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("store: report grants for user %d: %w", userID, err)
@@ -118,7 +119,7 @@ func (s *Store) ReportGroupNames(ctx context.Context) ([]string, error) {
 //
 // The system user (id 1) is refused (ErrSystemUser). programID, when non-nil, is the
 // granted program-subtree root (self + descendants covered at report time).
-func (s *Store) GrantReportGroup(ctx context.Context, userID int64, group string, programID *int64) error {
+func (s *Store) GrantReportGroup(ctx context.Context, userID ids.UserID, group string, programID *int64) error {
 	if userID == systemUserID {
 		return ErrSystemUser
 	}
@@ -175,7 +176,7 @@ func (s *Store) GrantReportGroup(ctx context.Context, userID int64, group string
 // the live row is deleted (the account-subsidiaries removeSub convention). A
 // revoke of a grant the user does not hold is a no-op (no live row to snapshot, no
 // version row). The system user (id 1) is refused (ErrSystemUser).
-func (s *Store) RevokeReportGroup(ctx context.Context, userID int64, group string) error {
+func (s *Store) RevokeReportGroup(ctx context.Context, userID ids.UserID, group string) error {
 	if userID == systemUserID {
 		return ErrSystemUser
 	}

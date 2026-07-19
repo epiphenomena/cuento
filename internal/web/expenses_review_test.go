@@ -27,7 +27,7 @@ type reviewReportEnv struct {
 	reportID  int64
 	expense   int64
 	cash      int64
-	submitter int64
+	submitter ids.UserID
 }
 
 func seedSubmittedReport(t *testing.T, st *store.Store, amount int64) reviewReportEnv {

@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // ErrNoActor is returned by the write funnel when the context carries no actor.
@@ -50,7 +51,7 @@ var ErrNoActor = errors.New("store: no actor in context")
 // changes.actor_id foreign key needs — contexts carry the actor and nothing
 // else (AGENTS Style). Speculative fields (name, roles) live elsewhere.
 type Actor struct {
-	ID int64
+	ID ids.UserID
 }
 
 // actorKey is an unexported context-key type so no other package can collide
@@ -136,7 +137,7 @@ func (s *Store) write(
 	q := s.q.WithTx(tx)
 
 	changeID, err := q.InsertChange(ctx, sqlc.InsertChangeParams{
-		ActorID: actor.ID,
+		ActorID: int64(actor.ID),
 		At:      s.now().Format(time.RFC3339Nano),
 		Kind:    kind,
 		Note:    nullString(note),

@@ -10,6 +10,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
 )
@@ -35,7 +36,7 @@ func adminApp(t *testing.T) (http.Handler, *store.Store, *scs.SessionManager, *s
 
 // adminUserByUsername returns the id of a user by username via the store's admin
 // list (excludes the system user), or 0.
-func adminUserByUsername(t *testing.T, st *store.Store, username string) int64 {
+func adminUserByUsername(t *testing.T, st *store.Store, username string) ids.UserID {
 	t.Helper()
 	users, err := st.ListUsers(context.Background())
 	if err != nil {
@@ -156,7 +157,7 @@ func TestAdminUserDisable(t *testing.T) {
 	admin := mkUser(t, st, "boss", "none", true)
 	target := mkUser(t, st, "goner", "write", false)
 
-	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(target)+"/disable", url.Values{})
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/disable", url.Values{})
 	if rec.Code >= 400 {
 		t.Fatalf("disable returned %d, body: %s", rec.Code, rec.Body.String())
 	}
@@ -175,7 +176,7 @@ func TestAdminLastAdminGuardHTTP(t *testing.T) {
 	h, st, sm := accountsApp(t)
 	admin := mkUser(t, st, "onlyboss", "none", true)
 
-	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(admin)+"/disable", url.Values{})
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(admin))+"/disable", url.Values{})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("disable sole admin = %d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
@@ -197,7 +198,7 @@ func TestAdminResetPassword(t *testing.T) {
 
 	form := url.Values{}
 	form.Set("password", "brand new secret")
-	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(target)+"/reset-password", form)
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/reset-password", form)
 	if rec.Code >= 400 {
 		t.Fatalf("reset returned %d, body: %s", rec.Code, rec.Body.String())
 	}
@@ -219,7 +220,7 @@ func TestAdminSetTxnPerm(t *testing.T) {
 
 	form := url.Values{}
 	form.Set("txn_perm", "write")
-	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(target)+"/txn-perm", form)
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/txn-perm", form)
 	if rec.Code >= 400 {
 		t.Fatalf("set txn_perm returned %d, body: %s", rec.Code, rec.Body.String())
 	}
@@ -230,8 +231,8 @@ func TestAdminSetTxnPerm(t *testing.T) {
 	if u.TxnPerm != "write" {
 		t.Errorf("txn_perm = %q, want write", u.TxnPerm)
 	}
-	testutil.AssertVersioned(t, db, "users", target, "update")
-	if got := testutil.LatestVersionActor(t, db, "users", target); got != admin {
+	testutil.AssertVersioned(t, db, "users", int64(target), "update")
+	if got := testutil.LatestVersionActor(t, db, "users", int64(target)); got != int64(admin) {
 		t.Errorf("txn_perm change actor = %d, want admin %d", got, admin)
 	}
 }
@@ -254,28 +255,28 @@ func TestAdminGrantsRoundTrip(t *testing.T) {
 	// Grant.
 	grant := url.Values{}
 	grant.Set("grant_"+grp, "1")
-	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(target)+"/grants", grant)
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/grants", grant)
 	if rec.Code >= 400 {
 		t.Fatalf("grant returned %d, body: %s", rec.Code, rec.Body.String())
 	}
 	if gs, _ := st.ReportGrants(context.Background(), target); len(gs) != 1 || gs[0].Group != grp {
 		t.Fatalf("grants after grant = %v, want [%s]", gs, grp)
 	}
-	testutil.AssertVersionedGrant(t, db, target, grp, "create")
-	if got := testutil.LatestGrantActor(t, db, target, grp); got != admin {
+	testutil.AssertVersionedGrant(t, db, int64(target), grp, "create")
+	if got := testutil.LatestGrantActor(t, db, int64(target), grp); got != int64(admin) {
 		t.Errorf("grant actor = %d, want admin %d", got, admin)
 	}
 
 	// Revoke (submit the form with the box unchecked = absent).
-	rec = asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(target)+"/grants", url.Values{})
+	rec = asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/grants", url.Values{})
 	if rec.Code >= 400 {
 		t.Fatalf("revoke returned %d, body: %s", rec.Code, rec.Body.String())
 	}
 	if gs, _ := st.ReportGrants(context.Background(), target); len(gs) != 0 {
 		t.Fatalf("grants after revoke = %v, want empty", gs)
 	}
-	testutil.AssertVersionedGrant(t, db, target, grp, "delete")
-	if got := testutil.LatestGrantActor(t, db, target, grp); got != admin {
+	testutil.AssertVersionedGrant(t, db, int64(target), grp, "delete")
+	if got := testutil.LatestGrantActor(t, db, int64(target), grp); got != int64(admin) {
 		t.Errorf("revoke actor = %d, want admin %d", got, admin)
 	}
 }
@@ -301,7 +302,7 @@ func TestAdminGrantsProgramScope(t *testing.T) {
 	scoped := url.Values{}
 	scoped.Set("grant_financial", "1")
 	scoped.Set("program_financial", itoa(prog))
-	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(target)+"/grants", scoped)
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/grants", scoped)
 	if rec.Code >= 400 {
 		t.Fatalf("scoped grant returned %d, body: %s", rec.Code, rec.Body.String())
 	}
@@ -309,12 +310,12 @@ func TestAdminGrantsProgramScope(t *testing.T) {
 	if len(gs) != 1 || gs[0].Group != "financial" || gs[0].ProgramID == nil || *gs[0].ProgramID != prog {
 		t.Fatalf("grants after scoped grant = %+v, want [financial scoped to %d]", gs, prog)
 	}
-	testutil.AssertVersionedGrant(t, db, target, "financial", "create")
+	testutil.AssertVersionedGrant(t, db, int64(target), "financial", "create")
 
 	// Re-submit with the same box checked but NO program -> re-grant org-wide (scope change).
 	orgWide := url.Values{}
 	orgWide.Set("grant_financial", "1")
-	rec = asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(target)+"/grants", orgWide)
+	rec = asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/grants", orgWide)
 	if rec.Code >= 400 {
 		t.Fatalf("org-wide re-grant returned %d, body: %s", rec.Code, rec.Body.String())
 	}
@@ -329,7 +330,7 @@ func TestAdminGrantsProgramScope(t *testing.T) {
 	craft.Set("grant_financial", "1")
 	craft.Set("grant_funds", "1")
 	craft.Set("program_funds", itoa(prog))
-	rec = asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(target)+"/grants", craft)
+	rec = asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/grants", craft)
 	if rec.Code >= 400 {
 		t.Fatalf("funds grant returned %d, body: %s", rec.Code, rec.Body.String())
 	}
@@ -353,8 +354,8 @@ func TestAdminGrantsProgramScope(t *testing.T) {
 	rescope.Set("grant_financial", "1")
 	rescope.Set("program_financial", itoa(prog))
 	rescope.Set("grant_funds", "1")
-	asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(target)+"/grants", rescope)
-	get := asUser(t, h, sm, admin, http.MethodGet, "/admin/users/"+itoa(target), nil)
+	asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/grants", rescope)
+	get := asUser(t, h, sm, admin, http.MethodGet, "/admin/users/"+itoa(int64(target)), nil)
 	if get.Code != http.StatusOK {
 		t.Fatalf("GET detail = %d", get.Code)
 	}

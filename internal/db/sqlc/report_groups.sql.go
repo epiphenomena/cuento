@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 const deleteReportGrant = `-- name: DeleteReportGrant :exec
@@ -16,7 +18,7 @@ WHERE user_id = ? AND group_name = ?
 `
 
 type DeleteReportGrantParams struct {
-	UserID    int64
+	UserID    ids.UserID
 	GroupName string
 }
 
@@ -34,7 +36,7 @@ WHERE user_id = ? AND group_name = ?
 `
 
 type GetReportGrantScopeParams struct {
-	UserID    int64
+	UserID    ids.UserID
 	GroupName string
 }
 
@@ -56,7 +58,7 @@ WHERE user_id = ? AND group_name = ?
 `
 
 type HasReportGrantParams struct {
-	UserID    int64
+	UserID    ids.UserID
 	GroupName string
 }
 
@@ -76,7 +78,7 @@ VALUES (?, ?, ?)
 `
 
 type InsertReportGrantParams struct {
-	UserID    int64
+	UserID    ids.UserID
 	GroupName string
 	ProgramID sql.NullInt64
 }
@@ -102,7 +104,7 @@ WHERE c.id = ? AND g.user_id = ? AND g.group_name = ?
 type InsertReportGrantVersionParams struct {
 	Op        string
 	ID        int64
-	UserID    int64
+	UserID    ids.UserID
 	GroupName string
 }
 
@@ -168,7 +170,7 @@ type ReportGrantsForUserRow struct {
 // (org-wide). Read by the permission-enforcement middleware ONLY when a route's
 // Perm is ReportGroup, so it never taxes the anonymous / non-report hot path.
 // ORDER BY for determinism.
-func (q *Queries) ReportGrantsForUser(ctx context.Context, userID int64) ([]ReportGrantsForUserRow, error) {
+func (q *Queries) ReportGrantsForUser(ctx context.Context, userID ids.UserID) ([]ReportGrantsForUserRow, error) {
 	rows, err := q.db.QueryContext(ctx, reportGrantsForUser, userID)
 	if err != nil {
 		return nil, err

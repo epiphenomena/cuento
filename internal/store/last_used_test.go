@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"testing"
+
+	"cuento/internal/ids"
 )
 
 // p26.37 last-used header account. The prefill for a NEW transaction opened from the
@@ -10,13 +12,13 @@ import (
 // change id, not business date) non-deleted transaction, scoped to that actor.
 
 // actorCtx returns a mutation context tagged with the given actor id (mutCtx uses id 1).
-func actorCtx(id int64) context.Context {
+func actorCtx(id ids.UserID) context.Context {
 	return WithActor(context.Background(), Actor{ID: id})
 }
 
 // postHeaderTxn posts a balanced 2-split txn whose POSITION-0 (header) split is `header`
 // and body split is `body`, on `date`, as the given actor. Returns the transaction id.
-func (e txnEnv) postHeaderTxn(t *testing.T, actor int64, date string, header, body, amount int64) int64 {
+func (e txnEnv) postHeaderTxn(t *testing.T, actor ids.UserID, date string, header, body, amount int64) int64 {
 	t.Helper()
 	in := PostTransactionInput{
 		Date: date, SubsidiaryID: e.subUS, Currency: "USD",

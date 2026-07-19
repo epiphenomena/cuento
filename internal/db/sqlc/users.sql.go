@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 const countHumanUsers = `-- name: CountHumanUsers :one
@@ -33,7 +35,7 @@ WHERE id <> ? AND is_admin = 1 AND disabled_at IS NULL
 // DisableUser rejects disabling an admin when this is 0 -- the very last enabled
 // admin cannot lock the whole org out of the admin surface. Distinct from
 // CountHumanUsers (which counts non-system users regardless of admin/enabled).
-func (q *Queries) CountOtherEnabledAdmins(ctx context.Context, id int64) (int64, error) {
+func (q *Queries) CountOtherEnabledAdmins(ctx context.Context, id ids.UserID) (int64, error) {
 	row := q.db.QueryRowContext(ctx, countOtherEnabledAdmins, id)
 	var count int64
 	err := row.Scan(&count)
@@ -59,7 +61,7 @@ WHERE id = ?
 `
 
 type GetUserRow struct {
-	ID          int64
+	ID          ids.UserID
 	Username    string
 	DisplayName string
 	CreatedAt   string
@@ -69,7 +71,7 @@ type GetUserRow struct {
 // p06.1 adds InsertUser + InsertUserVersion. Keep this file PURE ASCII: sqlc
 // v1.31.1 miscounts byte offsets on multi-byte UTF-8 and corrupts the WHOLE
 // file's generated SQL (see docs/DECISIONS.md p04.2).
-func (q *Queries) GetUser(ctx context.Context, id int64) (GetUserRow, error) {
+func (q *Queries) GetUser(ctx context.Context, id ids.UserID) (GetUserRow, error) {
 	row := q.db.QueryRowContext(ctx, getUser, id)
 	var i GetUserRow
 	err := row.Scan(
@@ -89,7 +91,7 @@ WHERE id = ?
 `
 
 type GetUserRowRow struct {
-	ID                int64
+	ID                ids.UserID
 	Username          string
 	DisplayName       string
 	IsAdmin           int64
@@ -101,7 +103,7 @@ type GetUserRowRow struct {
 // Full live user row for the admin detail page (p13.2): the columns the per-user
 // perm/grant editor needs. Distinct from UserByID (session projection) so this
 // step touches no existing query.
-func (q *Queries) GetUserRow(ctx context.Context, id int64) (GetUserRowRow, error) {
+func (q *Queries) GetUserRow(ctx context.Context, id ids.UserID) (GetUserRowRow, error) {
 	row := q.db.QueryRowContext(ctx, getUserRow, id)
 	var i GetUserRowRow
 	err := row.Scan(
@@ -135,7 +137,7 @@ type InsertUserParams struct {
 // the system user, passes NULL). Settings columns are omitted so their schema
 // DEFAULTs apply; the version append reads them back from the live row. Returns
 // the new id for the store to snapshot + return.
-func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (int64, error) {
+func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (ids.UserID, error) {
 	row := q.db.QueryRowContext(ctx, insertUser,
 		arg.Username,
 		arg.DisplayName,
@@ -144,7 +146,7 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (int64, 
 		arg.IsAdmin,
 		arg.TxnPerm,
 	)
-	var id int64
+	var id ids.UserID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -166,7 +168,7 @@ WHERE c.id = ? AND u.id = ?
 type InsertUserVersionParams struct {
 	Op   string
 	ID   int64
-	ID_2 int64
+	ID_2 ids.UserID
 }
 
 // Snapshot-from-live version append for users (rule 5, D4). Runs AFTER the live
@@ -192,7 +194,7 @@ ORDER BY username
 `
 
 type ListUsersRow struct {
-	ID          int64
+	ID          ids.UserID
 	Username    string
 	DisplayName string
 	IsAdmin     int64
@@ -239,7 +241,7 @@ UPDATE users SET can_submit_expenses = ? WHERE id = ?
 
 type SetUserCanSubmitExpensesParams struct {
 	CanSubmitExpenses int64
-	ID                int64
+	ID                ids.UserID
 }
 
 // Live update of a user's standalone expense-submit capability (p20.1 admin, wired
@@ -258,7 +260,7 @@ UPDATE users SET disabled_at = ? WHERE id = ?
 
 type SetUserDisabledParams struct {
 	DisabledAt sql.NullString
-	ID         int64
+	ID         ids.UserID
 }
 
 // Live update of a user's disabled_at (p06.4 `user disable`). A disabled user
@@ -275,7 +277,7 @@ UPDATE users SET password_hash = ? WHERE id = ?
 
 type SetUserPasswordParams struct {
 	PasswordHash sql.NullString
-	ID           int64
+	ID           ids.UserID
 }
 
 // Live update of a user's password_hash (p06.4 `user passwd`). The version append
@@ -292,7 +294,7 @@ UPDATE users SET theme = ? WHERE id = ?
 
 type SetUserThemeParams struct {
 	Theme string
-	ID    int64
+	ID    ids.UserID
 }
 
 // Live update of a user's theme preference (p10.2 POST /theme). Versioned as
@@ -311,7 +313,7 @@ UPDATE users SET txn_perm = ? WHERE id = ?
 
 type SetUserTxnPermParams struct {
 	TxnPerm string
-	ID      int64
+	ID      ids.UserID
 }
 
 // Live update of a user's transaction permission (p13.2 admin). Versioned as
@@ -339,7 +341,7 @@ type UpdateUserSettingsParams struct {
 	Theme               string
 	DefaultSubsidiaryID sql.NullInt64
 	DefaultProgramID    sql.NullInt64
-	ID                  int64
+	ID                  ids.UserID
 }
 
 // Live update of a user's personal settings (p13.1 /settings): the UI locale, the
@@ -373,7 +375,7 @@ WHERE id = ?
 `
 
 type UserByIDRow struct {
-	ID                  int64
+	ID                  ids.UserID
 	Username            string
 	DisabledAt          sql.NullString
 	TxnPerm             string
@@ -402,7 +404,7 @@ type UserByIDRow struct {
 // p20.1 adds can_submit_expenses (the standalone expense-submit capability,
 // INDEPENDENT of txn_perm): the auth middleware resolves it here so decide() can
 // gate the ExpenseSubmit perm per-request without a second query.
-func (q *Queries) UserByID(ctx context.Context, id int64) (UserByIDRow, error) {
+func (q *Queries) UserByID(ctx context.Context, id ids.UserID) (UserByIDRow, error) {
 	row := q.db.QueryRowContext(ctx, userByID, id)
 	var i UserByIDRow
 	err := row.Scan(
@@ -431,7 +433,7 @@ WHERE username = ?
 `
 
 type UserByUsernameRow struct {
-	ID           int64
+	ID           ids.UserID
 	PasswordHash sql.NullString
 	DisabledAt   sql.NullString
 	Locale       string
@@ -462,9 +464,9 @@ SELECT id FROM users WHERE username = ?
 // CLI lookup (p06.4): passwd/disable take a username; resolve it to the id the
 // versioned store methods need. A missing username is sql.ErrNoRows the CLI maps
 // to a clean "no such user" error.
-func (q *Queries) UserIDByUsername(ctx context.Context, username string) (int64, error) {
+func (q *Queries) UserIDByUsername(ctx context.Context, username string) (ids.UserID, error) {
 	row := q.db.QueryRowContext(ctx, userIDByUsername, username)
-	var id int64
+	var id ids.UserID
 	err := row.Scan(&id)
 	return id, err
 }

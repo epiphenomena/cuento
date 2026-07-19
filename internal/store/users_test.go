@@ -66,10 +66,10 @@ func TestUsersVersionOmitsPasswordHash(t *testing.T) {
 	// The hash must not appear ANYWHERE in users_versions for this user, even
 	// smuggled into a text column. Scan every column of the latest version row as
 	// text and assert none equals the secret.
-	assertHashAbsentFromVersion(t, d, id, secretHash)
+	assertHashAbsentFromVersion(t, d, int64(id), secretHash)
 
 	// (b) the version row exists, op='create', with the non-secret columns set.
-	testutil.AssertVersioned(t, d, "users", id, "create")
+	testutil.AssertVersioned(t, d, "users", int64(id), "create")
 
 	var (
 		vUsername string
@@ -203,7 +203,7 @@ func TestUpdateUserSettingsVersioned(t *testing.T) {
 	}
 
 	// An op='update' version snapshot exists, tied to the acting actor (id 1).
-	testutil.AssertVersioned(t, d, "users", id, "update")
+	testutil.AssertVersioned(t, d, "users", int64(id), "update")
 	var vActor int64
 	var vLocale, vDisplayMode string
 	err = d.QueryRow(
@@ -305,7 +305,7 @@ func TestCreateUserWithoutPasswordHash(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 
-	testutil.AssertVersioned(t, d, "users", id, "create")
+	testutil.AssertVersioned(t, d, "users", int64(id), "create")
 
 	var ph any
 	if err := d.QueryRow(`SELECT password_hash FROM users WHERE id = ?`, id).Scan(&ph); err != nil {

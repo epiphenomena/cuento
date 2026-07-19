@@ -63,10 +63,10 @@ func DemoUsers() []DemoUser {
 type DemoIDs struct {
 	IDs
 
-	AdminUser        int64
-	SubmitterUser    int64
-	ViewerUser       int64
-	CampDirectorUser int64
+	AdminUser        ids.UserID
+	SubmitterUser    ids.UserID
+	ViewerUser       ids.UserID
+	CampDirectorUser ids.UserID
 
 	DraftReport     ids.ExpenseReportID
 	SubmittedReport ids.ExpenseReportID
@@ -209,7 +209,7 @@ func passwordFor(username string) (string, error) {
 	return "", fmt.Errorf("no demo password for unknown username %q", username)
 }
 
-func createDemoUser(ctx context.Context, s *store.Store, username, display string, admin bool, txnPerm string) (int64, error) {
+func createDemoUser(ctx context.Context, s *store.Store, username, display string, admin bool, txnPerm string) (ids.UserID, error) {
 	password, err := passwordFor(username)
 	if err != nil {
 		return 0, err

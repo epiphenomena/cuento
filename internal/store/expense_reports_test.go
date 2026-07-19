@@ -21,7 +21,7 @@ import (
 // seedExpenseReportEnv builds the minimal env for report tests: a submitter user, a
 // reviewer, a subsidiary (the seeded root, id 1), an account, and returns the store,
 // db, a submitter-actor context, and the ids.
-func seedExpenseReportEnv(t *testing.T) (*Store, *sql.DB, context.Context, int64, int64) {
+func seedExpenseReportEnv(t *testing.T) (*Store, *sql.DB, context.Context, ids.UserID, int64) {
 	t.Helper()
 	d := testutil.NewDB(t)
 	s := New(d)
@@ -580,8 +580,8 @@ func TestCanSubmitExpensesVersioned(t *testing.T) {
 	if err := s.SetUserCanSubmitExpenses(adminCtx, targetID, true); err != nil {
 		t.Fatalf("SetUserCanSubmitExpenses: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "users", targetID, "update")
-	if got := testutil.LatestVersionActor(t, d, "users", targetID); got != adminID {
+	testutil.AssertVersioned(t, d, "users", int64(targetID), "update")
+	if got := testutil.LatestVersionActor(t, d, "users", int64(targetID)); got != int64(adminID) {
 		t.Errorf("can_submit_expenses change actor = %d, want admin %d", got, adminID)
 	}
 	// The live row reflects the flag (via the CurrentUser projection).
@@ -630,7 +630,7 @@ func postedTxnID(t *testing.T, d *sql.DB, id ids.ExpenseReportID) sql.NullInt64 
 	return pt
 }
 
-func latestVersionCanSubmit(t *testing.T, d *sql.DB, userID int64) int64 {
+func latestVersionCanSubmit(t *testing.T, d *sql.DB, userID ids.UserID) int64 {
 	t.Helper()
 	var v int64
 	err := d.QueryRow(

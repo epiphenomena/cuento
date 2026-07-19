@@ -68,7 +68,7 @@ var (
 // subsidiary exist inside fn so a rejection rolls back cleanly. The subsidiary is the
 // submitter's default at creation but is EDITABLE in-page until the first line is added
 // (UpdateExpenseReportSubsidiary, p25.3) -- it is no longer fixed at creation.
-func (s *Store) CreateExpenseReport(ctx context.Context, submitterID, subsidiaryID int64) (ids.ExpenseReportID, error) {
+func (s *Store) CreateExpenseReport(ctx context.Context, submitterID ids.UserID, subsidiaryID int64) (ids.ExpenseReportID, error) {
 	var newID ids.ExpenseReportID
 	_, err := s.write(ctx, "expense_report.create", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
@@ -576,7 +576,7 @@ func (s *Store) ExpenseReportLines(ctx context.Context, reportID ids.ExpenseRepo
 }
 
 // ExpenseReportsBySubmitter returns a submitter's own reports, newest first (read).
-func (s *Store) ExpenseReportsBySubmitter(ctx context.Context, submitterID int64) ([]sqlc.ExpenseReport, error) {
+func (s *Store) ExpenseReportsBySubmitter(ctx context.Context, submitterID ids.UserID) ([]sqlc.ExpenseReport, error) {
 	rows, err := s.q.ListExpenseReportsBySubmitter(ctx, submitterID)
 	if err != nil {
 		return nil, fmt.Errorf("store: expense reports by submitter %d: %w", submitterID, err)

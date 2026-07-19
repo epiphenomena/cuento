@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/testutil"
 )
 
@@ -47,8 +48,8 @@ func TestPermChangeVersioned(t *testing.T) {
 	if err := s.SetUserTxnPerm(adminCtx, targetID, "write"); err != nil {
 		t.Fatalf("SetUserTxnPerm: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "users", targetID, "update")
-	if got := testutil.LatestVersionActor(t, d, "users", targetID); got != adminID {
+	testutil.AssertVersioned(t, d, "users", int64(targetID), "update")
+	if got := testutil.LatestVersionActor(t, d, "users", int64(targetID)); got != int64(adminID) {
 		t.Errorf("txn_perm change actor = %d, want admin %d", got, adminID)
 	}
 	// The live row reflects the change.
@@ -62,16 +63,16 @@ func TestPermChangeVersioned(t *testing.T) {
 	if err := s.GrantReportGroup(adminCtx, targetID, "reports_x", nil); err != nil {
 		t.Fatalf("GrantReportGroup: %v", err)
 	}
-	testutil.AssertVersionedGrant(t, d, targetID, "reports_x", "create")
-	if got := testutil.LatestGrantActor(t, d, targetID, "reports_x"); got != adminID {
+	testutil.AssertVersionedGrant(t, d, int64(targetID), "reports_x", "create")
+	if got := testutil.LatestGrantActor(t, d, int64(targetID), "reports_x"); got != int64(adminID) {
 		t.Errorf("grant actor = %d, want admin %d", got, adminID)
 	}
 
 	if err := s.RevokeReportGroup(adminCtx, targetID, "reports_x"); err != nil {
 		t.Fatalf("RevokeReportGroup: %v", err)
 	}
-	testutil.AssertVersionedGrant(t, d, targetID, "reports_x", "delete")
-	if got := testutil.LatestGrantActor(t, d, targetID, "reports_x"); got != adminID {
+	testutil.AssertVersionedGrant(t, d, int64(targetID), "reports_x", "delete")
+	if got := testutil.LatestGrantActor(t, d, int64(targetID), "reports_x"); got != int64(adminID) {
 		t.Errorf("revoke actor = %d, want admin %d", got, adminID)
 	}
 	// The live grant is gone after a revoke.
@@ -84,8 +85,8 @@ func TestPermChangeVersioned(t *testing.T) {
 	if err := s.GrantReportGroup(adminCtx, targetID, "reports_x", nil); err != nil {
 		t.Fatalf("re-GrantReportGroup: %v", err)
 	}
-	testutil.AssertVersionedGrant(t, d, targetID, "reports_x", "create")
-	if got := testutil.LatestGrantActor(t, d, targetID, "reports_x"); got != adminID {
+	testutil.AssertVersionedGrant(t, d, int64(targetID), "reports_x", "create")
+	if got := testutil.LatestGrantActor(t, d, int64(targetID), "reports_x"); got != int64(adminID) {
 		t.Errorf("re-grant actor = %d, want admin %d", got, adminID)
 	}
 	// The live grant is back.
@@ -129,7 +130,7 @@ func TestGrantProgramScope(t *testing.T) {
 	if err := s.GrantReportGroup(ctx, target, "reports_x", &progA); err != nil {
 		t.Fatalf("GrantReportGroup scoped: %v", err)
 	}
-	testutil.AssertVersionedGrant(t, d, target, "reports_x", "create")
+	testutil.AssertVersionedGrant(t, d, int64(target), "reports_x", "create")
 	if gs, err := s.ReportGrants(ctx, target); err != nil {
 		t.Fatalf("ReportGrants: %v", err)
 	} else if len(gs) != 1 || gs[0].ProgramID == nil || *gs[0].ProgramID != progA {
@@ -150,7 +151,7 @@ func TestGrantProgramScope(t *testing.T) {
 	if err := s.GrantReportGroup(ctx, target, "reports_x", &progB); err != nil {
 		t.Fatalf("re-scope to B: %v", err)
 	}
-	testutil.AssertVersionedGrant(t, d, target, "reports_x", "create") // latest op is the new create
+	testutil.AssertVersionedGrant(t, d, int64(target), "reports_x", "create") // latest op is the new create
 	if gs, err := s.ReportGrants(ctx, target); err != nil {
 		t.Fatalf("ReportGrants after re-scope: %v", err)
 	} else if len(gs) != 1 || gs[0].ProgramID == nil || *gs[0].ProgramID != progB {
@@ -174,7 +175,7 @@ func TestGrantProgramScope(t *testing.T) {
 // grantVersionCount returns the number of user_report_grants_versions rows for a
 // (user, group) -- a raw read (in-convention for tests, p05.3) so the re-scope trail
 // can be counted.
-func grantVersionCount(t *testing.T, d *sql.DB, userID int64, group string) int {
+func grantVersionCount(t *testing.T, d *sql.DB, userID ids.UserID, group string) int {
 	t.Helper()
 	var n int
 	if err := d.QueryRowContext(context.Background(),

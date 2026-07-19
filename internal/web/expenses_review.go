@@ -131,12 +131,12 @@ func (s *server) buildReviewQueue(r *http.Request, submitted []sqlc.ExpenseRepor
 
 // submitterNameMap maps a user id -> a display name (falling back to the username),
 // for labeling a report's submitter on the queue.
-func (s *server) submitterNameMap(ctx context.Context) (map[int64]string, error) {
+func (s *server) submitterNameMap(ctx context.Context) (map[ids.UserID]string, error) {
 	users, err := s.store.ListUsers(ctx)
 	if err != nil {
 		return nil, err
 	}
-	m := make(map[int64]string, len(users))
+	m := make(map[ids.UserID]string, len(users))
 	for _, u := range users {
 		name := u.DisplayName
 		if name == "" {
@@ -150,7 +150,7 @@ func (s *server) submitterNameMap(ctx context.Context) (map[int64]string, error)
 // buildReviewRow assembles one queue row: submitter + subsidiary names, the line count,
 // the summed magnitude formatted in the report's subsidiary base currency, the status
 // key, and (converted) the posted txn id.
-func (s *server) buildReviewRow(ctx context.Context, rep sqlc.ExpenseReport, subNames, userNames map[int64]string) (reviewQueueRow, error) {
+func (s *server) buildReviewRow(ctx context.Context, rep sqlc.ExpenseReport, subNames map[int64]string, userNames map[ids.UserID]string) (reviewQueueRow, error) {
 	u := currentUser(ctx)
 
 	lines, err := s.store.ExpenseReportLines(ctx, rep.ID)

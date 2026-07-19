@@ -25,6 +25,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
+	entids "cuento/internal/ids"
 	"cuento/internal/reports"
 	"cuento/internal/store"
 	"cuento/internal/testutil/fixture"
@@ -35,7 +36,7 @@ import (
 // needed) and the FX rate seam applied (the trial balance's converted column, though
 // the drill itself is native-only). Returns the handler, store, session manager, the
 // admin user id, and the fixture ids.
-func drillFixtureApp(t *testing.T) (http.Handler, *store.Store, *scs.SessionManager, int64, fixture.IDs) {
+func drillFixtureApp(t *testing.T) (http.Handler, *store.Store, *scs.SessionManager, entids.UserID, fixture.IDs) {
 	t.Helper()
 	fx := fixture.New(t)
 	fx.ExtendRates(t)

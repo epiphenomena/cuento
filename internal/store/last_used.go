@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"cuento/internal/ids"
 )
 
 // p26.37 last-used header account. READ-ONLY convenience lookup (rule 2 permits reads
@@ -17,7 +19,7 @@ import (
 // most-recently-created (non-deleted) transaction, or 0 when they have none. Recency is
 // by create-change id (insertion order), not the transaction's business date, so a
 // backdated entry does not win.
-func (s *Store) LastHeaderAccountForActor(ctx context.Context, actorID int64) (int64, error) {
+func (s *Store) LastHeaderAccountForActor(ctx context.Context, actorID ids.UserID) (int64, error) {
 	if actorID == 0 {
 		return 0, nil
 	}

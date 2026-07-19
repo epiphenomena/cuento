@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -18,7 +19,7 @@ import (
 // setUserSettings persists a user's preferences through the store (the same funnel
 // the /settings POST uses), so a subsequent request renders per those settings. It
 // keeps the test focused on the RENDER, not the form plumbing.
-func setUserSettings(t *testing.T, st *store.Store, userID int64, in store.UserSettingsInput) {
+func setUserSettings(t *testing.T, st *store.Store, userID ids.UserID, in store.UserSettingsInput) {
 	t.Helper()
 	ctx := store.WithActor(context.Background(), store.Actor{ID: userID})
 	if err := st.UpdateUserSettings(ctx, userID, in, known); err != nil {

@@ -145,7 +145,7 @@ type InsertImportBatchParams struct {
 	AccountID    int64
 	SubsidiaryID int64
 	ProfileID    ids.MappingProfileID
-	UploadedBy   int64
+	UploadedBy   ids.UserID
 	UploadedAt   string
 }
 

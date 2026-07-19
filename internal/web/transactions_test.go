@@ -14,6 +14,7 @@ import (
 	"github.com/alexedwards/scs/v2"
 
 	"cuento/internal/i18n"
+	"cuento/internal/ids"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
 )
@@ -35,7 +36,7 @@ type txnWebEnv struct {
 	sm *scs.SessionManager
 	db *sql.DB
 
-	book int64
+	book ids.UserID
 	sub1 int64 // child sub A
 	sub2 int64 // child sub B
 
@@ -355,7 +356,7 @@ func TestTxnEditSplitIDRoundTrip(t *testing.T) {
 func TestTxnBothModesIdenticalSplits(t *testing.T) {
 	e := newTxnWebEnv(t)
 
-	post := func(user int64) []store.SplitState {
+	post := func(user ids.UserID) []store.SplitState {
 		f := e.balancedForm("100.00", "-100.00")
 		rec := asUser(t, e.h, e.sm, user, http.MethodPost, "/transactions", f)
 		if rec.Code != http.StatusSeeOther {
@@ -1311,7 +1312,7 @@ func splitVersionCountWeb(t *testing.T, e *txnWebEnv, splitID int64) int {
 // mkUserDisplay creates a write user and sets its display_mode column directly (the
 // settings UI is p13.1); this test only needs the stored value so the editor renders
 // the right amount columns.
-func mkUserDisplay(t *testing.T, e *txnWebEnv, username, display string) int64 {
+func mkUserDisplay(t *testing.T, e *txnWebEnv, username, display string) ids.UserID {
 	t.Helper()
 	id := mkUser(t, e.st, username, "write", false)
 	if _, err := e.db.Exec(`UPDATE users SET display_mode = ? WHERE id = ?`, display, id); err != nil {
@@ -1322,7 +1323,7 @@ func mkUserDisplay(t *testing.T, e *txnWebEnv, username, display string) int64 {
 
 // setDefaultSub sets a user's default_subsidiary_id column directly (settings UI is
 // p13.1); the editor reads it to default the header subsidiary.
-func setDefaultSub(t *testing.T, e *txnWebEnv, userID, subID int64) {
+func setDefaultSub(t *testing.T, e *txnWebEnv, userID ids.UserID, subID int64) {
 	t.Helper()
 	if _, err := e.db.Exec(`UPDATE users SET default_subsidiary_id = ? WHERE id = ?`, subID, userID); err != nil {
 		t.Fatalf("set default sub: %v", err)

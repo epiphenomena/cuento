@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"cuento/internal/db"
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -222,7 +223,7 @@ func seedSampleExpenseReport(ctx context.Context, st *store.Store) (bool, error)
 
 // firstUser returns the id of the first non-disabled user in the db, erroring if none
 // exists (an expense report needs a submitter).
-func firstUser(ctx context.Context, st *store.Store) (int64, error) {
+func firstUser(ctx context.Context, st *store.Store) (ids.UserID, error) {
 	users, err := st.ListUsers(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("list users: %w", err)
