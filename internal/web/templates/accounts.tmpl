@@ -25,10 +25,12 @@
      reports form's hx-push-url. */ -}}
 {{define "accounts-controls" -}}
 {{- with .}}
-{{/* p29.4: wrap the filter form + the ephemeral search in one flex row so both sit in the
-     one toolbar. The search is a SIBLING of the form (never a descendant), so it can never
-     serialize into or trigger the auto-submitting GET — the guarantee of its ephemerality
-     (see below). */ -}}
+{{/* p29.4/p30.3: wrap the filter form + the ephemeral search in one flex row so all four
+     controls (Subsidiary / Type / Active-only / Search) sit inline in the one toolbar. The
+     search is a SIBLING of the form (never a descendant), so it can never serialize into or
+     trigger the auto-submitting GET — the guarantee of its ephemerality (see below). The
+     p30.3 CSS shrinks the form to its content-width so the search flows on the SAME row
+     rather than wrapping below it. */ -}}
 <div class="accounts-subnav">
 {{/* p26.90: hx-sync="this:replace" ABORTS any in-flight filter GET when a new change
      fires (sub/type/active can change in quick succession), so the LATEST response always

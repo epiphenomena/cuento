@@ -590,9 +590,15 @@ input[aria-invalid="true"] {
   gap: var(--space-1) var(--space-3);
   width: 100%;
 }
-/* The accounts filter form no longer needs to grow to 100% (it shares the row with the
-   search), so it sizes to its content and the search sits beside it. */
-.accounts-subnav .accounts-filters { width: auto; }
+/* p30.3: the filter form must size to its content so the ephemeral Search sits on the
+   SAME row as Subsidiary/Type/Active, not wrap below it. The generic subnav rule
+   `.app-subnav-controls .report-params { width: 100% }` (0,2,0) would otherwise stretch
+   the form full-width and push the sibling .chart-search onto a second line; this rule
+   raises specificity (0,3,0) so the form hugs its fields and the search flows inline.
+   The search stays a SIBLING of the form (never a field), preserving ephemerality. */
+.app-subnav-controls .accounts-subnav .accounts-filters { width: auto; }
+/* The search box is a label-above column just like the .report-field filters, so it aligns
+   with Subsidiary/Type/Active in the shared flex row. */
 .chart-search { display: flex; flex-direction: column; }
 .chart-search label { font-weight: 600; font-size: 0.85rem; margin-bottom: 0; }
 .chart-search-input { min-width: 14rem; }

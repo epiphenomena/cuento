@@ -409,6 +409,11 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	sp := s.newShellPage(r, model)
 	sp.Shell.SubNavControls = "accounts"
+	// p30.3: render in the wide shell (100rem cap, not full-bleed) so the tree table has
+	// room for long dotted account paths, the notes column and the balances. Wide only
+	// widens <main>; the filter bar lives in the subnav (outside <main>) and the tree
+	// indentation is depth-class CSS, so neither is affected.
+	sp.Shell.Wide = true
 	s.render(w, r, http.StatusOK, "accounts.tmpl", sp)
 }
 
