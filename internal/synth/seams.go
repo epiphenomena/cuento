@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	entids "cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -129,7 +130,7 @@ func ExtendCapitalCampaign(ctx context.Context, s *store.Store, ids *IDs) error 
 		Type:            "asset",
 		DefaultCurrency: "USD",
 		Names:           map[string]string{"en": "Fixed Assets", "es": "Activos fijos"},
-		Subsidiaries:    []int64{ids.Root, ids.US, ids.MX},
+		Subsidiaries:    []entids.SubsidiaryID{ids.Root, ids.US, ids.MX},
 	})
 	if err != nil {
 		return fmt.Errorf("create Fixed Assets parent: %w", err)
@@ -141,7 +142,7 @@ func ExtendCapitalCampaign(ctx context.Context, s *store.Store, ids *IDs) error 
 		Type:            "asset",
 		DefaultCurrency: "USD",
 		Names:           map[string]string{"en": "Land", "es": "Terreno"},
-		Subsidiaries:    []int64{ids.US},
+		Subsidiaries:    []entids.SubsidiaryID{ids.US},
 	})
 	if err != nil {
 		return fmt.Errorf("create Land account: %w", err)
@@ -153,7 +154,7 @@ func ExtendCapitalCampaign(ctx context.Context, s *store.Store, ids *IDs) error 
 		Type:            "asset",
 		DefaultCurrency: "USD",
 		Names:           map[string]string{"en": "Construction in Progress", "es": "Construccion en proceso"},
-		Subsidiaries:    []int64{ids.US, ids.MX},
+		Subsidiaries:    []entids.SubsidiaryID{ids.US, ids.MX},
 	})
 	if err != nil {
 		return fmt.Errorf("create Construction account: %w", err)
@@ -167,7 +168,7 @@ func ExtendCapitalCampaign(ctx context.Context, s *store.Store, ids *IDs) error 
 		Type:            "liability",
 		DefaultCurrency: "USD",
 		Names:           map[string]string{"en": "Construction Loan", "es": "Prestamo de construccion"},
-		Subsidiaries:    []int64{ids.US},
+		Subsidiaries:    []entids.SubsidiaryID{ids.US},
 	})
 	if err != nil {
 		return fmt.Errorf("create Construction Loan account: %w", err)
@@ -180,7 +181,7 @@ func ExtendCapitalCampaign(ctx context.Context, s *store.Store, ids *IDs) error 
 		Funder:       "Capital Campaign Donors",
 		Purpose:      "Restore the Way capital campaign",
 		Restriction:  "purpose",
-		Subsidiaries: []int64{ids.US, ids.MX},
+		Subsidiaries: []entids.SubsidiaryID{ids.US, ids.MX},
 	})
 	if err != nil {
 		return fmt.Errorf("create campaign fund: %w", err)
@@ -191,7 +192,7 @@ func ExtendCapitalCampaign(ctx context.Context, s *store.Store, ids *IDs) error 
 
 	posts := []struct {
 		date   string
-		sub    int64
+		sub    entids.SubsidiaryID
 		ccy    string
 		memo   string
 		splits []sp

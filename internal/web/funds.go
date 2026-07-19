@@ -89,7 +89,7 @@ func (s *server) buildFundsPage(ctx context.Context, showClosed bool) (fundsPage
 		return fundsPageModel{}, err
 	}
 	asof := s.now().Format("2006-01-02")
-	balCells, err := s.store.FundBalancesAsOf(ctx, asof, scope)
+	balCells, err := s.store.FundBalancesAsOf(ctx, asof, ids.SubsidiaryID(scope))
 	if err != nil {
 		return fundsPageModel{}, err
 	}
@@ -136,7 +136,7 @@ func (s *server) buildFundsPage(ctx context.Context, showClosed bool) (fundsPage
 			return fundsPageModel{}, err
 		}
 		for _, sid := range subs {
-			row.Subs = append(row.Subs, subNames[sid])
+			row.Subs = append(row.Subs, subNames[int64(sid)])
 		}
 		if f.ProgramID.Valid {
 			row.Program = progNames[f.ProgramID.Int64]
@@ -258,7 +258,7 @@ func (s *server) fundStatement(w http.ResponseWriter, r *http.Request) {
 		}
 		model.Rows = append(model.Rows, fundStmtRow{
 			Date:              money.FormatDate(parseISOForDisplay(lr.Date), df),
-			SubName:           subs[lr.SubsidiaryID],
+			SubName:           subs[int64(lr.SubsidiaryID)],
 			AccountName:       names[lr.AccountID],
 			Memo:              memo,
 			IsAsset:           lr.IsAsset,
@@ -347,7 +347,7 @@ func (s *server) fundEditForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, sid := range sids {
-		form.CheckedSubs[sid] = true
+		form.CheckedSubs[int64(sid)] = true
 	}
 	s.render(w, r, http.StatusOK, "fund-form", form)
 }
@@ -364,7 +364,7 @@ func (s *server) buildFundForm(ctx context.Context, id ids.FundID) (fundForm, er
 		return form, err
 	}
 	for _, sub := range subs {
-		form.Subs = append(form.Subs, subOption{ID: sub.ID, Name: sub.Name})
+		form.Subs = append(form.Subs, subOption{ID: int64(sub.ID), Name: sub.Name})
 	}
 
 	progs, err := s.store.ProgramTree(ctx)
@@ -391,7 +391,7 @@ type parsedFundForm struct {
 	restriction string
 	programID   int64
 	notes       string
-	subs        []int64
+	subs        []ids.SubsidiaryID
 }
 
 // parseFundForm reads the POST form into a fundForm (for a 422 re-render) and a
@@ -415,7 +415,7 @@ func (s *server) parseFundForm(r *http.Request, id ids.FundID) (fundForm, parsed
 	for key, vals := range r.PostForm {
 		if len(key) > 4 && key[:4] == "sub_" && len(vals) > 0 && vals[0] != "" {
 			if sid := parseID(key[4:]); sid > 0 {
-				in.subs = append(in.subs, sid)
+				in.subs = append(in.subs, ids.SubsidiaryID(sid))
 				checked[sid] = true
 			}
 		}
@@ -502,9 +502,9 @@ func (s *server) fundUpdate(w http.ResponseWriter, r *http.Request) {
 
 // nonNilSubs guarantees a non-nil slice so UpdateFund treats an empty checklist as
 // "desired = empty" (-> ErrFundNoSubsidiary) rather than "leave unchanged" (nil).
-func nonNilSubs(subs []int64) []int64 {
+func nonNilSubs(subs []ids.SubsidiaryID) []ids.SubsidiaryID {
 	if subs == nil {
-		return []int64{}
+		return []ids.SubsidiaryID{}
 	}
 	return subs
 }

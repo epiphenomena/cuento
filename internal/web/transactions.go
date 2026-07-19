@@ -192,7 +192,7 @@ func (s *server) txnNewForm(w http.ResponseWriter, r *http.Request) {
 		sub = parseID(r.URL.Query().Get("subsidiary"))
 	}
 
-	model, err := s.newEditorModel(ctx, u, sub)
+	model, err := s.newEditorModel(ctx, u, ids.SubsidiaryID(sub))
 	if err != nil {
 		s.serverError(w)
 		return
@@ -505,7 +505,7 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 
 	subID := parseID(r.FormValue("subsidiary"))
 	currency := r.FormValue("currency")
-	model, err := s.newEditorModel(ctx, u, subID)
+	model, err := s.newEditorModel(ctx, u, ids.SubsidiaryID(subID))
 	if err != nil {
 		s.serverError(w)
 		return
@@ -564,7 +564,7 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID int64) 
 
 	in := store.PostTransactionInput{
 		Date:         dateISO,
-		SubsidiaryID: subID,
+		SubsidiaryID: ids.SubsidiaryID(subID),
 		Memo:         model.Memo,
 		Notes:        model.Notes,
 		Currency:     currency,
@@ -1065,10 +1065,10 @@ func parseEditorDate(s string, df money.DateFormat, now time.Time) (string, bool
 // active programs, the payees, the subsidiary select, and the functional classes. It
 // is shared by the new/edit forms and the re-render path so the options always match
 // the chosen subsidiary (Appendix C: changing the sub re-filters accounts + funds).
-func (s *server) newEditorModel(ctx context.Context, u *store.CurrentUser, sub int64) (txnEditorModel, error) {
+func (s *server) newEditorModel(ctx context.Context, u *store.CurrentUser, sub ids.SubsidiaryID) (txnEditorModel, error) {
 	lang := langOf(ctx)
 	model := txnEditorModel{
-		Subsidiary:    sub,
+		Subsidiary:    int64(sub),
 		Currency:      "USD",
 		DisplayDRCR:   displayModeOf(userDisplayMode(u)) == money.DebitCredit,
 		DateFormat:    dateFormatCode(u),
@@ -1087,7 +1087,7 @@ func (s *server) newEditorModel(ctx context.Context, u *store.CurrentUser, sub i
 		return model, err
 	}
 	for _, sb := range subs {
-		model.Subsidiaries = append(model.Subsidiaries, txnOption{ID: sb.ID, Name: sb.Name})
+		model.Subsidiaries = append(model.Subsidiaries, txnOption{ID: int64(sb.ID), Name: sb.Name})
 		if sb.ID == sub && sb.BaseCurrency != "" {
 			model.Currency = sb.BaseCurrency
 		}
@@ -1101,7 +1101,7 @@ func (s *server) newEditorModel(ctx context.Context, u *store.CurrentUser, sub i
 	model.Accounts = toTxnAccountOptions(accts)
 
 	// Fund select: funds scoped to `sub` (D20/Q1).
-	funds, err := s.store.ActiveFunds(ctx, sub)
+	funds, err := s.store.ActiveFunds(ctx, int64(sub))
 	if err != nil {
 		return model, err
 	}
@@ -1181,7 +1181,7 @@ func (s *server) injectRowAccounts(ctx context.Context, model *txnEditorModel) e
 	if len(include) == 0 {
 		return nil
 	}
-	accts, err := s.store.AccountEditorOptionsWith(ctx, langOf(ctx), model.Subsidiary, include)
+	accts, err := s.store.AccountEditorOptionsWith(ctx, langOf(ctx), ids.SubsidiaryID(model.Subsidiary), include)
 	if err != nil {
 		return err
 	}
@@ -1203,7 +1203,7 @@ func (s *server) injectMainAccount(ctx context.Context, model *txnEditorModel) {
 			return // already offered
 		}
 	}
-	accts, err := s.store.AccountEditorOptionsWith(ctx, langOf(ctx), model.Subsidiary, []int64{model.MainAccount})
+	accts, err := s.store.AccountEditorOptionsWith(ctx, langOf(ctx), ids.SubsidiaryID(model.Subsidiary), []int64{model.MainAccount})
 	if err != nil {
 		return
 	}
@@ -1265,14 +1265,14 @@ func reconOriginDest(origin string) string {
 // default_subsidiary_id if set, else the sole/root subsidiary (Appendix C).
 func (s *server) defaultSubsidiary(ctx context.Context, u *store.CurrentUser) int64 {
 	if u != nil && u.DefaultSubsidiaryID != nil {
-		return *u.DefaultSubsidiaryID
+		return int64(*u.DefaultSubsidiaryID)
 	}
 	subs, err := s.store.AllSubsidiaries(ctx)
 	if err != nil || len(subs) == 0 {
 		return 1 // the seeded root is id 1
 	}
 	// The root is the parent-less subsidiary; SubTree returns it first.
-	return subs[0].ID
+	return int64(subs[0].ID)
 }
 
 // currencyExponent returns the minor-unit exponent for a currency (for amount
@@ -1337,13 +1337,13 @@ func txnTitleKey(isEdit bool) string {
 
 // idsCSV renders a slice of ids as a comma-separated string (the data-subsidiaries
 // attribute the client re-filter reads).
-func idsCSV(ids []int64) string {
+func idsCSV[T ~int64](ids []T) string {
 	out := make([]byte, 0, len(ids)*3)
 	for i, id := range ids {
 		if i > 0 {
 			out = append(out, ',')
 		}
-		out = strconv.AppendInt(out, id, 10)
+		out = strconv.AppendInt(out, int64(id), 10)
 	}
 	return string(out)
 }

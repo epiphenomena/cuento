@@ -53,7 +53,7 @@ type GetImportRowRow struct {
 	Status              string
 	DedupeHash          string
 	PostedTransactionID sql.NullInt64
-	SubsidiaryID        int64
+	SubsidiaryID        ids.SubsidiaryID
 }
 
 // One staged row joined to its batch, for the p17.3 review queue (edit&post /
@@ -143,7 +143,7 @@ RETURNING id
 type InsertImportBatchParams struct {
 	Filename     string
 	AccountID    int64
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	ProfileID    ids.MappingProfileID
 	UploadedBy   ids.UserID
 	UploadedAt   string
@@ -152,7 +152,8 @@ type InsertImportBatchParams struct {
 // One upload, binding ONE account AND ONE subsidiary (the account-maps-to-subsidiary
 // check is done in the store via HasAccountSubsidiaryMap before this runs).
 func (q *Queries) InsertImportBatch(ctx context.Context, arg InsertImportBatchParams) (ids.ImportBatchID, error) {
-	row := q.db.QueryRowContext(ctx, insertImportBatch,
+	row := q.db.QueryRowContext(
+		ctx, insertImportBatch,
 		arg.Filename,
 		arg.AccountID,
 		arg.SubsidiaryID,
@@ -186,7 +187,8 @@ type InsertImportRowParams struct {
 // Stage one parsed row. account_id is denormalized from the batch (the dedupe
 // scope, DECISIONS p17.1). status is 'pending'; dedupe_hash is precomputed in Go.
 func (q *Queries) InsertImportRow(ctx context.Context, arg InsertImportRowParams) (ids.ImportRowID, error) {
-	row := q.db.QueryRowContext(ctx, insertImportRow,
+	row := q.db.QueryRowContext(
+		ctx, insertImportRow,
 		arg.BatchID,
 		arg.AccountID,
 		arg.RawJson,

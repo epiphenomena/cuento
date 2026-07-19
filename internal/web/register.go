@@ -141,7 +141,7 @@ func registerRows(
 			RunningBalance:    r.RunningBalance,
 			Currency:          r.Currency,
 			Date:              money.FormatDate(parseISOForDisplay(r.Date), df),
-			SubName:           subs[r.SubsidiaryID],
+			SubName:           subs[int64(r.SubsidiaryID)],
 			Description:       r.Description,
 			Memo:              memo,
 			CounterAccount:    ca.name,
@@ -222,7 +222,7 @@ func subNameMap(ctx context.Context, st *store.Store) (map[int64]string, error) 
 	}
 	m := make(map[int64]string, len(subs))
 	for _, s := range subs {
-		m[s.ID] = s.Name
+		m[int64(s.ID)] = s.Name
 	}
 	return m, nil
 }
@@ -469,7 +469,7 @@ func (s *server) attachRegisterFilterOptions(ctx context.Context, m *registerPag
 		return err
 	}
 	for _, sub := range subs {
-		m.Subs = append(m.Subs, regFilterOption{ID: sub.ID, Name: sub.Name})
+		m.Subs = append(m.Subs, regFilterOption{ID: int64(sub.ID), Name: sub.Name})
 	}
 	progs, err := s.store.ProgramTree(ctx)
 	if err != nil {

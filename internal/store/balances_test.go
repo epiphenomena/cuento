@@ -28,7 +28,7 @@ type balEnv struct {
 	d   *sql.DB
 	ctx context.Context
 
-	subUS, subCA int64
+	subUS, subCA ids.SubsidiaryID
 	educ         ids.ProgramID
 	grant        ids.FundID
 
@@ -57,14 +57,14 @@ func newBalEnv(t *testing.T) balEnv {
 	if err != nil {
 		t.Fatalf("CreateProgram: %v", err)
 	}
-	grant := mkFund(t, s, "Grant A", []int64{subUS, subCA}, nil)
+	grant := mkFund(t, s, "Grant A", []ids.SubsidiaryID{subUS, subCA}, nil)
 
 	root := rootProgramID
 	mgmt := "management"
-	checking := mkAcct(t, s, "asset", "Checking", []int64{subUS, subCA}, nil, nil)
-	fxclear := mkAcct(t, s, "asset", "FX Clearing", []int64{subUS}, nil, nil)
-	contrib := mkAcct(t, s, "revenue", "Contributions", []int64{subUS, subCA}, nil, &root)
-	salaries := mkAcct(t, s, "expense", "Salaries", []int64{subUS, subCA}, &mgmt, &root)
+	checking := mkAcct(t, s, "asset", "Checking", []ids.SubsidiaryID{subUS, subCA}, nil, nil)
+	fxclear := mkAcct(t, s, "asset", "FX Clearing", []ids.SubsidiaryID{subUS}, nil, nil)
+	contrib := mkAcct(t, s, "revenue", "Contributions", []ids.SubsidiaryID{subUS, subCA}, nil, &root)
+	salaries := mkAcct(t, s, "expense", "Salaries", []ids.SubsidiaryID{subUS, subCA}, &mgmt, &root)
 
 	e := balEnv{
 		t: t, s: s, d: d, ctx: ctx,
@@ -133,14 +133,14 @@ type split struct {
 
 // post posts a transaction and returns (txnID, firstSplitID). Used when only the
 // first split id is captured; postN returns all split ids.
-func (e balEnv) post(t *testing.T, date string, sub int64, ccy, memo string, sp ...split) (int64, int64) {
+func (e balEnv) post(t *testing.T, date string, sub ids.SubsidiaryID, ccy, memo string, sp ...split) (int64, int64) {
 	t.Helper()
 	id, ids := e.postN(t, date, sub, ccy, memo, sp...)
 	return id, ids[0]
 }
 
 // postN posts a transaction and returns (txnID, splitIDsInOrder).
-func (e balEnv) postN(t *testing.T, date string, sub int64, ccy, memo string, sp ...split) (int64, []int64) {
+func (e balEnv) postN(t *testing.T, date string, sub ids.SubsidiaryID, ccy, memo string, sp ...split) (int64, []int64) {
 	t.Helper()
 	in := PostTransactionInput{Date: date, SubsidiaryID: sub, Currency: ccy, Memo: memo}
 	for i, s := range sp {
@@ -638,7 +638,7 @@ func TestRegisterFilters(t *testing.T) {
 	}
 
 	// Subsidiary filter: checking in subCA -- only T6 (+8000).
-	subCA := e.subCA
+	subCA := int64(e.subCA)
 	sp, _, _, err := e.s.RegisterPage(e.ctx, e.checking, firstPage, RegisterFilters{Subsidiary: &subCA}, 0)
 	if err != nil {
 		t.Fatalf("sub filter: %v", err)
@@ -699,30 +699,30 @@ func TestRegisterParentRollup(t *testing.T) {
 	ctx := mutCtx()
 
 	sub := newSub(t, s, rootID, "US")
-	grant := mkFund(t, s, "Grant A", []int64{sub}, nil)
+	grant := mkFund(t, s, "Grant A", []ids.SubsidiaryID{sub}, nil)
 
 	// Parent "Cash" with two leaf children BOA + WF, all mapped to sub. The children
 	// hold the splits; the parent is a placeholder.
 	parent, err := s.CreateAccount(ctx, CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Cash"), Subsidiaries: []int64{sub},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Cash"), Subsidiaries: []ids.SubsidiaryID{sub},
 	})
 	if err != nil {
 		t.Fatalf("create parent: %v", err)
 	}
 	boa, err := s.CreateAccount(ctx, CreateAccountInput{
-		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: enName("BOA"), Subsidiaries: []int64{sub},
+		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: enName("BOA"), Subsidiaries: []ids.SubsidiaryID{sub},
 	})
 	if err != nil {
 		t.Fatalf("create BOA: %v", err)
 	}
 	wf, err := s.CreateAccount(ctx, CreateAccountInput{
-		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: enName("WF"), Subsidiaries: []int64{sub},
+		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: enName("WF"), Subsidiaries: []ids.SubsidiaryID{sub},
 	})
 	if err != nil {
 		t.Fatalf("create WF: %v", err)
 	}
 	// An unrelated revenue leaf (the counter side of receipts).
-	contrib := mkAcct(t, s, "revenue", "Contributions", []int64{sub}, nil, nil)
+	contrib := mkAcct(t, s, "revenue", "Contributions", []ids.SubsidiaryID{sub}, nil, nil)
 	root := rootProgramID
 
 	e := balEnv{t: t, s: s, d: d, ctx: ctx}
@@ -875,7 +875,7 @@ func TestDeletedTransactionExcluded(t *testing.T) {
 // subtree/period/fund wrap a query call + error check into ONE value so the
 // existing map helpers can consume them (Go forbids f(t, g()) when g is
 // multivalue).
-func (e balEnv) subtree(asof string, scope int64) []AccountCurrencyAmount {
+func (e balEnv) subtree(asof string, scope ids.SubsidiaryID) []AccountCurrencyAmount {
 	e.t.Helper()
 	cells, err := e.s.SubtreeBalancesAsOf(e.ctx, asof, scope)
 	if err != nil {
@@ -884,7 +884,7 @@ func (e balEnv) subtree(asof string, scope int64) []AccountCurrencyAmount {
 	return cells
 }
 
-func (e balEnv) period(from, to string, scope int64) []AccountCurrencyAmount {
+func (e balEnv) period(from, to string, scope ids.SubsidiaryID) []AccountCurrencyAmount {
 	e.t.Helper()
 	cells, err := e.s.PeriodActivity(e.ctx, from, to, scope)
 	if err != nil {
@@ -893,7 +893,7 @@ func (e balEnv) period(from, to string, scope int64) []AccountCurrencyAmount {
 	return cells
 }
 
-func (e balEnv) fundBalances(asof string, scope int64) []FundCurrencyAmount {
+func (e balEnv) fundBalances(asof string, scope ids.SubsidiaryID) []FundCurrencyAmount {
 	e.t.Helper()
 	cells, err := e.s.FundBalancesAsOf(e.ctx, asof, scope)
 	if err != nil {

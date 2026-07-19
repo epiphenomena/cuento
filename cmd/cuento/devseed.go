@@ -329,7 +329,7 @@ type leafAccount struct {
 // fails. Resolving the subsidiary and its leaves together guarantees they match on
 // any db shape (the fixture's root holds everything; a real import's operating subs
 // hold the R/E leaves). Errors if no subsidiary has such a pair.
-func firstSubsidiaryWithREPair(ctx context.Context, st *store.Store) (int64, leafAccount, leafAccount, error) {
+func firstSubsidiaryWithREPair(ctx context.Context, st *store.Store) (ids.SubsidiaryID, leafAccount, leafAccount, error) {
 	tree, err := st.SubTree(ctx)
 	if err != nil {
 		return 0, leafAccount{}, leafAccount{}, fmt.Errorf("sub tree: %w", err)
@@ -373,7 +373,7 @@ func firstProgram(ctx context.Context, st *store.Store) (ids.ProgramID, error) {
 // from the subsidiary-filtered tree so the returned account is guaranteed scoped to
 // subID (the store's budget-split subsidiary check, ErrBudgetSplitAccountSub).
 // Errors if none exists in that subsidiary.
-func firstLeafAccountInSub(ctx context.Context, st *store.Store, subID int64, typ string) (leafAccount, error) {
+func firstLeafAccountInSub(ctx context.Context, st *store.Store, subID ids.SubsidiaryID, typ string) (leafAccount, error) {
 	full, err := st.Tree(ctx, "en", nil)
 	if err != nil {
 		return leafAccount{}, fmt.Errorf("account tree: %w", err)

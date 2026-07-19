@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // Subsidiary operations (p04.2) — the PATTERN-SETTER for every versioned entity
@@ -51,7 +52,7 @@ var (
 // is required (> 0): the single root exists from the seed, so every created
 // subsidiary is a child (a second root is ErrSecondRoot).
 type CreateSubsidiaryInput struct {
-	ParentID     int64
+	ParentID     ids.SubsidiaryID
 	Name         string
 	BaseCurrency string
 	SortOrder    int64
@@ -62,7 +63,7 @@ type CreateSubsidiaryInput struct {
 // the pattern later entity updates copy. A non-nil ParentID moves the subsidiary
 // (validated against cycles and root-immovability).
 type UpdateSubsidiaryInput struct {
-	ParentID     *int64
+	ParentID     *ids.SubsidiaryID
 	Name         *string
 	BaseCurrency *string
 	SortOrder    *int64
@@ -71,12 +72,12 @@ type UpdateSubsidiaryInput struct {
 // CreateSubsidiary creates a child subsidiary and returns its new id. It rejects
 // a missing/invalid parent with a typed error (not leaning on the trigger) and
 // versions the create under one change.
-func (s *Store) CreateSubsidiary(ctx context.Context, in CreateSubsidiaryInput) (int64, error) {
+func (s *Store) CreateSubsidiary(ctx context.Context, in CreateSubsidiaryInput) (ids.SubsidiaryID, error) {
 	if in.ParentID <= 0 {
 		return 0, ErrSecondRoot
 	}
 
-	var newID int64
+	var newID ids.SubsidiaryID
 	_, err := s.write(ctx, "subsidiary.create", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			// Validate the parent exists inside the tx (transaction-consistent).
@@ -88,7 +89,7 @@ func (s *Store) CreateSubsidiary(ctx context.Context, in CreateSubsidiaryInput) 
 			}
 
 			id, err := q.InsertSubsidiary(ctx, sqlc.InsertSubsidiaryParams{
-				ParentID:     sql.NullInt64{Int64: in.ParentID, Valid: true},
+				ParentID:     sql.NullInt64{Int64: int64(in.ParentID), Valid: true},
 				Name:         in.Name,
 				BaseCurrency: in.BaseCurrency,
 				Active:       1,
@@ -112,7 +113,7 @@ func (s *Store) CreateSubsidiary(ctx context.Context, in CreateSubsidiaryInput) 
 // rejected if it would give the root a parent (ErrRootImmovable) or create a cycle
 // (ErrCycle: the new parent must not be the subsidiary itself nor any descendant).
 // The version append reflects the NEW values (it runs after the live update).
-func (s *Store) UpdateSubsidiary(ctx context.Context, id int64, in UpdateSubsidiaryInput) error {
+func (s *Store) UpdateSubsidiary(ctx context.Context, id ids.SubsidiaryID, in UpdateSubsidiaryInput) error {
 	_, err := s.write(ctx, "subsidiary.update", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			cur, err := q.GetSubsidiary(ctx, id)
@@ -152,7 +153,7 @@ func (s *Store) UpdateSubsidiary(ctx context.Context, id int64, in UpdateSubsidi
 						return ErrCycle
 					}
 				}
-				next.ParentID = sql.NullInt64{Int64: *in.ParentID, Valid: true}
+				next.ParentID = sql.NullInt64{Int64: int64(*in.ParentID), Valid: true}
 			}
 
 			if err := q.UpdateSubsidiary(ctx, sqlc.UpdateSubsidiaryParams{
@@ -179,7 +180,7 @@ func (s *Store) UpdateSubsidiary(ctx context.Context, id int64, in UpdateSubsidi
 // active descendants. Deactivation is op='update', NOT 'delete': the entity still
 // exists and keeps its history; delete-op is reserved for transaction soft-delete
 // (p08).
-func (s *Store) DeactivateSubsidiary(ctx context.Context, id int64) error {
+func (s *Store) DeactivateSubsidiary(ctx context.Context, id ids.SubsidiaryID) error {
 	_, err := s.write(ctx, "subsidiary.deactivate", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			cur, err := q.GetSubsidiary(ctx, id)
@@ -190,7 +191,7 @@ func (s *Store) DeactivateSubsidiary(ctx context.Context, id int64) error {
 				return fmt.Errorf("load subsidiary %d: %w", id, err)
 			}
 
-			n, err := q.CountActiveChildren(ctx, sql.NullInt64{Int64: id, Valid: true})
+			n, err := q.CountActiveChildren(ctx, sql.NullInt64{Int64: int64(id), Valid: true})
 			if err != nil {
 				return fmt.Errorf("count active children of %d: %w", id, err)
 			}
@@ -221,7 +222,7 @@ func (s *Store) DeactivateSubsidiary(ctx context.Context, id int64) error {
 // generated positional-param names (ID=change_id, Op, ID_2=entity_id — see the
 // query comment) behind one call site so every entity op reads the same way. It
 // MUST run after the live write so the snapshot captures the new values.
-func insertSubsidiaryVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID int64) error {
+func insertSubsidiaryVersion(ctx context.Context, q *sqlc.Queries, changeID int64, op string, entityID ids.SubsidiaryID) error {
 	if err := q.InsertSubsidiaryVersion(ctx, sqlc.InsertSubsidiaryVersionParams{
 		ID:   changeID,
 		Op:   op,
@@ -233,7 +234,7 @@ func insertSubsidiaryVersion(ctx context.Context, q *sqlc.Queries, changeID int6
 }
 
 // GetSubsidiary returns the current live row for one subsidiary (read; sqlc).
-func (s *Store) GetSubsidiary(ctx context.Context, id int64) (sqlc.Subsidiary, error) {
+func (s *Store) GetSubsidiary(ctx context.Context, id ids.SubsidiaryID) (sqlc.Subsidiary, error) {
 	row, err := s.q.GetSubsidiary(ctx, id)
 	if err != nil {
 		return sqlc.Subsidiary{}, fmt.Errorf("store: get subsidiary %d: %w", id, err)
@@ -253,7 +254,7 @@ func (s *Store) SubTree(ctx context.Context) ([]sqlc.SubTreeRow, error) {
 
 // Descendants returns a subsidiary plus its transitive closure (self included) —
 // the primitive report scoping uses (D18). Read; recursive CTE via sqlc.
-func (s *Store) Descendants(ctx context.Context, id int64) ([]sqlc.DescendantsRow, error) {
+func (s *Store) Descendants(ctx context.Context, id ids.SubsidiaryID) ([]sqlc.DescendantsRow, error) {
 	rows, err := s.q.Descendants(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("store: descendants of %d: %w", id, err)

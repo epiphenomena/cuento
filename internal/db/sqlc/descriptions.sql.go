@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 const prefillDescription = `-- name: PrefillDescription :one
@@ -22,7 +24,7 @@ LIMIT 1
 
 type PrefillDescriptionParams struct {
 	Description  string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 type PrefillDescriptionRow struct {
@@ -74,7 +76,7 @@ LIMIT 10
 
 type SuggestDescriptionsParams struct {
 	Description  string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // Autocomplete ranking (p26.18): DISTINCT non-empty splits.description values whose

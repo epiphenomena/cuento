@@ -145,7 +145,7 @@ func (s *server) buildSettingsForm(r *http.Request, form settingsForm) (settings
 	}
 	form.Subs = make([]subOption, 0, len(subs))
 	for _, sub := range subs {
-		form.Subs = append(form.Subs, subOption{ID: sub.ID, Name: sub.Name})
+		form.Subs = append(form.Subs, subOption{ID: int64(sub.ID), Name: sub.Name})
 	}
 	// Default-program options (p26.5): the ACTIVE programs in tree order, mirroring the
 	// txn editor's program select (an inactive program is not offered as a new default).
@@ -201,14 +201,15 @@ func (s *server) settingsUpdate(w http.ResponseWriter, r *http.Request) {
 
 	// default_subsidiary: "" (the "none" option) clears it; a non-empty value must
 	// parse to a positive id (existence is checked in the store).
-	var defaultSub *int64
+	var defaultSub *ids.SubsidiaryID
 	if v := r.PostFormValue("default_subsidiary"); v != "" {
 		id, perr := strconv.ParseInt(v, 10, 64)
 		if perr != nil || id <= 0 {
 			s.renderSettingsError(w, r, form, "default_subsidiary")
 			return
 		}
-		defaultSub = &id
+		sid := ids.SubsidiaryID(id)
+		defaultSub = &sid
 		form.DefaultSub = id
 	}
 

@@ -177,7 +177,7 @@ func runActivitiesByRestriction(ctx context.Context, tk *Toolkit, p Params) (Tab
 		// Expenses — in Without only (With 0, Total == Without). Drillable per the expense
 		// account set (all funds; expenses reduce unrestricted net assets after release).
 		expDrill := &Drill{
-			Scope: int64(p.Scope), AccountIDs: expenseIDs, Currency: ccy,
+			Scope: p.Scope, AccountIDs: expenseIDs, Currency: ccy,
 			Mode: DrillPeriod, From: p.From, To: p.To,
 		}
 		b.row("reports.activities_by_restriction.expenses", ccy, RowData,
@@ -257,7 +257,7 @@ func (b *abrBuilder) revenueWithDrill(ccy string, revenueIDs []int64, funds []Fu
 		return nil
 	}
 	return &Drill{
-		Scope: int64(b.p.Scope), AccountIDs: revenueIDs, Currency: ccy, FundIDs: funds,
+		Scope: b.p.Scope, AccountIDs: revenueIDs, Currency: ccy, FundIDs: funds,
 		Mode: DrillPeriod, From: b.p.From, To: b.p.To,
 	}
 }
@@ -272,7 +272,7 @@ func (b *abrBuilder) releasedDrill(ccy string, appIDs []int64, funds []FundID) *
 		return nil
 	}
 	return &Drill{
-		Scope: int64(b.p.Scope), AccountIDs: appIDs, Currency: ccy, FundIDs: funds,
+		Scope: b.p.Scope, AccountIDs: appIDs, Currency: ccy, FundIDs: funds,
 		Mode: DrillPeriod, From: b.p.From, To: b.p.To,
 	}
 }

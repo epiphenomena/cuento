@@ -401,7 +401,7 @@ func (b *psBuilder) cellDrill(acct AccountID, ccy string, c progCol, raw int64) 
 		return nil
 	}
 	d := &Drill{
-		Scope:      int64(b.p.Scope),
+		Scope:      b.p.Scope,
 		AccountIDs: []int64{int64(acct)},
 		Currency:   ccy,
 		Mode:       DrillPeriod,

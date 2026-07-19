@@ -86,7 +86,7 @@ func (s *server) budgetPlansPage(w http.ResponseWriter, r *http.Request) {
 	}
 	model := budgetPlansPageModel{}
 	for _, p := range plans {
-		model.Rows = append(model.Rows, budgetPlanRow{ID: int64(p.ID), Name: p.Name, SubName: subNames[p.SubsidiaryID]})
+		model.Rows = append(model.Rows, budgetPlanRow{ID: int64(p.ID), Name: p.Name, SubName: subNames[int64(p.SubsidiaryID)]})
 	}
 	s.render(w, r, http.StatusOK, "budget_plans.tmpl", s.newShellPage(r, model))
 }
@@ -112,7 +112,7 @@ func (s *server) budgetPlanNewForm(w http.ResponseWriter, r *http.Request) {
 	}
 	model := budgetPlanFormModel{}
 	for _, sb := range subs {
-		model.Subs = append(model.Subs, subOption{ID: sb.ID, Name: sb.Name})
+		model.Subs = append(model.Subs, subOption{ID: int64(sb.ID), Name: sb.Name})
 	}
 	if u := currentUser(ctx); u != nil {
 		model.SubID = s.defaultSubsidiary(ctx, u)
@@ -135,7 +135,7 @@ func (s *server) budgetPlanCreate(w http.ResponseWriter, r *http.Request) {
 		s.renderBudgetPlanFormError(w, r, name, sub, notes, "name", "error.budget_plan.name")
 		return
 	}
-	id, err := s.store.CreateBudgetPlan(s.actorCtx(ctx), store.BudgetPlanInput{Name: name, SubsidiaryID: sub, Notes: notes})
+	id, err := s.store.CreateBudgetPlan(s.actorCtx(ctx), store.BudgetPlanInput{Name: name, SubsidiaryID: ids.SubsidiaryID(sub), Notes: notes})
 	if err != nil {
 		if errors.Is(err, store.ErrBudgetSplitRefMissing) {
 			s.renderBudgetPlanFormError(w, r, name, sub, notes, "subsidiary_id", "error.budget_plan.subsidiary")
@@ -157,7 +157,7 @@ func (s *server) renderBudgetPlanFormError(w http.ResponseWriter, r *http.Reques
 	}
 	model := budgetPlanFormModel{Name: name, SubID: sub, Notes: notes}
 	for _, sb := range subs {
-		model.Subs = append(model.Subs, subOption{ID: sb.ID, Name: sb.Name})
+		model.Subs = append(model.Subs, subOption{ID: int64(sb.ID), Name: sb.Name})
 	}
 	model.Errors.add(field, key)
 	s.render(w, r, http.StatusUnprocessableEntity, "budget_plan_form.tmpl", s.newShellPage(r, model))
@@ -323,8 +323,8 @@ func (s *server) buildBudgetPlanDetailModel(w http.ResponseWriter, r *http.Reque
 		ID:        int64(plan.ID),
 		Name:      plan.Name,
 		Notes:     plan.Notes,
-		SubName:   subNames[plan.SubsidiaryID],
-		SubID:     plan.SubsidiaryID,
+		SubName:   subNames[int64(plan.SubsidiaryID)],
+		SubID:     int64(plan.SubsidiaryID),
 		Accounts:  accts,
 		Funds:     funds,
 		Programs:  progs,
@@ -358,7 +358,7 @@ func (s *server) buildBudgetPlanDetailModel(w http.ResponseWriter, r *http.Reque
 // sheet account is never offered, and the store rejects one out of band); funds =
 // ActiveFunds(sub); programs = all active. Mirrors expenseLineOptions but with the
 // wider account gate.
-func (s *server) budgetSplitOptions(ctx context.Context, sub int64, include ...int64) (accounts []expenseAccountOption, funds, programs []txnOption, err error) {
+func (s *server) budgetSplitOptions(ctx context.Context, sub ids.SubsidiaryID, include ...int64) (accounts []expenseAccountOption, funds, programs []txnOption, err error) {
 	lang := langOf(ctx)
 	accts, err := s.store.AccountEditorOptionsWith(ctx, lang, sub, include)
 	if err != nil {
@@ -372,7 +372,7 @@ func (s *server) budgetSplitOptions(ctx context.Context, sub int64, include ...i
 		}
 		accounts = append(accounts, expenseAccountOption{ID: a.ID, Name: a.Name, Path: a.Path, Type: a.Type, Unavailable: a.Unavailable})
 	}
-	fs, err := s.store.ActiveFunds(ctx, sub)
+	fs, err := s.store.ActiveFunds(ctx, int64(sub))
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -400,7 +400,7 @@ func (s *server) budgetSplitOptions(ctx context.Context, sub int64, include ...i
 // budgetSplitAccountOffered reports whether acctID is an offered (R/E or open_item A/L)
 // leaf in sub -- the web-edge gate mirroring what the grid showed, so a bad account is a
 // per-row error rather than a store 500.
-func (s *server) budgetSplitAccountOffered(ctx context.Context, sub, acctID int64) bool {
+func (s *server) budgetSplitAccountOffered(ctx context.Context, sub ids.SubsidiaryID, acctID int64) bool {
 	if acctID == 0 {
 		return false
 	}
@@ -563,7 +563,7 @@ func (s *server) renderBudgetGridError(w http.ResponseWriter, r *http.Request, p
 
 // subsidiaryExponent resolves a subsidiary's base-currency minor-unit exponent for
 // amount parse/format (rule 3/10). Best-effort: falls back to 2 on a lookup miss.
-func (s *server) subsidiaryExponent(ctx context.Context, subID int64) int {
+func (s *server) subsidiaryExponent(ctx context.Context, subID ids.SubsidiaryID) int {
 	sub, err := s.store.GetSubsidiary(ctx, subID)
 	if err != nil || sub.BaseCurrency == "" {
 		return 2
@@ -574,7 +574,7 @@ func (s *server) subsidiaryExponent(ctx context.Context, subID int64) int {
 // subsidiaryCurrency resolves a subsidiary's base ISO currency (a budget-split stores
 // the plan's subsidiary base currency, mirroring the expense-line convention, D18).
 // Best-effort: falls back to "" (which money.FormatMoney treats as unmapped).
-func (s *server) subsidiaryCurrency(ctx context.Context, subID int64) string {
+func (s *server) subsidiaryCurrency(ctx context.Context, subID ids.SubsidiaryID) string {
 	sub, err := s.store.GetSubsidiary(ctx, subID)
 	if err != nil {
 		return ""

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -184,7 +185,7 @@ func TestAccountEditWritesEnabledLanguageNames(t *testing.T) {
 	actorCtx := store.WithActor(ctx, store.Actor{ID: book})
 	id, err := st.CreateAccount(actorCtx, store.CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Bank", "es": "Banco"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Bank", "es": "Banco"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)

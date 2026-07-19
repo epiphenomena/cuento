@@ -49,7 +49,7 @@ func seedREAccount(t *testing.T, st *store.Store, typ, name string) int64 {
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	id, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: typ, DefaultCurrency: "USD",
-		Names: map[string]string{"en": name}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": name}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("seed %s account %s: %v", typ, name, err)
@@ -72,7 +72,7 @@ func TestExpenseSubsidiaryAndDiscard(t *testing.T) {
 	// added while the report is in sub2.
 	rev, err := st.CreateAccount(sysCtx, store.CreateAccountInput{
 		Type: "revenue", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Rev Branch"}, Subsidiaries: []int64{sub2},
+		Names: map[string]string{"en": "Rev Branch"}, Subsidiaries: []ids.SubsidiaryID{sub2},
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)
@@ -90,7 +90,7 @@ func TestExpenseSubsidiaryAndDiscard(t *testing.T) {
 	}
 
 	// Change the subsidiary in-page.
-	asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+itoa(repID)+"/subsidiary", url.Values{"subsidiary_id": {itoa(sub2)}})
+	asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+itoa(repID)+"/subsidiary", url.Values{"subsidiary_id": {itoa(int64(sub2))}})
 	if rep, _ := st.GetExpenseReport(context.Background(), ids.ExpenseReportID(repID)); rep.SubsidiaryID != sub2 {
 		t.Fatalf("subsidiary after change = %d, want %d", rep.SubsidiaryID, sub2)
 	}

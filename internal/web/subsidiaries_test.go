@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -21,7 +22,7 @@ import (
 // root may be created.
 
 // subByName returns the id of the subsidiary with the given name, or 0.
-func subByName(t *testing.T, st *store.Store, name string) int64 {
+func subByName(t *testing.T, st *store.Store, name string) ids.SubsidiaryID {
 	t.Helper()
 	rows, err := st.SubTree(context.Background())
 	if err != nil {
@@ -98,7 +99,7 @@ func TestSubsidiariesRename(t *testing.T) {
 	form.Set("parent_id", "1")
 	form.Set("base_currency", "USD")
 
-	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/subsidiaries/"+itoa(id), form)
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/subsidiaries/"+itoa(int64(id)), form)
 	if rec.Code >= 400 {
 		t.Fatalf("rename returned %d, body: %s", rec.Code, rec.Body.String())
 	}
@@ -126,15 +127,15 @@ func TestSubsidiariesMove(t *testing.T) {
 	// Move B under A.
 	form := url.Values{}
 	form.Set("name", "B")
-	form.Set("parent_id", itoa(a))
+	form.Set("parent_id", itoa(int64(a)))
 	form.Set("base_currency", "USD")
 
-	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/subsidiaries/"+itoa(b), form)
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/subsidiaries/"+itoa(int64(b)), form)
 	if rec.Code >= 400 {
 		t.Fatalf("move returned %d, body: %s", rec.Code, rec.Body.String())
 	}
 	sub, _ := st.GetSubsidiary(context.Background(), b)
-	if !sub.ParentID.Valid || sub.ParentID.Int64 != a {
+	if !sub.ParentID.Valid || sub.ParentID.Int64 != int64(a) {
 		t.Errorf("B parent = %v, want %d", sub.ParentID, a)
 	}
 }
@@ -151,7 +152,7 @@ func TestSubsidiariesDeactivateChildless(t *testing.T) {
 		t.Fatalf("seed sub: %v", err)
 	}
 
-	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/subsidiaries/"+itoa(id)+"/deactivate", url.Values{})
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/subsidiaries/"+itoa(int64(id))+"/deactivate", url.Values{})
 	if rec.Code >= 400 {
 		t.Fatalf("deactivate returned %d, body: %s", rec.Code, rec.Body.String())
 	}
@@ -241,7 +242,7 @@ func TestSubsidiariesRootImmovable(t *testing.T) {
 	// Try to reparent the ROOT (id 1) under its own child.
 	form := url.Values{}
 	form.Set("name", "Organization")
-	form.Set("parent_id", itoa(child))
+	form.Set("parent_id", itoa(int64(child)))
 	form.Set("base_currency", "USD")
 
 	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/subsidiaries/1", form)
@@ -273,10 +274,10 @@ func TestSubsidiariesMoveCycleRejected(t *testing.T) {
 	// Move A under B (its own descendant) -> ErrCycle.
 	form := url.Values{}
 	form.Set("name", "A")
-	form.Set("parent_id", itoa(b))
+	form.Set("parent_id", itoa(int64(b)))
 	form.Set("base_currency", "USD")
 
-	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/subsidiaries/"+itoa(a), form)
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/subsidiaries/"+itoa(int64(a)), form)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("cycle move status = %d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
@@ -303,7 +304,7 @@ func TestSubsidiariesDeactivateGuard(t *testing.T) {
 		t.Fatalf("seed kid: %v", err)
 	}
 
-	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/subsidiaries/"+itoa(parent)+"/deactivate", url.Values{})
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/subsidiaries/"+itoa(int64(parent))+"/deactivate", url.Values{})
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("guarded deactivate status = %d, want 422; body: %s", rec.Code, rec.Body.String())
 	}

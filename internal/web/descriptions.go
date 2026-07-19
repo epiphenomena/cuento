@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 
+	"cuento/internal/ids"
 	"cuento/internal/money"
 )
 
@@ -44,7 +45,7 @@ type descPrefillModel struct {
 func (s *server) descriptionsSuggest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query().Get("q")
-	sub := parseID(r.URL.Query().Get("sub"))
+	sub := ids.SubsidiaryID(parseID(r.URL.Query().Get("sub")))
 
 	sugg, err := s.store.SuggestDescriptions(ctx, q, sub)
 	if err != nil {
@@ -71,7 +72,7 @@ func (s *server) descriptionsPrefill(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(ctx)
 	q := r.URL.Query().Get("q")
-	sub := parseID(r.URL.Query().Get("sub"))
+	sub := ids.SubsidiaryID(parseID(r.URL.Query().Get("sub")))
 
 	pf, err := s.store.PrefillDescription(ctx, q, sub)
 	if err != nil {

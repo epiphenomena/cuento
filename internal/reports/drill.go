@@ -63,7 +63,7 @@ type Drill struct {
 	// descendants (D18), exactly as the toolkit computed it. The store query closes
 	// the descendant set itself (the same recursive CTE the balance queries use), so
 	// a root-scope drill picks up splits across every descendant sub.
-	Scope int64
+	Scope SubsidiaryID
 
 	// AccountIDs is the account set the figure sums over. One id for a leaf-account
 	// cell (the trial-balance retrofit); a subtree's account ids for a rollup cell a
@@ -121,7 +121,7 @@ type Drill struct {
 // are a comma-joined list under one key.
 func (d Drill) Encode() string {
 	q := url.Values{}
-	q.Set("scope", strconv.FormatInt(d.Scope, 10))
+	q.Set("scope", strconv.FormatInt(int64(d.Scope), 10))
 	if len(d.AccountIDs) > 0 {
 		ids := make([]string, len(d.AccountIDs))
 		for i, id := range d.AccountIDs {
@@ -184,7 +184,7 @@ func DecodeDrill(q url.Values) Drill {
 	var d Drill
 	if v := strings.TrimSpace(q.Get("scope")); v != "" {
 		if id, err := strconv.ParseInt(v, 10, 64); err == nil {
-			d.Scope = id
+			d.Scope = SubsidiaryID(id)
 		}
 	}
 	if v := strings.TrimSpace(q.Get("accts")); v != "" {

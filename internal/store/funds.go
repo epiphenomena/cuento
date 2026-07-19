@@ -63,7 +63,7 @@ type CreateFundInput struct {
 	StartDate    *string
 	EndDate      *string
 	Notes        string
-	Subsidiaries []int64
+	Subsidiaries []ids.SubsidiaryID
 }
 
 // UpdateFundInput carries only fields to change (nil = leave as-is). ProgramID
@@ -82,7 +82,7 @@ type UpdateFundInput struct {
 	StartDate    *string
 	EndDate      *string
 	Notes        *string
-	Subsidiaries []int64
+	Subsidiaries []ids.SubsidiaryID
 }
 
 // CreateFund creates a fund (+ its subsidiary memberships) under ONE change and
@@ -128,7 +128,7 @@ func (s *Store) CreateFund(ctx context.Context, in CreateFundInput) (ids.FundID,
 
 			// Flat set: add each membership directly (no propagation). Dedup so a
 			// caller passing a repeated sub does not hit the PK twice.
-			seen := make(map[int64]bool, len(in.Subsidiaries))
+			seen := make(map[ids.SubsidiaryID]bool, len(in.Subsidiaries))
 			for _, sid := range in.Subsidiaries {
 				if seen[sid] {
 					continue
@@ -201,7 +201,7 @@ func (s *Store) UpdateFund(ctx context.Context, id ids.FundID, in UpdateFundInpu
 			// Subsidiary-set diff (only when a desired set is supplied). Reject an
 			// empty desired set BEFORE any write so the change rolls back.
 			if in.Subsidiaries != nil {
-				want := make(map[int64]bool, len(in.Subsidiaries))
+				want := make(map[ids.SubsidiaryID]bool, len(in.Subsidiaries))
 				for _, sid := range in.Subsidiaries {
 					want[sid] = true
 				}
@@ -324,7 +324,7 @@ func (s *Store) GetFund(ctx context.Context, id ids.FundID) (sqlc.Fund, error) {
 // subsidiary-id ordered. It is the read the funds workspace (p12.5) uses for the
 // list's scope column and to pre-check the edit form's subsidiary checklist --
 // mirroring AccountSubsidiaryIDs. Read; sqlc.
-func (s *Store) FundSubsidiaryIDs(ctx context.Context, id ids.FundID) ([]int64, error) {
+func (s *Store) FundSubsidiaryIDs(ctx context.Context, id ids.FundID) ([]ids.SubsidiaryID, error) {
 	subs, err := s.q.FundSubsidiaries(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("store: fund %d subsidiaries: %w", id, err)
@@ -360,12 +360,12 @@ func checkFundProgram(ctx context.Context, q *sqlc.Queries, programID ids.Progra
 }
 
 // fundSubSetTx returns a fund's current subsidiary id set on the tx-bound queries.
-func fundSubSetTx(ctx context.Context, q *sqlc.Queries, fundID ids.FundID) (map[int64]bool, error) {
+func fundSubSetTx(ctx context.Context, q *sqlc.Queries, fundID ids.FundID) (map[ids.SubsidiaryID]bool, error) {
 	subs, err := q.FundSubsidiaries(ctx, fundID)
 	if err != nil {
 		return nil, fmt.Errorf("load subsidiaries of fund %d: %w", fundID, err)
 	}
-	set := make(map[int64]bool, len(subs))
+	set := make(map[ids.SubsidiaryID]bool, len(subs))
 	for _, sid := range subs {
 		set[sid] = true
 	}
@@ -374,7 +374,7 @@ func fundSubSetTx(ctx context.Context, q *sqlc.Queries, fundID ids.FundID) (map[
 
 // addFundSub adds membership (fundID, sid) live then versions it op='create'.
 // The set is FLAT: no propagation. Live-write-FIRST, then snapshot-from-live.
-func addFundSub(ctx context.Context, q *sqlc.Queries, changeID int64, fundID ids.FundID, sid int64) error {
+func addFundSub(ctx context.Context, q *sqlc.Queries, changeID int64, fundID ids.FundID, sid ids.SubsidiaryID) error {
 	if err := q.InsertFundSubsidiary(ctx, sqlc.InsertFundSubsidiaryParams{FundID: fundID, SubsidiaryID: sid}); err != nil {
 		return fmt.Errorf("add fund membership (%d,%d): %w", fundID, sid, err)
 	}
@@ -392,7 +392,7 @@ func addFundSub(ctx context.Context, q *sqlc.Queries, changeID int64, fundID ids
 // snapshot-FROM-LIVE, so the version row (the last-known membership) MUST be
 // captured BEFORE the live row is deleted, or there is nothing left to snapshot.
 // This mirrors accounts.go's removeSub ordering.
-func removeFundSub(ctx context.Context, q *sqlc.Queries, changeID int64, fundID ids.FundID, sid int64) error {
+func removeFundSub(ctx context.Context, q *sqlc.Queries, changeID int64, fundID ids.FundID, sid ids.SubsidiaryID) error {
 	if err := q.InsertFundSubsidiaryVersion(ctx, sqlc.InsertFundSubsidiaryVersionParams{
 		Op: "delete", ID: changeID, FundID: fundID, SubsidiaryID: sid,
 	}); err != nil {

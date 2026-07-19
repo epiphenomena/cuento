@@ -289,7 +289,7 @@ func assert990Rollup(t *testing.T, f *fixture.Fixture) {
 }
 
 // rootScope returns the root subsidiary id (full consolidation).
-func rootScope(f *fixture.Fixture) int64 { return f.IDs.Root }
+func rootScope(f *fixture.Fixture) ids.SubsidiaryID { return f.IDs.Root }
 
 type key struct {
 	id  int64

@@ -204,7 +204,7 @@ func actualDrill(key BudgetKey, bucketStart, bucketEnd, from, to string) *Drill 
 	fund := key.Fund
 	prog := key.Program
 	return &Drill{
-		Scope:      int64(key.Subsidiary),
+		Scope:      key.Subsidiary,
 		AccountIDs: []int64{int64(key.Account)},
 		Currency:   key.Currency,
 		FundID:     &fund,

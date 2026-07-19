@@ -68,7 +68,7 @@ var (
 // BudgetPlanInput is the desired state of a budget plan (name + subsidiary + notes).
 type BudgetPlanInput struct {
 	Name         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Notes        string
 }
 

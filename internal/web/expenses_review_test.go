@@ -40,7 +40,7 @@ func seedSubmittedReport(t *testing.T, st *store.Store, amount int64) reviewRepo
 	rootProg := ids.ProgramID(1)
 	expense, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "expense", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Travel", "es": "Viajes"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Travel", "es": "Viajes"}, Subsidiaries: []ids.SubsidiaryID{1},
 		FunctionalClass: &fc, DefaultProgramID: &rootProg,
 	})
 	if err != nil {
@@ -48,7 +48,7 @@ func seedSubmittedReport(t *testing.T, st *store.Store, amount int64) reviewRepo
 	}
 	cash, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Cash", "es": "Caja"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Cash", "es": "Caja"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create cash account: %v", err)

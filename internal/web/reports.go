@@ -65,7 +65,7 @@ func (s *server) resolveParams(
 	// pre-order, so subs[0] is the single root (D18).
 	subs := make([]subInfo, len(rows))
 	for i, r := range rows {
-		subs[i] = subInfo{ID: r.ID, Name: r.Name, Base: r.BaseCurrency}
+		subs[i] = subInfo{ID: int64(r.ID), Name: r.Name, Base: r.BaseCurrency}
 	}
 
 	// Scope: query override -> user default -> root.
@@ -74,7 +74,7 @@ func (s *server) resolveParams(
 		scope = subs[0].ID
 	}
 	if u != nil && u.DefaultSubsidiaryID != nil {
-		scope = *u.DefaultSubsidiaryID
+		scope = int64(*u.DefaultSubsidiaryID)
 	}
 	if v := first(q, "scope"); v != "" {
 		if id := parseID(v); id != 0 && subExists(subs, id) {

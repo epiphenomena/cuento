@@ -33,6 +33,7 @@ import (
 	"context"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/reports"
 	"cuento/internal/store"
 	"cuento/internal/testutil/fixture"
@@ -634,21 +635,21 @@ func TestProgramStatementNestedSubtotal(t *testing.T) {
 	// of its own), with a USD leaf (Fuel) and an MXN leaf (Rations) under it.
 	fieldOps, err := f.Store.CreateAccount(ctx, store.CreateAccountInput{
 		ParentID: &f.IDs.Expenses, Type: "expense", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Field Ops", "es": "Operaciones de campo"}, Subsidiaries: []int64{f.IDs.Root, f.IDs.US, f.IDs.MX},
+		Names: map[string]string{"en": "Field Ops", "es": "Operaciones de campo"}, Subsidiaries: []ids.SubsidiaryID{f.IDs.Root, f.IDs.US, f.IDs.MX},
 	})
 	if err != nil {
 		t.Fatalf("create Field Ops: %v", err)
 	}
 	fuel, err := f.Store.CreateAccount(ctx, store.CreateAccountInput{
 		ParentID: &fieldOps, Type: "expense", DefaultCurrency: "USD", FunctionalClass: &prog,
-		Names: map[string]string{"en": "Fuel", "es": "Combustible"}, Subsidiaries: []int64{f.IDs.Root, f.IDs.US, f.IDs.MX},
+		Names: map[string]string{"en": "Fuel", "es": "Combustible"}, Subsidiaries: []ids.SubsidiaryID{f.IDs.Root, f.IDs.US, f.IDs.MX},
 	})
 	if err != nil {
 		t.Fatalf("create Fuel: %v", err)
 	}
 	rations, err := f.Store.CreateAccount(ctx, store.CreateAccountInput{
 		ParentID: &fieldOps, Type: "expense", DefaultCurrency: "MXN", FunctionalClass: &prog,
-		Names: map[string]string{"en": "Rations", "es": "Raciones"}, Subsidiaries: []int64{f.IDs.Root, f.IDs.US, f.IDs.MX},
+		Names: map[string]string{"en": "Rations", "es": "Raciones"}, Subsidiaries: []ids.SubsidiaryID{f.IDs.Root, f.IDs.US, f.IDs.MX},
 	})
 	if err != nil {
 		t.Fatalf("create Rations: %v", err)

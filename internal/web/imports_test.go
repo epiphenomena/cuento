@@ -89,7 +89,7 @@ func importChart(t *testing.T, st *store.Store) int64 {
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	id, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Checking"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Checking"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)

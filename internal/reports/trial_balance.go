@@ -175,7 +175,7 @@ func runTrialBalance(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 			// covers the underlying transactions); p15.4+ may drill converted columns
 			// via the same Drill (which still lists native splits).
 			nativeDrill := &Drill{
-				Scope:      int64(p.Scope),
+				Scope:      p.Scope,
 				AccountIDs: []int64{id},
 				Currency:   a.ccy,
 				Mode:       DrillAsOf,

@@ -143,7 +143,7 @@ func (s *Store) DeactivateMappingProfile(ctx context.Context, id ids.MappingProf
 // (ErrBatchSubsidiaryMismatch, TestBatchSubValidated) inside the funnel fn so a
 // rejection rolls the change row back and leaves no audit trace. Non-versioned:
 // funnel, no version append. uploadedAt is an RFC3339 timestamp string.
-func (s *Store) CreateImportBatch(ctx context.Context, filename string, accountID, subsidiaryID int64, profileID ids.MappingProfileID, uploadedAt string) (ids.ImportBatchID, error) {
+func (s *Store) CreateImportBatch(ctx context.Context, filename string, accountID int64, subsidiaryID ids.SubsidiaryID, profileID ids.MappingProfileID, uploadedAt string) (ids.ImportBatchID, error) {
 	actor, ok := ActorFrom(ctx)
 	if !ok {
 		return 0, ErrNoActor
@@ -336,7 +336,7 @@ type ImportBatch struct {
 	ID           ids.ImportBatchID
 	Filename     string
 	AccountID    int64
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // GetImportBatch returns one batch. ErrImportRowNotFound is reused for a missing
@@ -418,7 +418,7 @@ type ImportRow struct {
 	ID           ids.ImportRowID
 	BatchID      ids.ImportBatchID
 	AccountID    int64
-	SubsidiaryID int64 // the batch's subsidiary (locked in the editor)
+	SubsidiaryID ids.SubsidiaryID // the batch's subsidiary (locked in the editor)
 	AmountMinor  int64
 	Date         string
 	Description  string // bank line descriptive text (was payee); parsed_payee column

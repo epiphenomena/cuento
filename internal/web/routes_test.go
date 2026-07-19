@@ -48,7 +48,7 @@ func newMatrixApp(t *testing.T) (http.Handler, []Route, *store.Store, *sql.DB, *
 	seedAcct := func(name string, reconcilable bool) int64 {
 		id, err := st.CreateAccount(seedCtx, store.CreateAccountInput{
 			Type: "asset", DefaultCurrency: "USD",
-			Names: map[string]string{"en": name}, Subsidiaries: []int64{1},
+			Names: map[string]string{"en": name}, Subsidiaries: []ids.SubsidiaryID{1},
 			Reconcilable: reconcilable,
 		})
 		if err != nil {
@@ -80,7 +80,7 @@ func newMatrixApp(t *testing.T) (http.Handler, []Route, *store.Store, *sql.DB, *
 	// asserted; the routes only need SOME fund to exist so an authorized persona
 	// reaches the handler rather than a legitimate 404.
 	if _, err := st.CreateFund(seedCtx, store.CreateFundInput{
-		Name: "Seed Fund", Restriction: "purpose", Subsidiaries: []int64{1},
+		Name: "Seed Fund", Restriction: "purpose", Subsidiaries: []ids.SubsidiaryID{1},
 	}); err != nil {
 		t.Fatalf("seed fund: %v", err)
 	}
@@ -128,7 +128,7 @@ func newMatrixApp(t *testing.T) (http.Handler, []Route, *store.Store, *sql.DB, *
 	// the budget PLAN (id 1) seeded above covers the /budget-plans reachability.
 	if _, err := st.CreateAccount(seedCtx, store.CreateAccountInput{
 		Type: "revenue", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Seed Revenue"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Seed Revenue"}, Subsidiaries: []ids.SubsidiaryID{1},
 	}); err != nil {
 		t.Fatalf("seed revenue account: %v", err)
 	}

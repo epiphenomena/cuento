@@ -50,12 +50,12 @@ type AccountSubsidiariesVersion struct {
 	ChangeID     int64
 	ValidFrom    string
 	Op           string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 type AccountSubsidiary struct {
 	AccountID    int64
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 type AccountsVersion struct {
@@ -85,7 +85,7 @@ type AccountsVersion struct {
 type BudgetPlan struct {
 	ID           ids.BudgetPlanID
 	Name         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Notes        string
 }
 
@@ -96,7 +96,7 @@ type BudgetPlansVersion struct {
 	ValidFrom    string
 	Op           string
 	Name         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Notes        string
 }
 
@@ -159,7 +159,7 @@ type ExchangeRate struct {
 type ExpenseReport struct {
 	ID                  ids.ExpenseReportID
 	SubmitterID         ids.UserID
-	SubsidiaryID        int64
+	SubsidiaryID        ids.SubsidiaryID
 	Status              string
 	ReviewNotes         string
 	PostedTransactionID sql.NullInt64
@@ -199,7 +199,7 @@ type ExpenseReportsVersion struct {
 	ValidFrom           string
 	Op                  string
 	SubmitterID         ids.UserID
-	SubsidiaryID        int64
+	SubsidiaryID        ids.SubsidiaryID
 	Status              string
 	ReviewNotes         string
 	PostedTransactionID sql.NullInt64
@@ -234,12 +234,12 @@ type FundSubsidiariesVersion struct {
 	ChangeID     int64
 	ValidFrom    string
 	Op           string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 type FundSubsidiary struct {
 	FundID       ids.FundID
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 type FundsVersion struct {
@@ -263,7 +263,7 @@ type ImportBatch struct {
 	ID           ids.ImportBatchID
 	Filename     string
 	AccountID    int64
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	ProfileID    ids.MappingProfileID
 	UploadedBy   ids.UserID
 	UploadedAt   string
@@ -382,7 +382,7 @@ type SplitsVersion struct {
 
 type SubsidiariesVersion struct {
 	ID           int64
-	EntityID     int64
+	EntityID     ids.SubsidiaryID
 	ChangeID     int64
 	ValidFrom    string
 	Op           string
@@ -394,7 +394,7 @@ type SubsidiariesVersion struct {
 }
 
 type Subsidiary struct {
-	ID           int64
+	ID           ids.SubsidiaryID
 	ParentID     sql.NullInt64
 	Name         string
 	BaseCurrency string
@@ -405,7 +405,7 @@ type Subsidiary struct {
 type Transaction struct {
 	ID           int64
 	Date         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Memo         string
 	Currency     string
 	Deleted      int64
@@ -419,7 +419,7 @@ type TransactionsVersion struct {
 	ValidFrom    string
 	Op           string
 	Date         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Memo         string
 	Currency     string
 	Deleted      int64

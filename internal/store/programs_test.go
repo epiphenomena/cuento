@@ -343,7 +343,7 @@ func TestAccountDefaultProgramREOnly(t *testing.T) {
 		Type:             "asset",
 		DefaultCurrency:  "USD",
 		Names:            enName("Cash"),
-		Subsidiaries:     []int64{subA},
+		Subsidiaries:     []ids.SubsidiaryID{subA},
 		DefaultProgramID: &rootProg,
 	})
 	if !errors.Is(err, ErrDefaultProgramNotRE) {
@@ -359,7 +359,7 @@ func TestAccountDefaultProgramREOnly(t *testing.T) {
 		Type:             "revenue",
 		DefaultCurrency:  "USD",
 		Names:            enName("Donations"),
-		Subsidiaries:     []int64{subA},
+		Subsidiaries:     []ids.SubsidiaryID{subA},
 		DefaultProgramID: &prog,
 	})
 	if err != nil {
@@ -405,7 +405,7 @@ func TestAccountDefaultProgramREOnly(t *testing.T) {
 	// UpdateAccount also rejects a default program on a non-R/E account (the
 	// reject holds on BOTH entry points, not just create).
 	asset, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Bank"), Subsidiaries: []int64{subA},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Bank"), Subsidiaries: []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("create asset account: %v", err)

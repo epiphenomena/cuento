@@ -65,7 +65,7 @@ WHERE fund_id = ? AND subsidiary_id = ?
 
 type DeleteFundSubsidiaryParams struct {
 	FundID       ids.FundID
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // Remove one membership. For op=delete the version row is captured BEFORE this
@@ -105,7 +105,7 @@ type FundLedgerRow struct {
 	SplitID         int64
 	TxnID           int64
 	Date            string
-	SubsidiaryID    int64
+	SubsidiaryID    ids.SubsidiaryID
 	Currency        string
 	Amount          int64
 	AccountID       int64
@@ -181,15 +181,15 @@ ORDER BY subsidiary_id
 
 // The subsidiary id set a fund currently maps (order-insensitive; the store
 // builds a set for the diff).
-func (q *Queries) FundSubsidiaries(ctx context.Context, fundID ids.FundID) ([]int64, error) {
+func (q *Queries) FundSubsidiaries(ctx context.Context, fundID ids.FundID) ([]ids.SubsidiaryID, error) {
 	rows, err := q.db.QueryContext(ctx, fundSubsidiaries, fundID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []int64
+	var items []ids.SubsidiaryID
 	for rows.Next() {
-		var subsidiary_id int64
+		var subsidiary_id ids.SubsidiaryID
 		if err := rows.Scan(&subsidiary_id); err != nil {
 			return nil, err
 		}
@@ -236,7 +236,7 @@ WHERE fund_id = ? AND subsidiary_id = ?
 
 type HasFundSubsidiaryParams struct {
 	FundID       ids.FundID
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // 1 if the fund already maps the subsidiary. UpdateFund's set diff uses this to
@@ -292,7 +292,8 @@ type InsertFundParams struct {
 // end_date are optional (validated in the store where required). Returns the new
 // id for the store to snapshot + return.
 func (q *Queries) InsertFund(ctx context.Context, arg InsertFundParams) (ids.FundID, error) {
-	row := q.db.QueryRowContext(ctx, insertFund,
+	row := q.db.QueryRowContext(
+		ctx, insertFund,
 		arg.Name,
 		arg.Funder,
 		arg.Purpose,
@@ -315,7 +316,7 @@ VALUES (?, ?)
 
 type InsertFundSubsidiaryParams struct {
 	FundID       ids.FundID
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // Add one (fund_id, subsidiary_id) membership. Membership is a FLAT set (the PK
@@ -337,7 +338,7 @@ type InsertFundSubsidiaryVersionParams struct {
 	Op           string
 	ID           int64
 	FundID       ids.FundID
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // Snapshot-from-live version append for a COMPOSITE (fund_id, subsidiary_id)
@@ -347,7 +348,8 @@ type InsertFundSubsidiaryVersionParams struct {
 // exist to snapshot). Params (positional): op, change_id, fund_id, subsidiary_id
 // -> generated fields Op, ID, FundID, SubsidiaryID.
 func (q *Queries) InsertFundSubsidiaryVersion(ctx context.Context, arg InsertFundSubsidiaryVersionParams) error {
-	_, err := q.db.ExecContext(ctx, insertFundSubsidiaryVersion,
+	_, err := q.db.ExecContext(
+		ctx, insertFundSubsidiaryVersion,
 		arg.Op,
 		arg.ID,
 		arg.FundID,
@@ -453,7 +455,8 @@ type UpdateFundParams struct {
 // caller's fields, and writes the full desired state here, keeping
 // snapshot-from-live trivial.
 func (q *Queries) UpdateFund(ctx context.Context, arg UpdateFundParams) error {
-	_, err := q.db.ExecContext(ctx, updateFund,
+	_, err := q.db.ExecContext(
+		ctx, updateFund,
 		arg.Name,
 		arg.Funder,
 		arg.Purpose,

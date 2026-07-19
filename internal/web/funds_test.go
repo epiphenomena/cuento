@@ -95,14 +95,14 @@ func TestFundsListNegativeBadge(t *testing.T) {
 	// salaries (expense) account to post the overspend through.
 	fund, err := st.CreateFund(ctx, store.CreateFundInput{
 		Name: "Overspent Grant", Funder: "Donor X", Restriction: "purpose",
-		Subsidiaries: []int64{1},
+		Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("CreateFund: %v", err)
 	}
 	checking, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Checking"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Checking"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create checking: %v", err)
@@ -111,7 +111,7 @@ func TestFundsListNegativeBadge(t *testing.T) {
 	root := ids.ProgramID(1)
 	salaries, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "expense", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Salaries"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Salaries"}, Subsidiaries: []ids.SubsidiaryID{1},
 		FunctionalClass: &mgmt, DefaultProgramID: &root,
 	})
 	if err != nil {
@@ -121,7 +121,7 @@ func TestFundsListNegativeBadge(t *testing.T) {
 	// -400 (overspent). (Contributions credit to balance the receipt.)
 	contrib, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "revenue", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Contributions"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Contributions"}, Subsidiaries: []ids.SubsidiaryID{1},
 		DefaultProgramID: &root,
 	})
 	if err != nil {
@@ -268,7 +268,7 @@ func TestFundCreateHappyPath(t *testing.T) {
 	form.Set("purpose", "Scholarships")
 	form.Set("restriction", "purpose")
 	form.Set("program_id", itoa(int64(ids.Educacion)))
-	form.Set("sub_"+itoa(ids.US), itoa(ids.US))
+	form.Set("sub_"+itoa(int64(ids.US)), itoa(int64(ids.US)))
 
 	rec := asUser(t, h, sm, writer, http.MethodPost, "/funds", form)
 	if rec.Code != http.StatusSeeOther && rec.Code != http.StatusOK {
@@ -323,7 +323,7 @@ func TestFundEditPrefillsChecklist(t *testing.T) {
 	}
 	body := rec.Body.String()
 	// Beca Agua scopes to MX + US, so both boxes are checked.
-	if !strings.Contains(body, `name="sub_`+itoa(ids.US)+`" value="`+itoa(ids.US)+`" checked`) {
+	if !strings.Contains(body, `name="sub_`+itoa(int64(ids.US))+`" value="`+itoa(int64(ids.US))+`" checked`) {
 		t.Errorf("edit form did not pre-check the US subsidiary")
 	}
 }

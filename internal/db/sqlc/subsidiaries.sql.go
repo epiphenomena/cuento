@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 const countActiveChildren = `-- name: CountActiveChildren :one
@@ -40,7 +42,7 @@ FROM sub
 `
 
 type DescendantsRow struct {
-	ID           int64
+	ID           ids.SubsidiaryID
 	ParentID     sql.NullInt64
 	Name         string
 	BaseCurrency string
@@ -51,7 +53,7 @@ type DescendantsRow struct {
 // Self + transitive closure of a subsidiary (the primitive report scoping uses,
 // D18). Self is the recursive base case, so it is ALWAYS included; the store's
 // cycle check (new parent must not be self nor any descendant) relies on that.
-func (q *Queries) Descendants(ctx context.Context, id int64) ([]DescendantsRow, error) {
+func (q *Queries) Descendants(ctx context.Context, id ids.SubsidiaryID) ([]DescendantsRow, error) {
 	rows, err := q.db.QueryContext(ctx, descendants, id)
 	if err != nil {
 		return nil, err
@@ -87,7 +89,7 @@ FROM subsidiaries
 WHERE id = ?
 `
 
-func (q *Queries) GetSubsidiary(ctx context.Context, id int64) (Subsidiary, error) {
+func (q *Queries) GetSubsidiary(ctx context.Context, id ids.SubsidiaryID) (Subsidiary, error) {
 	row := q.db.QueryRowContext(ctx, getSubsidiary, id)
 	var i Subsidiary
 	err := row.Scan(
@@ -130,15 +132,16 @@ type InsertSubsidiaryParams struct {
 // Live insert of a CHILD. parent_id is validated present/valid in the store
 // (ErrSecondRoot / ErrParentMissing) BEFORE this runs, so a second root never
 // reaches the trigger. Returns the new id for the store to snapshot + return.
-func (q *Queries) InsertSubsidiary(ctx context.Context, arg InsertSubsidiaryParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, insertSubsidiary,
+func (q *Queries) InsertSubsidiary(ctx context.Context, arg InsertSubsidiaryParams) (ids.SubsidiaryID, error) {
+	row := q.db.QueryRowContext(
+		ctx, insertSubsidiary,
 		arg.ParentID,
 		arg.Name,
 		arg.BaseCurrency,
 		arg.Active,
 		arg.SortOrder,
 	)
-	var id int64
+	var id ids.SubsidiaryID
 	err := row.Scan(&id)
 	return id, err
 }
@@ -154,7 +157,7 @@ WHERE c.id = ? AND s.id = ?
 type InsertSubsidiaryVersionParams struct {
 	Op   string
 	ID   int64
-	ID_2 int64
+	ID_2 ids.SubsidiaryID
 }
 
 // The snapshot-from-live version append (rule 5, D4). Reads the CURRENT live row
@@ -197,7 +200,7 @@ ORDER BY tree.path
 `
 
 type SubTreeRow struct {
-	ID           int64
+	ID           ids.SubsidiaryID
 	ParentID     sql.NullInt64
 	Name         string
 	BaseCurrency string
@@ -252,14 +255,15 @@ type UpdateSubsidiaryParams struct {
 	BaseCurrency string
 	Active       int64
 	SortOrder    int64
-	ID           int64
+	ID           ids.SubsidiaryID
 }
 
 // Live update: rename / move (parent) / change base_currency / active / sort.
 // The store reads the current row (GetSubsidiary), overrides the caller's fields,
 // and writes the full desired state here, keeping snapshot-from-live trivial.
 func (q *Queries) UpdateSubsidiary(ctx context.Context, arg UpdateSubsidiaryParams) error {
-	_, err := q.db.ExecContext(ctx, updateSubsidiary,
+	_, err := q.db.ExecContext(
+		ctx, updateSubsidiary,
 		arg.ParentID,
 		arg.Name,
 		arg.BaseCurrency,

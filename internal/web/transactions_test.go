@@ -37,8 +37,8 @@ type txnWebEnv struct {
 	db *sql.DB
 
 	book ids.UserID
-	sub1 int64 // child sub A
-	sub2 int64 // child sub B
+	sub1 ids.SubsidiaryID // child sub A
+	sub2 ids.SubsidiaryID // child sub B
 
 	checking int64 // asset, sub1 only
 	cashB    int64 // asset, sub2 only
@@ -61,7 +61,7 @@ func newTxnWebEnv(t *testing.T) *txnWebEnv {
 	e := &txnWebEnv{h: app.handler, st: st, sm: app.sessions, db: db}
 	e.book = mkUser(t, st, "txnbook", "write", false)
 
-	root := int64(1)
+	root := ids.SubsidiaryID(1)
 	var err error
 	e.sub1, err = st.CreateSubsidiary(ctx, store.CreateSubsidiaryInput{Name: "Sub One", ParentID: root, BaseCurrency: "USD"})
 	must(t, err, "sub1")
@@ -75,7 +75,7 @@ func newTxnWebEnv(t *testing.T) *txnWebEnv {
 	e.progEdu, err = st.CreateProgram(ctx, store.CreateProgramInput{Name: "Educacion", ParentID: e.progRoot})
 	must(t, err, "prog edu")
 
-	mkAcct := func(name, typ string, subs []int64, class string, defProg *ids.ProgramID) int64 {
+	mkAcct := func(name, typ string, subs []ids.SubsidiaryID, class string, defProg *ids.ProgramID) int64 {
 		in := store.CreateAccountInput{
 			Type: typ, DefaultCurrency: "USD",
 			Names: map[string]string{"en": name}, Subsidiaries: subs,
@@ -90,15 +90,15 @@ func newTxnWebEnv(t *testing.T) *txnWebEnv {
 		must(t, err, "acct "+name)
 		return id
 	}
-	e.checking = mkAcct("Checking", "asset", []int64{e.sub1}, "", nil)
-	e.cashB = mkAcct("Cash B", "asset", []int64{e.sub2}, "", nil)
-	e.salaries = mkAcct("Salaries", "expense", []int64{e.sub1, e.sub2}, "program", nil)
-	e.grantRev = mkAcct("Grant Revenue", "revenue", []int64{e.sub1, e.sub2}, "", nil)
-	e.supplies = mkAcct("Supplies", "expense", []int64{e.sub1}, "", nil)
+	e.checking = mkAcct("Checking", "asset", []ids.SubsidiaryID{e.sub1}, "", nil)
+	e.cashB = mkAcct("Cash B", "asset", []ids.SubsidiaryID{e.sub2}, "", nil)
+	e.salaries = mkAcct("Salaries", "expense", []ids.SubsidiaryID{e.sub1, e.sub2}, "program", nil)
+	e.grantRev = mkAcct("Grant Revenue", "revenue", []ids.SubsidiaryID{e.sub1, e.sub2}, "", nil)
+	e.supplies = mkAcct("Supplies", "expense", []ids.SubsidiaryID{e.sub1}, "", nil)
 
 	prog := e.progEdu
 	e.fund, err = st.CreateFund(ctx, store.CreateFundInput{
-		Name: "Beca", Restriction: "purpose", Subsidiaries: []int64{e.sub1}, ProgramID: &prog,
+		Name: "Beca", Restriction: "purpose", Subsidiaries: []ids.SubsidiaryID{e.sub1}, ProgramID: &prog,
 	})
 	must(t, err, "fund")
 
@@ -111,7 +111,7 @@ func newTxnWebEnv(t *testing.T) *txnWebEnv {
 // normalizes DR/CR into these; here the test posts signed directly).
 func (e *txnWebEnv) balancedForm(debitAmt, creditAmt string) url.Values {
 	f := url.Values{}
-	f.Set("subsidiary", itoa(e.sub1))
+	f.Set("subsidiary", itoa(int64(e.sub1)))
 	f.Set("date", "2025-03-01")
 	f.Set("currency", "USD")
 	f.Set("memo", "")
@@ -291,7 +291,7 @@ func TestTxnEditSplitIDRoundTrip(t *testing.T) {
 	// Build an edit form that changes ONLY the salaries split's memo, round-tripping
 	// every existing split id.
 	f := url.Values{}
-	f.Set("subsidiary", itoa(e.sub1))
+	f.Set("subsidiary", itoa(int64(e.sub1)))
 	f.Set("date", "2025-03-01")
 	f.Set("currency", "USD")
 	// Order splits by position for deterministic row indices.
@@ -415,7 +415,7 @@ func TestTxnFundProgramScopeGoesToRow(t *testing.T) {
 	// grantRev (revenue) tagged the fund (program scope = Educación) but carrying the
 	// ROOT program (outside the scope) -> ErrFundProgramScope on that row.
 	f := url.Values{}
-	f.Set("subsidiary", itoa(e.sub1))
+	f.Set("subsidiary", itoa(int64(e.sub1)))
 	f.Set("date", "2025-03-01")
 	f.Set("currency", "USD")
 	f.Set("split_id_0", "")
@@ -450,7 +450,7 @@ func TestTxnAccountNotInSubGoesToRow(t *testing.T) {
 	e := newTxnWebEnv(t)
 	// cashB is sub2-only; posting it in sub1 is out of scope. Row 1 references it.
 	f := url.Values{}
-	f.Set("subsidiary", itoa(e.sub1))
+	f.Set("subsidiary", itoa(int64(e.sub1)))
 	f.Set("date", "2025-03-01")
 	f.Set("currency", "USD")
 	f.Set("split_id_0", "")
@@ -587,7 +587,7 @@ func TestTxnStableInputIDsAcrossAllSwaps(t *testing.T) {
 	// Swap 1: the subsidiary re-filter (hx-get to /transactions/new?subsidiary=...),
 	// which swaps #txn-form. Every row-0 id must survive.
 	q := url.Values{}
-	q.Set("subsidiary", itoa(e.sub2))
+	q.Set("subsidiary", itoa(int64(e.sub2)))
 	q.Set("rows", "2")
 	q.Set("account_0", itoa(e.checking))
 	q.Set("amount_0", "10.00")
@@ -630,7 +630,7 @@ func TestTxnInFlowActionsNeverFullReload(t *testing.T) {
 
 	// Re-filter: partial, still the #txn-form region, no shell.
 	q := url.Values{}
-	q.Set("subsidiary", itoa(e.sub2))
+	q.Set("subsidiary", itoa(int64(e.sub2)))
 	q.Set("rows", "2")
 	refilter := asHTMXUser(t, e, http.MethodGet, "/transactions/new?"+q.Encode(), nil)
 	if refilter.Code != http.StatusOK {
@@ -783,7 +783,7 @@ func TestTxnAccountOptionsCarryGatingMetadata(t *testing.T) {
 func TestTxnSubsidiaryReFilterEchoesRows(t *testing.T) {
 	e := newTxnWebEnv(t)
 	q := url.Values{}
-	q.Set("subsidiary", itoa(e.sub2))
+	q.Set("subsidiary", itoa(int64(e.sub2)))
 	q.Set("rows", "2")
 	q.Set("account_0", itoa(e.checking)) // sub1-only -> invalid in sub2
 	q.Set("amount_0", "10.00")
@@ -893,9 +893,9 @@ type splitFull struct {
 // per-fund residual) and its fund is DERIVED from the body. `body` is the list of body
 // rows (positions 1..m as stored). The header is always present, so the client posts
 // main_present=1.
-func mainHeaderForm(sub int64, main splitFull, body []splitFull) url.Values {
+func mainHeaderForm(sub ids.SubsidiaryID, main splitFull, body []splitFull) url.Values {
 	f := url.Values{}
-	f.Set("subsidiary", itoa(sub))
+	f.Set("subsidiary", itoa(int64(sub)))
 	f.Set("date", "2025-03-01")
 	f.Set("currency", "USD")
 	f.Set("main_present", "1")
@@ -1058,7 +1058,7 @@ func TestTxnMainHeaderMultiFundFanOut(t *testing.T) {
 	// Educacion so the salaries R/E body splits validate.
 	prog := e.progEdu
 	fund2, err := e.st.CreateFund(ctx, store.CreateFundInput{
-		Name: "Beca Dos", Restriction: "purpose", Subsidiaries: []int64{e.sub1}, ProgramID: &prog,
+		Name: "Beca Dos", Restriction: "purpose", Subsidiaries: []ids.SubsidiaryID{e.sub1}, ProgramID: &prog,
 	})
 	must(t, err, "fund2")
 
@@ -1120,7 +1120,7 @@ func TestTxnMultiFundReloadFlatFallback(t *testing.T) {
 
 	prog := e.progEdu
 	fund2, err := e.st.CreateFund(ctx, store.CreateFundInput{
-		Name: "Beca Dos", Restriction: "purpose", Subsidiaries: []int64{e.sub1}, ProgramID: &prog,
+		Name: "Beca Dos", Restriction: "purpose", Subsidiaries: []ids.SubsidiaryID{e.sub1}, ProgramID: &prog,
 	})
 	must(t, err, "fund2")
 
@@ -1161,7 +1161,7 @@ func TestTxnMultiFundReloadFlatFallback(t *testing.T) {
 	// A re-save of the flat form (main_present absent) must NOT re-fan-out: post the four
 	// rows as-is and assert the stored splits are unchanged in count.
 	f := url.Values{}
-	f.Set("subsidiary", itoa(e.sub1))
+	f.Set("subsidiary", itoa(int64(e.sub1)))
 	f.Set("date", "2025-03-01")
 	f.Set("currency", "USD")
 	live := splitStatesByPosition(t, e, id)
@@ -1203,7 +1203,7 @@ func TestTxnMainHeaderBodyErrorLandsOnRow(t *testing.T) {
 	// Header = Checking (asset, balancing); body row 0 = Supplies (expense, NO default
 	// class) 50 with NO class chosen -> the store rejects with ErrExpenseNeedsFunction.
 	f := url.Values{}
-	f.Set("subsidiary", itoa(e.sub1))
+	f.Set("subsidiary", itoa(int64(e.sub1)))
 	f.Set("date", "2025-03-01")
 	f.Set("currency", "USD")
 	f.Set("main_present", "1")
@@ -1230,7 +1230,7 @@ func TestTxnMainHeaderMissingAccount(t *testing.T) {
 	e := newTxnWebEnv(t)
 
 	f := url.Values{}
-	f.Set("subsidiary", itoa(e.sub1))
+	f.Set("subsidiary", itoa(int64(e.sub1)))
 	f.Set("date", "2025-03-01")
 	f.Set("currency", "USD")
 	f.Set("main_present", "1")
@@ -1323,9 +1323,9 @@ func mkUserDisplay(t *testing.T, e *txnWebEnv, username, display string) ids.Use
 
 // setDefaultSub sets a user's default_subsidiary_id column directly (settings UI is
 // p13.1); the editor reads it to default the header subsidiary.
-func setDefaultSub(t *testing.T, e *txnWebEnv, userID ids.UserID, subID int64) {
+func setDefaultSub(t *testing.T, e *txnWebEnv, userID ids.UserID, subID ids.SubsidiaryID) {
 	t.Helper()
-	if _, err := e.db.Exec(`UPDATE users SET default_subsidiary_id = ? WHERE id = ?`, subID, userID); err != nil {
+	if _, err := e.db.Exec(`UPDATE users SET default_subsidiary_id = ? WHERE id = ?`, int64(subID), userID); err != nil {
 		t.Fatalf("set default sub: %v", err)
 	}
 }
@@ -1410,7 +1410,7 @@ func TestTxnProgClassNonRootIdempotent(t *testing.T) {
 	// control's decode directly (main_present omitted): both splits as body rows, the salaries
 	// row's combined control set to Admin (c:management) with the program in the hidden carrier.
 	f := url.Values{}
-	f.Set("subsidiary", itoa(e.sub1))
+	f.Set("subsidiary", itoa(int64(e.sub1)))
 	f.Set("date", "2025-03-01")
 	f.Set("currency", "USD")
 	f.Set("rows", "2")

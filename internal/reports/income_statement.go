@@ -364,7 +364,7 @@ func (b *isBuilder) leafDrill(id AccountID, pr period) *Drill {
 		ccy = c
 	}
 	return &Drill{
-		Scope:      int64(b.p.Scope),
+		Scope:      b.p.Scope,
 		AccountIDs: []int64{int64(id)},
 		Currency:   ccy,
 		Mode:       DrillPeriod,

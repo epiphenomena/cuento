@@ -72,7 +72,7 @@ type importAccountOption struct {
 	// Path (p28.2) is the dotted ancestor chain; the target picker is a shared
 	// combobox that fuzzy-ranks on it, like every account picker.
 	Path          string
-	SubsidiaryIDs []int64
+	SubsidiaryIDs []ids.SubsidiaryID
 }
 
 // importProfileOption is one saved mapping profile the user may load.
@@ -245,7 +245,7 @@ func (s *server) buildImportUpload(r *http.Request) (importUploadModel, error) {
 		if sub.Active == 0 {
 			continue
 		}
-		model.Subsidiaries = append(model.Subsidiaries, importSubOption{ID: sub.ID, Name: sub.Name})
+		model.Subsidiaries = append(model.Subsidiaries, importSubOption{ID: int64(sub.ID), Name: sub.Name})
 	}
 
 	// All leaf+active accounts (union across subsidiaries). AccountEditorOptions is
@@ -253,7 +253,7 @@ func (s *server) buildImportUpload(r *http.Request) (importUploadModel, error) {
 	// de-duplicating by account id.
 	seen := make(map[int64]bool)
 	for _, sub := range model.Subsidiaries {
-		opts, err := s.store.AccountEditorOptions(ctx, lang, sub.ID)
+		opts, err := s.store.AccountEditorOptions(ctx, lang, ids.SubsidiaryID(sub.ID))
 		if err != nil {
 			return importUploadModel{}, err
 		}
@@ -460,7 +460,7 @@ func (s *server) importMapPreview(w http.ResponseWriter, r *http.Request, raw []
 		AccountID:     accountID,
 		AccountName:   s.accountName(ctx, accountID, lang),
 		SubsidiaryID:  subsidiaryID,
-		SubsidiaryNm:  s.subsidiaryName(ctx, subsidiaryID),
+		SubsidiaryNm:  s.subsidiaryName(ctx, ids.SubsidiaryID(subsidiaryID)),
 		Mapping:       cfg,
 		AmountModeStr: string(cfg.Amount),
 	}
@@ -566,7 +566,7 @@ func (s *server) parseImportPreview(r *http.Request, raw []byte, accountID, subs
 		AccountID:    accountID,
 		AccountName:  s.accountName(ctx, accountID, lang),
 		SubsidiaryID: subsidiaryID,
-		SubsidiaryNm: s.subsidiaryName(ctx, subsidiaryID),
+		SubsidiaryNm: s.subsidiaryName(ctx, ids.SubsidiaryID(subsidiaryID)),
 		Mapping:      cfg,
 		TotalRows:    len(rows),
 	}
@@ -649,7 +649,7 @@ func (s *server) importConfirm(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filename := r.FormValue("filename")
-	batchID, err := s.store.CreateImportBatch(actorCtx, filename, accountID, subsidiaryID, profileID, time.Now().UTC().Format(time.RFC3339))
+	batchID, err := s.store.CreateImportBatch(actorCtx, filename, accountID, ids.SubsidiaryID(subsidiaryID), profileID, time.Now().UTC().Format(time.RFC3339))
 	if err != nil {
 		if errors.Is(err, store.ErrBatchSubsidiaryMismatch) {
 			s.renderImportError(w, r, "import.error.sub_mismatch", "")
@@ -729,7 +729,7 @@ func (s *server) importProfileDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 // subsidiaryName returns a subsidiary's name, or "" on any error (display only).
-func (s *server) subsidiaryName(ctx context.Context, id int64) string {
+func (s *server) subsidiaryName(ctx context.Context, id ids.SubsidiaryID) string {
 	sub, err := s.store.GetSubsidiary(ctx, id)
 	if err != nil {
 		return ""

@@ -101,7 +101,7 @@ type SplitInput struct {
 // PostTransactionInput is a new transaction and its splits.
 type PostTransactionInput struct {
 	Date         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Memo         string
 	Notes        string // longer multiline explanation (p24.2), distinct from split memos
 	Currency     string
@@ -414,8 +414,8 @@ func (s *Store) LedgerDateRange(ctx context.Context) (min, max string, ok bool, 
 // idempotency guard: a non-zero count means the subsidiary was already imported,
 // so an additive re-import is refused (re-import means a fresh scaffold + import,
 // D26). Read-only; sqlc.
-func (s *Store) SubsidiaryTxnCount(ctx context.Context, subsidiaryID int64) (int64, error) {
-	n, err := s.q.CountTransactionsBySubsidiary(ctx, subsidiaryID)
+func (s *Store) SubsidiaryTxnCount(ctx context.Context, subsidiaryID ids.SubsidiaryID) (int64, error) {
+	n, err := s.q.CountTransactionsBySubsidiary(ctx, int64(subsidiaryID))
 	if err != nil {
 		return 0, fmt.Errorf("store: count transactions for subsidiary %d: %w", subsidiaryID, err)
 	}
@@ -461,8 +461,8 @@ type NativeTotal struct {
 // it for per-subsidiary reconciliation: the per-type native trial-balance for the
 // operator, and (summed per currency) an insurance check that posted splits net to
 // zero. Read-only; sqlc.
-func (s *Store) SubsidiaryNativeTotals(ctx context.Context, subsidiaryID int64) ([]NativeTotal, error) {
-	rows, err := s.q.SubsidiaryNativeTotals(ctx, subsidiaryID)
+func (s *Store) SubsidiaryNativeTotals(ctx context.Context, subsidiaryID ids.SubsidiaryID) ([]NativeTotal, error) {
+	rows, err := s.q.SubsidiaryNativeTotals(ctx, int64(subsidiaryID))
 	if err != nil {
 		return nil, fmt.Errorf("store: subsidiary %d native totals: %w", subsidiaryID, err)
 	}
@@ -479,7 +479,7 @@ func (s *Store) SubsidiaryNativeTotals(ctx context.Context, subsidiaryID int64) 
 type TransactionState struct {
 	Present      bool
 	Date         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Memo         string
 	Notes        string
 	Currency     string
@@ -670,7 +670,7 @@ func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in Post
 // account stays editable without reactivating. It is false on create and on any new
 // or account-changed split, which still require an active account. No other check
 // (missing, placeholder, subsidiary-map, fund, program, functional class) is relaxed.
-func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID int64, root sqlc.Program, in SplitInput, allowInactiveAccount bool) (resolvedSplit, error) {
+func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID ids.SubsidiaryID, root sqlc.Program, in SplitInput, allowInactiveAccount bool) (resolvedSplit, error) {
 	acct, err := q.GetAccount(ctx, in.AccountID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -804,7 +804,7 @@ func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID int64, 
 
 // accountSplitInSubsidiary reports whether a non-deleted split on accountID lives
 // in a transaction of subsidiary S (completes SetAccountSubsidiaries' p08 guard).
-func accountSplitInSubsidiary(ctx context.Context, q *sqlc.Queries, accountID, subID int64) (bool, error) {
+func accountSplitInSubsidiary(ctx context.Context, q *sqlc.Queries, accountID int64, subID ids.SubsidiaryID) (bool, error) {
 	inUse, err := q.SplitUsesAccountInSubsidiary(ctx, sqlc.SplitUsesAccountInSubsidiaryParams{AccountID: accountID, SubsidiaryID: subID})
 	if err != nil {
 		return false, fmt.Errorf("split-use of account %d in sub %d: %w", accountID, subID, err)
@@ -814,7 +814,7 @@ func accountSplitInSubsidiary(ctx context.Context, q *sqlc.Queries, accountID, s
 
 // fundSplitInSubsidiary reports whether a non-deleted split tagged fundID lives in
 // a transaction of subsidiary S (completes UpdateFund's p08 guard).
-func fundSplitInSubsidiary(ctx context.Context, q *sqlc.Queries, fundID ids.FundID, subID int64) (bool, error) {
+func fundSplitInSubsidiary(ctx context.Context, q *sqlc.Queries, fundID ids.FundID, subID ids.SubsidiaryID) (bool, error) {
 	inUse, err := q.SplitUsesFundInSubsidiary(ctx, sqlc.SplitUsesFundInSubsidiaryParams{
 		FundID: sql.NullInt64{Int64: int64(fundID), Valid: true}, SubsidiaryID: subID,
 	})

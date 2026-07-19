@@ -117,7 +117,7 @@ func runAccountLedger(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 		// transactions that produced it (as-of, this account+currency, this scope).
 		open := openByCcy[ccy]
 		openDrill := &Drill{
-			Scope:      int64(p.Scope),
+			Scope:      p.Scope,
 			AccountIDs: []int64{int64(p.Account)},
 			Currency:   ccy,
 			Mode:       DrillAsOf,
@@ -138,7 +138,7 @@ func runAccountLedger(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 		// scope (descendant closure), ordered (date, split_id) — the SAME filter the
 		// opening/closing balances close over, so opening + Σ == closing.
 		lines, err := tk.Store().DrillSplits(ctx, store.DrillFilter{
-			Scope:     int64(p.Scope),
+			Scope:     p.Scope,
 			AccountID: int64(p.Account),
 			Currency:  ccy,
 			From:      p.From,
@@ -166,7 +166,7 @@ func runAccountLedger(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 		// Closing row: the cumulative balance as of To. It EQUALS opening + Σlines
 		// (running) by construction; it is drillable to its own as-of transactions.
 		closeDrill := &Drill{
-			Scope:      int64(p.Scope),
+			Scope:      p.Scope,
 			AccountIDs: []int64{int64(p.Account)},
 			Currency:   ccy,
 			Mode:       DrillAsOf,

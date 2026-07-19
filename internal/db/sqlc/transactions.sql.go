@@ -104,7 +104,7 @@ SELECT EXISTS (
 
 type HasAccountSubsidiaryMapParams struct {
 	AccountID    int64
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // 1 when account A is mapped to subsidiary S (D18). Used to raise
@@ -124,7 +124,7 @@ SELECT EXISTS (
 
 type HasFundSubsidiaryMapParams struct {
 	FundID       ids.FundID
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // 1 when fund F is scoped to subsidiary S (D20/Z13). Used to raise
@@ -166,7 +166,8 @@ type InsertSplitParams struct {
 // expense account (trigger backstop); the store DEFAULTS both before insert so the
 // triggers never fire on the happy path. Returns the new id.
 func (q *Queries) InsertSplit(ctx context.Context, arg InsertSplitParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, insertSplit,
+	row := q.db.QueryRowContext(
+		ctx, insertSplit,
 		arg.TransactionID,
 		arg.AccountID,
 		arg.Amount,
@@ -217,7 +218,7 @@ RETURNING id
 
 type InsertTransactionParams struct {
 	Date         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Memo         string
 	Notes        string
 	Currency     string
@@ -230,7 +231,8 @@ type InsertTransactionParams struct {
 // currency). deleted defaults to 0. notes is the longer free-text explanation
 // (p24.2), distinct from the short per-split memo. Returns the new id.
 func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, insertTransaction,
+	row := q.db.QueryRowContext(
+		ctx, insertTransaction,
 		arg.Date,
 		arg.SubsidiaryID,
 		arg.Memo,
@@ -431,7 +433,7 @@ SELECT EXISTS (
 
 type SplitUsesAccountInSubsidiaryParams struct {
 	AccountID    int64
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // ---------------------------------------------------------------------------
@@ -457,7 +459,7 @@ SELECT EXISTS (
 
 type SplitUsesFundInSubsidiaryParams struct {
 	FundID       sql.NullInt64
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // 1 when a split with fund_id F belongs to a NON-DELETED transaction whose
@@ -761,7 +763,7 @@ type TransactionVersionAsOfParams struct {
 type TransactionVersionAsOfRow struct {
 	Op           string
 	Date         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Memo         string
 	Notes        string
 	Currency     string
@@ -807,7 +809,7 @@ type TransactionVersionHistoryRow struct {
 	Op           string
 	ValidFrom    string
 	Date         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Memo         string
 	Notes        string
 	Currency     string
@@ -888,7 +890,8 @@ type UpdateSplitParams struct {
 // Live update of one split's business columns (replace-set diff: only splits that
 // actually changed reach this). id last.
 func (q *Queries) UpdateSplit(ctx context.Context, arg UpdateSplitParams) error {
-	_, err := q.db.ExecContext(ctx, updateSplit,
+	_, err := q.db.ExecContext(
+		ctx, updateSplit,
 		arg.AccountID,
 		arg.Amount,
 		arg.FundID,
@@ -910,7 +913,7 @@ WHERE id = ?
 
 type UpdateTransactionParams struct {
 	Date         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Memo         string
 	Notes        string
 	Currency     string
@@ -922,7 +925,8 @@ type UpdateTransactionParams struct {
 // change on an edit). deleted is carried through by the store (never flipped here --
 // soft-delete is its own query).
 func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionParams) error {
-	_, err := q.db.ExecContext(ctx, updateTransaction,
+	_, err := q.db.ExecContext(
+		ctx, updateTransaction,
 		arg.Date,
 		arg.SubsidiaryID,
 		arg.Memo,

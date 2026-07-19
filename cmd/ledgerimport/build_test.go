@@ -970,7 +970,7 @@ func parseTestInputs(t *testing.T) ([]AccountMap, Config, []Record) {
 	return accMap, cfg, recs
 }
 
-func txnCount(t *testing.T, st *store.Store, ctx context.Context, subID int64) int64 {
+func txnCount(t *testing.T, st *store.Store, ctx context.Context, subID ids.SubsidiaryID) int64 {
 	t.Helper()
 	n, err := st.SubsidiaryTxnCount(ctx, subID)
 	if err != nil {
@@ -1467,7 +1467,7 @@ func TestSplitDonorNameBecomesDescription(t *testing.T) {
 
 // ---- small raw-read helpers (reads outside the store are fine via sqlc/raw) --
 
-func mustSub(t *testing.T, st *store.Store, id int64) sqlc.Subsidiary {
+func mustSub(t *testing.T, st *store.Store, id ids.SubsidiaryID) sqlc.Subsidiary {
 	t.Helper()
 	s, err := st.GetSubsidiary(context.Background(), id)
 	if err != nil {
@@ -1687,7 +1687,7 @@ func TestCorrectionPostsBalancedAdjustment(t *testing.T) {
 	).Scan(&subID, &date, &memo, &currency); err != nil {
 		t.Fatalf("load correction txn: %v", err)
 	}
-	if subID != res.SubsidiaryIDs["Test US"] {
+	if ids.SubsidiaryID(subID) != res.SubsidiaryIDs["Test US"] {
 		t.Errorf("correction subsidiary = %d, want Test US (%d)", subID, res.SubsidiaryIDs["Test US"])
 	}
 	if date != "2025-12-31" || memo != "FY cutoff adjustment" || currency != "USD" {

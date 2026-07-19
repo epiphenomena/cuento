@@ -197,7 +197,7 @@ func (tk *Toolkit) CashflowProjectionPlan(ctx context.Context, s Scope, planID B
 
 	// Start balances: each fund's ACTUAL current-cash balance at the period start
 	// (as-of `from`). This is the resolved per-fund opening (DECISIONS tension 1).
-	startFB, err := tk.store.CurrentCashFundBalancesAsOf(ctx, from, int64(s.Sub))
+	startFB, err := tk.store.CurrentCashFundBalancesAsOf(ctx, from, s.Sub)
 	if err != nil {
 		return nil, fmt.Errorf("cashflow projection: start balances: %w", err)
 	}
@@ -312,7 +312,7 @@ func (tk *Toolkit) BudgetVariancePlan(ctx context.Context, s Scope, planID Budge
 	}
 
 	// ACTUAL: p15.2 net-debit activity per key, bucketed by each split's date.
-	cells, err := tk.store.BudgetKeyActivity(ctx, from, to, int64(s.Sub))
+	cells, err := tk.store.BudgetKeyActivity(ctx, from, to, s.Sub)
 	if err != nil {
 		return nil, fmt.Errorf("budget variance: actuals: %w", err)
 	}

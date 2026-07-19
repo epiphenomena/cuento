@@ -202,7 +202,8 @@ type HasLaterFinalizedReconciliationParams struct {
 // PriorFinalizedStatementBalance's "prior" bound. Params: account_id, currency,
 // statement_date, statement_date, id (of the recon being reopened).
 func (q *Queries) HasLaterFinalizedReconciliation(ctx context.Context, arg HasLaterFinalizedReconciliationParams) (bool, error) {
-	row := q.db.QueryRowContext(ctx, hasLaterFinalizedReconciliation,
+	row := q.db.QueryRowContext(
+		ctx, hasLaterFinalizedReconciliation,
 		arg.AccountID,
 		arg.Currency,
 		arg.StatementDate,
@@ -255,7 +256,8 @@ type InsertReconciliationParams struct {
 // (account, currency) across all funds (D13). Returns the new id for the store to
 // snapshot + return.
 func (q *Queries) InsertReconciliation(ctx context.Context, arg InsertReconciliationParams) (ids.ReconciliationID, error) {
-	row := q.db.QueryRowContext(ctx, insertReconciliation,
+	row := q.db.QueryRowContext(
+		ctx, insertReconciliation,
 		arg.AccountID,
 		arg.StatementDate,
 		arg.StatementBalance,
@@ -402,7 +404,8 @@ type PriorFinalizedStatementBalanceParams struct {
 // Z9's opening subquery. Params: account_id, currency, statement_date, id (the
 // statement_date and id of the recon being finalized, to bound "prior").
 func (q *Queries) PriorFinalizedStatementBalance(ctx context.Context, arg PriorFinalizedStatementBalanceParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, priorFinalizedStatementBalance,
+	row := q.db.QueryRowContext(
+		ctx, priorFinalizedStatementBalance,
 		arg.AccountID,
 		arg.Currency,
 		arg.StatementDate,
@@ -432,7 +435,7 @@ type ReconciliationClearedSplitsRow struct {
 	Memo          string
 	Description   string
 	Date          string
-	SubsidiaryID  int64
+	SubsidiaryID  ids.SubsidiaryID
 	TxnMemo       string
 }
 
@@ -599,7 +602,7 @@ type WorkspaceSplitsRow struct {
 	Description      string
 	ReconciliationID sql.NullInt64
 	Date             string
-	SubsidiaryID     int64
+	SubsidiaryID     ids.SubsidiaryID
 	TxnMemo          string
 }
 

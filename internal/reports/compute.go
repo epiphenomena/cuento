@@ -123,7 +123,7 @@ func RoundHalfEven(x float64) int64 { return int64(math.RoundToEven(x)) }
 // converted to o.To at the on-or-before closing rate and collapsed into a single
 // o.To CurAmt per account (D12).
 func (tk *Toolkit) BalancesAsOf(ctx context.Context, s Scope, d string, o ConvertOpts) (map[AccountID][]CurAmt, error) {
-	rows, err := tk.store.SubtreeBalancesAsOf(ctx, d, int64(s.Sub))
+	rows, err := tk.store.SubtreeBalancesAsOf(ctx, d, s.Sub)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +167,7 @@ func (tk *Toolkit) BalancesAsOf(ctx context.Context, s Scope, d string, o Conver
 // It preserves AccountID through the collapse, so the D19 IC-exclusion is unaffected: the
 // CALLER (Activity) still drops excl[AccountID] rows over this output exactly as it does
 // over the unscoped store.PeriodActivity rows -- the helper does not (re)apply excl itself.
-func (tk *Toolkit) periodActivityRows(ctx context.Context, from, to string, sub int64) ([]store.AccountCurrencyAmount, error) {
+func (tk *Toolkit) periodActivityRows(ctx context.Context, from, to string, sub ids.SubsidiaryID) ([]store.AccountCurrencyAmount, error) {
 	if len(tk.Params.ProgramScope) == 0 {
 		return tk.store.PeriodActivity(ctx, from, to, sub)
 	}
@@ -205,12 +205,12 @@ func (tk *Toolkit) periodActivityRows(ctx context.Context, from, to string, sub 
 // p27.4: the raw rows come from periodActivityRows, which applies the program-subtree
 // grant filter on the SCOPED path (empty ProgramScope => store.PeriodActivity verbatim).
 func (tk *Toolkit) Activity(ctx context.Context, s Scope, from, to string, o ConvertOpts) (map[AccountID][]CurAmt, error) {
-	excl, err := tk.consolidatedICExclusions(ctx, int64(s.Sub))
+	excl, err := tk.consolidatedICExclusions(ctx, s.Sub)
 	if err != nil {
 		return nil, err
 	}
 	if o.Mode != RateTxnDate {
-		rows, err := tk.periodActivityRows(ctx, from, to, int64(s.Sub))
+		rows, err := tk.periodActivityRows(ctx, from, to, s.Sub)
 		if err != nil {
 			return nil, err
 		}
@@ -244,7 +244,7 @@ func (tk *Toolkit) Activity(ctx context.Context, s Scope, from, to string, o Con
 	unrounded := make(map[AccountID]float64)
 	present := make(map[AccountID]bool)
 	err = tk.ByPeriod(from, to, GranMonth, func(pFrom, pTo string) error {
-		rows, err := tk.periodActivityRows(ctx, pFrom, pTo, int64(s.Sub))
+		rows, err := tk.periodActivityRows(ctx, pFrom, pTo, s.Sub)
 		if err != nil {
 			return err
 		}
@@ -282,7 +282,7 @@ func (tk *Toolkit) Activity(ctx context.Context, s Scope, from, to string, o Con
 // converts each fund's currencies to o.To at the as-of rate and collapses to one
 // o.To CurAmt.
 func (tk *Toolkit) FundBalancesAsOf(ctx context.Context, s Scope, d string, o ConvertOpts) (map[FundID][]CurAmt, error) {
-	rows, err := tk.store.FundBalancesAsOf(ctx, d, int64(s.Sub))
+	rows, err := tk.store.FundBalancesAsOf(ctx, d, s.Sub)
 	if err != nil {
 		return nil, err
 	}
@@ -505,7 +505,7 @@ func (tk *Toolkit) FundPeriodStatement(ctx context.Context, s Scope, f FundID, f
 //
 // Like periodActivityRows, it preserves AccountID, so the CALLER (FunctionalMatrix)'s D19
 // IC-exclusion loop drops IC accounts over this output; the helper does not (re)apply excl.
-func (tk *Toolkit) functionalActivityRows(ctx context.Context, from, to string, sub int64) ([]store.FunctionalCell, error) {
+func (tk *Toolkit) functionalActivityRows(ctx context.Context, from, to string, sub ids.SubsidiaryID) ([]store.FunctionalCell, error) {
 	if len(tk.Params.ProgramScope) == 0 {
 		return tk.store.FunctionalActivity(ctx, from, to, sub)
 	}
@@ -535,7 +535,7 @@ func (tk *Toolkit) functionalActivityRows(ctx context.Context, from, to string, 
 }
 
 func (tk *Toolkit) FunctionalMatrix(ctx context.Context, s Scope, from, to string, o ConvertOpts) (map[AccountID]map[Class][]CurAmt, error) {
-	excl, err := tk.consolidatedICExclusions(ctx, int64(s.Sub))
+	excl, err := tk.consolidatedICExclusions(ctx, s.Sub)
 	if err != nil {
 		return nil, err
 	}
@@ -548,7 +548,7 @@ func (tk *Toolkit) FunctionalMatrix(ctx context.Context, s Scope, from, to strin
 		// rate for every split in the month — so each expense flow lands at its own rate.
 		unrounded := make(map[AccountID]map[Class]float64)
 		err := tk.ByPeriod(from, to, GranMonth, func(pFrom, pTo string) error {
-			rows, err := tk.functionalActivityRows(ctx, pFrom, pTo, int64(s.Sub))
+			rows, err := tk.functionalActivityRows(ctx, pFrom, pTo, s.Sub)
 			if err != nil {
 				return err
 			}
@@ -586,7 +586,7 @@ func (tk *Toolkit) FunctionalMatrix(ctx context.Context, s Scope, from, to strin
 		return out, nil
 	}
 
-	rows, err := tk.functionalActivityRows(ctx, from, to, int64(s.Sub))
+	rows, err := tk.functionalActivityRows(ctx, from, to, s.Sub)
 	if err != nil {
 		return nil, err
 	}
@@ -625,11 +625,11 @@ func (tk *Toolkit) FunctionalMatrix(ctx context.Context, s Scope, from, to strin
 // activity (so General, the seeded root, carries the whole org's program activity).
 // RateClosing converts each cell to o.To at the as-of (to) rate.
 func (tk *Toolkit) ProgramActivity(ctx context.Context, s Scope, from, to string, o ConvertOpts) (map[ProgramID]map[AccountID][]CurAmt, error) {
-	rows, err := tk.store.ProgramActivity(ctx, from, to, int64(s.Sub))
+	rows, err := tk.store.ProgramActivity(ctx, from, to, s.Sub)
 	if err != nil {
 		return nil, err
 	}
-	excl, err := tk.consolidatedICExclusions(ctx, int64(s.Sub))
+	excl, err := tk.consolidatedICExclusions(ctx, s.Sub)
 	if err != nil {
 		return nil, err
 	}
@@ -821,7 +821,7 @@ func (tk *Toolkit) IntercompanyNet(ctx context.Context, s Scope, d string) ([]Cu
 	for _, id := range icIDs {
 		isIC[AccountID(id)] = true
 	}
-	rows, err := tk.store.SubtreeBalancesAsOf(ctx, d, int64(s.Sub))
+	rows, err := tk.store.SubtreeBalancesAsOf(ctx, d, s.Sub)
 	if err != nil {
 		return nil, err
 	}
@@ -889,7 +889,7 @@ func (tk *Toolkit) IntercompanyResidualSplit(ctx context.Context, s Scope, d, ta
 	// the earliest intercompany-touching transaction date (not the 1900 inception) so a
 	// balanced org with a recent first entry does not decompose a century of empty
 	// months every run; "" (no IC activity) short-circuits to zero historical.
-	from, err := tk.earliestICYear(ctx, int64(s.Sub), isIC, d)
+	from, err := tk.earliestICYear(ctx, s.Sub, isIC, d)
 	if err != nil {
 		return ICResidualSplit{}, err
 	}
@@ -898,7 +898,7 @@ func (tk *Toolkit) IntercompanyResidualSplit(ctx context.Context, s Scope, d, ta
 	}
 	unrounded := make(map[string]float64)
 	err = tk.ByPeriod(from, d, GranMonth, func(pFrom, pTo string) error {
-		rows, err := tk.store.PeriodActivity(ctx, pFrom, pTo, int64(s.Sub))
+		rows, err := tk.store.PeriodActivity(ctx, pFrom, pTo, s.Sub)
 		if err != nil {
 			return err
 		}
@@ -936,7 +936,7 @@ func (tk *Toolkit) IntercompanyResidualSplit(ctx context.Context, s Scope, d, ta
 // inception — a coarse yearly scan (one PeriodActivity per year) finds the active span
 // cheaply, then the caller month-decomposes only [that year, d]. No store query is added
 // (PeriodActivity carries no min-date); the yearly probe reuses the same read.
-func (tk *Toolkit) earliestICYear(ctx context.Context, scope int64, isIC map[AccountID]bool, d string) (string, error) {
+func (tk *Toolkit) earliestICYear(ctx context.Context, scope ids.SubsidiaryID, isIC map[AccountID]bool, d string) (string, error) {
 	var earliest string
 	err := tk.ByPeriod(inceptionDate, d, GranYear, func(pFrom, pTo string) error {
 		if earliest != "" {
@@ -1327,7 +1327,7 @@ func (tk *Toolkit) codeOrder(ctx context.Context) (map[string]int, error) {
 // EMPTY — there the intercompany account is that entity's real external-facing
 // line and stays. The two legs of a transfer are flagged independently, so both
 // drop; no cross-currency netting is needed (they are simply excluded).
-func (tk *Toolkit) consolidatedICExclusions(ctx context.Context, scope int64) (map[AccountID]bool, error) {
+func (tk *Toolkit) consolidatedICExclusions(ctx context.Context, scope ids.SubsidiaryID) (map[AccountID]bool, error) {
 	consolidated, err := tk.isConsolidated(ctx, SubsidiaryID(scope))
 	if err != nil {
 		return nil, err

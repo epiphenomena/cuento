@@ -446,7 +446,7 @@ func finalizeCmd(ctx context.Context, args []string) error {
 
 // subsidiaryIDByName resolves a subsidiary name to its id from the db (for the
 // CLI's post-import reconciliation output).
-func subsidiaryIDByName(ctx context.Context, st *store.Store, name string) (int64, bool) {
+func subsidiaryIDByName(ctx context.Context, st *store.Store, name string) (ids.SubsidiaryID, bool) {
 	subs, err := st.SubTree(ctx)
 	if err != nil {
 		return 0, false

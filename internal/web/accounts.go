@@ -42,7 +42,7 @@ type balanceCell struct {
 // depending on time.Now. The numbers come STRAIGHT from SubtreeBalancesAsOf; this
 // only attaches each currency's exponent for rendering.
 func balancesByAccount(ctx context.Context, st *store.Store, asof string, scopeSub int64) (map[int64][]balanceCell, error) {
-	rows, err := st.SubtreeBalancesAsOf(ctx, asof, scopeSub)
+	rows, err := st.SubtreeBalancesAsOf(ctx, asof, ids.SubsidiaryID(scopeSub))
 	if err != nil {
 		return nil, err
 	}
@@ -325,9 +325,10 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 		typeFilter = s.sessions.GetString(ctx, sessionAcctTypeKey)
 	}
 
-	var subPtr *int64
+	var subPtr *ids.SubsidiaryID
 	if subFilter > 0 {
-		subPtr = &subFilter
+		sp := ids.SubsidiaryID(subFilter)
+		subPtr = &sp
 	}
 	rows, err := s.store.Tree(ctx, lang, subPtr)
 	if err != nil {
@@ -396,7 +397,7 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, sub := range subs {
-		model.Subs = append(model.Subs, subOption{ID: sub.ID, Name: sub.Name})
+		model.Subs = append(model.Subs, subOption{ID: int64(sub.ID), Name: sub.Name})
 	}
 
 	// p23.10: a filter change is the section-bar form's hx-get targeting
@@ -435,7 +436,7 @@ func (s *server) rootSubsidiary(ctx context.Context) (int64, error) {
 	}
 	for _, sub := range subs {
 		if !sub.ParentID.Valid {
-			return sub.ID, nil
+			return int64(sub.ID), nil
 		}
 	}
 	return 0, errors.New("web: no root subsidiary")
@@ -673,7 +674,7 @@ func (s *server) accountEditForm(w http.ResponseWriter, r *http.Request) {
 	}
 	if ids, err := s.store.AccountSubsidiaryIDs(ctx, id); err == nil {
 		for _, sid := range ids {
-			form.CheckedSubs[sid] = true
+			form.CheckedSubs[int64(sid)] = true
 		}
 	}
 	// A type-change re-fetch on the edit form overlays in-progress entries over the
@@ -762,7 +763,7 @@ func (s *server) buildAccountForm(ctx context.Context, id int64, typ string) (ac
 		return form, err
 	}
 	for _, sub := range subs {
-		form.Subs = append(form.Subs, subOption{ID: sub.ID, Name: sub.Name})
+		form.Subs = append(form.Subs, subOption{ID: int64(sub.ID), Name: sub.Name})
 	}
 
 	if form.IsRE {
@@ -974,7 +975,7 @@ type parsedAccountForm struct {
 	functionalClass string
 	defaultProgram  int64
 	form990Code     string
-	subs            []int64
+	subs            []ids.SubsidiaryID
 }
 
 // parseAccountForm reads the POST form into an accountForm (for re-render) and a
@@ -1008,7 +1009,7 @@ func (s *server) parseAccountForm(r *http.Request, id int64) (accountForm, parse
 	for key, vals := range r.PostForm {
 		if len(key) > 4 && key[:4] == "sub_" && len(vals) > 0 && vals[0] != "" {
 			if sid := parseID(key[4:]); sid > 0 {
-				in.subs = append(in.subs, sid)
+				in.subs = append(in.subs, ids.SubsidiaryID(sid))
 				checked[sid] = true
 			}
 		}

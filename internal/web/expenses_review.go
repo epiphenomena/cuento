@@ -165,7 +165,7 @@ func (s *server) buildReviewRow(ctx context.Context, rep sqlc.ExpenseReport, sub
 	row := reviewQueueRow{
 		ID:        int64(rep.ID),
 		Submitter: userNames[rep.SubmitterID],
-		SubName:   subNames[rep.SubsidiaryID],
+		SubName:   subNames[int64(rep.SubsidiaryID)],
 		LineCount: len(lines),
 		TotalFmt:  money.FormatMoney(total, s.reportCurrency(ctx, rep), exp, formatOptsFor(u)),
 		StatusKey: "expense.status." + rep.Status,

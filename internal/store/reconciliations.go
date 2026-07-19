@@ -435,7 +435,7 @@ type ReconciliationWorkspaceSplit struct {
 	TxnID        int64
 	Amount       int64 // net-debit signed minor units (D2)
 	FundID       *ids.FundID
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	SplitMemo    string
 	Description  string // per-split free-text (p26.15); the workspace Description cell
 	TxnMemo      string
@@ -563,7 +563,7 @@ type ReconciliationStatementSplit struct {
 	TxnID        int64
 	Amount       int64 // net-debit signed minor units (D2)
 	FundID       *ids.FundID
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	SplitMemo    string
 	Description  string // per-split free-text (p26.15); the statement Description cell
 	TxnMemo      string

@@ -24,7 +24,7 @@ import (
 type txnEnv struct {
 	s     *Store
 	d     *sql.DB
-	subUS int64
+	subUS ids.SubsidiaryID
 
 	checking int64 // asset, US
 	credit   int64 // liability, US
@@ -50,12 +50,12 @@ func newTxnEnv(t *testing.T) txnEnv {
 	env := txnEnv{s: s, d: d, subUS: subUS, educ: educ}
 	root := rootProgramID
 	mgmt := "management"
-	env.checking = mkAcct(t, s, "asset", "Checking", []int64{subUS}, nil, nil)
-	env.credit = mkAcct(t, s, "liability", "Credit Card", []int64{subUS}, nil, nil)
-	env.salaries = mkAcct(t, s, "expense", "Salaries", []int64{subUS}, &mgmt, &root)
-	env.supplies = mkAcct(t, s, "expense", "Supplies", []int64{subUS}, nil, nil)
-	env.contrib = mkAcct(t, s, "revenue", "Contributions", []int64{subUS}, nil, nil)
-	env.equity = mkAcct(t, s, "equity", "Opening Balances", []int64{subUS}, nil, nil)
+	env.checking = mkAcct(t, s, "asset", "Checking", []ids.SubsidiaryID{subUS}, nil, nil)
+	env.credit = mkAcct(t, s, "liability", "Credit Card", []ids.SubsidiaryID{subUS}, nil, nil)
+	env.salaries = mkAcct(t, s, "expense", "Salaries", []ids.SubsidiaryID{subUS}, &mgmt, &root)
+	env.supplies = mkAcct(t, s, "expense", "Supplies", []ids.SubsidiaryID{subUS}, nil, nil)
+	env.contrib = mkAcct(t, s, "revenue", "Contributions", []ids.SubsidiaryID{subUS}, nil, nil)
+	env.equity = mkAcct(t, s, "equity", "Opening Balances", []ids.SubsidiaryID{subUS}, nil, nil)
 	return env
 }
 
@@ -65,7 +65,7 @@ var rootProgramMarker ids.ProgramID = rootProgramID
 
 // mkAcct creates a leaf account of the given type mapped to subs, optionally with a
 // default functional class and default program, and returns its id.
-func mkAcct(t *testing.T, s *Store, typ, name string, subs []int64, fClass *string, defProg *ids.ProgramID) int64 {
+func mkAcct(t *testing.T, s *Store, typ, name string, subs []ids.SubsidiaryID, fClass *string, defProg *ids.ProgramID) int64 {
 	t.Helper()
 	in := CreateAccountInput{
 		Type: typ, DefaultCurrency: "USD", Names: enName(name), Subsidiaries: subs,
@@ -319,8 +319,8 @@ func TestPostUnbalancedRejected(t *testing.T) {
 func TestPostFundUnbalancedRejected(t *testing.T) {
 	e := newTxnEnv(t)
 	// Two funds both scoped to US; overall balanced but each fund skewed.
-	fundA := mkFund(t, e.s, "Grant A", []int64{e.subUS}, nil)
-	fundB := mkFund(t, e.s, "Grant B", []int64{e.subUS}, nil)
+	fundA := mkFund(t, e.s, "Grant A", []ids.SubsidiaryID{e.subUS}, nil)
+	fundB := mkFund(t, e.s, "Grant B", []ids.SubsidiaryID{e.subUS}, nil)
 	before := countChanges(t, e.d)
 	// Overall: +10000 -10000 = 0. Fund A: +10000 (salaries) -0. Fund B: -10000.
 	in := PostTransactionInput{
@@ -341,7 +341,7 @@ func TestPostFundUnbalancedRejected(t *testing.T) {
 
 func TestPostMixedFundsBalanced(t *testing.T) {
 	e := newTxnEnv(t)
-	grant := mkFund(t, e.s, "Grant", []int64{e.subUS}, nil)
+	grant := mkFund(t, e.s, "Grant", []ids.SubsidiaryID{e.subUS}, nil)
 	// 60/40 grant/unrestricted expense with a correspondingly split cash side.
 	in := PostTransactionInput{
 		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD",
@@ -375,7 +375,7 @@ func TestPostSingleSplitRejected(t *testing.T) {
 func TestPostPlaceholderRejected(t *testing.T) {
 	e := newTxnEnv(t)
 	// Make `checking` a placeholder by giving it a child.
-	child := mkAcct(t, e.s, "asset", "Sub-checking", []int64{e.subUS}, nil, nil)
+	child := mkAcct(t, e.s, "asset", "Sub-checking", []ids.SubsidiaryID{e.subUS}, nil, nil)
 	if err := e.s.UpdateAccount(mutCtx(), child, UpdateAccountInput{ParentID: &e.checking}); err != nil {
 		t.Fatalf("reparent child under checking: %v", err)
 	}
@@ -401,7 +401,7 @@ func TestPostAccountNotInSubsidiary(t *testing.T) {
 	e := newTxnEnv(t)
 	// An account mapped only to a DIFFERENT sub.
 	other := newSub(t, e.s, rootID, "Other")
-	foreign := mkAcct(t, e.s, "asset", "Foreign Cash", []int64{other}, nil, nil)
+	foreign := mkAcct(t, e.s, "asset", "Foreign Cash", []ids.SubsidiaryID{other}, nil, nil)
 	in := PostTransactionInput{
 		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD",
 		Splits: []SplitInput{
@@ -416,8 +416,8 @@ func TestPostInactiveSubsidiaryRejected(t *testing.T) {
 	e := newTxnEnv(t)
 	// Deactivate a fresh leaf subsidiary (root can't be deactivated / has children).
 	dead := newSub(t, e.s, rootID, "Dead")
-	acct := mkAcct(t, e.s, "asset", "Dead Cash", []int64{dead}, nil, nil)
-	acct2 := mkAcct(t, e.s, "asset", "Dead Savings", []int64{dead}, nil, nil)
+	acct := mkAcct(t, e.s, "asset", "Dead Cash", []ids.SubsidiaryID{dead}, nil, nil)
+	acct2 := mkAcct(t, e.s, "asset", "Dead Savings", []ids.SubsidiaryID{dead}, nil, nil)
 	if err := e.s.DeactivateSubsidiary(mutCtx(), dead); err != nil {
 		t.Fatalf("DeactivateSubsidiary: %v", err)
 	}
@@ -435,7 +435,7 @@ func TestPostFundSubsidiaryScope(t *testing.T) {
 	e := newTxnEnv(t)
 	// A fund scoped to US only; a third sub is out of scope.
 	subMX := newSub(t, e.s, rootID, "MX")
-	fund := mkFund(t, e.s, "Scoped", []int64{e.subUS, subMX}, nil)
+	fund := mkFund(t, e.s, "Scoped", []ids.SubsidiaryID{e.subUS, subMX}, nil)
 	// Posts fine in US.
 	in := e.balancedInput(100)
 	in.Splits[1].FundID = &fund
@@ -445,8 +445,8 @@ func TestPostFundSubsidiaryScope(t *testing.T) {
 	}
 	// A third sub not in the fund's scope is rejected.
 	subZ := newSub(t, e.s, rootID, "Z")
-	acctZ := mkAcct(t, e.s, "asset", "Z Cash", []int64{subZ}, nil, nil)
-	acctZ2 := mkAcct(t, e.s, "expense", "Z Exp", []int64{subZ}, nil, nil)
+	acctZ := mkAcct(t, e.s, "asset", "Z Cash", []ids.SubsidiaryID{subZ}, nil, nil)
+	acctZ2 := mkAcct(t, e.s, "expense", "Z Exp", []ids.SubsidiaryID{subZ}, nil, nil)
 	inZ := PostTransactionInput{
 		Date: "2025-03-01", SubsidiaryID: subZ, Currency: "USD",
 		Splits: []SplitInput{
@@ -459,7 +459,7 @@ func TestPostFundSubsidiaryScope(t *testing.T) {
 
 func TestPostInactiveFundRejected(t *testing.T) {
 	e := newTxnEnv(t)
-	fund := mkFund(t, e.s, "Closed", []int64{e.subUS}, nil)
+	fund := mkFund(t, e.s, "Closed", []ids.SubsidiaryID{e.subUS}, nil)
 	if err := e.s.CloseFund(mutCtx(), fund); err != nil {
 		t.Fatalf("CloseFund: %v", err)
 	}
@@ -504,7 +504,7 @@ func TestPostProgramDefaulted(t *testing.T) {
 	// contrib (revenue) has NO default program -> root. salaries default program is
 	// root too. Use a revenue account with a default program to test the account
 	// default branch.
-	feeAcct := mkAcctDefProg(t, e.s, "revenue", "Program Fees", []int64{e.subUS}, e.educ)
+	feeAcct := mkAcctDefProg(t, e.s, "revenue", "Program Fees", []ids.SubsidiaryID{e.subUS}, e.educ)
 
 	// Split omits program: revenue with account default -> educ; salaries -> root.
 	in := PostTransactionInput{
@@ -574,7 +574,7 @@ func TestPostFundProgramScope(t *testing.T) {
 	e := newTxnEnv(t)
 	// Fund scoped to program subtree educ. An R/E split tagged the fund with a
 	// program OUTSIDE educ's subtree (root) is rejected.
-	fund := mkFund(t, e.s, "Educ Grant", []int64{e.subUS}, &e.educ)
+	fund := mkFund(t, e.s, "Educ Grant", []ids.SubsidiaryID{e.subUS}, &e.educ)
 	in := PostTransactionInput{
 		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD",
 		Splits: []SplitInput{
@@ -858,7 +858,7 @@ func TestUpdateKeepsInactiveAccountOnUnchangedSplit(t *testing.T) {
 func TestUpdateChangeToInactiveAccountRejected(t *testing.T) {
 	e := newTxnEnv(t)
 	// A second checking-like asset leaf, mapped to the sub, then deactivated.
-	other := mkAcct(t, e.s, "asset", "Savings", []int64{e.subUS}, nil, nil)
+	other := mkAcct(t, e.s, "asset", "Savings", []ids.SubsidiaryID{e.subUS}, nil, nil)
 	id, err := e.s.PostTransaction(mutCtx(), e.balancedInput(100))
 	if err != nil {
 		t.Fatalf("PostTransaction: %v", err)
@@ -897,7 +897,7 @@ func TestUpdateChangeToInactiveAccountRejected(t *testing.T) {
 // inactive account still requires an active account -> rejected.
 func TestUpdateNewSplitOnInactiveAccountRejected(t *testing.T) {
 	e := newTxnEnv(t)
-	other := mkAcct(t, e.s, "asset", "Savings", []int64{e.subUS}, nil, nil)
+	other := mkAcct(t, e.s, "asset", "Savings", []ids.SubsidiaryID{e.subUS}, nil, nil)
 	id, err := e.s.PostTransaction(mutCtx(), e.balancedInput(100))
 	if err != nil {
 		t.Fatalf("PostTransaction: %v", err)
@@ -1027,10 +1027,10 @@ func TestTransactionAsOf(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateProgram: %v", err)
 	}
-	fundA := mkFund(t, s, "Fund A", []int64{subUS}, nil)
-	checking := mkAcct(t, s, "asset", "Checking", []int64{subUS}, nil, nil)
+	fundA := mkFund(t, s, "Fund A", []ids.SubsidiaryID{subUS}, nil)
+	checking := mkAcct(t, s, "asset", "Checking", []ids.SubsidiaryID{subUS}, nil, nil)
 	// Expense with default class management, default program root.
-	salaries := mkAcctFull(t, s, "expense", "Salaries", []int64{subUS}, "management", rootProgramID)
+	salaries := mkAcctFull(t, s, "expense", "Salaries", []ids.SubsidiaryID{subUS}, "management", rootProgramID)
 
 	t0 := base
 	t1 := base.Add(1 * time.Hour)
@@ -1175,7 +1175,7 @@ func TestConcurrentPostsSerialize(t *testing.T) {
 // --- fixture helpers ------------------------------------------------------
 
 // mkFund creates a fund scoped to subs, optionally to a program subtree.
-func mkFund(t *testing.T, s *Store, name string, subs []int64, prog *ids.ProgramID) ids.FundID {
+func mkFund(t *testing.T, s *Store, name string, subs []ids.SubsidiaryID, prog *ids.ProgramID) ids.FundID {
 	t.Helper()
 	in := CreateFundInput{Name: name, Restriction: "purpose", Subsidiaries: subs}
 	if prog != nil {
@@ -1190,7 +1190,7 @@ func mkFund(t *testing.T, s *Store, name string, subs []int64, prog *ids.Program
 }
 
 // mkAcctDefProg creates a leaf account with a default program (no functional class).
-func mkAcctDefProg(t *testing.T, s *Store, typ, name string, subs []int64, defProg ids.ProgramID) int64 {
+func mkAcctDefProg(t *testing.T, s *Store, typ, name string, subs []ids.SubsidiaryID, defProg ids.ProgramID) int64 {
 	t.Helper()
 	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: typ, DefaultCurrency: "USD", Names: enName(name), Subsidiaries: subs,
@@ -1272,7 +1272,7 @@ func TestAccountMissingRejectedEveryPath(t *testing.T) {
 
 // mkAcctFull creates a leaf expense account with an explicit default functional
 // class and default program.
-func mkAcctFull(t *testing.T, s *Store, typ, name string, subs []int64, fClass string, defProg ids.ProgramID) int64 {
+func mkAcctFull(t *testing.T, s *Store, typ, name string, subs []ids.SubsidiaryID, fClass string, defProg ids.ProgramID) int64 {
 	t.Helper()
 	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: typ, DefaultCurrency: "USD", Names: enName(name), Subsidiaries: subs,

@@ -52,14 +52,14 @@ func newReconWebEnv(t *testing.T) reconWebEnv {
 
 	checking, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Checking US"},
-		Subsidiaries: []int64{1}, Reconcilable: true,
+		Subsidiaries: []ids.SubsidiaryID{1}, Reconcilable: true,
 	})
 	if err != nil {
 		t.Fatalf("create checking: %v", err)
 	}
 	revenue, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "revenue", DefaultCurrency: "USD", Names: map[string]string{"en": "Grants"},
-		Subsidiaries: []int64{1},
+		Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create revenue: %v", err)
@@ -67,7 +67,7 @@ func newReconWebEnv(t *testing.T) reconWebEnv {
 	mgmt := "management"
 	expense, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "expense", DefaultCurrency: "USD", Names: map[string]string{"en": "Supplies"},
-		Subsidiaries: []int64{1}, FunctionalClass: &mgmt,
+		Subsidiaries: []ids.SubsidiaryID{1}, FunctionalClass: &mgmt,
 	})
 	if err != nil {
 		t.Fatalf("create expense: %v", err)

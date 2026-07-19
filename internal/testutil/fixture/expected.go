@@ -2,6 +2,11 @@ package fixture
 
 import "cuento/internal/ids"
 
+// subCcyMap keys a per-scope currency list by subsidiary id. Named so the map
+// literal in expectedFor (where the `ids` param shadows the ids package) can be
+// written without naming the package.
+type subCcyMap = map[ids.SubsidiaryID][]string
+
 // Expected holds the hand-computed aggregates a golden/report test asserts
 // against the p08.4 balance queries. Every number is NATIVE-CURRENCY (no FX
 // conversion -- that is p14) and is derived independently from the transaction
@@ -27,7 +32,7 @@ type Expected struct {
 	// zero (double-entry, D2). Keyed by scope subsidiary id; the value lists the
 	// currencies that must each sum to zero. The ROOT scope (full consolidation)
 	// is the strongest: every currency nets to zero across the whole org.
-	TrialBalanceCurrencies map[int64][]string
+	TrialBalanceCurrencies subCcyMap
 
 	// AccountBalances: selected (account id, currency) -> signed minor-unit
 	// balance at AsOf, ROOT scope (full consolidation). Net-debit signs (D2).
@@ -238,7 +243,7 @@ func expectedFor(ids IDs) Expected {
 		ActivityFrom: "2025-01-01",
 		ActivityTo:   "2026-06-30",
 
-		TrialBalanceCurrencies: map[int64][]string{
+		TrialBalanceCurrencies: subCcyMap{
 			ids.Root: {"USD", "MXN"},
 			ids.US:   {"USD"},
 			ids.MX:   {"USD", "MXN"},

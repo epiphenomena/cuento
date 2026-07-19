@@ -11,6 +11,7 @@ import (
 	"context"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/reports"
 	"cuento/internal/store"
 	"cuento/internal/testutil/fixture"
@@ -29,7 +30,7 @@ func find(amts []reports.CurAmt, ccy string) (int64, bool) {
 
 // tkFor builds a toolkit over the fixture scoped to the given subsidiary, target
 // currency USD (the fixture's report base).
-func tkFor(f *fixture.Fixture, scope int64) *reports.Toolkit {
+func tkFor(f *fixture.Fixture, scope ids.SubsidiaryID) *reports.Toolkit {
 	return reports.NewToolkit(f.Store, reports.Params{Scope: reports.SubsidiaryID(scope), TargetCurrency: "USD"})
 }
 

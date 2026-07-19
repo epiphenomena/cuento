@@ -30,10 +30,10 @@ import (
 // the created entity ids (by source key) and the surfaced warnings (non-balancing
 // groups etc. -- NEVER silently forced, docs hazard #4).
 type BuildResult struct {
-	SubsidiaryIDs map[string]int64         // subsidiary name -> id (incl. renamed root)
-	ProgramIDs    map[string]ids.ProgramID // program name -> id (incl. seeded root "General"? no -- created)
-	FundIDs       map[string]ids.FundID    // source donor -> fund id
-	AccountIDs    map[string]int64         // source_acct -> account id
+	SubsidiaryIDs map[string]ids.SubsidiaryID // subsidiary name -> id (incl. renamed root)
+	ProgramIDs    map[string]ids.ProgramID    // program name -> id (incl. seeded root "General"? no -- created)
+	FundIDs       map[string]ids.FundID       // source donor -> fund id
+	AccountIDs    map[string]int64            // source_acct -> account id
 	Warnings      []string
 
 	// CampusFundID is the id of the marker-driven "campus" fund (cfg.CampusFund),
@@ -64,12 +64,12 @@ func (r *BuildResult) accountHasSplit(id int64) bool { return r.splitAccounts[id
 
 // rootSubsidiaryID is the seeded root subsidiary (migration id 1); build renames
 // it rather than creating a second root (single-root trigger, D18).
-const rootSubsidiaryID = int64(1)
+const rootSubsidiaryID = ids.SubsidiaryID(1)
 
 // newResult returns an empty BuildResult with every map initialized.
 func newResult() *BuildResult {
 	return &BuildResult{
-		SubsidiaryIDs: map[string]int64{},
+		SubsidiaryIDs: map[string]ids.SubsidiaryID{},
 		ProgramIDs:    map[string]ids.ProgramID{},
 		FundIDs:       map[string]ids.FundID{},
 		AccountIDs:    map[string]int64{},
@@ -798,7 +798,7 @@ func mapAccountPath(sourceAcct string, nameEN, parEN map[string]string) (string,
 // Opening Balances) exist in the scaffolded db AND are scoped to the importing
 // subsidiary -- else the store rejects every counter-leg mid-import. Fails loud so
 // a misconfigured scaffold is caught before any transaction posts.
-func (b *builder) preflightSharedAccounts(ctx context.Context, subID int64) error {
+func (b *builder) preflightSharedAccounts(ctx context.Context, subID ids.SubsidiaryID) error {
 	for _, key := range []string{b.cfg.FXClearingAccount, b.cfg.OpeningBalanceAccount} {
 		id, ok := b.res.AccountIDs[key]
 		if !ok {
@@ -828,7 +828,7 @@ func (b *builder) preflightSharedAccounts(ctx context.Context, subID int64) erro
 // subsidiary total does too -- a nonzero total means a posted-splits bug, so fail
 // loud). The per-type breakdown it reads is surfaced to the operator by the CLI
 // (importSubCmd) for a manual trial-balance check against the source books.
-func (b *builder) reconcile(ctx context.Context, subName string, subID int64) error {
+func (b *builder) reconcile(ctx context.Context, subName string, subID ids.SubsidiaryID) error {
 	totals, err := b.st.SubsidiaryNativeTotals(ctx, subID)
 	if err != nil {
 		return err
@@ -847,8 +847,8 @@ func (b *builder) reconcile(ctx context.Context, subName string, subID int64) er
 }
 
 // subIDs resolves subsidiary NAMES to ids via the created-subsidiary map.
-func (b *builder) subIDs(names []string) ([]int64, error) {
-	out := make([]int64, 0, len(names))
+func (b *builder) subIDs(names []string) ([]ids.SubsidiaryID, error) {
+	out := make([]ids.SubsidiaryID, 0, len(names))
 	for _, n := range names {
 		id, ok := b.res.SubsidiaryIDs[n]
 		if !ok {

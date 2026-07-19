@@ -87,7 +87,7 @@ func (s *server) expensesPage(w http.ResponseWriter, r *http.Request) {
 	for _, rep := range reports {
 		row := expenseReportRow{
 			ID:        int64(rep.ID),
-			SubName:   subNames[rep.SubsidiaryID],
+			SubName:   subNames[int64(rep.SubsidiaryID)],
 			StatusKey: "expense.status." + rep.Status,
 			Draft:     rep.Status == "draft",
 		}
@@ -114,7 +114,7 @@ func (s *server) expenseCreate(w http.ResponseWriter, r *http.Request) {
 	if sub == 0 {
 		sub = s.defaultSubsidiary(ctx, u)
 	}
-	id, err := s.store.CreateExpenseReport(s.actorCtx(ctx), u.ID, sub)
+	id, err := s.store.CreateExpenseReport(s.actorCtx(ctx), u.ID, ids.SubsidiaryID(sub))
 	if err != nil {
 		// A bad subsidiary id is the only expected failure (ErrExpenseReportRefMissing);
 		// send the submitter back to the list rather than a dead 500.
@@ -145,8 +145,8 @@ func (s *server) expenseSetSubsidiary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sub := parseID(r.PostFormValue("subsidiary_id"))
-	if sub != 0 && sub != rep.SubsidiaryID {
-		if err := s.store.UpdateExpenseReportSubsidiary(s.actorCtx(ctx), ids.ExpenseReportID(id), sub); err != nil {
+	if sub != 0 && ids.SubsidiaryID(sub) != rep.SubsidiaryID {
+		if err := s.store.UpdateExpenseReportSubsidiary(s.actorCtx(ctx), ids.ExpenseReportID(id), ids.SubsidiaryID(sub)); err != nil {
 			// Expected guards (locked/bad sub) just no-op back to the page; anything else
 			// is a real fault.
 			if !errors.Is(err, store.ErrExpenseReportHasLines) &&
@@ -329,8 +329,8 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 
 	model := expenseDetailModel{
 		ID:        int64(id),
-		SubName:   subNames[rep.SubsidiaryID],
-		SubID:     rep.SubsidiaryID,
+		SubName:   subNames[int64(rep.SubsidiaryID)],
+		SubID:     int64(rep.SubsidiaryID),
 		Status:    rep.Status,
 		StatusKey: "expense.status." + rep.Status,
 		Editable:  rep.Status == "draft" || rep.Status == "rejected",
@@ -351,7 +351,7 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 			return expenseDetailModel{}, false
 		}
 		for _, sb := range subs {
-			model.Subs = append(model.Subs, subOption{ID: sb.ID, Name: sb.Name})
+			model.Subs = append(model.Subs, subOption{ID: int64(sb.ID), Name: sb.Name})
 		}
 	}
 	// p25.4: when editable, load the sub-scoped account/fund/program option lists the
@@ -457,7 +457,7 @@ func (s *server) reportCurrency(ctx context.Context, rep sqlc.ExpenseReport) str
 // out of band); funds = ActiveFunds(sub); programs = all active (not sub-scoped, like
 // the txn/budget editors). It is shared by the detail render and the 422 re-render so
 // the options always match the report's subsidiary.
-func (s *server) expenseLineOptions(ctx context.Context, sub int64, include ...int64) (accounts []expenseAccountOption, funds, programs []txnOption, err error) {
+func (s *server) expenseLineOptions(ctx context.Context, sub ids.SubsidiaryID, include ...int64) (accounts []expenseAccountOption, funds, programs []txnOption, err error) {
 	lang := langOf(ctx)
 
 	accts, err := s.store.AccountEditorOptionsWith(ctx, lang, sub, include)
@@ -474,7 +474,7 @@ func (s *server) expenseLineOptions(ctx context.Context, sub int64, include ...i
 		accounts = append(accounts, expenseAccountOption{ID: a.ID, Name: a.Name, Path: a.Path, Type: a.Type, Unavailable: a.Unavailable})
 	}
 
-	fs, err := s.store.ActiveFunds(ctx, sub)
+	fs, err := s.store.ActiveFunds(ctx, int64(sub))
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -503,7 +503,7 @@ func (s *server) expenseLineOptions(ctx context.Context, sub int64, include ...i
 // reportAccountType returns an account's type and whether it is one of the R/E leaves
 // offered for the report's subsidiary. Reuses AccountEditorOptions (the SAME set the
 // grid offers), so the gate can never disagree with what the picker showed.
-func (s *server) reportAccountType(ctx context.Context, sub, acctID int64) (string, bool) {
+func (s *server) reportAccountType(ctx context.Context, sub ids.SubsidiaryID, acctID int64) (string, bool) {
 	if acctID == 0 {
 		return "", false
 	}

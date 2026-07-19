@@ -137,7 +137,7 @@ func fundListTable(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 			bal := MoneyCell(a.Minor, a.Currency)
 			if fid := fundIDForDrill(id); fid != nil {
 				bal = bal.WithDrill(&Drill{
-					Scope:      int64(p.Scope),
+					Scope:      p.Scope,
 					AccountIDs: assetIDs,
 					Currency:   a.Currency,
 					FundID:     fid,
@@ -210,19 +210,19 @@ func fundStatementTable(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 		// Opening (spendable, day before From) — drillable to the spendable asset splits.
 		t.Rows = append(t.Rows, statementRow(t, "reports.fund_activity.opening", ccy,
 			st.Opening[ccy], RowSubtotal, &Drill{
-				Scope: int64(p.Scope), AccountIDs: spendableIDs, Currency: ccy, FundID: fund,
+				Scope: p.Scope, AccountIDs: spendableIDs, Currency: ccy, FundID: fund,
 				Mode: DrillAsOf, AsOf: opening,
 			}))
 		// Received — drillable to the revenue splits in the period.
 		t.Rows = append(t.Rows, statementRow(t, "reports.fund_activity.received", ccy,
 			st.Received[ccy], RowData, &Drill{
-				Scope: int64(p.Scope), AccountIDs: revenueAndLiabilityDrill(ctx, tk), Currency: ccy,
+				Scope: p.Scope, AccountIDs: revenueAndLiabilityDrill(ctx, tk), Currency: ccy,
 				FundID: fund, Mode: DrillPeriod, From: p.From, To: p.To,
 			}))
 		// Applied — expense.
 		t.Rows = append(t.Rows, statementRow(t, "reports.fund_activity.applied_expense", ccy,
 			st.AppliedExpense[ccy], RowData, &Drill{
-				Scope: int64(p.Scope), AccountIDs: expenseIDs, Currency: ccy, FundID: fund,
+				Scope: p.Scope, AccountIDs: expenseIDs, Currency: ccy, FundID: fund,
 				Mode: DrillPeriod, From: p.From, To: p.To,
 			}))
 		// Applied — non-expense (the Building purchase, loan principal).
@@ -231,13 +231,13 @@ func fundStatementTable(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 		// Closing (spendable) — Opening + Received − Applied.
 		t.Rows = append(t.Rows, statementRow(t, "reports.fund_activity.closing", ccy,
 			st.Closing[ccy], RowSubtotal, &Drill{
-				Scope: int64(p.Scope), AccountIDs: spendableIDs, Currency: ccy, FundID: fund,
+				Scope: p.Scope, AccountIDs: spendableIDs, Currency: ccy, FundID: fund,
 				Mode: DrillAsOf, AsOf: p.To,
 			}))
 		// Reconciliation: Closing + Capitalized == all-asset FundBalancesAsOf(To).
 		t.Rows = append(t.Rows, statementRow(t, "reports.fund_activity.total_assets", ccy,
 			allByCcy[ccy], RowTotal, &Drill{
-				Scope: int64(p.Scope), AccountIDs: assetIDs, Currency: ccy, FundID: fund,
+				Scope: p.Scope, AccountIDs: assetIDs, Currency: ccy, FundID: fund,
 				Mode: DrillAsOf, AsOf: p.To,
 			}))
 	}
@@ -265,7 +265,7 @@ func nonExpenseDrill(p Params, capitalIDs []int64, ccy string, fund *FundID) *Dr
 		return nil
 	}
 	return &Drill{
-		Scope: int64(p.Scope), AccountIDs: capitalIDs, Currency: ccy, FundID: fund,
+		Scope: p.Scope, AccountIDs: capitalIDs, Currency: ccy, FundID: fund,
 		Mode: DrillPeriod, From: p.From, To: p.To,
 	}
 }

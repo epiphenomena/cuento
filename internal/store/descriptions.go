@@ -25,7 +25,7 @@ import (
 // subsidiary chosen yet" -> unscoped (all subs). A blank q returns nothing
 // (autocomplete shows suggestions only once the user types). LIKE metacharacters in q
 // are neutralized so a literal % or _ is matched as itself.
-func (s *Store) SuggestDescriptions(ctx context.Context, q string, sub int64) ([]string, error) {
+func (s *Store) SuggestDescriptions(ctx context.Context, q string, sub ids.SubsidiaryID) ([]string, error) {
 	q = strings.TrimSpace(q)
 	if q == "" {
 		return nil, nil
@@ -64,7 +64,7 @@ type DescriptionPrefill struct {
 // account/fund/program may now be inactive within sub -- the method returns it
 // regardless (the editor's p26.10 option injection + save-time guard handle
 // display/validation); the caller notes this contract.
-func (s *Store) PrefillDescription(ctx context.Context, q string, sub int64) (DescriptionPrefill, error) {
+func (s *Store) PrefillDescription(ctx context.Context, q string, sub ids.SubsidiaryID) (DescriptionPrefill, error) {
 	q = strings.TrimSpace(q)
 	if q == "" {
 		return DescriptionPrefill{Found: false}, nil

@@ -160,7 +160,7 @@ func TestAccountEditFormFullPage(t *testing.T) {
 
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	id, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{1},
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("seed account: %v", err)
@@ -266,7 +266,7 @@ func TestAccountsEditHappyPath(t *testing.T) {
 
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	id, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{1},
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("seed account: %v", err)
@@ -296,7 +296,7 @@ func TestAccountsDeactivate(t *testing.T) {
 
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	id, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Temp"}, Subsidiaries: []int64{1},
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Temp"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("seed account: %v", err)
@@ -424,14 +424,14 @@ func TestAccountsEditErrorReRenderExcludesSelf(t *testing.T) {
 	// Parent asset + a child asset, so the parent select for the CHILD would list
 	// the parent but must never list the child itself.
 	parent, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Assets"}, Subsidiaries: []int64{1},
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Assets"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create parent: %v", err)
 	}
 	child, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		ParentID: &parent, Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Cash"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create child: %v", err)
@@ -512,7 +512,7 @@ func TestSubAssignmentPropagation(t *testing.T) {
 	}
 	// Parent maps {root} only.
 	parent, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Assets"}, Subsidiaries: []int64{1},
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Assets"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create parent: %v", err)
@@ -520,7 +520,7 @@ func TestSubAssignmentPropagation(t *testing.T) {
 	// Child under parent, initially {root}.
 	child, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		ParentID: &parent, Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Cash"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create child: %v", err)
@@ -533,7 +533,7 @@ func TestSubAssignmentPropagation(t *testing.T) {
 	form.Set("name_en", "Cash")
 	form.Set("parent_id", itoa(parent))
 	form.Set("sub_1", "1")
-	form.Set("sub_"+itoa(subA), itoa(subA))
+	form.Set("sub_"+itoa(int64(subA)), itoa(int64(subA)))
 
 	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts/"+itoa(child), form)
 	if rec.Code >= 400 {
@@ -563,13 +563,13 @@ func TestBalancesColumnMatchesQuery(t *testing.T) {
 
 	// Two accounts + a balanced transaction so there are non-zero balances.
 	cash, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{1},
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create cash: %v", err)
 	}
 	eq, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "equity", DefaultCurrency: "USD", Names: map[string]string{"en": "Opening"}, Subsidiaries: []int64{1},
+		Type: "equity", DefaultCurrency: "USD", Names: map[string]string{"en": "Opening"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create equity: %v", err)
@@ -642,11 +642,11 @@ func TestAccountsFilterRemembered(t *testing.T) {
 	}
 
 	// (a) A deliberate filter submit: sub present + active unchecked (no active key).
-	rec := do("/accounts?sub=" + itoa(subA))
+	rec := do("/accounts?sub=" + itoa(int64(subA)))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("filter GET = %d, body: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), `value="`+itoa(subA)+`" selected`) {
+	if !strings.Contains(rec.Body.String(), `value="`+itoa(int64(subA))+`" selected`) {
 		t.Fatalf("filter GET did not select sub %d; body: %s", subA, rec.Body.String())
 	}
 
@@ -656,7 +656,7 @@ func TestAccountsFilterRemembered(t *testing.T) {
 		t.Fatalf("bare GET = %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `value="`+itoa(subA)+`" selected`) {
+	if !strings.Contains(body, `value="`+itoa(int64(subA))+`" selected`) {
 		t.Errorf("bare GET did not restore sub %d; body: %s", subA, body)
 	}
 	// "active only" was OFF on the saving request -> restored OFF: the checkbox

@@ -297,7 +297,7 @@ func (s *server) renderDrillRows(
 			Amount:         rw.Amount,
 			Currency:       rw.Currency,
 			Date:           money.FormatDate(parseISOForDisplay(rw.Date), df),
-			SubName:        subs[rw.SubsidiaryID],
+			SubName:        subs[int64(rw.SubsidiaryID)],
 			Description:    rw.Description,
 			Memo:           memo,
 			CounterAccount: ca.name,

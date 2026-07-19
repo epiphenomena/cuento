@@ -84,7 +84,7 @@ type CreateAccountInput struct {
 	Type            string
 	DefaultCurrency string
 	Names           map[string]string
-	Subsidiaries    []int64
+	Subsidiaries    []ids.SubsidiaryID
 	FunctionalClass *string
 	Form990Code     *string
 	// DefaultProgramID is optional (nil = none). It is meaningful ONLY on
@@ -424,7 +424,7 @@ func (s *Store) SetAccountName(ctx context.Context, id int64, lang, name string)
 // under one change, honoring the superset invariant + ancestor auto-propagation
 // (D18). Additions cascade UP (each ancestor missing the sub gains it); removals
 // are local and blocked while a child still maps the sub (ErrSubInUseByChild).
-func (s *Store) SetAccountSubsidiaries(ctx context.Context, id int64, subs []int64) error {
+func (s *Store) SetAccountSubsidiaries(ctx context.Context, id int64, subs []ids.SubsidiaryID) error {
 	_, err := s.write(ctx, "account.subsidiaries", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			if _, err := q.GetAccount(ctx, id); err != nil {
@@ -434,7 +434,7 @@ func (s *Store) SetAccountSubsidiaries(ctx context.Context, id int64, subs []int
 				return fmt.Errorf("load account %d: %w", id, err)
 			}
 
-			want := make(map[int64]bool, len(subs))
+			want := make(map[ids.SubsidiaryID]bool, len(subs))
 			for _, sid := range subs {
 				want[sid] = true
 			}
@@ -612,7 +612,7 @@ type TreeRow struct {
 // Tree returns accounts in pre-order (recursive CTE), names resolved for `lang`
 // via a plain LEFT JOIN (empty when absent). When subFilter is non-nil, only
 // accounts mapped to that subsidiary are returned. Read; sqlc.
-func (s *Store) Tree(ctx context.Context, lang string, subFilter *int64) ([]TreeRow, error) {
+func (s *Store) Tree(ctx context.Context, lang string, subFilter *ids.SubsidiaryID) ([]TreeRow, error) {
 	if subFilter != nil {
 		rows, err := s.q.AccountTreeBySubsidiary(ctx, sqlc.AccountTreeBySubsidiaryParams{
 			SubsidiaryID: *subFilter,
@@ -711,13 +711,13 @@ func checkFlagTypes(accountType string, currentCash, openItem bool) error {
 }
 
 // subSet returns an account's current subsidiary id set.
-func subSet(ctx context.Context, q *sqlc.Queries, accountID int64) (map[int64]bool, error) {
-	ids, err := q.AccountSubsidiaries(ctx, accountID)
+func subSet(ctx context.Context, q *sqlc.Queries, accountID int64) (map[ids.SubsidiaryID]bool, error) {
+	subs, err := q.AccountSubsidiaries(ctx, accountID)
 	if err != nil {
 		return nil, fmt.Errorf("load subsidiaries of %d: %w", accountID, err)
 	}
-	set := make(map[int64]bool, len(ids))
-	for _, sid := range ids {
+	set := make(map[ids.SubsidiaryID]bool, len(subs))
+	for _, sid := range subs {
 		set[sid] = true
 	}
 	return set, nil
@@ -744,7 +744,7 @@ func check990Type(ctx context.Context, q *sqlc.Queries, code, accountType string
 // ancestor missing it (D18 auto-propagation). Each newly-added membership (self
 // or ancestor) gets its own op='create' version row; an account already holding
 // the sub is a no-op with no version row (the PK forbids a duplicate).
-func addSubWithPropagation(ctx context.Context, q *sqlc.Queries, changeID, accountID, sid int64) error {
+func addSubWithPropagation(ctx context.Context, q *sqlc.Queries, changeID, accountID int64, sid ids.SubsidiaryID) error {
 	anc, err := q.AccountAncestors(ctx, accountID)
 	if err != nil {
 		return fmt.Errorf("load ancestors of %d: %w", accountID, err)
@@ -779,7 +779,7 @@ func addSubWithPropagation(ctx context.Context, q *sqlc.Queries, changeID, accou
 // captured BEFORE the live row is deleted, or there is nothing left to snapshot.
 // This is the one place the account ops depart from subsidiaries.go's order; the
 // comment is deliberate.
-func removeSub(ctx context.Context, q *sqlc.Queries, changeID, accountID, sid int64) error {
+func removeSub(ctx context.Context, q *sqlc.Queries, changeID, accountID int64, sid ids.SubsidiaryID) error {
 	if err := q.InsertAccountSubsidiaryVersion(ctx, sqlc.InsertAccountSubsidiaryVersionParams{
 		Op: "delete", ID: changeID, AccountID: accountID, SubsidiaryID: sid,
 	}); err != nil {

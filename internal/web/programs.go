@@ -34,7 +34,7 @@ import (
 // testable directly against the p08.4 ProgramActivity query without scraping HTML
 // or depending on time.Now. Numbers come STRAIGHT from ProgramActivity; this only
 // sums per currency and attaches each currency's exponent for rendering.
-func programActivityTotals(ctx context.Context, st *store.Store, from, to string, scopeSub int64) (map[ids.ProgramID][]balanceCell, error) {
+func programActivityTotals(ctx context.Context, st *store.Store, from, to string, scopeSub ids.SubsidiaryID) (map[ids.ProgramID][]balanceCell, error) {
 	cells, err := st.ProgramActivity(ctx, from, to, scopeSub)
 	if err != nil {
 		return nil, err
@@ -131,7 +131,7 @@ func (s *server) buildProgramsPage(ctx context.Context, from, to string) (progra
 	if err != nil {
 		return programsPageModel{}, err
 	}
-	totals, err := programActivityTotals(ctx, s.store, from, to, scope)
+	totals, err := programActivityTotals(ctx, s.store, from, to, ids.SubsidiaryID(scope))
 	if err != nil {
 		return programsPageModel{}, err
 	}

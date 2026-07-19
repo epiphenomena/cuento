@@ -364,7 +364,7 @@ type CurrentUser struct {
 	NegStyle     string
 	// DefaultSubsidiaryID is the user's preferred subsidiary for new transactions
 	// (p12.2); nil = unset, so the editor falls back to the sole/root subsidiary.
-	DefaultSubsidiaryID *int64
+	DefaultSubsidiaryID *ids.SubsidiaryID
 	// DefaultProgramID is the user's preferred program for new revenue/expense splits
 	// (p26.5); nil = unset. It is the program-prefill fallback tier BELOW the account's
 	// own default_program (account default wins) and ABOVE the root program.
@@ -415,10 +415,7 @@ func (s *Store) UserByID(ctx context.Context, id ids.UserID) (CurrentUser, error
 		DisplayMode:  row.DisplayMode,
 		NegStyle:     row.NegStyle,
 	}
-	if row.DefaultSubsidiaryID.Valid {
-		v := row.DefaultSubsidiaryID.Int64
-		cu.DefaultSubsidiaryID = &v
-	}
+	cu.DefaultSubsidiaryID = ids.Ptr[ids.SubsidiaryID](row.DefaultSubsidiaryID)
 	cu.DefaultProgramID = ids.Ptr[ids.ProgramID](row.DefaultProgramID)
 	cu.CanSubmitExpenses = row.CanSubmitExpenses != 0
 	return cu, nil
@@ -472,7 +469,7 @@ type UserSettingsInput struct {
 	DisplayMode         string
 	NegStyle            string
 	Theme               string
-	DefaultSubsidiaryID *int64
+	DefaultSubsidiaryID *ids.SubsidiaryID
 	// DefaultProgramID is nil to CLEAR the preference; a non-nil id must reference an
 	// existing program (p26.5). Validated exactly like DefaultSubsidiaryID.
 	DefaultProgramID *ids.ProgramID
@@ -525,7 +522,7 @@ func (s *Store) UpdateUserSettings(ctx context.Context, userID ids.UserID, in Us
 				DisplayMode:         in.DisplayMode,
 				NegStyle:            in.NegStyle,
 				Theme:               in.Theme,
-				DefaultSubsidiaryID: nullInt64Ptr(in.DefaultSubsidiaryID),
+				DefaultSubsidiaryID: ids.Null(in.DefaultSubsidiaryID),
 				DefaultProgramID:    ids.Null(in.DefaultProgramID),
 				ID:                  userID,
 			}); err != nil {

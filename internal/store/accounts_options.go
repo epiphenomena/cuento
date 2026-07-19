@@ -192,12 +192,12 @@ func (s *Store) ParentOptions(ctx context.Context, lang, accountType string, exc
 // so the form's subsidiary checklist can pre-check the account's memberships. It
 // wraps the AccountSubsidiaries query directly (read; no ordering guarantee is
 // needed -- the caller builds a set).
-func (s *Store) AccountSubsidiaryIDs(ctx context.Context, id int64) ([]int64, error) {
-	ids, err := s.q.AccountSubsidiaries(ctx, id)
+func (s *Store) AccountSubsidiaryIDs(ctx context.Context, id int64) ([]ids.SubsidiaryID, error) {
+	subs, err := s.q.AccountSubsidiaries(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("store: account %d subsidiaries: %w", id, err)
 	}
-	return ids, nil
+	return subs, nil
 }
 
 // AllSubsidiaries returns every subsidiary in tree order for the form's
@@ -245,7 +245,7 @@ type AccountEditorOption struct {
 	// (p27.2c) offers R/E leaves AND open_item asset/liability leaves, so it needs
 	// this flag to include/filter A/L options (the txn/expense editors ignore it).
 	OpenItem      bool
-	SubsidiaryIDs []int64
+	SubsidiaryIDs []ids.SubsidiaryID
 	// Unavailable marks an option that would NOT normally be offered (it is inactive,
 	// a placeholder, or outside the editor's subsidiary) but was force-included because
 	// an existing split references it (p26.10). The web layer marks it visibly (an
@@ -260,7 +260,7 @@ type AccountEditorOption struct {
 // mirrors the store's own write-side account rules (leaf via the full tree's parent
 // set, active via the row) so the offered options can never disagree with what
 // PostTransaction accepts. The chart is small; per-account metadata is read once.
-func (s *Store) AccountEditorOptions(ctx context.Context, lang string, subID int64) ([]AccountEditorOption, error) {
+func (s *Store) AccountEditorOptions(ctx context.Context, lang string, subID ids.SubsidiaryID) ([]AccountEditorOption, error) {
 	return s.AccountEditorOptionsWith(ctx, lang, subID, nil)
 }
 
@@ -273,7 +273,7 @@ func (s *Store) AccountEditorOptions(ctx context.Context, lang string, subID int
 // result is byte-for-byte the normal offered set (the NEW-transaction case is
 // unchanged). All names/paths come from the SAME lang-resolved full tree, so an
 // injected option's label matches a normal one's.
-func (s *Store) AccountEditorOptionsWith(ctx context.Context, lang string, subID int64, include []int64) ([]AccountEditorOption, error) {
+func (s *Store) AccountEditorOptionsWith(ctx context.Context, lang string, subID ids.SubsidiaryID, include []int64) ([]AccountEditorOption, error) {
 	// Full tree (unfiltered) -> which ids are placeholders (have children).
 	full, err := s.Tree(ctx, lang, nil)
 	if err != nil {

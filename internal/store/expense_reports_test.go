@@ -33,7 +33,7 @@ func seedExpenseReportEnv(t *testing.T) (*Store, *sql.DB, context.Context, ids.U
 	}
 	acctID, err := s.CreateAccount(sysCtx, CreateAccountInput{
 		Type: "expense", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Travel"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Travel"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create account: %v", err)
@@ -491,7 +491,7 @@ func TestPostAndConvertExpenseReport(t *testing.T) {
 	sysCtx := WithActor(context.Background(), Actor{ID: 1})
 	cash, err := s.CreateAccount(sysCtx, CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Cash"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("seed cash: %v", err)
@@ -651,7 +651,7 @@ func seedPostedTxn(t *testing.T, s *Store, expenseAcct int64) int64 {
 	sysCtx := WithActor(context.Background(), Actor{ID: 1})
 	cash, err := s.CreateAccount(sysCtx, CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Cash"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("seed cash account: %v", err)

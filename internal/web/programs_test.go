@@ -329,13 +329,13 @@ func TestProgramActivityTotalsMatchQuery(t *testing.T) {
 		t.Fatalf("create program: %v", err)
 	}
 	cash, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{1},
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create cash: %v", err)
 	}
 	rev, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "revenue", DefaultCurrency: "USD", Names: map[string]string{"en": "Donations"}, Subsidiaries: []int64{1},
+		Type: "revenue", DefaultCurrency: "USD", Names: map[string]string{"en": "Donations"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create revenue: %v", err)

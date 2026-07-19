@@ -36,7 +36,7 @@ func stageReviewBatch(t *testing.T, st *store.Store, description, memo string) r
 
 	checking, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Checking", "es": "Checking"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Checking", "es": "Checking"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount checking: %v", err)
@@ -45,7 +45,7 @@ func stageReviewBatch(t *testing.T, st *store.Store, description, memo string) r
 	rootProg := ids.ProgramID(1)
 	expense, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "expense", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Supplies", "es": "Suministros"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Supplies", "es": "Suministros"}, Subsidiaries: []ids.SubsidiaryID{1},
 		FunctionalClass: &fc, DefaultProgramID: &rootProg,
 	})
 	if err != nil {

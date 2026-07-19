@@ -49,7 +49,7 @@ func reportsApp(t *testing.T) (http.Handler, *store.Store, *sql.DB, *scs.Session
 	mkAcct := func(name string) int64 {
 		id, err := st.CreateAccount(ctx, store.CreateAccountInput{
 			Type: "asset", DefaultCurrency: "USD",
-			Names: map[string]string{"en": name}, Subsidiaries: []int64{1},
+			Names: map[string]string{"en": name}, Subsidiaries: []ids.SubsidiaryID{1},
 		})
 		if err != nil {
 			t.Fatalf("seed account %s: %v", name, err)

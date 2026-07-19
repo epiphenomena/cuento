@@ -8,6 +8,8 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+
+	"cuento/internal/ids"
 )
 
 const accountAncestors = `-- name: AccountAncestors :many
@@ -90,15 +92,15 @@ ORDER BY subsidiary_id
 
 // The subsidiary id set an account currently maps (order-insensitive; the store
 // builds a set).
-func (q *Queries) AccountSubsidiaries(ctx context.Context, accountID int64) ([]int64, error) {
+func (q *Queries) AccountSubsidiaries(ctx context.Context, accountID int64) ([]ids.SubsidiaryID, error) {
 	rows, err := q.db.QueryContext(ctx, accountSubsidiaries, accountID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []int64
+	var items []ids.SubsidiaryID
 	for rows.Next() {
-		var subsidiary_id int64
+		var subsidiary_id ids.SubsidiaryID
 		if err := rows.Scan(&subsidiary_id); err != nil {
 			return nil, err
 		}
@@ -220,7 +222,7 @@ ORDER BY tree.path
 
 type AccountTreeBySubsidiaryParams struct {
 	Lang         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 type AccountTreeBySubsidiaryRow struct {
@@ -329,7 +331,7 @@ WHERE child.parent_id = ? AND asub.subsidiary_id = ?
 
 type CountChildAccountsWithSubParams struct {
 	ParentID     sql.NullInt64
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // Number of DIRECT child accounts that still map a given subsidiary. Removing a
@@ -351,7 +353,7 @@ WHERE account_id = ? AND subsidiary_id = ?
 
 type DeleteAccountSubsidiaryParams struct {
 	AccountID    int64
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // Remove one membership. For op=delete the version row is captured BEFORE this
@@ -445,7 +447,7 @@ WHERE account_id = ? AND subsidiary_id = ?
 
 type HasAccountSubsidiaryParams struct {
 	AccountID    int64
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // 1 if the account already maps the subsidiary. Propagation uses this to skip
@@ -503,7 +505,8 @@ type InsertAccountParams struct {
 // backstopped by triggers. default_program_id is validated in the store as R/E-only
 // (D24). Returns the new id for the store to snapshot + return.
 func (q *Queries) InsertAccount(ctx context.Context, arg InsertAccountParams) (int64, error) {
-	row := q.db.QueryRowContext(ctx, insertAccount,
+	row := q.db.QueryRowContext(
+		ctx, insertAccount,
 		arg.ParentID,
 		arg.Type,
 		arg.DefaultCurrency,
@@ -544,7 +547,8 @@ type InsertAccountNameVersionParams struct {
 // identity (00005). Must run AFTER the live upsert. Params (positional): op,
 // change_id, account_id, lang -> generated fields Op, ID, AccountID, Lang.
 func (q *Queries) InsertAccountNameVersion(ctx context.Context, arg InsertAccountNameVersionParams) error {
-	_, err := q.db.ExecContext(ctx, insertAccountNameVersion,
+	_, err := q.db.ExecContext(
+		ctx, insertAccountNameVersion,
 		arg.Op,
 		arg.ID,
 		arg.AccountID,
@@ -560,7 +564,7 @@ VALUES (?, ?)
 
 type InsertAccountSubsidiaryParams struct {
 	AccountID    int64
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // Add one (account_id, subsidiary_id) membership. Callers guard with
@@ -582,7 +586,7 @@ type InsertAccountSubsidiaryVersionParams struct {
 	Op           string
 	ID           int64
 	AccountID    int64
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 }
 
 // Snapshot-from-live version append for a COMPOSITE (account_id, subsidiary_id)
@@ -592,7 +596,8 @@ type InsertAccountSubsidiaryVersionParams struct {
 // exist to snapshot). Params (positional): op, change_id, account_id,
 // subsidiary_id -> generated fields Op, ID, AccountID, SubsidiaryID.
 func (q *Queries) InsertAccountSubsidiaryVersion(ctx context.Context, arg InsertAccountSubsidiaryVersionParams) error {
-	_, err := q.db.ExecContext(ctx, insertAccountSubsidiaryVersion,
+	_, err := q.db.ExecContext(
+		ctx, insertAccountSubsidiaryVersion,
 		arg.Op,
 		arg.ID,
 		arg.AccountID,
@@ -741,7 +746,8 @@ type UpdateAccountParams struct {
 // (read-modify-write), and so is default_program_id unless changed -- the store
 // carries cur.DefaultProgramID through, so an unrelated update never NULLs it.
 func (q *Queries) UpdateAccount(ctx context.Context, arg UpdateAccountParams) error {
-	_, err := q.db.ExecContext(ctx, updateAccount,
+	_, err := q.db.ExecContext(
+		ctx, updateAccount,
 		arg.ParentID,
 		arg.Type,
 		arg.DefaultCurrency,

@@ -23,7 +23,7 @@ type sp struct {
 
 // post inserts a balanced transaction and returns its id. It is the workhorse of
 // the transaction build.
-func post(ctx context.Context, s *store.Store, date string, sub int64, ccy, memo string, splits ...sp) (int64, error) {
+func post(ctx context.Context, s *store.Store, date string, sub entids.SubsidiaryID, ccy, memo string, splits ...sp) (int64, error) {
 	in := store.PostTransactionInput{
 		Date:         date,
 		SubsidiaryID: sub,
@@ -378,7 +378,7 @@ func buildEditedTransaction(ctx context.Context, s *store.Store, ids *IDs) error
 }
 
 // editTxn replaces a transaction's header + split set (UpdateTransaction).
-func editTxn(ctx context.Context, s *store.Store, id int64, date string, sub int64, ccy, memo string, splits ...sp) error {
+func editTxn(ctx context.Context, s *store.Store, id int64, date string, sub entids.SubsidiaryID, ccy, memo string, splits ...sp) error {
 	in := store.PostTransactionInput{Date: date, SubsidiaryID: sub, Currency: ccy, Memo: memo}
 	for i, x := range splits {
 		in.Splits = append(in.Splits, store.SplitInput{

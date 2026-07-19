@@ -19,7 +19,7 @@ import (
 // newFundSub is a tiny helper: create a child subsidiary under the root and
 // return its id (fund scope needs real subsidiaries; the seeded root id 1
 // exists but child subs make multi-sub scoping tests clearer).
-func newFundSub(t *testing.T, s *Store, name string) int64 {
+func newFundSub(t *testing.T, s *Store, name string) ids.SubsidiaryID {
 	t.Helper()
 	return newSub(t, s, rootID, name)
 }
@@ -87,7 +87,7 @@ func TestCreateFundVersioned(t *testing.T) {
 		Funder:       "Acme Foundation",
 		Purpose:      "youth programs",
 		Restriction:  "purpose",
-		Subsidiaries: []int64{subA, subB},
+		Subsidiaries: []ids.SubsidiaryID{subA, subB},
 	})
 	if err != nil {
 		t.Fatalf("CreateFund: %v", err)
@@ -102,8 +102,8 @@ func TestCreateFundVersioned(t *testing.T) {
 	}
 
 	testutil.AssertVersioned(t, d, "funds", int64(id), "create")
-	testutil.AssertVersionedFundSub(t, d, int64(id), subA, "create")
-	testutil.AssertVersionedFundSub(t, d, int64(id), subB, "create")
+	testutil.AssertVersionedFundSub(t, d, int64(id), int64(subA), "create")
+	testutil.AssertVersionedFundSub(t, d, int64(id), int64(subB), "create")
 
 	// Live row matches inputs.
 	f := getFund(t, s, id)
@@ -111,7 +111,7 @@ func TestCreateFundVersioned(t *testing.T) {
 		f.Restriction != "purpose" || f.Active != 1 {
 		t.Errorf("live fund = %+v, want (Youth Grant, Acme Foundation, purpose, active=1)", f)
 	}
-	if set := fundSubSet(t, d, id); !set[subA] || !set[subB] || len(set) != 2 {
+	if set := fundSubSet(t, d, id); !set[int64(subA)] || !set[int64(subB)] || len(set) != 2 {
 		t.Errorf("fund sub set = %v, want {%d,%d}", set, subA, subB)
 	}
 }
@@ -150,14 +150,14 @@ func TestActiveFundsForSubsidiary(t *testing.T) {
 	subC := newFundSub(t, s, "C")
 
 	ab, err := s.CreateFund(mutCtx(), CreateFundInput{
-		Name: "AB Grant", Restriction: "purpose", Subsidiaries: []int64{subA, subB},
+		Name: "AB Grant", Restriction: "purpose", Subsidiaries: []ids.SubsidiaryID{subA, subB},
 	})
 	if err != nil {
 		t.Fatalf("CreateFund AB: %v", err)
 	}
 	// A closed fund scoped to A must not appear.
 	closed, err := s.CreateFund(mutCtx(), CreateFundInput{
-		Name: "Closed", Restriction: "time", Subsidiaries: []int64{subA},
+		Name: "Closed", Restriction: "time", Subsidiaries: []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("CreateFund closed: %v", err)
@@ -166,9 +166,9 @@ func TestActiveFundsForSubsidiary(t *testing.T) {
 		t.Fatalf("CloseFund: %v", err)
 	}
 
-	assertFundsForSub := func(sub int64, wantIDs ...ids.FundID) {
+	assertFundsForSub := func(sub ids.SubsidiaryID, wantIDs ...ids.FundID) {
 		t.Helper()
-		funds, err := s.ActiveFunds(context.Background(), sub)
+		funds, err := s.ActiveFunds(context.Background(), int64(sub))
 		if err != nil {
 			t.Fatalf("ActiveFunds(%d): %v", sub, err)
 		}
@@ -205,7 +205,7 @@ func TestProgramScopeStored(t *testing.T) {
 
 	id, err := s.CreateFund(mutCtx(), CreateFundInput{
 		Name: "Scoped", Restriction: "purpose",
-		ProgramID: &prog, Subsidiaries: []int64{subA},
+		ProgramID: &prog, Subsidiaries: []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("CreateFund with program: %v", err)
@@ -233,7 +233,7 @@ func TestProgramScopeStored(t *testing.T) {
 	bad := ids.ProgramID(9999)
 	if _, err := s.CreateFund(mutCtx(), CreateFundInput{
 		Name: "BadProg", Restriction: "purpose",
-		ProgramID: &bad, Subsidiaries: []int64{subA},
+		ProgramID: &bad, Subsidiaries: []ids.SubsidiaryID{subA},
 	}); !errors.Is(err, ErrFundProgramMissing) {
 		t.Fatalf("CreateFund bad program: err = %v, want ErrFundProgramMissing", err)
 	}
@@ -250,7 +250,7 @@ func TestReopenAudited(t *testing.T) {
 
 	subA := newFundSub(t, s, "A")
 	id, err := s.CreateFund(mutCtx(), CreateFundInput{
-		Name: "Toggler", Restriction: "time", Subsidiaries: []int64{subA},
+		Name: "Toggler", Restriction: "time", Subsidiaries: []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("CreateFund: %v", err)
@@ -297,7 +297,7 @@ func TestUpdateFundSubsetChange(t *testing.T) {
 	subC := newFundSub(t, s, "C")
 
 	id, err := s.CreateFund(mutCtx(), CreateFundInput{
-		Name: "Grant", Restriction: "purpose", Subsidiaries: []int64{subA, subB},
+		Name: "Grant", Restriction: "purpose", Subsidiaries: []ids.SubsidiaryID{subA, subB},
 	})
 	if err != nil {
 		t.Fatalf("CreateFund: %v", err)
@@ -307,19 +307,19 @@ func TestUpdateFundSubsetChange(t *testing.T) {
 	newName := "Renamed Grant"
 	if err := s.UpdateFund(mutCtx(), id, UpdateFundInput{
 		Name:         &newName,
-		Subsidiaries: []int64{subA, subC},
+		Subsidiaries: []ids.SubsidiaryID{subA, subC},
 	}); err != nil {
 		t.Fatalf("UpdateFund: %v", err)
 	}
 
 	set := fundSubSet(t, d, id)
-	if !set[subA] || !set[subC] || set[subB] || len(set) != 2 {
+	if !set[int64(subA)] || !set[int64(subC)] || set[int64(subB)] || len(set) != 2 {
 		t.Errorf("live sub set = %v, want {%d,%d}", set, subA, subC)
 	}
 	// Membership version ops: C created, B deleted, A still create (untouched).
-	testutil.AssertVersionedFundSub(t, d, int64(id), subC, "create")
-	testutil.AssertVersionedFundSub(t, d, int64(id), subB, "delete")
-	testutil.AssertVersionedFundSub(t, d, int64(id), subA, "create")
+	testutil.AssertVersionedFundSub(t, d, int64(id), int64(subC), "create")
+	testutil.AssertVersionedFundSub(t, d, int64(id), int64(subB), "delete")
+	testutil.AssertVersionedFundSub(t, d, int64(id), int64(subA), "create")
 
 	if f := getFund(t, s, id); f.Name != "Renamed Grant" {
 		t.Errorf("live name = %q, want Renamed Grant", f.Name)
@@ -328,7 +328,7 @@ func TestUpdateFundSubsetChange(t *testing.T) {
 
 	// Narrowing to empty is rejected (>=1 must remain), no trace.
 	before := countChanges(t, d)
-	if err := s.UpdateFund(mutCtx(), id, UpdateFundInput{Subsidiaries: []int64{}}); !errors.Is(err, ErrFundNoSubsidiary) {
+	if err := s.UpdateFund(mutCtx(), id, UpdateFundInput{Subsidiaries: []ids.SubsidiaryID{}}); !errors.Is(err, ErrFundNoSubsidiary) {
 		t.Fatalf("UpdateFund to empty set: err = %v, want ErrFundNoSubsidiary", err)
 	}
 	if n := countChanges(t, d); n != before {
@@ -349,7 +349,7 @@ func TestCloseFundBlocksNewUse(t *testing.T) {
 
 	subA := newFundSub(t, s, "A")
 	id, err := s.CreateFund(mutCtx(), CreateFundInput{
-		Name: "ToClose", Restriction: "purpose", Subsidiaries: []int64{subA},
+		Name: "ToClose", Restriction: "purpose", Subsidiaries: []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("CreateFund: %v", err)
@@ -370,7 +370,7 @@ func TestNarrowSubsBlockedBySplits(t *testing.T) {
 	e := newTxnEnv(t)
 	// A fund scoped to {US, MX}; post a txn in US tagging the fund.
 	subMX := newSub(t, e.s, rootID, "MX")
-	fund := mkFund(t, e.s, "Grant", []int64{e.subUS, subMX}, nil)
+	fund := mkFund(t, e.s, "Grant", []ids.SubsidiaryID{e.subUS, subMX}, nil)
 	in := e.balancedInput(100)
 	in.Splits[0].FundID = &fund
 	in.Splits[1].FundID = &fund
@@ -380,7 +380,7 @@ func TestNarrowSubsBlockedBySplits(t *testing.T) {
 
 	// Removing US (which has the split) must be blocked.
 	before := countChanges(t, e.d)
-	err := e.s.UpdateFund(mutCtx(), fund, UpdateFundInput{Subsidiaries: []int64{subMX}})
+	err := e.s.UpdateFund(mutCtx(), fund, UpdateFundInput{Subsidiaries: []ids.SubsidiaryID{subMX}})
 	if !errors.Is(err, ErrFundSubInUseBySplit) {
 		t.Fatalf("narrow away US: err = %v, want ErrFundSubInUseBySplit", err)
 	}
@@ -389,7 +389,7 @@ func TestNarrowSubsBlockedBySplits(t *testing.T) {
 	}
 
 	// Removing MX (no split there) succeeds.
-	if err := e.s.UpdateFund(mutCtx(), fund, UpdateFundInput{Subsidiaries: []int64{e.subUS}}); err != nil {
+	if err := e.s.UpdateFund(mutCtx(), fund, UpdateFundInput{Subsidiaries: []ids.SubsidiaryID{e.subUS}}); err != nil {
 		t.Fatalf("narrow away MX (unused): %v", err)
 	}
 }

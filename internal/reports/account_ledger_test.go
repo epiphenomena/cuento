@@ -26,6 +26,7 @@ import (
 	"context"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/reports"
 	"cuento/internal/store"
 	"cuento/internal/testutil"
@@ -410,12 +411,12 @@ func TestAccountLedgerMidRangeOnlyCurrency(t *testing.T) {
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 
 	// Root subsidiary is seeded id 1 (migration 00004); EUR is a seeded currency.
-	const rootSub = int64(1)
+	const rootSub = ids.SubsidiaryID(1)
 	mkAcct := func(name, typ string) int64 {
 		t.Helper()
 		id, err := s.CreateAccount(ctx, store.CreateAccountInput{
 			Type: typ, DefaultCurrency: "EUR", Names: map[string]string{"en": name},
-			Subsidiaries: []int64{rootSub},
+			Subsidiaries: []ids.SubsidiaryID{rootSub},
 		})
 		if err != nil {
 			t.Fatalf("CreateAccount(%s): %v", name, err)

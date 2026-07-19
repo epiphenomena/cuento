@@ -20,10 +20,11 @@ import (
 // plan on it, an R/E (expense) account mapped to it, a revenue account, an
 // open_item receivable account, a program, and a fund scoped to the sub.
 type splitSetup struct {
-	sub, expense, revenue, receivable int64
-	prog                              ids.ProgramID
-	fund                              ids.FundID
-	plan                              ids.BudgetPlanID
+	sub                          ids.SubsidiaryID
+	expense, revenue, receivable int64
+	prog                         ids.ProgramID
+	fund                         ids.FundID
+	plan                         ids.BudgetPlanID
 }
 
 func mkSplitSetup(t *testing.T, s *Store) splitSetup {
@@ -38,25 +39,25 @@ func mkSplitSetup(t *testing.T, s *Store) splitSetup {
 		t.Fatalf("create program: %v", err)
 	}
 	expense, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "expense", DefaultCurrency: "USD", Names: enName("Rent"), Subsidiaries: []int64{sub},
+		Type: "expense", DefaultCurrency: "USD", Names: enName("Rent"), Subsidiaries: []ids.SubsidiaryID{sub},
 	})
 	if err != nil {
 		t.Fatalf("create expense account: %v", err)
 	}
 	revenue, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "revenue", DefaultCurrency: "USD", Names: enName("Donations"), Subsidiaries: []int64{sub},
+		Type: "revenue", DefaultCurrency: "USD", Names: enName("Donations"), Subsidiaries: []ids.SubsidiaryID{sub},
 	})
 	if err != nil {
 		t.Fatalf("create revenue account: %v", err)
 	}
 	receivable, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Due from"), Subsidiaries: []int64{sub}, OpenItem: true,
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Due from"), Subsidiaries: []ids.SubsidiaryID{sub}, OpenItem: true,
 	})
 	if err != nil {
 		t.Fatalf("create receivable account: %v", err)
 	}
 	fund, err := s.CreateFund(mutCtx(), CreateFundInput{
-		Name: "Grant", Restriction: "purpose", Subsidiaries: []int64{sub},
+		Name: "Grant", Restriction: "purpose", Subsidiaries: []ids.SubsidiaryID{sub},
 	})
 	if err != nil {
 		t.Fatalf("create fund: %v", err)
@@ -240,7 +241,7 @@ func TestCreateBudgetSplitPlainBalanceSheet(t *testing.T) {
 	s := New(d)
 	st := mkSplitSetup(t, s)
 	plain, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Checking"), Subsidiaries: []int64{st.sub},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Checking"), Subsidiaries: []ids.SubsidiaryID{st.sub},
 	})
 	if err != nil {
 		t.Fatalf("create plain asset: %v", err)
@@ -261,7 +262,7 @@ func TestCreateBudgetSplitAccountNotInSubsidiary(t *testing.T) {
 	st := mkSplitSetup(t, s)
 	other := newSub(t, s, rootID, "Other")
 	acct, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "expense", DefaultCurrency: "USD", Names: enName("Elsewhere"), Subsidiaries: []int64{other},
+		Type: "expense", DefaultCurrency: "USD", Names: enName("Elsewhere"), Subsidiaries: []ids.SubsidiaryID{other},
 	})
 	if err != nil {
 		t.Fatalf("create account in other sub: %v", err)

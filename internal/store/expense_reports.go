@@ -68,7 +68,7 @@ var (
 // subsidiary exist inside fn so a rejection rolls back cleanly. The subsidiary is the
 // submitter's default at creation but is EDITABLE in-page until the first line is added
 // (UpdateExpenseReportSubsidiary, p25.3) -- it is no longer fixed at creation.
-func (s *Store) CreateExpenseReport(ctx context.Context, submitterID ids.UserID, subsidiaryID int64) (ids.ExpenseReportID, error) {
+func (s *Store) CreateExpenseReport(ctx context.Context, submitterID ids.UserID, subsidiaryID ids.SubsidiaryID) (ids.ExpenseReportID, error) {
 	var newID ids.ExpenseReportID
 	_, err := s.write(ctx, "expense_report.create", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
@@ -106,7 +106,7 @@ func (s *Store) CreateExpenseReport(ctx context.Context, submitterID ids.UserID,
 // scopes each line's account/fund options, so changing it after lines exist would
 // orphan them (ErrExpenseReportHasLines). Validates the new subsidiary exists.
 // Versioned op='update'.
-func (s *Store) UpdateExpenseReportSubsidiary(ctx context.Context, reportID ids.ExpenseReportID, subsidiaryID int64) error {
+func (s *Store) UpdateExpenseReportSubsidiary(ctx context.Context, reportID ids.ExpenseReportID, subsidiaryID ids.SubsidiaryID) error {
 	_, err := s.write(ctx, "expense_report.set_subsidiary", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID int64) error {
 			rep, err := loadExpenseReport(ctx, q, reportID)

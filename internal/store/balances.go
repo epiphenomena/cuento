@@ -70,9 +70,9 @@ func (s *Store) IntercompanyAccountIDs(ctx context.Context) ([]int64, error) {
 // balance of non-deleted splits whose transaction date <= asof and whose
 // subsidiary is in scopeSub's descendant closure (D18). Balances are cumulative
 // to the date.
-func (s *Store) SubtreeBalancesAsOf(ctx context.Context, asof string, scopeSub int64) ([]AccountCurrencyAmount, error) {
+func (s *Store) SubtreeBalancesAsOf(ctx context.Context, asof string, scopeSub ids.SubsidiaryID) ([]AccountCurrencyAmount, error) {
 	rows, err := s.q.SubtreeBalancesAsOf(ctx, sqlc.SubtreeBalancesAsOfParams{
-		ID:   scopeSub,
+		ID:   int64(scopeSub),
 		Date: asof,
 	})
 	if err != nil {
@@ -87,9 +87,9 @@ func (s *Store) SubtreeBalancesAsOf(ctx context.Context, asof string, scopeSub i
 
 // PeriodActivity returns, per (account, currency), the signed activity over the
 // closed interval from <= date <= to in scopeSub's descendant closure.
-func (s *Store) PeriodActivity(ctx context.Context, from, to string, scopeSub int64) ([]AccountCurrencyAmount, error) {
+func (s *Store) PeriodActivity(ctx context.Context, from, to string, scopeSub ids.SubsidiaryID) ([]AccountCurrencyAmount, error) {
 	rows, err := s.q.PeriodActivity(ctx, sqlc.PeriodActivityParams{
-		ID:     scopeSub,
+		ID:     int64(scopeSub),
 		Date:   from,
 		Date_2: to,
 	})
@@ -109,9 +109,9 @@ func (s *Store) PeriodActivity(ctx context.Context, from, to string, scopeSub in
 // is identically zero (D20/Z10 fund conservation), so the balance is the fund's
 // cash/asset position = unexpended restricted resources (Z18 precedent, recorded
 // as p08.4 in docs/DECISIONS.md).
-func (s *Store) FundBalancesAsOf(ctx context.Context, asof string, scopeSub int64) ([]FundCurrencyAmount, error) {
+func (s *Store) FundBalancesAsOf(ctx context.Context, asof string, scopeSub ids.SubsidiaryID) ([]FundCurrencyAmount, error) {
 	rows, err := s.q.FundBalancesAsOf(ctx, sqlc.FundBalancesAsOfParams{
-		ID:   scopeSub,
+		ID:   int64(scopeSub),
 		Date: asof,
 	})
 	if err != nil {
@@ -131,9 +131,9 @@ func (s *Store) FundBalancesAsOf(ctx context.Context, asof string, scopeSub int6
 // FundBalancesAsOf (the whole asset-side position, which includes receivables and
 // capitalized non-cash assets), this is strictly the spendable cash the org can
 // project forward.
-func (s *Store) CurrentCashFundBalancesAsOf(ctx context.Context, asof string, scopeSub int64) ([]FundCurrencyAmount, error) {
+func (s *Store) CurrentCashFundBalancesAsOf(ctx context.Context, asof string, scopeSub ids.SubsidiaryID) ([]FundCurrencyAmount, error) {
 	rows, err := s.q.CurrentCashFundBalancesAsOf(ctx, sqlc.CurrentCashFundBalancesAsOfParams{
-		ID:   scopeSub,
+		ID:   int64(scopeSub),
 		Date: asof,
 	})
 	if err != nil {
@@ -150,9 +150,9 @@ func (s *Store) CurrentCashFundBalancesAsOf(ctx context.Context, asof string, sc
 // the signed activity over from <= date <= to in scopeSub's descendant closure.
 // Only expense splits carry a class (D21), so the result contains exactly the
 // expense activity, keyed by class.
-func (s *Store) FunctionalActivity(ctx context.Context, from, to string, scopeSub int64) ([]FunctionalCell, error) {
+func (s *Store) FunctionalActivity(ctx context.Context, from, to string, scopeSub ids.SubsidiaryID) ([]FunctionalCell, error) {
 	rows, err := s.q.FunctionalActivity(ctx, sqlc.FunctionalActivityParams{
-		ID:     scopeSub,
+		ID:     int64(scopeSub),
 		Date:   from,
 		Date_2: to,
 	})
@@ -189,9 +189,9 @@ type FunctionalCellProgram struct {
 // subtree BEFORE rolling classes up. Only expense splits carry BOTH a class (D21) and
 // a program (D24). The unscoped path keeps FunctionalActivity (no program column), so
 // the goldens do not move.
-func (s *Store) FunctionalActivityByProgram(ctx context.Context, from, to string, scopeSub int64) ([]FunctionalCellProgram, error) {
+func (s *Store) FunctionalActivityByProgram(ctx context.Context, from, to string, scopeSub ids.SubsidiaryID) ([]FunctionalCellProgram, error) {
 	rows, err := s.q.FunctionalActivityByProgram(ctx, sqlc.FunctionalActivityByProgramParams{
-		ID:     scopeSub,
+		ID:     int64(scopeSub),
 		Date:   from,
 		Date_2: to,
 	})
@@ -216,9 +216,9 @@ func (s *Store) FunctionalActivityByProgram(ctx context.Context, from, to string
 // over from <= date <= to in scopeSub's descendant closure. Only revenue/expense
 // splits carry a program (D24). Rows are raw per (program, account) -- the tree
 // rollup is the report layer's job (rollup-ready).
-func (s *Store) ProgramActivity(ctx context.Context, from, to string, scopeSub int64) ([]ProgramCell, error) {
+func (s *Store) ProgramActivity(ctx context.Context, from, to string, scopeSub ids.SubsidiaryID) ([]ProgramCell, error) {
 	rows, err := s.q.ProgramActivity(ctx, sqlc.ProgramActivityParams{
-		ID:     scopeSub,
+		ID:     int64(scopeSub),
 		Date:   from,
 		Date_2: to,
 	})
@@ -244,7 +244,7 @@ func (s *Store) ProgramActivity(ctx context.Context, from, to string, scopeSub i
 // unrestricted group (D20). Date is preserved so the caller buckets each cell by
 // its own date (discrete, no pro-rata) exactly as it buckets budget occurrences.
 type BudgetKeyCell struct {
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	AccountID    int64
 	FundID       ids.FundID // 0 = unrestricted
 	ProgramID    ids.ProgramID
@@ -260,9 +260,9 @@ type BudgetKeyCell struct {
 // grain a budget line carries (unrestricted = fund 0, COALESCE), with the date kept
 // so the caller buckets by occurrence date. Only R/E splits (those carrying a
 // program, D24) are returned.
-func (s *Store) BudgetKeyActivity(ctx context.Context, from, to string, scopeSub int64) ([]BudgetKeyCell, error) {
+func (s *Store) BudgetKeyActivity(ctx context.Context, from, to string, scopeSub ids.SubsidiaryID) ([]BudgetKeyCell, error) {
 	rows, err := s.q.BudgetKeyActivity(ctx, sqlc.BudgetKeyActivityParams{
-		ID:     scopeSub,
+		ID:     int64(scopeSub),
 		Date:   from,
 		Date_2: to,
 	})
@@ -314,7 +314,7 @@ type RegisterRow struct {
 	SplitID         int64
 	TxnID           int64
 	Date            string
-	SubsidiaryID    int64
+	SubsidiaryID    ids.SubsidiaryID
 	Currency        string
 	AccountID       int64 // the split's OWN account (a descendant leaf for a parent rollup)
 	Amount          int64 // signed minor units (net-debit, D2)
@@ -381,7 +381,7 @@ func (s *Store) RegisterPage(
 		Column10:     fundActive,
 		FundID:       ids.Null(filters.FundID),
 		Column12:     subActive,
-		SubsidiaryID: derefOr0(filters.Subsidiary),
+		SubsidiaryID: ids.SubsidiaryID(derefOr0(filters.Subsidiary)),
 		Column14:     progActive,
 		ProgramID:    ids.Null(filters.ProgramID),
 	})
@@ -452,7 +452,7 @@ type FundLedgerRow struct {
 	SplitID         int64
 	TxnID           int64
 	Date            string
-	SubsidiaryID    int64
+	SubsidiaryID    ids.SubsidiaryID
 	Currency        string
 	Amount          int64 // signed minor units (net-debit, D2)
 	AccountID       int64
@@ -512,9 +512,9 @@ func (s *Store) FundLedger(ctx context.Context, fundID ids.FundID, asof string) 
 // trial-balance cell sets AccountID + Currency + AsOf; a period report sets From/To
 // instead; Fund/Program/Class narrow further (nil = no filter on that dimension).
 type DrillFilter struct {
-	Scope     int64  // subsidiary; consolidated with ALL descendants (D18)
-	AccountID int64  // the leaf account the figure sums (0 = none => empty result)
-	Currency  string // native currency of the cell (per-currency reconciliation)
+	Scope     ids.SubsidiaryID // subsidiary; consolidated with ALL descendants (D18)
+	AccountID int64            // the leaf account the figure sums (0 = none => empty result)
+	Currency  string           // native currency of the cell (per-currency reconciliation)
 
 	// Date bound. When AsOf != "" the figure is cumulative (t.date <= AsOf); else
 	// From/To bound a period (From <= t.date <= To, either side optional).
@@ -535,7 +535,7 @@ type DrillRow struct {
 	SplitID         int64
 	TxnID           int64
 	Date            string
-	SubsidiaryID    int64
+	SubsidiaryID    ids.SubsidiaryID
 	Currency        string
 	Amount          int64 // signed minor units (net-debit, D2)
 	FundID          *ids.FundID
@@ -566,7 +566,7 @@ func (s *Store) DrillSplits(ctx context.Context, f DrillFilter) ([]DrillRow, err
 	classActive := b2i(f.Class != nil)
 
 	rows, err := s.q.DrillSplits(ctx, sqlc.DrillSplitsParams{
-		ID:              f.Scope,
+		ID:              int64(f.Scope),
 		AccountID:       f.AccountID,
 		Currency:        f.Currency,
 		Column4:         asofActive,

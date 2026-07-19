@@ -34,8 +34,8 @@ type regEnv struct {
 	sm   *scs.SessionManager
 	book ids.UserID // bookkeeper (txn write) user id
 
-	root       int64 // root subsidiary
-	subA, subB int64 // two children (so a >1-sub account exists)
+	root       ids.SubsidiaryID // root subsidiary
+	subA, subB ids.SubsidiaryID // two children (so a >1-sub account exists)
 
 	checking int64      // reconcilable, mapped to subA only (1 sub -> no badge)
 	multiSub int64      // mapped to subA + subB (badge), NOT reconcilable
@@ -68,7 +68,7 @@ func newRegEnv(t *testing.T) *regEnv {
 		t.Fatalf("create subB: %v", err)
 	}
 
-	mkAcct := func(name, typ, ccy string, recon bool, subs []int64) int64 {
+	mkAcct := func(name, typ, ccy string, recon bool, subs []ids.SubsidiaryID) int64 {
 		in := store.CreateAccountInput{
 			Type:            typ,
 			DefaultCurrency: ccy,
@@ -82,18 +82,18 @@ func newRegEnv(t *testing.T) *regEnv {
 		}
 		return id
 	}
-	e.checking = mkAcct("Checking A", "asset", "USD", true, []int64{e.subA})
-	e.multiSub = mkAcct("Shared Cash", "asset", "USD", false, []int64{e.subA, e.subB})
-	e.clearing = mkAcct("FX Clearing", "equity", "USD", false, []int64{e.root, e.subA, e.subB})
-	e.expense = mkAcct("Supplies", "expense", "USD", false, []int64{e.subA, e.subB})
-	e.otherExp = mkAcct("Rent", "expense", "USD", false, []int64{e.subA, e.subB})
-	e.revenue = mkAcct("Contributions", "revenue", "USD", false, []int64{e.subA, e.subB})
+	e.checking = mkAcct("Checking A", "asset", "USD", true, []ids.SubsidiaryID{e.subA})
+	e.multiSub = mkAcct("Shared Cash", "asset", "USD", false, []ids.SubsidiaryID{e.subA, e.subB})
+	e.clearing = mkAcct("FX Clearing", "equity", "USD", false, []ids.SubsidiaryID{e.root, e.subA, e.subB})
+	e.expense = mkAcct("Supplies", "expense", "USD", false, []ids.SubsidiaryID{e.subA, e.subB})
+	e.otherExp = mkAcct("Rent", "expense", "USD", false, []ids.SubsidiaryID{e.subA, e.subB})
+	e.revenue = mkAcct("Contributions", "revenue", "USD", false, []ids.SubsidiaryID{e.subA, e.subB})
 
 	// A restricted fund scoped to subA (so its splits carry a non-NULL fund_id).
 	e.fund, err = st.CreateFund(ctx, store.CreateFundInput{
 		Name:         "Beca 2025",
 		Restriction:  "purpose",
-		Subsidiaries: []int64{e.subA},
+		Subsidiaries: []ids.SubsidiaryID{e.subA},
 	})
 	if err != nil {
 		t.Fatalf("create fund: %v", err)
@@ -222,7 +222,7 @@ func TestRegisterRunningBalancePerCurrency(t *testing.T) {
 	cashMX, err := e.st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "asset", DefaultCurrency: "MXN",
 		Names:        map[string]string{"en": "Cash MXN"},
-		Subsidiaries: []int64{e.subA},
+		Subsidiaries: []ids.SubsidiaryID{e.subA},
 	})
 	if err != nil {
 		t.Fatalf("create cashMX: %v", err)
@@ -312,10 +312,11 @@ func TestRegisterFilters(t *testing.T) {
 	if n := countRows(store.RegisterFilters{FundID: &e.fund}); n != 1 {
 		t.Fatalf("fund filter = %d rows, want 1", n)
 	}
-	if n := countRows(store.RegisterFilters{Subsidiary: &e.subA}); n != 3 {
+	subAID, subBID := int64(e.subA), int64(e.subB)
+	if n := countRows(store.RegisterFilters{Subsidiary: &subAID}); n != 3 {
 		t.Fatalf("subsidiary subA = %d rows, want 3", n)
 	}
-	if n := countRows(store.RegisterFilters{Subsidiary: &e.subB}); n != 0 {
+	if n := countRows(store.RegisterFilters{Subsidiary: &subBID}); n != 0 {
 		t.Fatalf("subsidiary subB = %d rows, want 0", n)
 	}
 	p := generalProgram
@@ -460,19 +461,19 @@ func TestRegisterParentRollupCounterAccount(t *testing.T) {
 
 	// Parent "Cash" (placeholder) with two leaf children BOA + WF, all in subA.
 	parent, err := e.st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{e.subA},
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []ids.SubsidiaryID{e.subA},
 	})
 	if err != nil {
 		t.Fatalf("create parent: %v", err)
 	}
 	boa, err := e.st.CreateAccount(ctx, store.CreateAccountInput{
-		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "BOA"}, Subsidiaries: []int64{e.subA},
+		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "BOA"}, Subsidiaries: []ids.SubsidiaryID{e.subA},
 	})
 	if err != nil {
 		t.Fatalf("create BOA: %v", err)
 	}
 	wf, err := e.st.CreateAccount(ctx, store.CreateAccountInput{
-		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "WF"}, Subsidiaries: []int64{e.subA},
+		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "WF"}, Subsidiaries: []ids.SubsidiaryID{e.subA},
 	})
 	if err != nil {
 		t.Fatalf("create WF: %v", err)
@@ -579,13 +580,13 @@ func TestRegisterNewTxnLeafOnly(t *testing.T) {
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 
 	parent, err := e.st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash Group"}, Subsidiaries: []int64{e.subA},
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash Group"}, Subsidiaries: []ids.SubsidiaryID{e.subA},
 	})
 	if err != nil {
 		t.Fatalf("create parent: %v", err)
 	}
 	leaf, err := e.st.CreateAccount(ctx, store.CreateAccountInput{
-		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash Leaf"}, Subsidiaries: []int64{e.subA},
+		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash Leaf"}, Subsidiaries: []ids.SubsidiaryID{e.subA},
 	})
 	if err != nil {
 		t.Fatalf("create leaf: %v", err)

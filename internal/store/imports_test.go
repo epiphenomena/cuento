@@ -43,12 +43,12 @@ func TestPostImportRowCreatesBalancedTxnAndLinks(t *testing.T) {
 	// A restricted fund scoped to subUS, and an expense account (so the counter split
 	// carries a fund + functional class -- the p12.3 template fields).
 	fund, err := s.CreateFund(mutCtx(), CreateFundInput{
-		Name: "Grant", Restriction: "purpose", Subsidiaries: []int64{env.subUS},
+		Name: "Grant", Restriction: "purpose", Subsidiaries: []ids.SubsidiaryID{env.subUS},
 	})
 	if err != nil {
 		t.Fatalf("CreateFund: %v", err)
 	}
-	expense := mkAcctFull(t, s, "expense", "Supplies", []int64{env.subUS}, "program", rootProgramID)
+	expense := mkAcctFull(t, s, "expense", "Supplies", []ids.SubsidiaryID{env.subUS}, "program", rootProgramID)
 
 	rowID := stageOnePending(t, env, "2025-01-15", 10000, "Acme", "Invoice")
 
@@ -284,8 +284,8 @@ func strptr(s string) *string { return &s }
 // to US, and an equity account for the other side of a posted transaction.
 type importEnv struct {
 	s        *Store
-	subUS    int64
-	subOther int64
+	subUS    ids.SubsidiaryID
+	subOther ids.SubsidiaryID
 	checking int64
 	equity   int64
 	profile  ids.MappingProfileID
@@ -299,12 +299,12 @@ func newImportEnv(t *testing.T) importEnv {
 
 	checking, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD", Names: enName("Checking"),
-		Subsidiaries: []int64{subUS},
+		Subsidiaries: []ids.SubsidiaryID{subUS},
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount checking: %v", err)
 	}
-	equity := mkAcct(t, s, "equity", "Opening", []int64{subUS}, nil, nil)
+	equity := mkAcct(t, s, "equity", "Opening", []ids.SubsidiaryID{subUS}, nil, nil)
 
 	profile, err := s.CreateMappingProfile(mutCtx(), "bank", bankimport.Config{
 		Delimiter: bankimport.DelimiterComma, HasHeader: true, Amount: bankimport.AmountSingle,

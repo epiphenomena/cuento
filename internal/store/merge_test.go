@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"cuento/internal/ids"
 	"cuento/internal/ledger"
 	"cuento/internal/testutil"
 )
@@ -151,12 +152,12 @@ func TestMergeBlockedSourceReconciled(t *testing.T) {
 	// asset->asset so the checking counter-side is not what we reconcile.
 	srcBank, err := e.s.CreateAccount(ctx, CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD", Names: enName("Bank Src"),
-		Subsidiaries: []int64{e.subUS}, Reconcilable: true,
+		Subsidiaries: []ids.SubsidiaryID{e.subUS}, Reconcilable: true,
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount srcBank: %v", err)
 	}
-	dstBank := mkAcct(t, e.s, "asset", "Bank Dst", []int64{e.subUS}, nil, nil)
+	dstBank := mkAcct(t, e.s, "asset", "Bank Dst", []ids.SubsidiaryID{e.subUS}, nil, nil)
 
 	// A balanced txn touching srcBank: srcBank +10,000 / checking -10,000.
 	txnID, err := e.s.PostTransaction(ctx, PostTransactionInput{
@@ -240,9 +241,9 @@ func TestMergeBlockedCrossTypeClass(t *testing.T) {
 func TestMergeBlockedIntoPlaceholder(t *testing.T) {
 	e := newTxnEnv(t)
 	// Make dst a placeholder: create an expense child under a fresh expense parent.
-	parent := mkAcct(t, e.s, "expense", "Occupancy", []int64{e.subUS}, nil, nil)
+	parent := mkAcct(t, e.s, "expense", "Occupancy", []ids.SubsidiaryID{e.subUS}, nil, nil)
 	pptr := parent
-	child := mkAcct(t, e.s, "expense", "Rent", []int64{e.subUS}, nil, nil)
+	child := mkAcct(t, e.s, "expense", "Rent", []ids.SubsidiaryID{e.subUS}, nil, nil)
 	if err := e.s.UpdateAccount(mutCtx(), child, UpdateAccountInput{ParentID: &pptr}); err != nil {
 		t.Fatalf("reparent: %v", err)
 	}
@@ -262,8 +263,8 @@ func TestMergeBlockedSubsetSubs(t *testing.T) {
 	// A second subsidiary; src maps to BOTH US and MX, dst maps only to US, so
 	// dst's set does NOT cover src's. Both leaves, same type.
 	subMX := newSub(t, e.s, rootID, "MX")
-	src := mkAcct(t, e.s, "expense", "Travel", []int64{e.subUS, subMX}, nil, nil)
-	dst := mkAcct(t, e.s, "expense", "Office", []int64{e.subUS}, nil, nil)
+	src := mkAcct(t, e.s, "expense", "Travel", []ids.SubsidiaryID{e.subUS, subMX}, nil, nil)
+	dst := mkAcct(t, e.s, "expense", "Office", []ids.SubsidiaryID{e.subUS}, nil, nil)
 
 	before := countChanges(t, e.d)
 	err := e.s.MergeAccount(mutCtx(), src, dst)
@@ -393,10 +394,10 @@ func newTxnEnvClock(t *testing.T, clock func() time.Time) txnEnv {
 	env := txnEnv{s: s, d: d, subUS: subUS, educ: educ}
 	root := rootProgramID
 	mgmt := "management"
-	env.checking = mkAcct(t, s, "asset", "Checking", []int64{subUS}, nil, nil)
-	env.salaries = mkAcct(t, s, "expense", "Salaries", []int64{subUS}, &mgmt, &root)
-	env.supplies = mkAcct(t, s, "expense", "Supplies", []int64{subUS}, nil, nil)
-	env.contrib = mkAcct(t, s, "revenue", "Contributions", []int64{subUS}, nil, nil)
-	env.equity = mkAcct(t, s, "equity", "Opening Balances", []int64{subUS}, nil, nil)
+	env.checking = mkAcct(t, s, "asset", "Checking", []ids.SubsidiaryID{subUS}, nil, nil)
+	env.salaries = mkAcct(t, s, "expense", "Salaries", []ids.SubsidiaryID{subUS}, &mgmt, &root)
+	env.supplies = mkAcct(t, s, "expense", "Supplies", []ids.SubsidiaryID{subUS}, nil, nil)
+	env.contrib = mkAcct(t, s, "revenue", "Contributions", []ids.SubsidiaryID{subUS}, nil, nil)
+	env.equity = mkAcct(t, s, "equity", "Opening Balances", []ids.SubsidiaryID{subUS}, nil, nil)
 	return env
 }

@@ -3,6 +3,7 @@ package store
 import (
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/testutil"
 )
 
@@ -28,25 +29,25 @@ func TestParentOptionsExcludeDescendantsAndWrongClass(t *testing.T) {
 	// itself and Cash (descendant), EXCLUDE Liabilities/Revenue (wrong class for an
 	// asset), and there is no other asset placeholder, so the option set is empty.
 	assets, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Assets"), Subsidiaries: []int64{rootID},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Assets"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create assets: %v", err)
 	}
 	cash, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		ParentID: &assets, Type: "asset", DefaultCurrency: "USD", Names: enName("Cash"), Subsidiaries: []int64{rootID},
+		ParentID: &assets, Type: "asset", DefaultCurrency: "USD", Names: enName("Cash"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create cash: %v", err)
 	}
 	liab, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "liability", DefaultCurrency: "USD", Names: enName("Liabilities"), Subsidiaries: []int64{rootID},
+		Type: "liability", DefaultCurrency: "USD", Names: enName("Liabilities"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create liab: %v", err)
 	}
 	rev, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "revenue", DefaultCurrency: "USD", Names: enName("Revenue"), Subsidiaries: []int64{rootID},
+		Type: "revenue", DefaultCurrency: "USD", Names: enName("Revenue"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create rev: %v", err)
@@ -101,19 +102,19 @@ func TestAccountEditorOptionsPath(t *testing.T) {
 
 	// Cash(placeholder) > BOA(leaf) ; Petty(top-level leaf).
 	cash, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Cash"), Subsidiaries: []int64{rootID},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Cash"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create cash: %v", err)
 	}
 	boa, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		ParentID: &cash, Type: "asset", DefaultCurrency: "USD", Names: enName("BOA"), Subsidiaries: []int64{rootID},
+		ParentID: &cash, Type: "asset", DefaultCurrency: "USD", Names: enName("BOA"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create boa: %v", err)
 	}
 	petty, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Petty"), Subsidiaries: []int64{rootID},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Petty"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create petty: %v", err)
@@ -154,7 +155,7 @@ func TestAccountEditorOptionsIncludeInactive(t *testing.T) {
 
 	// A top-level leaf, then deactivate it.
 	acct, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Old Cash"), Subsidiaries: []int64{rootID},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Old Cash"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create acct: %v", err)
@@ -202,7 +203,7 @@ func TestAccountEditorOptionsIncludeInactive(t *testing.T) {
 	// Including an id ALREADY in the set (an active leaf) does not duplicate it and
 	// does not mark it Unavailable.
 	active, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Live Cash"), Subsidiaries: []int64{rootID},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Live Cash"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create active: %v", err)
@@ -239,13 +240,13 @@ func TestSubsidiaryFilter(t *testing.T) {
 	// onlyA maps {subA}; onlyB maps {subB}. Both are top-level (no propagation
 	// beyond self).
 	onlyA, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Cash A"), Subsidiaries: []int64{subA},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Cash A"), Subsidiaries: []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("create onlyA: %v", err)
 	}
 	onlyB, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Cash B"), Subsidiaries: []int64{subB},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Cash B"), Subsidiaries: []ids.SubsidiaryID{subB},
 	})
 	if err != nil {
 		t.Fatalf("create onlyB: %v", err)

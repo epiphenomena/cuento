@@ -86,7 +86,7 @@ RETURNING id
 
 type InsertBudgetPlanParams struct {
 	Name         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Notes        string
 }
 
@@ -150,7 +150,8 @@ type InsertBudgetSplitParams struct {
 // validates the account (leaf in the plan's subsidiary; R/E or open_item A/L), the
 // fund/program refs+scope, and the program-required/forbidden rule. Returns the id.
 func (q *Queries) InsertBudgetSplit(ctx context.Context, arg InsertBudgetSplitParams) (ids.BudgetSplitID, error) {
-	row := q.db.QueryRowContext(ctx, insertBudgetSplit,
+	row := q.db.QueryRowContext(
+		ctx, insertBudgetSplit,
 		arg.PlanID,
 		arg.Description,
 		arg.Date,
@@ -273,13 +274,14 @@ WHERE id = ?
 
 type UpdateBudgetPlanParams struct {
 	Name         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Notes        string
 	ID           ids.BudgetPlanID
 }
 
 func (q *Queries) UpdateBudgetPlan(ctx context.Context, arg UpdateBudgetPlanParams) error {
-	_, err := q.db.ExecContext(ctx, updateBudgetPlan,
+	_, err := q.db.ExecContext(
+		ctx, updateBudgetPlan,
 		arg.Name,
 		arg.SubsidiaryID,
 		arg.Notes,
@@ -307,7 +309,8 @@ type UpdateBudgetSplitParams struct {
 }
 
 func (q *Queries) UpdateBudgetSplit(ctx context.Context, arg UpdateBudgetSplitParams) error {
-	_, err := q.db.ExecContext(ctx, updateBudgetSplit,
+	_, err := q.db.ExecContext(
+		ctx, updateBudgetSplit,
 		arg.Description,
 		arg.Date,
 		arg.AccountID,

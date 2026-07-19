@@ -40,7 +40,7 @@ type BudgetKeyActivityParams struct {
 }
 
 type BudgetKeyActivityRow struct {
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	AccountID    int64
 	FundID       ids.FundID
 	ProgramID    sql.NullInt64
@@ -135,7 +135,7 @@ type DrillSplitsRow struct {
 	SplitID         int64
 	TxnID           int64
 	Date            string
-	SubsidiaryID    int64
+	SubsidiaryID    ids.SubsidiaryID
 	Currency        string
 	Amount          int64
 	FundID          sql.NullInt64
@@ -176,7 +176,8 @@ type DrillSplitsRow struct {
 //	fromActive, from, toActive, to,
 //	fundActive, fund, programActive, program, classActive, class.
 func (q *Queries) DrillSplits(ctx context.Context, arg DrillSplitsParams) ([]DrillSplitsRow, error) {
-	rows, err := q.db.QueryContext(ctx, drillSplits,
+	rows, err := q.db.QueryContext(
+		ctx, drillSplits,
 		arg.ID,
 		arg.AccountID,
 		arg.Currency,
@@ -646,7 +647,7 @@ type RegisterPageParams struct {
 	Column10     interface{}
 	FundID       sql.NullInt64
 	Column12     interface{}
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Column14     interface{}
 	ProgramID    sql.NullInt64
 }
@@ -655,7 +656,7 @@ type RegisterPageRow struct {
 	SplitID         int64
 	TxnID           int64
 	Date            string
-	SubsidiaryID    int64
+	SubsidiaryID    ids.SubsidiaryID
 	Currency        string
 	AccountID       int64
 	Amount          int64
@@ -702,7 +703,8 @@ type RegisterPageRow struct {
 //	textActive, text, text, text,
 //	fundActive, fund, subActive, sub, programActive, program.
 func (q *Queries) RegisterPage(ctx context.Context, arg RegisterPageParams) ([]RegisterPageRow, error) {
-	rows, err := q.db.QueryContext(ctx, registerPage,
+	rows, err := q.db.QueryContext(
+		ctx, registerPage,
 		arg.AccountID,
 		arg.Column2,
 		arg.Date,

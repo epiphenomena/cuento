@@ -7,13 +7,14 @@ import (
 	"testing"
 	"time"
 
+	"cuento/internal/ids"
 	"cuento/internal/testutil"
 )
 
 // newSub is a tiny helper: create a child subsidiary under a parent and return
 // its id, failing the test on error. Accounts map to subsidiaries created via
 // CreateSubsidiary (p04.2); the seeded root subsidiary id 1 exists.
-func newSub(t *testing.T, s *Store, parent int64, name string) int64 {
+func newSub(t *testing.T, s *Store, parent ids.SubsidiaryID, name string) ids.SubsidiaryID {
 	t.Helper()
 	id, err := s.CreateSubsidiary(mutCtx(), CreateSubsidiaryInput{
 		ParentID: parent, Name: name, BaseCurrency: "USD",
@@ -70,7 +71,7 @@ func TestCreateAccountVersioned(t *testing.T) {
 	// Parent account maps {root}; child (under parent) maps {subA}. Creating the
 	// child must propagate subA up to the parent account (superset invariant).
 	parent, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Assets"), Subsidiaries: []int64{rootID},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Assets"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create parent: %v", err)
@@ -81,7 +82,7 @@ func TestCreateAccountVersioned(t *testing.T) {
 		Type:            "asset",
 		DefaultCurrency: "USD",
 		Names:           map[string]string{"en": "Cash", "es": "Efectivo"},
-		Subsidiaries:    []int64{subA},
+		Subsidiaries:    []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)
@@ -96,15 +97,15 @@ func TestCreateAccountVersioned(t *testing.T) {
 	testutil.AssertVersionedName(t, d, id, "en", "create")
 	testutil.AssertVersionedName(t, d, id, "es", "create")
 	// The child's own membership versioned create.
-	testutil.AssertVersionedSub(t, d, id, subA, "create")
+	testutil.AssertVersionedSub(t, d, id, int64(subA), "create")
 	// The propagated PARENT-ACCOUNT membership versioned create.
-	testutil.AssertVersionedSub(t, d, parent, subA, "create")
+	testutil.AssertVersionedSub(t, d, parent, int64(subA), "create")
 
 	// Live memberships: the child maps subA; the parent now also maps subA.
-	if !accountSubs(t, d, id)[subA] {
+	if !accountSubs(t, d, id)[int64(subA)] {
 		t.Errorf("child %d missing subA after create; got %v", id, accountSubs(t, d, id))
 	}
-	if !accountSubs(t, d, parent)[subA] {
+	if !accountSubs(t, d, parent)[int64(subA)] {
 		t.Errorf("parent %d missing propagated subA; got %v", parent, accountSubs(t, d, parent))
 	}
 }
@@ -140,7 +141,7 @@ func TestCreateRequiresEnName(t *testing.T) {
 		Type:            "asset",
 		DefaultCurrency: "USD",
 		Names:           map[string]string{"es": "Efectivo"}, // no en
-		Subsidiaries:    []int64{rootID},
+		Subsidiaries:    []ids.SubsidiaryID{rootID},
 	})
 	if !errors.Is(err, ErrNameRequired) {
 		t.Fatalf("CreateAccount(no en name): err = %v, want ErrNameRequired", err)
@@ -160,13 +161,13 @@ func TestAccountMoveRejectsCycle(t *testing.T) {
 
 	// asset parent P -> child C (both map to root).
 	p, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("P"), Subsidiaries: []int64{rootID},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("P"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create P: %v", err)
 	}
 	c, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		ParentID: &p, Type: "asset", DefaultCurrency: "USD", Names: enName("C"), Subsidiaries: []int64{rootID},
+		ParentID: &p, Type: "asset", DefaultCurrency: "USD", Names: enName("C"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create C: %v", err)
@@ -195,13 +196,13 @@ func TestMoveRejectsCrossTypeClass(t *testing.T) {
 	s := New(d)
 
 	asset, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Cash"), Subsidiaries: []int64{rootID},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Cash"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create asset: %v", err)
 	}
 	rev, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "revenue", DefaultCurrency: "USD", Names: enName("Donations"), Subsidiaries: []int64{rootID},
+		Type: "revenue", DefaultCurrency: "USD", Names: enName("Donations"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create revenue: %v", err)
@@ -231,13 +232,13 @@ func TestMoveRejectsSubMismatch(t *testing.T) {
 	// mover maps to {A, root} (via propagation). newParent maps to {B, root}.
 	// newParent's set does NOT cover mover's {A} -> mismatch.
 	newParent, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("PB"), Subsidiaries: []int64{subB},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("PB"), Subsidiaries: []ids.SubsidiaryID{subB},
 	})
 	if err != nil {
 		t.Fatalf("create newParent: %v", err)
 	}
 	mover, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("MA"), Subsidiaries: []int64{subA},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("MA"), Subsidiaries: []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("create mover: %v", err)
@@ -266,19 +267,19 @@ func TestAssignSubPropagatesToAncestors(t *testing.T) {
 
 	// Account tree: gp (maps root) -> parent (maps root) -> leaf (maps root).
 	gp, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("GP"), Subsidiaries: []int64{rootID},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("GP"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create gp: %v", err)
 	}
 	parent, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		ParentID: &gp, Type: "asset", DefaultCurrency: "USD", Names: enName("Parent"), Subsidiaries: []int64{rootID},
+		ParentID: &gp, Type: "asset", DefaultCurrency: "USD", Names: enName("Parent"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create parent: %v", err)
 	}
 	leaf, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: enName("Leaf"), Subsidiaries: []int64{rootID},
+		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: enName("Leaf"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create leaf: %v", err)
@@ -290,19 +291,19 @@ func TestAssignSubPropagatesToAncestors(t *testing.T) {
 	// (A1's own tree-ancestor) is NOT auto-added -- report scoping consolidates
 	// descendants at read time.
 	_ = subA
-	if err := s.SetAccountSubsidiaries(mutCtx(), leaf, []int64{rootID, subA1}); err != nil {
+	if err := s.SetAccountSubsidiaries(mutCtx(), leaf, []ids.SubsidiaryID{rootID, subA1}); err != nil {
 		t.Fatalf("SetAccountSubsidiaries: %v", err)
 	}
 
 	for _, acct := range []int64{leaf, parent, gp} {
 		subs := accountSubs(t, d, acct)
-		if !subs[subA1] {
+		if !subs[int64(subA1)] {
 			t.Errorf("account %d missing propagated sub A1; got %v", acct, subs)
 		}
 	}
 	// Each ancestor gained the membership -> versioned create for the added ones.
-	testutil.AssertVersionedSub(t, d, parent, subA1, "create")
-	testutil.AssertVersionedSub(t, d, gp, subA1, "create")
+	testutil.AssertVersionedSub(t, d, parent, int64(subA1), "create")
+	testutil.AssertVersionedSub(t, d, gp, int64(subA1), "create")
 }
 
 // TestRemoveSubBlockedByChildOrSplits: removing a subsidiary from an account is
@@ -317,13 +318,13 @@ func TestRemoveSubBlockedByChildOrSplits(t *testing.T) {
 
 	// parent maps {A, root}; child maps {A, root} (child needs A too).
 	parent, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Parent"), Subsidiaries: []int64{subA},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Parent"), Subsidiaries: []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("create parent: %v", err)
 	}
 	child, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: enName("Child"), Subsidiaries: []int64{subA},
+		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: enName("Child"), Subsidiaries: []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("create child: %v", err)
@@ -332,7 +333,7 @@ func TestRemoveSubBlockedByChildOrSplits(t *testing.T) {
 
 	// Removing A from the parent must be blocked: the child still maps A.
 	before := countChanges(t, d)
-	err = s.SetAccountSubsidiaries(mutCtx(), parent, []int64{rootID})
+	err = s.SetAccountSubsidiaries(mutCtx(), parent, []ids.SubsidiaryID{rootID})
 	if !errors.Is(err, ErrSubInUseByChild) {
 		t.Fatalf("remove sub still used by child: err = %v, want ErrSubInUseByChild", err)
 	}
@@ -340,7 +341,7 @@ func TestRemoveSubBlockedByChildOrSplits(t *testing.T) {
 		t.Errorf("changes count = %d, want %d (rejected remove leaves no trace)", n, before)
 	}
 	// Parent still maps A.
-	if !accountSubs(t, d, parent)[subA] {
+	if !accountSubs(t, d, parent)[int64(subA)] {
 		t.Errorf("parent lost sub A despite blocked removal")
 	}
 
@@ -360,11 +361,11 @@ func testRemoveSubBlockedBySplit(t *testing.T) {
 	}
 	// Add a second sub to checking, then try to remove US: blocked by the split.
 	subMX := newSub(t, e.s, rootID, "MX")
-	if err := e.s.SetAccountSubsidiaries(mutCtx(), e.checking, []int64{e.subUS, subMX}); err != nil {
+	if err := e.s.SetAccountSubsidiaries(mutCtx(), e.checking, []ids.SubsidiaryID{e.subUS, subMX}); err != nil {
 		t.Fatalf("widen checking subs: %v", err)
 	}
 	before := countChanges(t, e.d)
-	err := e.s.SetAccountSubsidiaries(mutCtx(), e.checking, []int64{subMX})
+	err := e.s.SetAccountSubsidiaries(mutCtx(), e.checking, []ids.SubsidiaryID{subMX})
 	if !errors.Is(err, ErrSubInUseByChild) {
 		t.Fatalf("remove US used by a split: err = %v, want ErrSubInUseByChild", err)
 	}
@@ -381,21 +382,21 @@ func TestRemoveSubSucceedsWhenUnused(t *testing.T) {
 
 	subA := newSub(t, s, rootID, "A")
 	acct, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Solo"), Subsidiaries: []int64{subA},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Solo"), Subsidiaries: []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("create acct: %v", err)
 	}
 	// Currently maps {A} only (no account parent, so no propagation). Set to
 	// {root}: A is removed (no children use it), root is added.
-	if err := s.SetAccountSubsidiaries(mutCtx(), acct, []int64{rootID}); err != nil {
+	if err := s.SetAccountSubsidiaries(mutCtx(), acct, []ids.SubsidiaryID{rootID}); err != nil {
 		t.Fatalf("SetAccountSubsidiaries remove: %v", err)
 	}
-	if accountSubs(t, d, acct)[subA] {
+	if accountSubs(t, d, acct)[int64(subA)] {
 		t.Errorf("account still maps A after removal")
 	}
 	// The removal is versioned op=delete (snapshot captured before the live delete).
-	testutil.AssertVersionedSub(t, d, acct, subA, "delete")
+	testutil.AssertVersionedSub(t, d, acct, int64(subA), "delete")
 }
 
 // TestDeactivate: DeactivateAccount sets active=0 and appends op='update' (NOT
@@ -405,7 +406,7 @@ func TestDeactivate(t *testing.T) {
 	s := New(d)
 
 	acct, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Doomed"), Subsidiaries: []int64{rootID},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Doomed"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create acct: %v", err)
@@ -430,19 +431,19 @@ func TestTreeOrdering(t *testing.T) {
 	// asset A (sort 1) with child A1; asset B (sort 0). Pre-order with sort_order
 	// then id: B(0) before A(1); A1 nests under A.
 	a, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("A"), Subsidiaries: []int64{rootID}, SortOrder: 1,
+		Type: "asset", DefaultCurrency: "USD", Names: enName("A"), Subsidiaries: []ids.SubsidiaryID{rootID}, SortOrder: 1,
 	})
 	if err != nil {
 		t.Fatalf("create A: %v", err)
 	}
 	a1, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		ParentID: &a, Type: "asset", DefaultCurrency: "USD", Names: enName("A1"), Subsidiaries: []int64{rootID},
+		ParentID: &a, Type: "asset", DefaultCurrency: "USD", Names: enName("A1"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create A1: %v", err)
 	}
 	b, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("B"), Subsidiaries: []int64{rootID}, SortOrder: 0,
+		Type: "asset", DefaultCurrency: "USD", Names: enName("B"), Subsidiaries: []ids.SubsidiaryID{rootID}, SortOrder: 0,
 	})
 	if err != nil {
 		t.Fatalf("create B: %v", err)
@@ -483,13 +484,13 @@ func TestTreeSubsidiaryFilter(t *testing.T) {
 	subB := newSub(t, s, rootID, "B")
 
 	inA, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("InA"), Subsidiaries: []int64{subA},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("InA"), Subsidiaries: []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("create inA: %v", err)
 	}
 	inB, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("InB"), Subsidiaries: []int64{subB},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("InB"), Subsidiaries: []ids.SubsidiaryID{subB},
 	})
 	if err != nil {
 		t.Fatalf("create inB: %v", err)
@@ -545,7 +546,7 @@ func TestTreeNameFallback(t *testing.T) {
 	// requested-lang wins: has both fr and en; requesting fr yields the fr name.
 	wantsFr, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "en-name", "fr": "fr-name"}, Subsidiaries: []int64{subA},
+		Names: map[string]string{"en": "en-name", "fr": "fr-name"}, Subsidiaries: []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("create wantsFr: %v", err)
@@ -554,7 +555,7 @@ func TestTreeNameFallback(t *testing.T) {
 	// en fallback: no fr, has en; requesting fr yields the en name.
 	enFallback, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "en-only"}, Subsidiaries: []int64{subA},
+		Names: map[string]string{"en": "en-only"}, Subsidiaries: []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("create enFallback: %v", err)
@@ -565,7 +566,7 @@ func TestTreeNameFallback(t *testing.T) {
 	// name ("de-name" < "es-name").
 	anyFallback, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "en-doomed", "es": "es-name", "de": "de-name"}, Subsidiaries: []int64{subA},
+		Names: map[string]string{"en": "en-doomed", "es": "es-name", "de": "de-name"}, Subsidiaries: []ids.SubsidiaryID{subA},
 	})
 	if err != nil {
 		t.Fatalf("create anyFallback: %v", err)
@@ -611,7 +612,7 @@ func TestAccountNameAsOf(t *testing.T) {
 	s := New(d, WithClock(func() time.Time { return clk }))
 
 	acct, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Old Name"), Subsidiaries: []int64{rootID},
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Old Name"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create acct: %v", err)
@@ -676,14 +677,14 @@ func TestEffective990Inherited(t *testing.T) {
 	code := "IX.16"
 	parent, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "expense", DefaultCurrency: "USD", Names: enName("Occupancy"),
-		Subsidiaries: []int64{rootID}, Form990Code: &code,
+		Subsidiaries: []ids.SubsidiaryID{rootID}, Form990Code: &code,
 	})
 	if err != nil {
 		t.Fatalf("create parent: %v", err)
 	}
 	child, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		ParentID: &parent, Type: "expense", DefaultCurrency: "USD", Names: enName("Rent"),
-		Subsidiaries: []int64{rootID},
+		Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create child: %v", err)
@@ -691,7 +692,7 @@ func TestEffective990Inherited(t *testing.T) {
 	own := "IX.17"
 	grand, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		ParentID: &child, Type: "expense", DefaultCurrency: "USD", Names: enName("Travel"),
-		Subsidiaries: []int64{rootID}, Form990Code: &own,
+		Subsidiaries: []ids.SubsidiaryID{rootID}, Form990Code: &own,
 	})
 	if err != nil {
 		t.Fatalf("create grand: %v", err)
@@ -719,7 +720,7 @@ func TestSet990CodeTypeMismatch(t *testing.T) {
 	s := New(d)
 
 	acct, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "expense", DefaultCurrency: "USD", Names: enName("Rent"), Subsidiaries: []int64{rootID},
+		Type: "expense", DefaultCurrency: "USD", Names: enName("Rent"), Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("create acct: %v", err)
@@ -748,7 +749,7 @@ func TestCreateFunctionalClassNonExpense(t *testing.T) {
 	fc := "program"
 	_, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD", Names: enName("Cash"),
-		Subsidiaries: []int64{rootID}, FunctionalClass: &fc,
+		Subsidiaries: []ids.SubsidiaryID{rootID}, FunctionalClass: &fc,
 	})
 	if !errors.Is(err, ErrFunctionalClassNotExpense) {
 		t.Fatalf("functional class on asset: err = %v, want ErrFunctionalClassNotExpense", err)
@@ -777,7 +778,7 @@ func TestCreateAccountFlagsVersioned(t *testing.T) {
 
 	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD", Names: enName("Receivable Cash"),
-		Subsidiaries: []int64{rootID}, CurrentCash: true, OpenItem: true,
+		Subsidiaries: []ids.SubsidiaryID{rootID}, CurrentCash: true, OpenItem: true,
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)
@@ -818,7 +819,7 @@ func TestAccountNotesRoundTrip(t *testing.T) {
 	note := "Synthetic reconcile monthly against the bank feed."
 	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD", Names: enName("Checking"),
-		Subsidiaries: []int64{rootID}, Notes: &note,
+		Subsidiaries: []ids.SubsidiaryID{rootID}, Notes: &note,
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)
@@ -866,7 +867,7 @@ func TestCreateCurrentCashNonAsset(t *testing.T) {
 	before := countChanges(t, d)
 	_, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "liability", DefaultCurrency: "USD", Names: enName("Loan"),
-		Subsidiaries: []int64{rootID}, CurrentCash: true,
+		Subsidiaries: []ids.SubsidiaryID{rootID}, CurrentCash: true,
 	})
 	if !errors.Is(err, ErrCurrentCashNotAsset) {
 		t.Fatalf("current_cash on liability: err = %v, want ErrCurrentCashNotAsset", err)
@@ -885,7 +886,7 @@ func TestCreateOpenItemBadType(t *testing.T) {
 	before := countChanges(t, d)
 	_, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "equity", DefaultCurrency: "USD", Names: enName("Opening"),
-		Subsidiaries: []int64{rootID}, OpenItem: true,
+		Subsidiaries: []ids.SubsidiaryID{rootID}, OpenItem: true,
 	})
 	if !errors.Is(err, ErrOpenItemBadType) {
 		t.Fatalf("open_item on equity: err = %v, want ErrOpenItemBadType", err)
@@ -904,7 +905,7 @@ func TestUpdateAccountFlagsRoundTrip(t *testing.T) {
 
 	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD", Names: enName("Bank"),
-		Subsidiaries: []int64{rootID},
+		Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)
@@ -942,7 +943,7 @@ func TestUpdateCurrentCashNonAsset(t *testing.T) {
 
 	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "liability", DefaultCurrency: "USD", Names: enName("Payable"),
-		Subsidiaries: []int64{rootID},
+		Subsidiaries: []ids.SubsidiaryID{rootID},
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)
@@ -965,7 +966,7 @@ func TestDeactivatePreservesFlags(t *testing.T) {
 
 	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD", Names: enName("Petty Cash"),
-		Subsidiaries: []int64{rootID}, CurrentCash: true,
+		Subsidiaries: []ids.SubsidiaryID{rootID}, CurrentCash: true,
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)

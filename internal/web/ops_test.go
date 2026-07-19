@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -172,14 +173,14 @@ func TestOpsCheckRendersViolation(t *testing.T) {
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	a1, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Bank A"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Bank A"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create account a1: %v", err)
 	}
 	a2, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Bank B"}, Subsidiaries: []int64{1},
+		Names: map[string]string{"en": "Bank B"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create account a2: %v", err)

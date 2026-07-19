@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"cuento/internal/db/sqlc"
+	"cuento/internal/ids"
 )
 
 // Transaction history reconstruction (p12.4) -- the ordered audit timeline for one
@@ -86,7 +87,7 @@ type SplitDiff struct {
 // nothing here). Deleted marks the void state (the delete version).
 type HistHeaderState struct {
 	Date         string
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	Memo         string
 	Notes        string
 	Currency     string
@@ -415,4 +416,4 @@ func splitFieldsFull(row *sqlc.SplitVersionHistoryRow, newSide bool) []FieldDiff
 }
 
 // valid wraps a non-null id into a sql.NullInt64 (Valid=true).
-func valid(id int64) sql.NullInt64 { return sql.NullInt64{Int64: id, Valid: true} }
+func valid[T ~int64](id T) sql.NullInt64 { return sql.NullInt64{Int64: int64(id), Valid: true} }

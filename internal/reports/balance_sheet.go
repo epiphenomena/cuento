@@ -686,7 +686,7 @@ func (b *bsBuilder) accountDrill(l bsLine, ccy string) *Drill {
 		return nil
 	}
 	return &Drill{
-		Scope:      int64(b.p.Scope),
+		Scope:      b.p.Scope,
 		AccountIDs: []int64{l.acctID},
 		Currency:   ccy,
 		Mode:       DrillAsOf,
@@ -720,7 +720,7 @@ func (b *bsBuilder) table() Table {
 // balances are internal and eliminated (D19). A leaf (single-sub) scope is not a
 // consolidation: its intercompany accounts are genuine due-to/due-from balances.
 func (tk *Toolkit) isConsolidated(ctx context.Context, scope SubsidiaryID) (bool, error) {
-	desc, err := tk.store.Descendants(ctx, int64(scope))
+	desc, err := tk.store.Descendants(ctx, scope)
 	if err != nil {
 		return false, err
 	}
@@ -744,7 +744,7 @@ func (tk *Toolkit) restrictedNetAssets(ctx context.Context, scope SubsidiaryID, 
 			restricted[f.ID] = true
 		}
 	}
-	fb, err := tk.store.FundBalancesAsOf(ctx, d, int64(scope))
+	fb, err := tk.store.FundBalancesAsOf(ctx, d, scope)
 	if err != nil {
 		return nil, err
 	}

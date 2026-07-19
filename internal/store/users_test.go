@@ -175,7 +175,7 @@ func TestUpdateUserSettingsVersioned(t *testing.T) {
 
 	// Root subsidiary is seeded id 1; use it as a valid default. The seeded root
 	// program (id 1) is a valid default program.
-	rootSub := int64(1)
+	rootSub := ids.SubsidiaryID(1)
 	rootProg := ids.ProgramID(1)
 	in := UserSettingsInput{
 		Locale: "es", DateFormat: "EU", NumberFormat: "EU",
@@ -260,7 +260,7 @@ func TestUpdateUserSettingsRejectsInvalid(t *testing.T) {
 		Locale: "en", DateFormat: "ISO", NumberFormat: "US",
 		DisplayMode: "signed", NegStyle: "minus", Theme: "auto",
 	}
-	bad := int64(999999)
+	bad := ids.SubsidiaryID(999999)
 	badProg := ids.ProgramID(999999)
 	cases := map[string]func(UserSettingsInput) UserSettingsInput{
 		"locale":        func(i UserSettingsInput) UserSettingsInput { i.Locale = "de"; return i },

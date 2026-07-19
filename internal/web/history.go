@@ -235,7 +235,7 @@ func (r histResolver) headerFields(h store.HistHeaderState, cur string, exp int,
 		value string
 	}{
 		{store.FieldDate, money.FormatDate(parseISOForDisplay(h.Date), r.df)},
-		{store.FieldSubsidiary, r.subs[h.SubsidiaryID]},
+		{store.FieldSubsidiary, r.subs[int64(h.SubsidiaryID)]},
 		{store.FieldCurrency, h.Currency},
 		{store.FieldMemo, h.Memo},
 		{store.FieldNotes, h.Notes},

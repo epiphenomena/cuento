@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -73,9 +74,9 @@ func (s *server) buildSubsidiariesPage(ctx context.Context) (subsidiariesPageMod
 		if row.ParentID.Valid {
 			d = depth[row.ParentID.Int64] + 1
 		}
-		depth[row.ID] = d
+		depth[int64(row.ID)] = d
 		model.Rows = append(model.Rows, subRow{
-			ID:           row.ID,
+			ID:           int64(row.ID),
 			Name:         row.Name,
 			BaseCurrency: row.BaseCurrency,
 			Active:       row.Active != 0,
@@ -122,7 +123,7 @@ func (s *server) subsidiaryNewForm(w http.ResponseWriter, r *http.Request) {
 // prefilled from the subsidiary's current state, for an inline htmx swap.
 func (s *server) subsidiaryEditForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
+	id := ids.SubsidiaryID(parseID(r.PathValue("id")))
 	sub, err := s.store.GetSubsidiary(ctx, id)
 	if err != nil {
 		http.NotFound(w, r)
@@ -146,8 +147,8 @@ func (s *server) subsidiaryEditForm(w http.ResponseWriter, r *http.Request) {
 // are every subsidiary EXCEPT the subject and its descendants (so the select never
 // OFFERS a cycle) -- presentation only; the store still enforces cycles and root
 // immovability. The currency options are the active currencies.
-func (s *server) buildSubsidiaryForm(ctx context.Context, id int64) (subsidiaryForm, error) {
-	form := subsidiaryForm{ID: id}
+func (s *server) buildSubsidiaryForm(ctx context.Context, id ids.SubsidiaryID) (subsidiaryForm, error) {
+	form := subsidiaryForm{ID: int64(id)}
 
 	// Exclude the subject + its descendants from the parent options on edit (self +
 	// transitive closure; Descendants includes self as its base case).
@@ -158,7 +159,7 @@ func (s *server) buildSubsidiaryForm(ctx context.Context, id int64) (subsidiaryF
 			return form, err
 		}
 		for _, d := range desc {
-			excluded[d.ID] = true
+			excluded[int64(d.ID)] = true
 		}
 	}
 
@@ -167,10 +168,10 @@ func (s *server) buildSubsidiaryForm(ctx context.Context, id int64) (subsidiaryF
 		return form, err
 	}
 	for _, sub := range subs {
-		if excluded[sub.ID] {
+		if excluded[int64(sub.ID)] {
 			continue
 		}
-		form.Parents = append(form.Parents, subOption{ID: sub.ID, Name: sub.Name})
+		form.Parents = append(form.Parents, subOption{ID: int64(sub.ID), Name: sub.Name})
 	}
 
 	curs, err := s.store.Currencies(ctx)
@@ -217,7 +218,7 @@ func (s *server) subsidiaryCreate(w http.ResponseWriter, r *http.Request) {
 // keys and re-rendered at 422.
 func (s *server) subsidiaryUpdate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
+	id := ids.SubsidiaryID(parseID(r.PathValue("id")))
 	form, in, err := s.parseSubsidiaryForm(r, id)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
@@ -248,7 +249,7 @@ func (s *server) subsidiaryUpdate(w http.ResponseWriter, r *http.Request) {
 // (the guard is shown; nothing executed). Success redirects to the list.
 func (s *server) subsidiaryDeactivate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := parseID(r.PathValue("id"))
+	id := ids.SubsidiaryID(parseID(r.PathValue("id")))
 	if err := s.store.DeactivateSubsidiary(s.actorCtx(ctx), id); err != nil {
 		if key := subsidiaryPageErrorKey(err); key != "" {
 			model, berr := s.buildSubsidiariesPage(ctx)
@@ -270,7 +271,7 @@ func (s *server) subsidiaryDeactivate(w http.ResponseWriter, r *http.Request) {
 // fields) of a submitted subsidiary form; the store does the real validation.
 type parsedSubsidiaryForm struct {
 	name         string
-	parentID     int64
+	parentID     ids.SubsidiaryID
 	baseCurrency string
 }
 
@@ -280,13 +281,13 @@ type parsedSubsidiaryForm struct {
 // of an EDIT excludes the subject + descendants from the parent select -- exactly
 // as the initial edit GET does. It does NOT validate business rules (the store
 // owns that).
-func (s *server) parseSubsidiaryForm(r *http.Request, id int64) (subsidiaryForm, parsedSubsidiaryForm, error) {
+func (s *server) parseSubsidiaryForm(r *http.Request, id ids.SubsidiaryID) (subsidiaryForm, parsedSubsidiaryForm, error) {
 	if err := r.ParseForm(); err != nil {
 		return subsidiaryForm{}, parsedSubsidiaryForm{}, err
 	}
 	in := parsedSubsidiaryForm{
 		name:         r.PostFormValue("name"),
-		parentID:     parseID(r.PostFormValue("parent_id")),
+		parentID:     ids.SubsidiaryID(parseID(r.PostFormValue("parent_id"))),
 		baseCurrency: r.PostFormValue("base_currency"),
 	}
 	form, err := s.buildSubsidiaryForm(r.Context(), id)
@@ -295,7 +296,7 @@ func (s *server) parseSubsidiaryForm(r *http.Request, id int64) (subsidiaryForm,
 	}
 	// Echo submitted values back so a 422 re-render keeps what the user entered.
 	form.Name = in.name
-	form.ParentID = in.parentID
+	form.ParentID = int64(in.parentID)
 	form.BaseCurrency = in.baseCurrency
 	// On edit, mark the root so the template still omits the parent select.
 	if id != 0 {

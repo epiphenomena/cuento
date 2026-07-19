@@ -48,20 +48,20 @@ func seedMergeEnv(t *testing.T) mergeEnv {
 	mgmt := "management"
 	src, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "expense", DefaultCurrency: "USD", Names: map[string]string{"en": "Supplies"},
-		Subsidiaries: []int64{1}, FunctionalClass: &mgmt,
+		Subsidiaries: []ids.SubsidiaryID{1}, FunctionalClass: &mgmt,
 	})
 	if err != nil {
 		t.Fatalf("create src: %v", err)
 	}
 	dst, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "expense", DefaultCurrency: "USD", Names: map[string]string{"en": "Office"},
-		Subsidiaries: []int64{1}, FunctionalClass: &mgmt,
+		Subsidiaries: []ids.SubsidiaryID{1}, FunctionalClass: &mgmt,
 	})
 	if err != nil {
 		t.Fatalf("create dst: %v", err)
 	}
 	cash, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{1},
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create cash: %v", err)
@@ -195,13 +195,13 @@ func TestMergeSubCoverageSurfaced(t *testing.T) {
 		t.Fatalf("create sub MX: %v", err)
 	}
 	src, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "expense", DefaultCurrency: "USD", Names: map[string]string{"en": "Travel"}, Subsidiaries: []int64{1, subMX},
+		Type: "expense", DefaultCurrency: "USD", Names: map[string]string{"en": "Travel"}, Subsidiaries: []ids.SubsidiaryID{1, subMX},
 	})
 	if err != nil {
 		t.Fatalf("create src: %v", err)
 	}
 	dst, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "expense", DefaultCurrency: "USD", Names: map[string]string{"en": "Office"}, Subsidiaries: []int64{1},
+		Type: "expense", DefaultCurrency: "USD", Names: map[string]string{"en": "Office"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create dst: %v", err)
@@ -239,19 +239,19 @@ func TestMergeReconciledSourceSurfaced(t *testing.T) {
 	// A reconcilable asset source + an asset destination on root sub 1.
 	src, err := st.CreateAccount(ctx, store.CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Bank Src"},
-		Subsidiaries: []int64{1}, Reconcilable: true,
+		Subsidiaries: []ids.SubsidiaryID{1}, Reconcilable: true,
 	})
 	if err != nil {
 		t.Fatalf("create src: %v", err)
 	}
 	dst, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Bank Dst"}, Subsidiaries: []int64{1},
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Bank Dst"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create dst: %v", err)
 	}
 	cash, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []int64{1},
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Cash"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create cash: %v", err)
@@ -307,13 +307,13 @@ func TestMergeCrossTypeSurfaced(t *testing.T) {
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 
 	rev, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "revenue", DefaultCurrency: "USD", Names: map[string]string{"en": "Contributions"}, Subsidiaries: []int64{1},
+		Type: "revenue", DefaultCurrency: "USD", Names: map[string]string{"en": "Contributions"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create revenue: %v", err)
 	}
 	exp, err := st.CreateAccount(ctx, store.CreateAccountInput{
-		Type: "expense", DefaultCurrency: "USD", Names: map[string]string{"en": "Salaries"}, Subsidiaries: []int64{1},
+		Type: "expense", DefaultCurrency: "USD", Names: map[string]string{"en": "Salaries"}, Subsidiaries: []ids.SubsidiaryID{1},
 	})
 	if err != nil {
 		t.Fatalf("create expense: %v", err)

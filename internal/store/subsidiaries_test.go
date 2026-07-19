@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/testutil"
 )
 
@@ -16,11 +17,11 @@ func mutCtx() context.Context {
 }
 
 // rootID is the seeded root subsidiary's id (p04.1 seeds id 1, NULL parent).
-const rootID int64 = 1
+const rootID ids.SubsidiaryID = 1
 
 // getSub reads a subsidiary's current live row directly through the store's
 // GetSubsidiary read method (sqlc, rule 6) for assertions.
-func getSub(t *testing.T, s *Store, id int64) (parentID sql.NullInt64, name, baseCcy string, active int64) {
+func getSub(t *testing.T, s *Store, id ids.SubsidiaryID) (parentID sql.NullInt64, name, baseCcy string, active int64) {
 	t.Helper()
 	row, err := s.GetSubsidiary(context.Background(), id)
 	if err != nil {
@@ -32,7 +33,7 @@ func getSub(t *testing.T, s *Store, id int64) (parentID sql.NullInt64, name, bas
 // latestVersion reads the newest subsidiaries_versions snapshot for an entity so
 // tests can prove the snapshot mirrors the live row's NEW values. Raw SQL is
 // acceptable in a test (as AssertVersioned itself does).
-func latestVersion(t *testing.T, d *sql.DB, entityID int64) (op, name, baseCcy string, active int64, parentID sql.NullInt64) {
+func latestVersion(t *testing.T, d *sql.DB, entityID ids.SubsidiaryID) (op, name, baseCcy string, active int64, parentID sql.NullInt64) {
 	t.Helper()
 	err := d.QueryRow(
 		`SELECT op, name, base_currency, active, parent_id
@@ -66,11 +67,11 @@ func TestCreateSubsidiaryVersioned(t *testing.T) {
 		t.Fatalf("CreateSubsidiary returned id %d, want positive", id)
 	}
 
-	testutil.AssertVersioned(t, d, "subsidiaries", id, "create")
+	testutil.AssertVersioned(t, d, "subsidiaries", int64(id), "create")
 
 	// Live row.
 	parent, name, ccy, active := getSub(t, s, id)
-	if !parent.Valid || parent.Int64 != rootID {
+	if !parent.Valid || parent.Int64 != int64(rootID) {
 		t.Errorf("live parent = %+v, want %d", parent, rootID)
 	}
 	if name != "West Branch" || ccy != "USD" || active != 1 {
@@ -148,7 +149,7 @@ func TestUpdateSubsidiaryVersioned(t *testing.T) {
 		t.Fatalf("UpdateSubsidiary: %v", err)
 	}
 
-	testutil.AssertVersioned(t, d, "subsidiaries", id, "update")
+	testutil.AssertVersioned(t, d, "subsidiaries", int64(id), "update")
 
 	_, name, ccy, _ := getSub(t, s, id)
 	if name != "New Name" || ccy != "EUR" {
@@ -173,13 +174,13 @@ func TestUpdateMoveVersioned(t *testing.T) {
 		t.Fatalf("UpdateSubsidiary move: %v", err)
 	}
 
-	testutil.AssertVersioned(t, d, "subsidiaries", b, "update")
+	testutil.AssertVersioned(t, d, "subsidiaries", int64(b), "update")
 	parent, _, _, _ := getSub(t, s, b)
-	if !parent.Valid || parent.Int64 != a {
+	if !parent.Valid || parent.Int64 != int64(a) {
 		t.Errorf("live parent of B = %+v, want %d", parent, a)
 	}
 	_, _, _, _, vParent := latestVersion(t, d, b)
-	if !vParent.Valid || vParent.Int64 != a {
+	if !vParent.Valid || vParent.Int64 != int64(a) {
 		t.Errorf("snapshot parent of B = %+v, want %d", vParent, a)
 	}
 }
@@ -196,7 +197,7 @@ func TestDeactivateVersioned(t *testing.T) {
 		t.Fatalf("DeactivateSubsidiary: %v", err)
 	}
 
-	testutil.AssertVersioned(t, d, "subsidiaries", id, "update")
+	testutil.AssertVersioned(t, d, "subsidiaries", int64(id), "update")
 	_, _, _, active := getSub(t, s, id)
 	if active != 0 {
 		t.Errorf("live active = %d, want 0", active)
@@ -264,7 +265,7 @@ func TestRootRenameable(t *testing.T) {
 	if err := s.UpdateSubsidiary(mutCtx(), rootID, UpdateSubsidiaryInput{Name: &newName}); err != nil {
 		t.Fatalf("rename root: %v", err)
 	}
-	testutil.AssertVersioned(t, d, "subsidiaries", rootID, "update")
+	testutil.AssertVersioned(t, d, "subsidiaries", int64(rootID), "update")
 	parent, name, _, _ := getSub(t, s, rootID)
 	if parent.Valid {
 		t.Errorf("root parent = %+v after rename, want NULL", parent)
@@ -318,12 +319,12 @@ func TestSubTree(t *testing.T) {
 		t.Fatalf("SubTree: %v", err)
 	}
 
-	gotIDs := make([]int64, len(tree))
+	gotIDs := make([]ids.SubsidiaryID, len(tree))
 	for i, row := range tree {
 		gotIDs[i] = row.ID
 	}
 	// Pre-order with B (sort 0) before A (sort 1): root, B, A, A1.
-	want := []int64{rootID, b, a, a1}
+	want := []ids.SubsidiaryID{rootID, b, a, a1}
 	if len(gotIDs) != len(want) {
 		t.Fatalf("SubTree returned %v, want %v", gotIDs, want)
 	}
@@ -351,11 +352,11 @@ func TestDescendants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Descendants(a): %v", err)
 	}
-	got := make(map[int64]bool, len(rows))
+	got := make(map[ids.SubsidiaryID]bool, len(rows))
 	for _, r := range rows {
 		got[r.ID] = true
 	}
-	for _, id := range []int64{a, a1, a11} {
+	for _, id := range []ids.SubsidiaryID{a, a1, a11} {
 		if !got[id] {
 			t.Errorf("Descendants(a) missing %d (self+closure): got %v", id, got)
 		}

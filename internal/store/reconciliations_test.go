@@ -20,7 +20,7 @@ import (
 type reconEnv struct {
 	s     *Store
 	d     *sql.DB
-	subUS int64
+	subUS ids.SubsidiaryID
 
 	checking int64      // asset, US, RECONCILABLE
 	other    int64      // asset, US, reconcilable (a different account, for Z8 mismatch)
@@ -38,14 +38,14 @@ func newReconEnv(t *testing.T) reconEnv {
 
 	checking, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD", Names: enName("Checking US"),
-		Subsidiaries: []int64{subUS}, Reconcilable: true,
+		Subsidiaries: []ids.SubsidiaryID{subUS}, Reconcilable: true,
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount checking: %v", err)
 	}
 	other, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD", Names: enName("Savings US"),
-		Subsidiaries: []int64{subUS}, Reconcilable: true,
+		Subsidiaries: []ids.SubsidiaryID{subUS}, Reconcilable: true,
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount other: %v", err)
@@ -53,12 +53,12 @@ func newReconEnv(t *testing.T) reconEnv {
 
 	env := reconEnv{
 		s: s, d: d, subUS: subUS, checking: checking, other: other,
-		expense: mkAcct(t, s, "expense", "Supplies", []int64{subUS}, strp("management"), nil),
-		revenue: mkAcct(t, s, "revenue", "Grants", []int64{subUS}, nil, nil),
-		equity:  mkAcct(t, s, "equity", "Opening", []int64{subUS}, nil, nil),
+		expense: mkAcct(t, s, "expense", "Supplies", []ids.SubsidiaryID{subUS}, strp("management"), nil),
+		revenue: mkAcct(t, s, "revenue", "Grants", []ids.SubsidiaryID{subUS}, nil, nil),
+		equity:  mkAcct(t, s, "equity", "Opening", []ids.SubsidiaryID{subUS}, nil, nil),
 	}
 	env.fund, err = s.CreateFund(mutCtx(), CreateFundInput{
-		Name: "Beca", Restriction: "purpose", Subsidiaries: []int64{subUS},
+		Name: "Beca", Restriction: "purpose", Subsidiaries: []ids.SubsidiaryID{subUS},
 	})
 	if err != nil {
 		t.Fatalf("CreateFund: %v", err)

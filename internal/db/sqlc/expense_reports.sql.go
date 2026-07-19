@@ -104,7 +104,7 @@ RETURNING id
 
 type InsertExpenseReportParams struct {
 	SubmitterID  ids.UserID
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	CreatedAt    string
 }
 
@@ -159,7 +159,8 @@ type InsertExpenseReportLineParams struct {
 // need not balance). fund_id/program_id may be NULL (the reviewer resolves them at
 // convert). Returns the new id.
 func (q *Queries) InsertExpenseReportLine(ctx context.Context, arg InsertExpenseReportLineParams) (ids.ExpenseReportLineID, error) {
-	row := q.db.QueryRowContext(ctx, insertExpenseReportLine,
+	row := q.db.QueryRowContext(
+		ctx, insertExpenseReportLine,
 		arg.ReportID,
 		arg.AccountID,
 		arg.Amount,
@@ -390,7 +391,7 @@ WHERE id = ?
 `
 
 type SetExpenseReportSubsidiaryParams struct {
-	SubsidiaryID int64
+	SubsidiaryID ids.SubsidiaryID
 	ID           ids.ExpenseReportID
 }
 
@@ -419,7 +420,8 @@ type UpdateExpenseReportLineParams struct {
 }
 
 func (q *Queries) UpdateExpenseReportLine(ctx context.Context, arg UpdateExpenseReportLineParams) error {
-	_, err := q.db.ExecContext(ctx, updateExpenseReportLine,
+	_, err := q.db.ExecContext(
+		ctx, updateExpenseReportLine,
 		arg.AccountID,
 		arg.Amount,
 		arg.FundID,

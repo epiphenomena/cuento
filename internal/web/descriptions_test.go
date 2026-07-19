@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/store"
 )
 
@@ -19,7 +20,7 @@ import (
 // program+class defaulted) carrying `desc` as its description + memo `memo`, and
 // checking-or-cashB (credit) with no description. sub picks the matching asset
 // (sub1 -> checking, sub2 -> cashB) so the txn is single-subsidiary-valid.
-func (e *txnWebEnv) seedDescTxn(t *testing.T, sub int64, date, desc, memo string, amount int64) {
+func (e *txnWebEnv) seedDescTxn(t *testing.T, sub ids.SubsidiaryID, date, desc, memo string, amount int64) {
 	t.Helper()
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	asset := e.checking
@@ -72,7 +73,7 @@ func TestDescriptionsSuggest(t *testing.T) {
 	// sub1's suggestions at all (subsidiary A never surfaces B's descriptions). "Rent tower"
 	// is the newest overall but lives only in sub2.
 	e.seedDescTxn(t, e.sub2, "2025-09-09", "Rent tower", "", 7000) // sub2 only, newest
-	rec2 := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/descriptions/suggest?q=rent&sub="+itoa(e.sub1), nil)
+	rec2 := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/descriptions/suggest?q=rent&sub="+itoa(int64(e.sub1)), nil)
 	body2 := rec2.Body.String()
 	if strings.Contains(body2, "Rent tower") {
 		t.Fatalf("sub1 scope: sub2-only 'Rent tower' must NOT appear\n%s", body2)
@@ -82,14 +83,14 @@ func TestDescriptionsSuggest(t *testing.T) {
 		t.Fatalf("sub1 scope: expected sub1's own 'Rent office' + 'Rent parking'\n%s", body2)
 	}
 	// The converse: sub2's suggestions include "Rent tower" but NOT sub1-only "Rent parking".
-	rec2b := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/descriptions/suggest?q=rent&sub="+itoa(e.sub2), nil)
+	rec2b := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/descriptions/suggest?q=rent&sub="+itoa(int64(e.sub2)), nil)
 	body2b := rec2b.Body.String()
 	if !strings.Contains(body2b, "Rent tower") || strings.Contains(body2b, "Rent parking") {
 		t.Fatalf("sub2 scope: expected 'Rent tower' and NOT sub1-only 'Rent parking'\n%s", body2b)
 	}
 
 	// Empty q -> an empty listbox (no <li> items), 200.
-	rec3 := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/descriptions/suggest?q=&sub="+itoa(e.sub1), nil)
+	rec3 := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/descriptions/suggest?q=&sub="+itoa(int64(e.sub1)), nil)
 	if rec3.Code != http.StatusOK {
 		t.Fatalf("empty-q suggest: status=%d", rec3.Code)
 	}
@@ -134,7 +135,7 @@ func TestDescriptionsPrefill(t *testing.T) {
 
 	// p26.38 sub SCOPING: sub1 -> the sub1 split (80.00, sub1 memo) even though sub2 is
 	// newer (the sub2 split is FILTERED OUT, so it never leaks its account/memo into sub1).
-	rec2 := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/descriptions/prefill?q=Consulting+fee&sub="+itoa(e.sub1), nil)
+	rec2 := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/descriptions/prefill?q=Consulting+fee&sub="+itoa(int64(e.sub1)), nil)
 	body2 := rec2.Body.String()
 	if !strings.Contains(body2, `data-amount="80.00"`) || !strings.Contains(body2, `data-memo="sub1 memo"`) {
 		t.Fatalf("sub1 scope: expected the sub1 split (80.00 / sub1 memo)\n%s", body2)
@@ -142,7 +143,7 @@ func TestDescriptionsPrefill(t *testing.T) {
 	// A description that exists ONLY in sub2, queried under sub1 -> no match (data-found=0):
 	// subsidiary A never pulls B's split.
 	e.seedDescTxn(t, e.sub2, "2025-06-01", "Sub2 vendor", "sub2 only", 3000)
-	recX := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/descriptions/prefill?q=Sub2+vendor&sub="+itoa(e.sub1), nil)
+	recX := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/descriptions/prefill?q=Sub2+vendor&sub="+itoa(int64(e.sub1)), nil)
 	if recX.Code != http.StatusOK || !strings.Contains(recX.Body.String(), `data-found="0"`) {
 		t.Fatalf("sub1 scope: a sub2-only description must not prefill under sub1\n%s", recX.Body.String())
 	}

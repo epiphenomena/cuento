@@ -122,7 +122,7 @@ func TestHistoryUpdateShowsFundAndClassSplitDiffs(t *testing.T) {
 	e := newTxnEnv(t)
 	// Fund scoped to subUS so the salaries split can carry it (balanced within fund
 	// requires both splits share the fund; keep it simple: retag BOTH splits' fund).
-	fund := newFund(t, e.s, "Beca", []int64{e.subUS}, nil)
+	fund := newFund(t, e.s, "Beca", []ids.SubsidiaryID{e.subUS}, nil)
 
 	// Create with class=program on the expense, no fund.
 	prog := "program"
@@ -267,7 +267,7 @@ func TestHistorySplitOnlyChangeOrdered(t *testing.T) {
 
 	// A second leaf checking-like account to merge INTO checking (same asset type,
 	// same sub). MergeAccount repoints splits and versions each -- a SPLIT-ONLY change.
-	other := mkAcct(t, e.s, "asset", "Checking Two", []int64{e.subUS}, nil, nil)
+	other := mkAcct(t, e.s, "asset", "Checking Two", []ids.SubsidiaryID{e.subUS}, nil, nil)
 	// Post a txn using `other` so the merge has a split to repoint on THIS txn's account
 	// set is not required; merge repoints ALL splits on `other`. To make the merge touch
 	// OUR txn's history, merge `checking` INTO `other` (our split moves to `other`).
@@ -538,7 +538,7 @@ func TestHistoryMissingTransaction(t *testing.T) {
 
 // post2 posts a balanced 2-split transaction and returns its id. debitAcct must
 // carry (or default) any required program/class -- newTxnEnv's salaries has both.
-func post2(t *testing.T, e txnEnv, sub, debitAcct int64, debitAmt int64, creditAcct, creditAmt int64) int64 {
+func post2(t *testing.T, e txnEnv, sub ids.SubsidiaryID, debitAcct int64, debitAmt int64, creditAcct, creditAmt int64) int64 {
 	t.Helper()
 	id, err := e.s.PostTransaction(mutCtx(), PostTransactionInput{
 		Date: "2025-03-01", SubsidiaryID: sub, Currency: "USD",
@@ -554,7 +554,7 @@ func post2(t *testing.T, e txnEnv, sub, debitAcct int64, debitAmt int64, creditA
 }
 
 // newFund creates a fund scoped to subs (optionally a program scope) and returns id.
-func newFund(t *testing.T, s *Store, name string, subs []int64, programID *ids.ProgramID) ids.FundID {
+func newFund(t *testing.T, s *Store, name string, subs []ids.SubsidiaryID, programID *ids.ProgramID) ids.FundID {
 	t.Helper()
 	id, err := s.CreateFund(mutCtx(), CreateFundInput{
 		Name: name, Restriction: "purpose", Subsidiaries: subs, ProgramID: programID,

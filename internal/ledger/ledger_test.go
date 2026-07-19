@@ -26,7 +26,7 @@ func mutCtx() context.Context {
 // consts) so tests can take &rootProg when a split explicitly tags the root
 // program.
 var (
-	rootSub  = int64(1)
+	rootSub  = ids.SubsidiaryID(1)
 	rootProg = ids.ProgramID(1)
 )
 
@@ -37,7 +37,7 @@ type world struct {
 	d *sql.DB
 	s *store.Store
 
-	subUS, subMX int64
+	subUS, subMX ids.SubsidiaryID
 	prog         ids.ProgramID
 	fund         ids.FundID
 
@@ -67,7 +67,7 @@ func newWorld(t *testing.T) *world {
 	// contrib split below tags this fund AND carries Educacion, which the recursive
 	// subtree walk must accept. (A flat/unscoped fund would leave Z15-scope
 	// unexercised on the clean world.)
-	w.fund = mkFundScoped(t, s, "Beca", []int64{w.subUS}, &rootProg)
+	w.fund = mkFundScoped(t, s, "Beca", []ids.SubsidiaryID{w.subUS}, &rootProg)
 
 	mgmt := "management"
 	code990Rev := "VIII.1f"
@@ -76,14 +76,14 @@ func newWorld(t *testing.T) *world {
 	// superset of children) real tree EDGES on valid data -- without a nested
 	// account both rules would pass the clean-world test vacuously (zero edges).
 	// checkingUS is that child, under an "Assets" placeholder.
-	assetsParent := mkAcct(t, s, acct{typ: "asset", name: "Assets", subs: []int64{w.subUS}})
-	w.checkingUS = mkAcct(t, s, acct{typ: "asset", name: "Checking US", subs: []int64{w.subUS}, parent: &assetsParent})
-	w.salaries = mkAcct(t, s, acct{typ: "expense", name: "Salaries", subs: []int64{w.subUS}, fclass: &mgmt, defProg: &rootProg, code990: &code990Exp})
-	w.contrib = mkAcct(t, s, acct{typ: "revenue", name: "Contributions", subs: []int64{w.subUS}, defProg: &rootProg, code990: &code990Rev})
-	w.equity = mkAcct(t, s, acct{typ: "equity", name: "Opening", subs: []int64{w.subUS}})
-	w.dueFrom = mkAcct(t, s, acct{typ: "asset", name: "Due from MX", subs: []int64{w.subUS}, intercompany: true})
-	w.dueTo = mkAcct(t, s, acct{typ: "liability", name: "Due to US", subs: []int64{w.subMX}, intercompany: true})
-	w.checkingMX = mkAcct(t, s, acct{typ: "asset", name: "Checking MX", subs: []int64{w.subMX}})
+	assetsParent := mkAcct(t, s, acct{typ: "asset", name: "Assets", subs: []ids.SubsidiaryID{w.subUS}})
+	w.checkingUS = mkAcct(t, s, acct{typ: "asset", name: "Checking US", subs: []ids.SubsidiaryID{w.subUS}, parent: &assetsParent})
+	w.salaries = mkAcct(t, s, acct{typ: "expense", name: "Salaries", subs: []ids.SubsidiaryID{w.subUS}, fclass: &mgmt, defProg: &rootProg, code990: &code990Exp})
+	w.contrib = mkAcct(t, s, acct{typ: "revenue", name: "Contributions", subs: []ids.SubsidiaryID{w.subUS}, defProg: &rootProg, code990: &code990Rev})
+	w.equity = mkAcct(t, s, acct{typ: "equity", name: "Opening", subs: []ids.SubsidiaryID{w.subUS}})
+	w.dueFrom = mkAcct(t, s, acct{typ: "asset", name: "Due from MX", subs: []ids.SubsidiaryID{w.subUS}, intercompany: true})
+	w.dueTo = mkAcct(t, s, acct{typ: "liability", name: "Due to US", subs: []ids.SubsidiaryID{w.subMX}, intercompany: true})
+	w.checkingMX = mkAcct(t, s, acct{typ: "asset", name: "Checking MX", subs: []ids.SubsidiaryID{w.subMX}})
 
 	// A plain balanced US expense: debit salaries 10000, credit checking 10000.
 	w.txPlain = post(t, s, store.PostTransactionInput{
@@ -130,7 +130,7 @@ func newWorld(t *testing.T) *world {
 
 // --- store-build helpers -----------------------------------------------------
 
-func mkSub(t *testing.T, s *store.Store, name string) int64 {
+func mkSub(t *testing.T, s *store.Store, name string) ids.SubsidiaryID {
 	t.Helper()
 	id, err := s.CreateSubsidiary(mutCtx(), store.CreateSubsidiaryInput{ParentID: rootSub, Name: name, BaseCurrency: "USD"})
 	if err != nil {
@@ -149,7 +149,7 @@ func mkProg(t *testing.T, s *store.Store, name string) ids.ProgramID {
 }
 
 // mkFundScoped creates a fund optionally scoped to a program subtree (progScope).
-func mkFundScoped(t *testing.T, s *store.Store, name string, subs []int64, progScope *ids.ProgramID) ids.FundID {
+func mkFundScoped(t *testing.T, s *store.Store, name string, subs []ids.SubsidiaryID, progScope *ids.ProgramID) ids.FundID {
 	t.Helper()
 	id, err := s.CreateFund(mutCtx(), store.CreateFundInput{
 		Name: name, Restriction: "purpose", Subsidiaries: subs, ProgramID: progScope,
@@ -163,7 +163,7 @@ func mkFundScoped(t *testing.T, s *store.Store, name string, subs []int64, progS
 type acct struct {
 	typ          string
 	name         string
-	subs         []int64
+	subs         []ids.SubsidiaryID
 	parent       *int64
 	fclass       *string
 	defProg      *ids.ProgramID
@@ -565,14 +565,14 @@ func TestZ12ParentMissingChildSub(t *testing.T) {
 	// then raw-delete the parent's membership for the child's sub.
 	s := w.s
 	parent, err := s.CreateAccount(mutCtx(), store.CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Assets"}, Subsidiaries: []int64{w.subUS},
+		Type: "asset", DefaultCurrency: "USD", Names: map[string]string{"en": "Assets"}, Subsidiaries: []ids.SubsidiaryID{w.subUS},
 	})
 	if err != nil {
 		t.Fatalf("create parent: %v", err)
 	}
 	_, err = s.CreateAccount(mutCtx(), store.CreateAccountInput{
 		ParentID: &parent, Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Child"}, Subsidiaries: []int64{w.subUS},
+		Names: map[string]string{"en": "Child"}, Subsidiaries: []ids.SubsidiaryID{w.subUS},
 	})
 	if err != nil {
 		t.Fatalf("create child: %v", err)
@@ -686,7 +686,7 @@ func TestZ17IgnoresIncomeStatementIntercompany(t *testing.T) {
 	code990Exp := "IX.16"
 	// An intercompany EXPENSE account (defaults let the split omit class/program).
 	xfer := mkAcct(t, w.s, acct{
-		typ: "expense", name: "Transfer To MX", subs: []int64{w.subUS},
+		typ: "expense", name: "Transfer To MX", subs: []ids.SubsidiaryID{w.subUS},
 		fclass: &mgmt, defProg: &rootProg, code990: &code990Exp, intercompany: true,
 	})
 	// One-sided intercompany expense: DR xfer 500 / CR checking 500. Balanced
@@ -750,7 +750,7 @@ func TestZ19UnmappedActiveLeaf(t *testing.T) {
 	// splits and no effective code -- exactly Z19. (Kept OUT of newWorld so the
 	// clean-world test stays warning-free.)
 	mgmt := "management"
-	unmapped := mkAcct(t, w.s, acct{typ: "expense", name: "Unmapped Exp", subs: []int64{w.subUS}, fclass: &mgmt, defProg: &rootProg})
+	unmapped := mkAcct(t, w.s, acct{typ: "expense", name: "Unmapped Exp", subs: []ids.SubsidiaryID{w.subUS}, fclass: &mgmt, defProg: &rootProg})
 	post(t, w.s, store.PostTransactionInput{
 		Date: "2025-06-10", SubsidiaryID: w.subUS, Currency: "USD",
 		Splits: []store.SplitInput{
@@ -837,7 +837,7 @@ func mkReconData(t *testing.T, w *world) ids.ReconciliationID {
 	t.Helper()
 	acctID, err := w.s.CreateAccount(mutCtx(), store.CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD",
-		Names: map[string]string{"en": "Bank Reconcilable"}, Subsidiaries: []int64{w.subUS},
+		Names: map[string]string{"en": "Bank Reconcilable"}, Subsidiaries: []ids.SubsidiaryID{w.subUS},
 		Reconcilable: true,
 	})
 	if err != nil {

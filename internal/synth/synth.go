@@ -49,8 +49,8 @@ func BuildClock() func() time.Time {
 
 // Seeded roots keep their migration ids.
 const (
-	seedRootSub     int64 = 1 // "Organization" (USD), renamed below
-	seedRootProgram int64 = 1 // "General"
+	seedRootSub     ids.SubsidiaryID = 1 // "Organization" (USD), renamed below
+	seedRootProgram int64            = 1 // "General"
 )
 
 // IDs holds every entity id the builder creates, so callers (the fixture, the demo
@@ -58,9 +58,9 @@ const (
 // keep their migration ids (subsidiary 1, program 1).
 type IDs struct {
 	// Subsidiaries.
-	Root int64 // renamed seed: "Rio Verde Internacional" (USD)
-	US   int64 // "RV Estados Unidos" (USD)
-	MX   int64 // "RV Mexico" (MXN)
+	Root ids.SubsidiaryID // renamed seed: "Rio Verde Internacional" (USD)
+	US   ids.SubsidiaryID // "RV Estados Unidos" (USD)
+	MX   ids.SubsidiaryID // "RV Mexico" (MXN)
 
 	// Programs.
 	General    ids.ProgramID // seeded root
