@@ -470,7 +470,9 @@ func TestSubNavRendersPerSection(t *testing.T) {
 	if !strings.Contains(body, `class="app-subnav"`) || !strings.Contains(body, `class="app-subnav-controls"`) {
 		t.Errorf("/accounts should render a section bar with controls:\n%s", body)
 	}
-	if !strings.Contains(body, `class="subnav-filters"`) {
+	// p29.4: the accounts filter bar now renders through the shared reports .report-params
+	// markup (label-above controls) so the two filter bars read identically.
+	if !strings.Contains(body, `class="report-params accounts-filters"`) {
 		t.Errorf("/accounts section bar missing the filter form")
 	}
 

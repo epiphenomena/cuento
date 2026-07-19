@@ -570,10 +570,23 @@ input[aria-invalid="true"] {
    Type). Muted + small so it reads as secondary annotation, not the account name. */
 .acct-notes { font-size: 0.85em; color: var(--color-muted, inherit); }
 
-/* p28.9: EPHEMERAL chart search box + its filter mechanism. The box sits above the
-   tree; typing narrows the visible rows. */
-.chart-search { display: flex; gap: var(--space-2); align-items: center; margin: var(--space-3) 0; }
-.chart-search-input { min-width: 18rem; }
+/* p28.9/p29.4: EPHEMERAL chart search box + its filter mechanism. The box now lives in
+   the second-level nav toolbar (a SIBLING of the filter form, .accounts-subnav), rendered
+   as a label-above .report-field like the reports/filter controls. Typing narrows the
+   visible rows client-side; it never submits. */
+.accounts-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-1) var(--space-3);
+  width: 100%;
+}
+/* The accounts filter form no longer needs to grow to 100% (it shares the row with the
+   search), so it sizes to its content and the search sits beside it. */
+.accounts-subnav .accounts-filters { width: auto; }
+.chart-search { display: flex; flex-direction: column; }
+.chart-search label { font-weight: 600; font-size: 0.85rem; margin-bottom: 0; }
+.chart-search-input { min-width: 14rem; }
 /* While searching (chartsearch.js adds `searching`), an author `display` rule wins
    over the UA `[hidden]{display:none}` treetable uses -- so search visibility governs
    without the two mechanisms fighting over `tr.hidden`. Rows not marked
@@ -648,6 +661,15 @@ input[aria-invalid="true"] {
    pairs otherwise. */
 .report-params .report-field { display: flex; flex-direction: column; }
 .report-params label { font-weight: 600; margin-bottom: var(--space-1); }
+/* p29.4: a boolean filter (the accounts active-only checkbox) renders its checkbox
+   inline with its own label — the label wraps the input, so it is NOT a stacked
+   label-above-control field. Keep it a compact inline unit, aligned with its neighbours. */
+.report-params .check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: 400;
+}
 .report-params .report-run { align-self: end; }
 
 /* p26.76/p26.86: EVERY report's filter form renders in the second-level nav bar (the

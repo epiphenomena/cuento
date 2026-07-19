@@ -15,44 +15,78 @@
   (rule 9); no inline script (rule 12).
 */ -}}
 
-{{/* accounts-controls: the section-bar controls (p23.10). Dot is the accountsPageModel. */ -}}
+{{/* accounts-controls: the section-bar controls (p23.10). Dot is the accountsPageModel.
+
+     p29.4: the filter bar now mirrors the reports filter bar — it renders through
+     .report-params / .report-field (each label sits ABOVE its control as a column) and
+     the subsidiary select uses the wider .report-scope-select cap (18rem, p28.29), so the
+     two toolbars read identically. It KEEPS the accounts-specific htmx wiring (swap
+     #accounts-results, hx-sync, the no-JS submit + updating cue) — it does NOT inherit the
+     reports form's hx-push-url. */ -}}
 {{define "accounts-controls" -}}
 {{- with .}}
+{{/* p29.4: wrap the filter form + the ephemeral search in one flex row so both sit in the
+     one toolbar. The search is a SIBLING of the form (never a descendant), so it can never
+     serialize into or trigger the auto-submitting GET — the guarantee of its ephemerality
+     (see below). */ -}}
+<div class="accounts-subnav">
 {{/* p26.90: hx-sync="this:replace" ABORTS any in-flight filter GET when a new change
      fires (sub/type/active can change in quick succession), so the LATEST response always
      wins — no out-of-order swap. */ -}}
-<form class="subnav-filters" method="get" action="/accounts"
+<form class="report-params accounts-filters" method="get" action="/accounts"
       hx-get="/accounts" hx-trigger="change" hx-target="#accounts-results" hx-swap="outerHTML"
       hx-sync="this:replace">
-  <label for="sub-filter">{{t "accounts.filter.subsidiary"}}</label>
-  <select id="sub-filter" name="sub">
-    <option value="0">{{t "accounts.filter.all_subsidiaries"}}</option>
-    {{range .Subs}}<option value="{{.ID}}"{{if eq .ID $.SubFilter}} selected{{end}}>{{.Name}}</option>
-    {{end}}
-  </select>
-  {{/* p26.75: account-type filter -- show only one type's group. Rides the SAME filter
-       form (so it submits alongside `sub`, the deliberate-submit discriminator) and is
-       persisted like the sub/active filters. The option labels reuse the plural
-       account.section.* section labels, matching the injected chart headers. */}}
-  <label for="type-filter">{{t "accounts.filter.type"}}</label>
-  <select id="type-filter" name="type">
-    <option value="">{{t "accounts.filter.all_types"}}</option>
-    <option value="asset"{{if eq "asset" .TypeFilter}} selected{{end}}>{{t "account.section.asset"}}</option>
-    <option value="liability"{{if eq "liability" .TypeFilter}} selected{{end}}>{{t "account.section.liability"}}</option>
-    <option value="equity"{{if eq "equity" .TypeFilter}} selected{{end}}>{{t "account.section.equity"}}</option>
-    <option value="revenue"{{if eq "revenue" .TypeFilter}} selected{{end}}>{{t "account.section.revenue"}}</option>
-    <option value="expense"{{if eq "expense" .TypeFilter}} selected{{end}}>{{t "account.section.expense"}}</option>
-  </select>
-  <label class="check">
-    <input type="checkbox" name="active" value="1"{{if .ActiveOnly}} checked{{end}}>
-    {{t "accounts.filter.active_only"}}
-  </label>
+  <fieldset class="report-scope">
+    <div class="report-field">
+      <label for="sub-filter">{{t "accounts.filter.subsidiary"}}</label>
+      <select id="sub-filter" name="sub" class="report-scope-select">
+        <option value="0">{{t "accounts.filter.all_subsidiaries"}}</option>
+        {{range .Subs}}<option value="{{.ID}}"{{if eq .ID $.SubFilter}} selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </div>
+    {{/* p26.75: account-type filter -- show only one type's group. Rides the SAME filter
+         form (so it submits alongside `sub`, the deliberate-submit discriminator) and is
+         persisted like the sub/active filters. The option labels reuse the plural
+         account.section.* section labels, matching the injected chart headers. */}}
+    <div class="report-field">
+      <label for="type-filter">{{t "accounts.filter.type"}}</label>
+      <select id="type-filter" name="type">
+        <option value="">{{t "accounts.filter.all_types"}}</option>
+        <option value="asset"{{if eq "asset" .TypeFilter}} selected{{end}}>{{t "account.section.asset"}}</option>
+        <option value="liability"{{if eq "liability" .TypeFilter}} selected{{end}}>{{t "account.section.liability"}}</option>
+        <option value="equity"{{if eq "equity" .TypeFilter}} selected{{end}}>{{t "account.section.equity"}}</option>
+        <option value="revenue"{{if eq "revenue" .TypeFilter}} selected{{end}}>{{t "account.section.revenue"}}</option>
+        <option value="expense"{{if eq "expense" .TypeFilter}} selected{{end}}>{{t "account.section.expense"}}</option>
+      </select>
+    </div>
+    <div class="report-field">
+      <label class="check">
+        <input type="checkbox" name="active" value="1"{{if .ActiveOnly}} checked{{end}}>
+        {{t "accounts.filter.active_only"}}
+      </label>
+    </div>
+  </fieldset>
   {{/* No-JS fallback: without htmx the change-trigger can't fire, so keep a submit. */}}
   <noscript><button type="submit" class="btn">{{t "accounts.filter.apply"}}</button></noscript>
   {{/* p28.30: non-disruptive "updating…" cue while a filter GET is in flight (same
        mechanism as the report filters: form gets .htmx-request, this span fades in). */}}
   <span class="htmx-indicator subnav-updating" aria-hidden="true">{{t "common.updating"}}</span>
 </form>
+{{/* p29.4: the EPHEMERAL fuzzy search over the chart rows, moved from the page body into
+     the toolbar so all chart controls live in one bar (like the reports filters). It stays
+     a SIBLING of the filter <form> (never inside it) and has NO `name`, no session key, no
+     route — so it can neither serialize into the auto-submitting GET nor fire that form's
+     change-trigger (a text input's `change` fires on blur), and it resets on every
+     navigation. chartsearch.js filters the rows client-side (id #acct-search unchanged); a
+     filter swap re-applies the current query but never wipes the typed text (it lives
+     outside #accounts-results). With no JS the box is inert and the full tree shows. */ -}}
+<div class="report-field chart-search">
+  <label for="acct-search">{{t "accounts.search.label"}}</label>
+  <input type="text" id="acct-search" class="chart-search-input"
+         placeholder="{{t "accounts.search.placeholder"}}" autocomplete="off">
+</div>
+</div>
 <div class="subnav-actions">
   {{/* p26.7: New opens a dedicated full page (GET /accounts/new) -- a plain link, so
        the form is always on-screen even when the tree is scrolled. Merge stays inline
@@ -152,18 +186,10 @@
        until Merge is opened. */}}
   <div id="account-form" class="account-form-region"></div>
 
-  {{/* p28.9: EPHEMERAL fuzzy search over the chart rows. Lives OUTSIDE
-       #accounts-results (so a filter swap does not wipe the typed text) and is NOT a
-       named field of the persisted filter form, has no session key and no route -- so
-       it resets on every navigation, unlike the sub/active/type filters. chartsearch.js
-       (loaded on the page) filters the rows client-side; with no JS the box is inert
-       and the full tree shows. */}}
-  <div class="chart-search">
-    <label for="acct-search">{{t "accounts.search.label"}}</label>
-    <input type="text" id="acct-search" class="chart-search-input"
-           placeholder="{{t "accounts.search.placeholder"}}" autocomplete="off">
-  </div>
-
+  {{/* p29.4: the EPHEMERAL fuzzy search moved into the second-level nav toolbar (the
+       "accounts-controls" partial), alongside the subsidiary/type/active filters, so all
+       chart controls live in one bar. It stays a SIBLING of the filter form there (never a
+       submitting field) — see the note in "accounts-controls". */}}
   {{template "accounts-results" .}}
   {{/* p26.25: the reusable tree collapse/expand module. Loaded on the PAGE (not the
        swapped #accounts-results partial: a <script> injected via htmx innerHTML does
