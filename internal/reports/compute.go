@@ -24,19 +24,20 @@ import (
 	"sort"
 	"time"
 
+	"cuento/internal/ids"
 	"cuento/internal/money"
 	"cuento/internal/store"
 )
 
-// AccountID / FundID / ProgramID / SubsidiaryID are report-layer id aliases so the
-// Appendix-E signatures read as intended without importing store id types (the
-// store uses bare int64). They are plain aliases: a store int64 flows in and out
-// freely.
+// AccountID / FundID / ProgramID / SubsidiaryID are report-layer aliases for the
+// shared distinct id types in internal/ids, so the Appendix-E signatures read as
+// intended AND carry real compile-time safety. They are aliases (not new defined
+// types): a reports.AccountID IS an ids.AccountID.
 type (
-	AccountID    = int64
-	FundID       = int64
-	ProgramID    = int64
-	SubsidiaryID = int64
+	AccountID    = ids.AccountID
+	FundID       = ids.FundID
+	ProgramID    = ids.ProgramID
+	SubsidiaryID = ids.SubsidiaryID
 )
 
 // Scope is a report scope: a subsidiary consolidated with ALL its descendants
@@ -120,13 +121,14 @@ func RoundHalfEven(x float64) int64 { return int64(math.RoundToEven(x)) }
 // converted to o.To at the on-or-before closing rate and collapsed into a single
 // o.To CurAmt per account (D12).
 func (tk *Toolkit) BalancesAsOf(ctx context.Context, s Scope, d string, o ConvertOpts) (map[AccountID][]CurAmt, error) {
-	rows, err := tk.store.SubtreeBalancesAsOf(ctx, d, s.Sub)
+	rows, err := tk.store.SubtreeBalancesAsOf(ctx, d, int64(s.Sub))
 	if err != nil {
 		return nil, err
 	}
 	native := make(map[AccountID][]CurAmt, len(rows))
 	for _, r := range rows {
-		native[r.AccountID] = append(native[r.AccountID], CurAmt{Currency: r.Currency, Minor: r.Amount})
+		acct := AccountID(r.AccountID)
+		native[acct] = append(native[acct], CurAmt{Currency: r.Currency, Minor: r.Amount})
 	}
 	if o.Mode == RateNone {
 		return native, nil
@@ -180,7 +182,7 @@ func (tk *Toolkit) periodActivityRows(ctx context.Context, from, to string, sub 
 	}
 	sum := make(map[key]int64, len(rows))
 	for _, r := range rows {
-		if !tk.Params.InProgramScope(r.ProgramID) {
+		if !tk.Params.InProgramScope(ProgramID(r.ProgramID)) {
 			continue
 		}
 		sum[key{r.AccountID, r.Currency}] += r.Amount
@@ -201,21 +203,22 @@ func (tk *Toolkit) periodActivityRows(ctx context.Context, from, to string, sub 
 // p27.4: the raw rows come from periodActivityRows, which applies the program-subtree
 // grant filter on the SCOPED path (empty ProgramScope => store.PeriodActivity verbatim).
 func (tk *Toolkit) Activity(ctx context.Context, s Scope, from, to string, o ConvertOpts) (map[AccountID][]CurAmt, error) {
-	excl, err := tk.consolidatedICExclusions(ctx, s.Sub)
+	excl, err := tk.consolidatedICExclusions(ctx, int64(s.Sub))
 	if err != nil {
 		return nil, err
 	}
 	if o.Mode != RateTxnDate {
-		rows, err := tk.periodActivityRows(ctx, from, to, s.Sub)
+		rows, err := tk.periodActivityRows(ctx, from, to, int64(s.Sub))
 		if err != nil {
 			return nil, err
 		}
 		native := make(map[AccountID][]CurAmt, len(rows))
 		for _, r := range rows {
-			if excl[r.AccountID] {
+			acct := AccountID(r.AccountID)
+			if excl[acct] {
 				continue // intra-group R/E, excluded at consolidation (D19)
 			}
-			native[r.AccountID] = append(native[r.AccountID], CurAmt{Currency: r.Currency, Minor: r.Amount})
+			native[acct] = append(native[acct], CurAmt{Currency: r.Currency, Minor: r.Amount})
 		}
 		if o.Mode == RateNone {
 			return native, nil
@@ -239,12 +242,13 @@ func (tk *Toolkit) Activity(ctx context.Context, s Scope, from, to string, o Con
 	unrounded := make(map[AccountID]float64)
 	present := make(map[AccountID]bool)
 	err = tk.ByPeriod(from, to, GranMonth, func(pFrom, pTo string) error {
-		rows, err := tk.periodActivityRows(ctx, pFrom, pTo, s.Sub)
+		rows, err := tk.periodActivityRows(ctx, pFrom, pTo, int64(s.Sub))
 		if err != nil {
 			return err
 		}
 		for _, r := range rows {
-			if excl[r.AccountID] {
+			acct := AccountID(r.AccountID)
+			if excl[acct] {
 				continue // intra-group R/E, excluded at consolidation (D19)
 			}
 			rr, err := tk.RateOn(ctx, r.Currency, o.To, pTo)
@@ -255,8 +259,8 @@ func (tk *Toolkit) Activity(ctx context.Context, s Scope, from, to string, o Con
 			if err != nil {
 				return err
 			}
-			unrounded[r.AccountID] += float64(r.Amount) * rr.Rate * math.Pow(10, float64(exTo-exFrom))
-			present[r.AccountID] = true
+			unrounded[acct] += float64(r.Amount) * rr.Rate * math.Pow(10, float64(exTo-exFrom))
+			present[acct] = true
 		}
 		return nil
 	})
@@ -276,13 +280,14 @@ func (tk *Toolkit) Activity(ctx context.Context, s Scope, from, to string, o Con
 // converts each fund's currencies to o.To at the as-of rate and collapses to one
 // o.To CurAmt.
 func (tk *Toolkit) FundBalancesAsOf(ctx context.Context, s Scope, d string, o ConvertOpts) (map[FundID][]CurAmt, error) {
-	rows, err := tk.store.FundBalancesAsOf(ctx, d, s.Sub)
+	rows, err := tk.store.FundBalancesAsOf(ctx, d, int64(s.Sub))
 	if err != nil {
 		return nil, err
 	}
 	native := make(map[FundID][]CurAmt, len(rows))
 	for _, r := range rows {
-		native[r.FundID] = append(native[r.FundID], CurAmt{Currency: r.Currency, Minor: r.Amount})
+		fund := FundID(r.FundID)
+		native[fund] = append(native[fund], CurAmt{Currency: r.Currency, Minor: r.Amount})
 	}
 	if o.Mode == RateNone {
 		return native, nil
@@ -363,12 +368,12 @@ func (tk *Toolkit) FundPeriodStatement(ctx context.Context, s Scope, f FundID, f
 	}
 	acctType := make(map[AccountID]string, len(tree))
 	for _, r := range tree {
-		acctType[r.ID] = r.Type
+		acctType[AccountID(r.ID)] = r.Type
 	}
 
 	// All the fund's splits up to To, ordered (date, split_id), with IsAsset and the
 	// per-currency asset-side running balance already computed by the store.
-	rows, err := tk.store.FundLedger(ctx, f, to)
+	rows, err := tk.store.FundLedger(ctx, int64(f), to)
 	if err != nil {
 		return FundStatement{}, err
 	}
@@ -387,7 +392,7 @@ func (tk *Toolkit) FundPeriodStatement(ctx context.Context, s Scope, f FundID, f
 	// Opening (and thus Closing) for any window that starts after the capitalization.
 	revenueTxn := make(map[int64]bool) // txn id -> has a revenue split for this fund
 	for _, r := range rows {
-		if acctType[r.AccountID] == "revenue" {
+		if acctType[AccountID(r.AccountID)] == "revenue" {
 			revenueTxn[r.TxnID] = true
 		}
 	}
@@ -396,11 +401,11 @@ func (tk *Toolkit) FundPeriodStatement(ctx context.Context, s Scope, f FundID, f
 		if r.Date > to {
 			continue // defensive; FundLedger already bounds rows at <= to
 		}
-		if acctType[r.AccountID] == "asset" && r.Amount > 0 && !revenueTxn[r.TxnID] {
+		if acctType[AccountID(r.AccountID)] == "asset" && r.Amount > 0 && !revenueTxn[r.TxnID] {
 			// A positive (debit) asset movement on a disbursement txn = capitalizing
 			// cash into a held asset (the Building purchase). That target account is a
 			// capital account for this fund.
-			capital[r.AccountID] = true
+			capital[AccountID(r.AccountID)] = true
 		}
 	}
 
@@ -418,9 +423,10 @@ func (tk *Toolkit) FundPeriodStatement(ctx context.Context, s Scope, f FundID, f
 	// PASS 2: fold every split. Opening (< from) accumulates only the SPENDABLE (cash)
 	// asset movements. In-period splits fold into the flow buckets by account type.
 	for _, r := range rows {
+		acct := AccountID(r.AccountID)
 		ccy := r.Currency
 		seen[ccy] = true
-		spendableAsset := acctType[r.AccountID] == "asset" && !capital[r.AccountID]
+		spendableAsset := acctType[acct] == "asset" && !capital[acct]
 
 		if r.Date < from {
 			if spendableAsset {
@@ -429,13 +435,13 @@ func (tk *Toolkit) FundPeriodStatement(ctx context.Context, s Scope, f FundID, f
 			continue
 		}
 		// In period.
-		switch acctType[r.AccountID] {
+		switch acctType[acct] {
 		case "revenue":
 			st.Received[ccy] += -r.Amount // credit → positive inflow
 		case "expense":
 			st.AppliedExpense[ccy] += r.Amount
 		case "asset":
-			if capital[r.AccountID] {
+			if capital[acct] {
 				if r.Amount > 0 {
 					st.AppliedNonExpense[ccy] += r.Amount
 					st.Capitalized[ccy] += r.Amount
@@ -512,7 +518,7 @@ func (tk *Toolkit) functionalActivityRows(ctx context.Context, from, to string, 
 	}
 	sum := make(map[key]int64, len(rows))
 	for _, r := range rows {
-		if !tk.Params.InProgramScope(r.ProgramID) {
+		if !tk.Params.InProgramScope(ProgramID(r.ProgramID)) {
 			continue
 		}
 		sum[key{r.AccountID, r.FunctionalClass, r.Currency}] += r.Amount
@@ -527,7 +533,7 @@ func (tk *Toolkit) functionalActivityRows(ctx context.Context, from, to string, 
 }
 
 func (tk *Toolkit) FunctionalMatrix(ctx context.Context, s Scope, from, to string, o ConvertOpts) (map[AccountID]map[Class][]CurAmt, error) {
-	excl, err := tk.consolidatedICExclusions(ctx, s.Sub)
+	excl, err := tk.consolidatedICExclusions(ctx, int64(s.Sub))
 	if err != nil {
 		return nil, err
 	}
@@ -540,12 +546,13 @@ func (tk *Toolkit) FunctionalMatrix(ctx context.Context, s Scope, from, to strin
 		// rate for every split in the month — so each expense flow lands at its own rate.
 		unrounded := make(map[AccountID]map[Class]float64)
 		err := tk.ByPeriod(from, to, GranMonth, func(pFrom, pTo string) error {
-			rows, err := tk.functionalActivityRows(ctx, pFrom, pTo, s.Sub)
+			rows, err := tk.functionalActivityRows(ctx, pFrom, pTo, int64(s.Sub))
 			if err != nil {
 				return err
 			}
 			for _, r := range rows {
-				if excl[r.AccountID] {
+				acct := AccountID(r.AccountID)
+				if excl[acct] {
 					continue // intra-group expense, excluded at consolidation (D19)
 				}
 				rr, err := tk.RateOn(ctx, r.Currency, o.To, pTo)
@@ -557,10 +564,10 @@ func (tk *Toolkit) FunctionalMatrix(ctx context.Context, s Scope, from, to strin
 					return err
 				}
 				cl := Class(r.FunctionalClass)
-				if unrounded[r.AccountID] == nil {
-					unrounded[r.AccountID] = make(map[Class]float64)
+				if unrounded[acct] == nil {
+					unrounded[acct] = make(map[Class]float64)
 				}
-				unrounded[r.AccountID][cl] += float64(r.Amount) * rr.Rate * math.Pow(10, float64(exTo-exFrom))
+				unrounded[acct][cl] += float64(r.Amount) * rr.Rate * math.Pow(10, float64(exTo-exFrom))
 			}
 			return nil
 		})
@@ -577,20 +584,21 @@ func (tk *Toolkit) FunctionalMatrix(ctx context.Context, s Scope, from, to strin
 		return out, nil
 	}
 
-	rows, err := tk.functionalActivityRows(ctx, from, to, s.Sub)
+	rows, err := tk.functionalActivityRows(ctx, from, to, int64(s.Sub))
 	if err != nil {
 		return nil, err
 	}
 	native := make(map[AccountID]map[Class][]CurAmt)
 	for _, r := range rows {
-		if excl[r.AccountID] {
+		acct := AccountID(r.AccountID)
+		if excl[acct] {
 			continue // intra-group expense, excluded at consolidation (D19)
 		}
-		if native[r.AccountID] == nil {
-			native[r.AccountID] = make(map[Class][]CurAmt)
+		if native[acct] == nil {
+			native[acct] = make(map[Class][]CurAmt)
 		}
 		cl := Class(r.FunctionalClass)
-		native[r.AccountID][cl] = append(native[r.AccountID][cl], CurAmt{Currency: r.Currency, Minor: r.Amount})
+		native[acct][cl] = append(native[acct][cl], CurAmt{Currency: r.Currency, Minor: r.Amount})
 	}
 	if o.Mode == RateNone {
 		return native, nil
@@ -615,11 +623,11 @@ func (tk *Toolkit) FunctionalMatrix(ctx context.Context, s Scope, from, to strin
 // activity (so General, the seeded root, carries the whole org's program activity).
 // RateClosing converts each cell to o.To at the as-of (to) rate.
 func (tk *Toolkit) ProgramActivity(ctx context.Context, s Scope, from, to string, o ConvertOpts) (map[ProgramID]map[AccountID][]CurAmt, error) {
-	rows, err := tk.store.ProgramActivity(ctx, from, to, s.Sub)
+	rows, err := tk.store.ProgramActivity(ctx, from, to, int64(s.Sub))
 	if err != nil {
 		return nil, err
 	}
-	excl, err := tk.consolidatedICExclusions(ctx, s.Sub)
+	excl, err := tk.consolidatedICExclusions(ctx, int64(s.Sub))
 	if err != nil {
 		return nil, err
 	}
@@ -631,7 +639,7 @@ func (tk *Toolkit) ProgramActivity(ctx context.Context, s Scope, from, to string
 	parent := make(map[ProgramID]ProgramID, len(tree))
 	for _, n := range tree {
 		if n.ParentID.Valid {
-			parent[n.ID] = n.ParentID.Int64
+			parent[ProgramID(n.ID)] = ProgramID(n.ParentID.Int64)
 		}
 	}
 	// native[program][account] summed per currency, rolled up to ancestors.
@@ -647,18 +655,19 @@ func (tk *Toolkit) ProgramActivity(ctx context.Context, s Scope, from, to string
 		acc[p][a][ccy] += minor
 	}
 	for _, r := range rows {
-		if excl[r.AccountID] {
+		acct := AccountID(r.AccountID)
+		if excl[acct] {
 			continue // intra-group R/E, excluded at consolidation (D19)
 		}
-		if !tk.Params.InProgramScope(r.ProgramID) {
+		if !tk.Params.InProgramScope(ProgramID(r.ProgramID)) {
 			// p27.4: a program-SCOPED report grant filters rows to the granted subtree.
 			// The check is on the RAW split program BEFORE the ancestor rollup, so a
 			// sibling subtree contributes nothing to any (incl. ancestor) cell -- no leak.
 			continue
 		}
 		// Add to the program and every ancestor (tree rollup).
-		for p := r.ProgramID; ; {
-			add(p, r.AccountID, r.Currency, r.Amount)
+		for p := ProgramID(r.ProgramID); ; {
+			add(p, acct, r.Currency, r.Amount)
 			up, ok := parent[p]
 			if !ok {
 				break
@@ -700,7 +709,7 @@ func (tk *Toolkit) Group990(ctx context.Context, part, currency string, leaf map
 	}
 	byCode := make(map[string]int64)
 	for acct, minor := range leaf {
-		byCode[eff[acct]] += minor // absent -> "" (Unmapped)
+		byCode[eff[int64(acct)]] += minor // absent -> "" (Unmapped)
 	}
 	// Order codes by the part's line sort order (form990_lines sort,code). Codes
 	// outside the part still render under their own code (sorted after known lines)
@@ -785,7 +794,15 @@ func (tk *Toolkit) Part990Lines(ctx context.Context, part, accountType string) (
 // store so a report (p15.7) groups its accounts by effective line without importing
 // the store, mirroring how Group990 resolves the same map internally.
 func (tk *Toolkit) EffectiveCodes(ctx context.Context) (map[AccountID]string, error) {
-	return tk.store.Effective990Codes(ctx)
+	raw, err := tk.store.Effective990Codes(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[AccountID]string, len(raw))
+	for id, code := range raw {
+		out[AccountID(id)] = code
+	}
+	return out, nil
 }
 
 // IntercompanyNet computes the residual of the intercompany-flagged accounts (D19)
@@ -800,15 +817,15 @@ func (tk *Toolkit) IntercompanyNet(ctx context.Context, s Scope, d string) ([]Cu
 	}
 	isIC := make(map[AccountID]bool, len(icIDs))
 	for _, id := range icIDs {
-		isIC[id] = true
+		isIC[AccountID(id)] = true
 	}
-	rows, err := tk.store.SubtreeBalancesAsOf(ctx, d, s.Sub)
+	rows, err := tk.store.SubtreeBalancesAsOf(ctx, d, int64(s.Sub))
 	if err != nil {
 		return nil, err
 	}
 	byCcy := make(map[string]int64)
 	for _, r := range rows {
-		if isIC[r.AccountID] {
+		if isIC[AccountID(r.AccountID)] {
 			byCcy[r.Currency] += r.Amount
 		}
 	}
@@ -846,7 +863,7 @@ func (tk *Toolkit) IntercompanyResidualSplit(ctx context.Context, s Scope, d, ta
 	}
 	isIC := make(map[AccountID]bool, len(icIDs))
 	for _, id := range icIDs {
-		isIC[id] = true
+		isIC[AccountID(id)] = true
 	}
 
 	// CLOSING: native residual per currency, each converted at the as-of rate.
@@ -870,7 +887,7 @@ func (tk *Toolkit) IntercompanyResidualSplit(ctx context.Context, s Scope, d, ta
 	// the earliest intercompany-touching transaction date (not the 1900 inception) so a
 	// balanced org with a recent first entry does not decompose a century of empty
 	// months every run; "" (no IC activity) short-circuits to zero historical.
-	from, err := tk.earliestICYear(ctx, s.Sub, isIC, d)
+	from, err := tk.earliestICYear(ctx, int64(s.Sub), isIC, d)
 	if err != nil {
 		return ICResidualSplit{}, err
 	}
@@ -879,12 +896,12 @@ func (tk *Toolkit) IntercompanyResidualSplit(ctx context.Context, s Scope, d, ta
 	}
 	unrounded := make(map[string]float64)
 	err = tk.ByPeriod(from, d, GranMonth, func(pFrom, pTo string) error {
-		rows, err := tk.store.PeriodActivity(ctx, pFrom, pTo, s.Sub)
+		rows, err := tk.store.PeriodActivity(ctx, pFrom, pTo, int64(s.Sub))
 		if err != nil {
 			return err
 		}
 		for _, r := range rows {
-			if !isIC[r.AccountID] {
+			if !isIC[AccountID(r.AccountID)] {
 				continue
 			}
 			rr, err := tk.RateOn(ctx, r.Currency, target, pTo)
@@ -928,7 +945,7 @@ func (tk *Toolkit) earliestICYear(ctx context.Context, scope int64, isIC map[Acc
 			return err
 		}
 		for _, r := range rows {
-			if isIC[r.AccountID] {
+			if isIC[AccountID(r.AccountID)] {
 				y, _, err := yearMonth(pFrom)
 				if err != nil {
 					return err
@@ -1026,11 +1043,13 @@ func (tk *Toolkit) Rollup(ctx context.Context, currency string, leaf map[Account
 	var roots []AccountID
 	isPlaceholder := make(map[AccountID]bool)
 	for _, r := range tree {
-		name[r.ID] = r.Name
+		id := AccountID(r.ID)
+		name[id] = r.Name
 		if r.ParentID.Valid {
-			children[r.ParentID.Int64] = append(children[r.ParentID.Int64], r.ID)
+			pid := AccountID(r.ParentID.Int64)
+			children[pid] = append(children[pid], id)
 		} else {
-			roots = append(roots, r.ID)
+			roots = append(roots, id)
 		}
 	}
 	for p := range children {
@@ -1040,12 +1059,12 @@ func (tk *Toolkit) Rollup(ctx context.Context, currency string, leaf map[Account
 	parentOf := make(map[AccountID]AccountID)
 	for _, r := range tree {
 		if r.ParentID.Valid {
-			parentOf[r.ID] = r.ParentID.Int64
+			parentOf[AccountID(r.ID)] = AccountID(r.ParentID.Int64)
 		}
 	}
 	for _, r := range tree {
 		d := 0
-		for n := r.ID; ; {
+		for n := AccountID(r.ID); ; {
 			p, ok := parentOf[n]
 			if !ok {
 				break
@@ -1053,7 +1072,7 @@ func (tk *Toolkit) Rollup(ctx context.Context, currency string, leaf map[Account
 			d++
 			n = p
 		}
-		depth[r.ID] = d
+		depth[AccountID(r.ID)] = d
 	}
 
 	// subtreeSum[id] = sum of leaf amounts in id's subtree (post-order fold).
@@ -1307,7 +1326,7 @@ func (tk *Toolkit) codeOrder(ctx context.Context) (map[string]int, error) {
 // line and stays. The two legs of a transfer are flagged independently, so both
 // drop; no cross-currency netting is needed (they are simply excluded).
 func (tk *Toolkit) consolidatedICExclusions(ctx context.Context, scope int64) (map[AccountID]bool, error) {
-	consolidated, err := tk.isConsolidated(ctx, scope)
+	consolidated, err := tk.isConsolidated(ctx, SubsidiaryID(scope))
 	if err != nil {
 		return nil, err
 	}
@@ -1335,7 +1354,7 @@ func (tk *Toolkit) reAccounts(ctx context.Context) (map[AccountID]bool, error) {
 	re := make(map[AccountID]bool)
 	for _, r := range tree {
 		if r.Type == "revenue" || r.Type == "expense" {
-			re[r.ID] = true
+			re[AccountID(r.ID)] = true
 		}
 	}
 	return re, nil

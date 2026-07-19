@@ -49,7 +49,7 @@ import (
 // f990GoldenParams: root scope, full fixture span (the fiscal year), USD target, en.
 func f990GoldenParams(f *fixture.Fixture) reports.Params {
 	return reports.Params{
-		Scope:          f.IDs.Root,
+		Scope:          reports.SubsidiaryID(f.IDs.Root),
 		From:           f.Expected.ActivityFrom, // 2025-01-01
 		To:             f.Expected.ActivityTo,   // 2026-06-30 (== Expected.AsOf, Part X year-end)
 		TargetCurrency: "USD",
@@ -285,7 +285,7 @@ func TestForm990PartXCrossCheckP154(t *testing.T) {
 		t.Fatalf("run 990: %v", err)
 	}
 	// p15.4 as-of the SAME year-end date, root scope, USD.
-	bsP := reports.Params{Scope: f.IDs.Root, AsOf: p.To, TargetCurrency: "USD", Lang: "en"}
+	bsP := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), AsOf: p.To, TargetCurrency: "USD", Lang: "en"}
 	bs, err := balanceSheetReport(t).Run(ctx, reports.NewToolkit(f.Store, bsP), bsP)
 	if err != nil {
 		t.Fatalf("run balance sheet: %v", err)
@@ -352,7 +352,7 @@ func TestForm990PartIIICrossCheckP1510(t *testing.T) {
 	}
 	// p15.10 comparative (no program chosen): a column per program (General, Educacion,
 	// Food Pantry). Section total rows carry the per-currency totals per program column.
-	psP := reports.Params{Scope: f.IDs.Root, From: p.From, To: p.To, Lang: "en"}
+	psP := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), From: p.From, To: p.To, Lang: "en"}
 	ps, err := psReport(t).Run(ctx, reports.NewToolkit(f.Store, psP), psP)
 	if err != nil {
 		t.Fatalf("run program statement: %v", err)
@@ -596,7 +596,7 @@ func TestForm990GrantProgramScope(t *testing.T) {
 	}
 
 	p := base
-	p.ProgramScope = []int64{f.IDs.Educacion}
+	p.ProgramScope = []reports.ProgramID{reports.ProgramID(f.IDs.Educacion)}
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run scoped: %v", err)

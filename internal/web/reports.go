@@ -90,7 +90,7 @@ func (s *server) resolveParams(
 		}
 	}
 
-	p := reports.Params{Scope: scope, Lang: langOf(ctx)}
+	p := reports.Params{Scope: reports.SubsidiaryID(scope), Lang: langOf(ctx)}
 	df := dateFormatFor(u)
 	today := s.now()
 
@@ -159,7 +159,7 @@ func (s *server) resolveParams(
 		}
 		if v := first(q, "account"); v != "" {
 			if id := parseID(v); id != 0 && acctExists(accts, id) {
-				p.Account = id
+				p.Account = reports.AccountID(id)
 			}
 		}
 	}
@@ -174,7 +174,7 @@ func (s *server) resolveParams(
 		}
 		if v := first(q, "fund"); v != "" {
 			if id := parseID(v); id != 0 && fundExists(funds, id) {
-				p.Fund = id
+				p.Fund = reports.FundID(id)
 			}
 		}
 	}
@@ -188,7 +188,7 @@ func (s *server) resolveParams(
 		}
 		if v := first(q, "program"); v != "" {
 			if id := parseID(v); id != 0 && programExists(progs, id) {
-				p.Program = id
+				p.Program = reports.ProgramID(id)
 			}
 		}
 	}
@@ -257,8 +257,11 @@ func (s *server) resolveParams(
 			return reports.Params{}, paramsForm{}, err
 		}
 		if len(scopeIDs) > 0 {
-			p.ProgramScope = scopeIDs
-			if p.Program != 0 && !containsID(scopeIDs, p.Program) {
+			p.ProgramScope = make([]reports.ProgramID, len(scopeIDs))
+			for i, id := range scopeIDs {
+				p.ProgramScope[i] = reports.ProgramID(id)
+			}
+			if p.Program != 0 && !containsID(scopeIDs, int64(p.Program)) {
 				p.Program = 0 // an out-of-scope selection falls back to the scoped comparative view
 			}
 		}
@@ -646,15 +649,15 @@ func (s *server) buildParamsForm(
 		Granularity:     p.Granularity.String(),
 		Currency:        p.TargetCurrency,
 		Detail:          p.Detail,
-		Account:         p.Account,
-		Fund:            p.Fund,
-		Program:         p.Program,
+		Account:         int64(p.Account),
+		Fund:            int64(p.Fund),
+		Program:         int64(p.Program),
 		Recon:           p.Reconciliation,
 		Budget:          p.Budget,
 	}
 	for _, sub := range subs {
 		f.Scopes = append(f.Scopes, scopeOption{
-			ID: sub.ID, Name: sub.Name, Selected: sub.ID == p.Scope,
+			ID: sub.ID, Name: sub.Name, Selected: sub.ID == int64(p.Scope),
 		})
 	}
 	if p.AsOf != "" {

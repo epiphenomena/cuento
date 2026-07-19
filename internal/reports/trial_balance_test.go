@@ -28,7 +28,7 @@ import (
 // deterministic — no clock, no user setting, no locale drift.
 func goldenParams(f *fixture.Fixture) reports.Params {
 	return reports.Params{
-		Scope:          f.IDs.Root,
+		Scope:          reports.SubsidiaryID(f.IDs.Root),
 		AsOf:           f.Expected.AsOf, // 2026-06-30
 		TargetCurrency: "USD",
 		Lang:           "en",
@@ -257,13 +257,13 @@ func TestTrialBalanceScope(t *testing.T) {
 	ctx := context.Background()
 	rep := trialBalanceReport(t)
 
-	rootTable, err := rep.Run(ctx, reports.NewToolkit(f.Store, reports.Params{Scope: f.IDs.Root, AsOf: f.Expected.AsOf, Lang: "en"}),
-		reports.Params{Scope: f.IDs.Root, AsOf: f.Expected.AsOf, Lang: "en"})
+	rootTable, err := rep.Run(ctx, reports.NewToolkit(f.Store, reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), AsOf: f.Expected.AsOf, Lang: "en"}),
+		reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), AsOf: f.Expected.AsOf, Lang: "en"})
 	if err != nil {
 		t.Fatalf("run root: %v", err)
 	}
-	leafTable, err := rep.Run(ctx, reports.NewToolkit(f.Store, reports.Params{Scope: f.IDs.MX, AsOf: f.Expected.AsOf, Lang: "en"}),
-		reports.Params{Scope: f.IDs.MX, AsOf: f.Expected.AsOf, Lang: "en"})
+	leafTable, err := rep.Run(ctx, reports.NewToolkit(f.Store, reports.Params{Scope: reports.SubsidiaryID(f.IDs.MX), AsOf: f.Expected.AsOf, Lang: "en"}),
+		reports.Params{Scope: reports.SubsidiaryID(f.IDs.MX), AsOf: f.Expected.AsOf, Lang: "en"})
 	if err != nil {
 		t.Fatalf("run leaf: %v", err)
 	}

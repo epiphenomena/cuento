@@ -57,7 +57,7 @@ func TestRegisterAndGet(t *testing.T) {
 
 	all := reg.All()
 	if len(all) != 2 || all[0].ID != "alpha" || all[1].ID != "beta" {
-		t.Errorf("All() = %v, want [alpha beta] in registration order", ids(all))
+		t.Errorf("All() = %v, want [alpha beta] in registration order", reportIDs(all))
 	}
 }
 
@@ -129,7 +129,7 @@ func TestProgramDimensionedSet(t *testing.T) {
 	}
 }
 
-func ids(rs []Report) []string {
+func reportIDs(rs []Report) []string {
 	out := make([]string, len(rs))
 	for i, r := range rs {
 		out[i] = r.ID

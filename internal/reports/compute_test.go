@@ -30,7 +30,7 @@ func find(amts []reports.CurAmt, ccy string) (int64, bool) {
 // tkFor builds a toolkit over the fixture scoped to the given subsidiary, target
 // currency USD (the fixture's report base).
 func tkFor(f *fixture.Fixture, scope int64) *reports.Toolkit {
-	return reports.NewToolkit(f.Store, reports.Params{Scope: scope, TargetCurrency: "USD"})
+	return reports.NewToolkit(f.Store, reports.Params{Scope: reports.SubsidiaryID(scope), TargetCurrency: "USD"})
 }
 
 // TestBalancesAsOfRootVsLeafScope: consolidation = the scope's descendant closure
@@ -44,19 +44,19 @@ func TestBalancesAsOfRootVsLeafScope(t *testing.T) {
 	ctx := context.Background()
 	none := reports.ConvertOpts{Mode: reports.RateNone}
 
-	root, err := tkFor(f, f.IDs.Root).BalancesAsOf(ctx, reports.Scope{Sub: f.IDs.Root}, f.Expected.AsOf, none)
+	root, err := tkFor(f, f.IDs.Root).BalancesAsOf(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, f.Expected.AsOf, none)
 	if err != nil {
 		t.Fatalf("BalancesAsOf root: %v", err)
 	}
 	// Every ROOT oracle balance must be reproduced exactly.
 	for _, ab := range f.Expected.AccountBalances {
-		got, ok := find(root[ab.Account], ab.Currency)
+		got, ok := find(root[reports.AccountID(ab.Account)], ab.Currency)
 		if !ok || got != ab.Amount {
 			t.Errorf("root balance acct %d %s = %d/%v, want %d", ab.Account, ab.Currency, got, ok, ab.Amount)
 		}
 	}
 
-	leaf, err := tkFor(f, f.IDs.MX).BalancesAsOf(ctx, reports.Scope{Sub: f.IDs.MX}, f.Expected.AsOf, none)
+	leaf, err := tkFor(f, f.IDs.MX).BalancesAsOf(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.MX)}, f.Expected.AsOf, none)
 	if err != nil {
 		t.Fatalf("BalancesAsOf leaf: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestBalancesAsOfRootVsLeafScope(t *testing.T) {
 		f.IDs.DueToIntl:  {"USD", -1_000_000},
 	}
 	for acct, want := range mxOnly {
-		got, ok := find(leaf[acct], want.ccy)
+		got, ok := find(leaf[reports.AccountID(acct)], want.ccy)
 		if !ok || got != want.amount {
 			t.Errorf("leaf(MX) balance acct %d %s = %d/%v, want %d", acct, want.ccy, got, ok, want.amount)
 		}
@@ -78,7 +78,7 @@ func TestBalancesAsOfRootVsLeafScope(t *testing.T) {
 	// US-only accounts must be ABSENT from the MX-leaf scope (descendant closure of
 	// MX does not include US).
 	for _, usOnly := range []int64{f.IDs.CheckingUS, f.IDs.Building, f.IDs.DueFromMX, f.IDs.CreditCard} {
-		if _, ok := leaf[usOnly]; ok {
+		if _, ok := leaf[reports.AccountID(usOnly)]; ok {
 			t.Errorf("leaf(MX) unexpectedly contains US-only account %d", usOnly)
 		}
 	}
@@ -97,7 +97,7 @@ func TestFundBalancesClosingConversion(t *testing.T) {
 	f.ExtendRates(t)
 	ctx := context.Background()
 
-	fb, err := tkFor(f, f.IDs.Root).FundBalancesAsOf(ctx, reports.Scope{Sub: f.IDs.Root}, f.Expected.AsOf,
+	fb, err := tkFor(f, f.IDs.Root).FundBalancesAsOf(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, f.Expected.AsOf,
 		reports.ConvertOpts{To: "USD", Mode: reports.RateClosing})
 	if err != nil {
 		t.Fatalf("FundBalancesAsOf closing: %v", err)
@@ -110,7 +110,7 @@ func TestFundBalancesClosingConversion(t *testing.T) {
 		0:                  1_709_392 + 18_517_500, // unrestricted MXN->USD + USD leg
 	}
 	for fund, wantUSD := range want {
-		got, ok := find(fb[fund], "USD")
+		got, ok := find(fb[reports.FundID(fund)], "USD")
 		if !ok || got != wantUSD {
 			t.Errorf("fund %d converted USD = %d/%v, want %d", fund, got, ok, wantUSD)
 		}
@@ -144,13 +144,13 @@ func TestActivityTxnDate(t *testing.T) {
 	f.ExtendRates(t)
 	ctx := context.Background()
 
-	act, err := tkFor(f, f.IDs.Root).Activity(ctx, reports.Scope{Sub: f.IDs.Root},
+	act, err := tkFor(f, f.IDs.Root).Activity(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)},
 		f.Expected.ActivityFrom, f.Expected.ActivityTo,
 		reports.ConvertOpts{To: "USD", Mode: reports.RateTxnDate})
 	if err != nil {
 		t.Fatalf("Activity txndate: %v", err)
 	}
-	got, ok := find(act[f.IDs.FoodPurchases], "USD")
+	got, ok := find(act[reports.AccountID(f.IDs.FoodPurchases)], "USD")
 	if !ok || got != 20_617 {
 		t.Errorf("FoodPurchases TxnDate USD = %d/%v, want 20617", got, ok)
 	}
@@ -162,18 +162,18 @@ func TestActivityTxnDate(t *testing.T) {
 	// 2025-08, -150,000 @ 2026-03, at rates 17.00/17.1294../17.1941../17.6529../
 	// 17.9059.. . Per-month-rounded sums to 38,971; accumulate-then-round-once =
 	// 38,970.28.. -> 38,970. The toolkit MUST yield 38,970.
-	if m, ok := find(act[f.IDs.CashMXN], "USD"); !ok || m != 38_970 {
+	if m, ok := find(act[reports.AccountID(f.IDs.CashMXN)], "USD"); !ok || m != 38_970 {
 		t.Errorf("CashMXN TxnDate USD = %d/%v, want 38970 (accumulate-then-round-once, not 38971)", m, ok)
 	}
 
 	// Native (Mode: None) must equal the raw MXN activity oracle (360,000): TxnDate
 	// only changes the converted figure, not the underlying tally.
-	nat, err := tkFor(f, f.IDs.Root).Activity(ctx, reports.Scope{Sub: f.IDs.Root},
+	nat, err := tkFor(f, f.IDs.Root).Activity(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)},
 		f.Expected.ActivityFrom, f.Expected.ActivityTo, reports.ConvertOpts{Mode: reports.RateNone})
 	if err != nil {
 		t.Fatalf("Activity native: %v", err)
 	}
-	if m, _ := find(nat[f.IDs.FoodPurchases], "MXN"); m != 360_000 {
+	if m, _ := find(nat[reports.AccountID(f.IDs.FoodPurchases)], "MXN"); m != 360_000 {
 		t.Errorf("FoodPurchases native MXN activity = %d, want 360000", m)
 	}
 }
@@ -188,7 +188,7 @@ func TestNetIncomeClosing(t *testing.T) {
 	f.ExtendRates(t)
 	ctx := context.Background()
 
-	ni, err := tkFor(f, f.IDs.Root).NetIncome(ctx, reports.Scope{Sub: f.IDs.Root},
+	ni, err := tkFor(f, f.IDs.Root).NetIncome(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)},
 		f.Expected.ActivityFrom, f.Expected.ActivityTo,
 		reports.ConvertOpts{To: "USD", Mode: reports.RateClosing})
 	if err != nil {
@@ -205,7 +205,7 @@ func TestNetIncomeClosing(t *testing.T) {
 func TestFundBalancesUnrestrictedLine(t *testing.T) {
 	f := fixture.New(t)
 	ctx := context.Background()
-	fb, err := tkFor(f, f.IDs.Root).FundBalancesAsOf(ctx, reports.Scope{Sub: f.IDs.Root}, f.Expected.AsOf,
+	fb, err := tkFor(f, f.IDs.Root).FundBalancesAsOf(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, f.Expected.AsOf,
 		reports.ConvertOpts{Mode: reports.RateNone})
 	if err != nil {
 		t.Fatalf("FundBalancesAsOf native: %v", err)
@@ -223,19 +223,19 @@ func TestFundBalancesUnrestrictedLine(t *testing.T) {
 func TestFunctionalMatrix(t *testing.T) {
 	f := fixture.New(t)
 	ctx := context.Background()
-	m, err := tkFor(f, f.IDs.Root).FunctionalMatrix(ctx, reports.Scope{Sub: f.IDs.Root},
+	m, err := tkFor(f, f.IDs.Root).FunctionalMatrix(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)},
 		f.Expected.ActivityFrom, f.Expected.ActivityTo, reports.ConvertOpts{Mode: reports.RateNone})
 	if err != nil {
 		t.Fatalf("FunctionalMatrix: %v", err)
 	}
 	for _, fc := range f.Expected.Functional {
-		got, ok := find(m[fc.Account][reports.Class(fc.Class)], fc.Currency)
+		got, ok := find(m[reports.AccountID(fc.Account)][reports.Class(fc.Class)], fc.Currency)
 		if !ok || got != fc.Amount {
 			t.Errorf("matrix[%d][%s] %s = %d/%v, want %d", fc.Account, fc.Class, fc.Currency, got, ok, fc.Amount)
 		}
 	}
 	// Occupancy sits under 'management', never 'program' — cross-class isolation.
-	if _, ok := m[f.IDs.Occupancy][reports.Class("program")]; ok {
+	if _, ok := m[reports.AccountID(f.IDs.Occupancy)][reports.Class("program")]; ok {
 		t.Errorf("Occupancy leaked into program class")
 	}
 }
@@ -249,7 +249,7 @@ func TestFunctionalMatrix(t *testing.T) {
 func TestProgramActivity(t *testing.T) {
 	f := fixture.New(t)
 	ctx := context.Background()
-	pa, err := tkFor(f, f.IDs.Root).ProgramActivity(ctx, reports.Scope{Sub: f.IDs.Root},
+	pa, err := tkFor(f, f.IDs.Root).ProgramActivity(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)},
 		f.Expected.ActivityFrom, f.Expected.ActivityTo, reports.ConvertOpts{Mode: reports.RateNone})
 	if err != nil {
 		t.Fatalf("ProgramActivity: %v", err)
@@ -259,7 +259,7 @@ func TestProgramActivity(t *testing.T) {
 		if pc.Program != f.IDs.Educacion && pc.Program != f.IDs.FoodPantry {
 			continue
 		}
-		got, ok := find(pa[pc.Program][pc.Account], pc.Currency)
+		got, ok := find(pa[reports.ProgramID(pc.Program)][reports.AccountID(pc.Account)], pc.Currency)
 		if !ok || got != pc.Amount {
 			t.Errorf("leaf program[%d][%d] %s = %d/%v, want %d", pc.Program, pc.Account, pc.Currency, got, ok, pc.Amount)
 		}
@@ -278,7 +278,7 @@ func TestProgramActivity(t *testing.T) {
 		{f.IDs.Salaries, "USD", 1_650_000},
 	}
 	for _, g := range generalRolled {
-		got, ok := find(pa[f.IDs.General][g.acct], g.ccy)
+		got, ok := find(pa[reports.ProgramID(f.IDs.General)][reports.AccountID(g.acct)], g.ccy)
 		if !ok || got != g.want {
 			t.Errorf("General rolled[%d] %s = %d/%v, want %d", g.acct, g.ccy, got, ok, g.want)
 		}
@@ -362,7 +362,7 @@ func TestGroup990Unmapped(t *testing.T) {
 func TestIntercompanyNetBalanced(t *testing.T) {
 	f := fixture.New(t)
 	ctx := context.Background()
-	net, err := tkFor(f, f.IDs.Root).IntercompanyNet(ctx, reports.Scope{Sub: f.IDs.Root}, f.Expected.AsOf)
+	net, err := tkFor(f, f.IDs.Root).IntercompanyNet(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, f.Expected.AsOf)
 	if err != nil {
 		t.Fatalf("IntercompanyNet balanced: %v", err)
 	}
@@ -401,7 +401,7 @@ func TestIntercompanyNetCorrupted(t *testing.T) {
 		t.Fatalf("post corrupting txn: %v", err)
 	}
 
-	net, err := tkFor(f, f.IDs.Root).IntercompanyNet(ctx, reports.Scope{Sub: f.IDs.Root}, f.Expected.AsOf)
+	net, err := tkFor(f, f.IDs.Root).IntercompanyNet(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, f.Expected.AsOf)
 	if err != nil {
 		t.Fatalf("IntercompanyNet corrupted: %v", err)
 	}
@@ -426,13 +426,13 @@ func TestFundPeriodStatementPreWindowCapitalExcluded(t *testing.T) {
 	ctx := context.Background()
 
 	st, err := reports.NewToolkit(f.Store, reports.Params{}).
-		FundPeriodStatement(ctx, reports.Scope{Sub: f.IDs.Root}, f.IDs.BuildingFund, "2025-07-01", "2025-12-31")
+		FundPeriodStatement(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, reports.FundID(f.IDs.BuildingFund), "2025-07-01", "2025-12-31")
 	if err != nil {
 		t.Fatalf("fund statement: %v", err)
 	}
 	// Building was capitalized BEFORE the window; it must be a capital account even
 	// though no in-window row touches it.
-	if !st.CapitalAccounts[f.IDs.Building] {
+	if !st.CapitalAccounts[reports.AccountID(f.IDs.Building)] {
 		t.Errorf("Building not classified as capital (pre-window capitalization missed)")
 	}
 	// Spendable Opening excludes the 40,000 pre-window Building debit: only the
@@ -472,7 +472,7 @@ func TestIntercompanyResidualSplitSameCurrency(t *testing.T) {
 		t.Fatalf("post: %v", err)
 	}
 
-	split, err := tkFor(f, f.IDs.Root).IntercompanyResidualSplit(ctx, reports.Scope{Sub: f.IDs.Root}, f.Expected.AsOf, "USD")
+	split, err := tkFor(f, f.IDs.Root).IntercompanyResidualSplit(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, f.Expected.AsOf, "USD")
 	if err != nil {
 		t.Fatalf("IntercompanyResidualSplit: %v", err)
 	}
@@ -514,7 +514,7 @@ func TestIntercompanyResidualSplitTranslation(t *testing.T) {
 	}
 
 	tk := tkFor(f, f.IDs.Root)
-	split, err := tk.IntercompanyResidualSplit(ctx, reports.Scope{Sub: f.IDs.Root}, f.Expected.AsOf, "USD")
+	split, err := tk.IntercompanyResidualSplit(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, f.Expected.AsOf, "USD")
 	if err != nil {
 		t.Fatalf("IntercompanyResidualSplit: %v", err)
 	}
@@ -554,25 +554,25 @@ func TestActivityExcludesIntercompanyConsolidated(t *testing.T) {
 	from, to := f.Expected.ActivityFrom, f.Expected.ActivityTo
 
 	// Consolidated root scope: the flagged account is excluded.
-	rootAct, err := tkFor(f, f.IDs.Root).Activity(ctx, reports.Scope{Sub: f.IDs.Root}, from, to, reports.ConvertOpts{Mode: reports.RateNone})
+	rootAct, err := tkFor(f, f.IDs.Root).Activity(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, from, to, reports.ConvertOpts{Mode: reports.RateNone})
 	if err != nil {
 		t.Fatalf("root Activity: %v", err)
 	}
-	if _, ok := rootAct[f.IDs.Salaries]; ok {
+	if _, ok := rootAct[reports.AccountID(f.IDs.Salaries)]; ok {
 		t.Error("intercompany account NOT excluded at consolidated root scope")
 	}
 
 	// Leaf scopes: the account is kept where it has activity (not consolidated).
-	usAct, err := tkFor(f, f.IDs.US).Activity(ctx, reports.Scope{Sub: f.IDs.US}, from, to, reports.ConvertOpts{Mode: reports.RateNone})
+	usAct, err := tkFor(f, f.IDs.US).Activity(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.US)}, from, to, reports.ConvertOpts{Mode: reports.RateNone})
 	if err != nil {
 		t.Fatalf("US Activity: %v", err)
 	}
-	mxAct, err := tkFor(f, f.IDs.MX).Activity(ctx, reports.Scope{Sub: f.IDs.MX}, from, to, reports.ConvertOpts{Mode: reports.RateNone})
+	mxAct, err := tkFor(f, f.IDs.MX).Activity(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.MX)}, from, to, reports.ConvertOpts{Mode: reports.RateNone})
 	if err != nil {
 		t.Fatalf("MX Activity: %v", err)
 	}
-	_, inUS := usAct[f.IDs.Salaries]
-	_, inMX := mxAct[f.IDs.Salaries]
+	_, inUS := usAct[reports.AccountID(f.IDs.Salaries)]
+	_, inMX := mxAct[reports.AccountID(f.IDs.Salaries)]
 	if !inUS && !inMX {
 		t.Error("intercompany account excluded at a LEAF scope (should only drop when consolidated)")
 	}

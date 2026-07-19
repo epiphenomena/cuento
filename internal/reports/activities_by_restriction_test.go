@@ -68,7 +68,7 @@ func abrReport(t *testing.T) reports.Report {
 // abrParams runs the statement over the whole fixture span, root scope, lang en.
 func abrParams(f *fixture.Fixture) reports.Params {
 	return reports.Params{
-		Scope: f.IDs.Root,
+		Scope: reports.SubsidiaryID(f.IDs.Root),
 		From:  f.Expected.ActivityFrom, // 2025-01-01
 		To:    f.Expected.AsOf,         // 2026-06-30
 		Lang:  "en",
@@ -184,7 +184,7 @@ func TestActivitiesReleasedMatchesFundStatements(t *testing.T) {
 	// Sum p15.8 restricted-fund applications per currency, independently.
 	wantByCcy := map[string]int64{}
 	for _, fund := range []int64{f.IDs.BecaAgua, f.IDs.BuildingFund} {
-		st, err := tk.FundPeriodStatement(ctx, reports.Scope{Sub: f.IDs.Root}, fund, p.From, p.To)
+		st, err := tk.FundPeriodStatement(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, reports.FundID(fund), p.From, p.To)
 		if err != nil {
 			t.Fatalf("fund period statement (fund %d): %v", fund, err)
 		}

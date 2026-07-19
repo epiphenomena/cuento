@@ -201,10 +201,10 @@ func actualDrill(key BudgetKey, bucketStart, bucketEnd, from, to string) *Drill 
 	if to != "" && to < tt {
 		tt = to
 	}
-	fund := key.Fund
+	fund := int64(key.Fund)
 	prog := int64(key.Program)
 	return &Drill{
-		Scope:      key.Subsidiary,
+		Scope:      int64(key.Subsidiary),
 		AccountIDs: []int64{int64(key.Account)},
 		Currency:   key.Currency,
 		FundID:     &fund,
@@ -369,7 +369,7 @@ func budgetKeyNames(ctx context.Context, tk *Toolkit, lang string) (keyNames, er
 	}
 	acct := make(map[AccountID]string, len(tree))
 	for _, r := range tree {
-		acct[r.ID] = r.Name
+		acct[AccountID(r.ID)] = r.Name
 	}
 	fund, err := fundNames(ctx, st)
 	if err != nil {
@@ -381,16 +381,16 @@ func budgetKeyNames(ctx context.Context, tk *Toolkit, lang string) (keyNames, er
 	}
 	prog := make(map[ProgramID]string, len(progTree))
 	for _, n := range progTree {
-		prog[n.ID] = n.Name
+		prog[ProgramID(n.ID)] = n.Name
 	}
 	return keyNames{account: acct, fund: fund, program: prog}, nil
 }
 
 // fundLabelCell builds the FUND column cell: the fund's stored name for a restricted
 // key, or the localized "Unrestricted" label for fund 0 (D20).
-func fundLabelCell(fund int64, funds map[int64]string) Cell {
+func fundLabelCell(fund FundID, funds map[int64]string) Cell {
 	if fund == 0 {
 		return LabelCell("reports.budget.unrestricted")
 	}
-	return TextCell(funds[fund])
+	return TextCell(funds[int64(fund)])
 }

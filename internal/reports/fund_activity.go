@@ -95,7 +95,7 @@ func fundListTable(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 	// Deterministic order: real funds by id, then the Unrestricted line (fund 0) last.
 	fundIDs := make([]int64, 0, len(bals))
 	for id := range bals {
-		fundIDs = append(fundIDs, id)
+		fundIDs = append(fundIDs, int64(id))
 	}
 	sort.Slice(fundIDs, func(i, j int) bool {
 		// 0 (unrestricted) sorts last; others by id.
@@ -109,7 +109,7 @@ func fundListTable(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 	})
 
 	for _, id := range fundIDs {
-		amts := bals[id]
+		amts := bals[FundID(id)]
 		sort.Slice(amts, func(i, j int) bool { return amts[i].Currency < amts[j].Currency })
 		meta := funds[id]
 		for i, a := range amts {
@@ -137,7 +137,7 @@ func fundListTable(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 			bal := MoneyCell(a.Minor, a.Currency)
 			if fid := fundIDForDrill(id); fid != nil {
 				bal = bal.WithDrill(&Drill{
-					Scope:      p.Scope,
+					Scope:      int64(p.Scope),
 					AccountIDs: assetIDs,
 					Currency:   a.Currency,
 					FundID:     fid,
@@ -193,36 +193,36 @@ func fundStatementTable(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 	// Opening/Closing, drillable.
 	spendableIDs := make([]int64, 0, len(assetIDs))
 	for _, id := range assetIDs {
-		if !st.CapitalAccounts[id] {
+		if !st.CapitalAccounts[AccountID(id)] {
 			spendableIDs = append(spendableIDs, id)
 		}
 	}
 	capitalIDs := make([]int64, 0, len(st.CapitalAccounts))
 	for id := range st.CapitalAccounts {
-		capitalIDs = append(capitalIDs, id)
+		capitalIDs = append(capitalIDs, int64(id))
 	}
 	sort.Slice(capitalIDs, func(i, j int) bool { return capitalIDs[i] < capitalIDs[j] })
 
-	fund := fundIDForDrill(p.Fund)
+	fund := fundIDForDrill(int64(p.Fund))
 	opening := dayBefore(p.From)
 
 	for _, ccy := range st.Currencies {
 		// Opening (spendable, day before From) — drillable to the spendable asset splits.
 		t.Rows = append(t.Rows, statementRow(t, "reports.fund_activity.opening", ccy,
 			st.Opening[ccy], RowSubtotal, &Drill{
-				Scope: p.Scope, AccountIDs: spendableIDs, Currency: ccy, FundID: fund,
+				Scope: int64(p.Scope), AccountIDs: spendableIDs, Currency: ccy, FundID: fund,
 				Mode: DrillAsOf, AsOf: opening,
 			}))
 		// Received — drillable to the revenue splits in the period.
 		t.Rows = append(t.Rows, statementRow(t, "reports.fund_activity.received", ccy,
 			st.Received[ccy], RowData, &Drill{
-				Scope: p.Scope, AccountIDs: revenueAndLiabilityDrill(ctx, tk), Currency: ccy,
+				Scope: int64(p.Scope), AccountIDs: revenueAndLiabilityDrill(ctx, tk), Currency: ccy,
 				FundID: fund, Mode: DrillPeriod, From: p.From, To: p.To,
 			}))
 		// Applied — expense.
 		t.Rows = append(t.Rows, statementRow(t, "reports.fund_activity.applied_expense", ccy,
 			st.AppliedExpense[ccy], RowData, &Drill{
-				Scope: p.Scope, AccountIDs: expenseIDs, Currency: ccy, FundID: fund,
+				Scope: int64(p.Scope), AccountIDs: expenseIDs, Currency: ccy, FundID: fund,
 				Mode: DrillPeriod, From: p.From, To: p.To,
 			}))
 		// Applied — non-expense (the Building purchase, loan principal).
@@ -231,13 +231,13 @@ func fundStatementTable(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 		// Closing (spendable) — Opening + Received − Applied.
 		t.Rows = append(t.Rows, statementRow(t, "reports.fund_activity.closing", ccy,
 			st.Closing[ccy], RowSubtotal, &Drill{
-				Scope: p.Scope, AccountIDs: spendableIDs, Currency: ccy, FundID: fund,
+				Scope: int64(p.Scope), AccountIDs: spendableIDs, Currency: ccy, FundID: fund,
 				Mode: DrillAsOf, AsOf: p.To,
 			}))
 		// Reconciliation: Closing + Capitalized == all-asset FundBalancesAsOf(To).
 		t.Rows = append(t.Rows, statementRow(t, "reports.fund_activity.total_assets", ccy,
 			allByCcy[ccy], RowTotal, &Drill{
-				Scope: p.Scope, AccountIDs: assetIDs, Currency: ccy, FundID: fund,
+				Scope: int64(p.Scope), AccountIDs: assetIDs, Currency: ccy, FundID: fund,
 				Mode: DrillAsOf, AsOf: p.To,
 			}))
 	}
@@ -265,7 +265,7 @@ func nonExpenseDrill(p Params, capitalIDs []int64, ccy string, fund *int64) *Dri
 		return nil
 	}
 	return &Drill{
-		Scope: p.Scope, AccountIDs: capitalIDs, Currency: ccy, FundID: fund,
+		Scope: int64(p.Scope), AccountIDs: capitalIDs, Currency: ccy, FundID: fund,
 		Mode: DrillPeriod, From: p.From, To: p.To,
 	}
 }

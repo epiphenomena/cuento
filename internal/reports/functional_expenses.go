@@ -277,8 +277,8 @@ func (b *feBuilder) cellDrill(acct AccountID, cl Class, native []CurAmt) *Drill 
 	}
 	class := string(cl)
 	return &Drill{
-		Scope:      b.p.Scope,
-		AccountIDs: []int64{acct},
+		Scope:      int64(b.p.Scope),
+		AccountIDs: []int64{int64(acct)},
 		Currency:   native[0].Currency,
 		Class:      &class,
 		Mode:       DrillPeriod,
@@ -329,7 +329,7 @@ func accountNameMap(ctx context.Context, tk *Toolkit, lang string) (map[AccountI
 	}
 	m := make(map[AccountID]string, len(tree))
 	for _, r := range tree {
-		m[r.ID] = r.Name
+		m[AccountID(r.ID)] = r.Name
 	}
 	return m, nil
 }

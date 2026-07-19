@@ -51,7 +51,7 @@ import (
 // isGoldenParams: root scope, full fixture span, quarterly columns, USD target, lang en.
 func isGoldenParams(f *fixture.Fixture) reports.Params {
 	return reports.Params{
-		Scope:          f.IDs.Root,
+		Scope:          reports.SubsidiaryID(f.IDs.Root),
 		From:           f.Expected.ActivityFrom, // 2025-01-01
 		To:             f.Expected.ActivityTo,   // 2026-06-30
 		Granularity:    reports.GranQuarter,
@@ -298,7 +298,7 @@ func TestIncomeStatementNativeNet(t *testing.T) {
 	// The fixture R/E oracle (from Expected.AccountBalances, which at AsOf == full-span
 	// activity for these flow accounts): revenue credits + expense debits.
 	// Native USD net and MXN net.
-	nat, err := tk.Activity(ctx, reports.Scope{Sub: f.IDs.Root},
+	nat, err := tk.Activity(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)},
 		f.Expected.ActivityFrom, f.Expected.ActivityTo, reports.ConvertOpts{Mode: reports.RateNone})
 	if err != nil {
 		t.Fatalf("activity native: %v", err)
@@ -310,7 +310,7 @@ func TestIncomeStatementNativeNet(t *testing.T) {
 	}
 	var usd, mxn int64
 	for _, id := range reIDs {
-		for _, a := range nat[id] {
+		for _, a := range nat[reports.AccountID(id)] {
 			switch a.Currency {
 			case "USD":
 				usd += a.Minor
@@ -327,7 +327,7 @@ func TestIncomeStatementNativeNet(t *testing.T) {
 	}
 
 	// NetIncome native per currency agrees (the toolkit oracle).
-	ni, err := tk.NetIncome(ctx, reports.Scope{Sub: f.IDs.Root},
+	ni, err := tk.NetIncome(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)},
 		f.Expected.ActivityFrom, f.Expected.ActivityTo, reports.ConvertOpts{Mode: reports.RateTxnDate, To: "USD"})
 	if err != nil {
 		t.Fatalf("netincome: %v", err)
@@ -358,7 +358,7 @@ func TestIncomeStatementScope(t *testing.T) {
 		t.Fatalf("run root: %v", err)
 	}
 	leafP := rootP
-	leafP.Scope = f.IDs.MX
+	leafP.Scope = reports.SubsidiaryID(f.IDs.MX)
 	leafT, err := rep.Run(ctx, reports.NewToolkit(f.Store, leafP), leafP)
 	if err != nil {
 		t.Fatalf("run leaf: %v", err)
@@ -471,7 +471,7 @@ func TestIncomeStatementGrantProgramScope(t *testing.T) {
 
 	// Scope the grant to Educacion: Food Pantry + every General-direct account are OUT.
 	p := base
-	p.ProgramScope = []int64{f.IDs.Educacion}
+	p.ProgramScope = []reports.ProgramID{reports.ProgramID(f.IDs.Educacion)}
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run scoped: %v", err)

@@ -188,7 +188,7 @@ func (b *f990Builder) periodLineDrill(accts []int64, ccys map[string]bool) *Dril
 		ccy = c
 	}
 	return &Drill{
-		Scope:      b.p.Scope,
+		Scope:      int64(b.p.Scope),
 		AccountIDs: dedupSortInts(accts),
 		Currency:   ccy,
 		Mode:       DrillPeriod,
@@ -259,7 +259,7 @@ func (b *f990Builder) programTypeLines(
 	for _, ccy := range sortedKeys(byCcy) {
 		accts := dedupSortInts(acctsByCcy[ccy])
 		d := &Drill{
-			Scope:      b.p.Scope,
+			Scope:      int64(b.p.Scope),
 			AccountIDs: accts,
 			Currency:   ccy,
 			Mode:       DrillPeriod,
@@ -493,7 +493,7 @@ func (b *f990Builder) partX(ctx context.Context) error {
 	// net-asset plug. Convert each (account,currency) at the closing rate to the target.
 	var assets, liabilities []bsLine
 	for _, node := range tree {
-		amts, ok := balances[node.ID]
+		amts, ok := balances[AccountID(node.ID)]
 		if !ok || icAccts[node.ID] {
 			continue
 		}
@@ -591,7 +591,7 @@ func (b *f990Builder) balanceAccountLine(ctx context.Context, l bsLine, asOf, ta
 	var d *Drill
 	if l.acctID != 0 && len(l.byCcy) == 1 {
 		for ccy := range l.byCcy {
-			d = &Drill{Scope: b.p.Scope, AccountIDs: []int64{l.acctID}, Currency: ccy, Mode: DrillAsOf, AsOf: asOf}
+			d = &Drill{Scope: int64(b.p.Scope), AccountIDs: []int64{l.acctID}, Currency: ccy, Mode: DrillAsOf, AsOf: asOf}
 		}
 	}
 	b.lineRowText(l.name, target, conv, d, 2)
@@ -617,7 +617,7 @@ func (b *f990Builder) unmappedBalanceBucket(ctx context.Context, lines []bsLine)
 	single := true
 	var ccy string
 	for _, l := range lines {
-		if eff[l.acctID] != "" {
+		if eff[AccountID(l.acctID)] != "" {
 			continue
 		}
 		accts = append(accts, l.acctID)
@@ -641,7 +641,7 @@ func (b *f990Builder) unmappedBalanceBucket(ctx context.Context, lines []bsLine)
 			conv = cc
 		}
 	}
-	d := &Drill{Scope: b.p.Scope, AccountIDs: dedupSortInts(accts), Currency: ccy, Mode: DrillAsOf, AsOf: b.p.To}
+	d := &Drill{Scope: int64(b.p.Scope), AccountIDs: dedupSortInts(accts), Currency: ccy, Mode: DrillAsOf, AsOf: b.p.To}
 	b.unmappedRow(b.target, conv, d)
 }
 
@@ -675,7 +675,7 @@ func (tk *Toolkit) accountTypes(ctx context.Context) (map[AccountID]string, erro
 	}
 	m := make(map[AccountID]string, len(tree))
 	for _, r := range tree {
-		m[r.ID] = r.Type
+		m[AccountID(r.ID)] = r.Type
 	}
 	return m, nil
 }

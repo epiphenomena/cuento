@@ -48,8 +48,8 @@ func accountLedgerReport(t *testing.T) reports.Report {
 // currency — the ledger prints native amounts.
 func ledgerGoldenParams(f *fixture.Fixture) reports.Params {
 	return reports.Params{
-		Scope:   f.IDs.Root,
-		Account: f.IDs.CheckingMX,
+		Scope:   reports.SubsidiaryID(f.IDs.Root),
+		Account: reports.AccountID(f.IDs.CheckingMX),
 		From:    "2025-05-01",
 		To:      f.Expected.AsOf, // 2026-06-30
 		Lang:    "en",
@@ -132,7 +132,7 @@ func TestAccountLedgerRangeBoundary(t *testing.T) {
 	ctx := context.Background()
 	rep := accountLedgerReport(t)
 
-	full := reports.Params{Scope: f.IDs.Root, Account: f.IDs.CheckingMX, From: "2025-01-01", To: f.Expected.AsOf, Lang: "en"}
+	full := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), Account: reports.AccountID(f.IDs.CheckingMX), From: "2025-01-01", To: f.Expected.AsOf, Lang: "en"}
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, full), full)
 	if err != nil {
 		t.Fatalf("run full range: %v", err)
@@ -163,7 +163,7 @@ func TestAccountLedgerMultiCurrency(t *testing.T) {
 	ctx := context.Background()
 	rep := accountLedgerReport(t)
 
-	p := reports.Params{Scope: f.IDs.Root, Account: f.IDs.FXClearing, From: "2025-01-01", To: f.Expected.AsOf, Lang: "en"}
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), Account: reports.AccountID(f.IDs.FXClearing), From: "2025-01-01", To: f.Expected.AsOf, Lang: "en"}
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run FX Clearing ledger: %v", err)
@@ -212,7 +212,7 @@ func TestAccountLedgerNoAccount(t *testing.T) {
 	ctx := context.Background()
 	rep := accountLedgerReport(t)
 
-	p := reports.Params{Scope: f.IDs.Root, From: "2025-01-01", To: f.Expected.AsOf, Lang: "en"} // Account left 0
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), From: "2025-01-01", To: f.Expected.AsOf, Lang: "en"} // Account left 0
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run with no account: %v", err)
@@ -443,7 +443,7 @@ func TestAccountLedgerMidRangeOnlyCurrency(t *testing.T) {
 	post("2025-09-01", -100_000) // spend 1,000 EUR back out
 
 	rep := accountLedgerReport(t)
-	p := reports.Params{Scope: rootSub, Account: cash, From: "2025-02-01", To: "2025-11-30", Lang: "en"}
+	p := reports.Params{Scope: reports.SubsidiaryID(rootSub), Account: reports.AccountID(cash), From: "2025-02-01", To: "2025-11-30", Lang: "en"}
 	table, err := rep.Run(ctx, reports.NewToolkit(s, p), p)
 	if err != nil {
 		t.Fatalf("run: %v", err)

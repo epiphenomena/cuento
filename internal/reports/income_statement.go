@@ -252,21 +252,21 @@ func (b *isBuilder) columns() {
 func (b *isBuilder) section(tree []treeNode, typ, sectionKey, totalKey string, sign int64) []int64 {
 	children, roots, isPlaceholder, name, depth, typeOf := indexTree(tree)
 
-	inSection := make(map[AccountID]bool)
-	colSum := make(map[AccountID][]int64) // [col] converted sum; col len(periods) = Total
+	inSection := make(map[int64]bool)
+	colSum := make(map[int64][]int64) // [col] converted sum; col len(periods) = Total
 	ncols := len(b.periods) + 1
 
-	var fold func(id AccountID) []int64
-	fold = func(id AccountID) []int64 {
+	var fold func(id int64) []int64
+	fold = func(id int64) []int64 {
 		sums := make([]int64, ncols)
 		if !isPlaceholder[id] {
-			_, hasActivity := b.total[id]
+			_, hasActivity := b.total[AccountID(id)]
 			if typeOf[id] == typ && hasActivity {
 				inSection[id] = true
 				for i := range b.periods {
-					sums[i] = b.perAcct[i][id]
+					sums[i] = b.perAcct[i][AccountID(id)]
 				}
-				sums[len(b.periods)] = b.total[id]
+				sums[len(b.periods)] = b.total[AccountID(id)]
 			}
 			colSum[id] = sums
 			return sums
@@ -293,8 +293,8 @@ func (b *isBuilder) section(tree []treeNode, typ, sectionKey, totalKey string, s
 	b.sectionHeader(sectionKey)
 
 	sectionSum := make([]int64, ncols)
-	var walk func(id AccountID)
-	walk = func(id AccountID) {
+	var walk func(id int64)
+	walk = func(id int64) {
 		if !inSection[id] {
 			return
 		}
@@ -305,7 +305,7 @@ func (b *isBuilder) section(tree []treeNode, typ, sectionKey, totalKey string, s
 			}
 			return
 		}
-		b.leafRow(name[id], id, depth[id], sign)
+		b.leafRow(name[id], AccountID(id), depth[id], sign)
 		for i := range sectionSum {
 			sectionSum[i] += colSum[id][i]
 		}
@@ -364,8 +364,8 @@ func (b *isBuilder) leafDrill(id AccountID, pr period) *Drill {
 		ccy = c
 	}
 	return &Drill{
-		Scope:      b.p.Scope,
-		AccountIDs: []int64{id},
+		Scope:      int64(b.p.Scope),
+		AccountIDs: []int64{int64(id)},
 		Currency:   ccy,
 		Mode:       DrillPeriod,
 		From:       pr.from,

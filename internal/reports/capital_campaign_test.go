@@ -35,8 +35,8 @@ func capitalCampaignReport(t *testing.T) reports.Report {
 func campaignParams(f *fixture.Fixture) reports.Params {
 	c := f.Expected.Campaign
 	return reports.Params{
-		Scope:          f.IDs.Root,
-		Fund:           c.Fund,
+		Scope:          reports.SubsidiaryID(f.IDs.Root),
+		Fund:           reports.FundID(c.Fund),
 		From:           c.From, // 2025-01-01
 		To:             c.To,   // 2025-12-31
 		TargetCurrency: "USD",
@@ -74,7 +74,7 @@ func TestCapitalCampaignFundStatementBridge(t *testing.T) {
 	ctx := context.Background()
 
 	st, err := reports.NewToolkit(f.Store, reports.Params{}).
-		FundPeriodStatement(ctx, reports.Scope{Sub: f.IDs.Root}, c.Fund, c.From, c.To)
+		FundPeriodStatement(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, reports.FundID(c.Fund), c.From, c.To)
 	if err != nil {
 		t.Fatalf("fund statement: %v", err)
 	}
@@ -272,7 +272,7 @@ func TestCapitalCampaignEmptyFund(t *testing.T) {
 	f := fixture.New(t)
 	ctx := context.Background()
 	rep := capitalCampaignReport(t)
-	p := reports.Params{Scope: f.IDs.Root, To: "2025-12-31", Lang: "en"} // Fund 0
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), To: "2025-12-31", Lang: "en"} // Fund 0
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run: %v", err)

@@ -54,8 +54,8 @@ func fundActivityReport(t *testing.T) reports.Report {
 // fullPeriod runs the report over the whole fixture span, root scope, lang en.
 func fullPeriod(f *fixture.Fixture, fund int64) reports.Params {
 	return reports.Params{
-		Scope: f.IDs.Root,
-		Fund:  fund,
+		Scope: reports.SubsidiaryID(f.IDs.Root),
+		Fund:  reports.FundID(fund),
 		From:  f.Expected.ActivityFrom, // 2025-01-01
 		To:    f.Expected.AsOf,         // 2026-06-30
 		Lang:  "en",
@@ -72,7 +72,7 @@ func TestFundActivityListGolden(t *testing.T) {
 	ctx := context.Background()
 	rep := fundActivityReport(t)
 
-	p := reports.Params{Scope: f.IDs.Root, To: f.Expected.AsOf, Lang: "en"} // Fund 0 => list
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), To: f.Expected.AsOf, Lang: "en"} // Fund 0 => list
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run fund list: %v", err)
@@ -121,7 +121,7 @@ func TestFundActivityListDrillReconciles(t *testing.T) {
 	f := fixture.New(t)
 	ctx := context.Background()
 	rep := fundActivityReport(t)
-	p := reports.Params{Scope: f.IDs.Root, To: f.Expected.AsOf, Lang: "en"}
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), To: f.Expected.AsOf, Lang: "en"}
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -276,7 +276,7 @@ func TestFundStatementNonzeroOpening(t *testing.T) {
 
 	// Opening (as of 2025-04-30): both grant receipts already in (MXN 100,000.00; USD
 	// 2,000.00), no spends yet. In-period (2025-05-01..): only the two supply spends.
-	p := reports.Params{Scope: f.IDs.Root, Fund: f.IDs.BecaAgua, From: "2025-05-01", To: f.Expected.AsOf, Lang: "en"}
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), Fund: reports.FundID(f.IDs.BecaAgua), From: "2025-05-01", To: f.Expected.AsOf, Lang: "en"}
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run: %v", err)

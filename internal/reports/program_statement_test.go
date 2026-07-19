@@ -52,7 +52,7 @@ func psReport(t *testing.T) reports.Report {
 // comparative view (no program chosen).
 func psParams(f *fixture.Fixture) reports.Params {
 	return reports.Params{
-		Scope: f.IDs.Root,
+		Scope: reports.SubsidiaryID(f.IDs.Root),
 		From:  f.Expected.ActivityFrom, // 2025-01-01
 		To:    f.Expected.AsOf,         // 2026-06-30
 		Lang:  "en",
@@ -331,7 +331,7 @@ func TestProgramStatementSingleSubtree(t *testing.T) {
 
 	// Single-program view for Educación (a leaf subtree).
 	p := psParams(f)
-	p.Program = f.IDs.Educacion
+	p.Program = reports.ProgramID(f.IDs.Educacion)
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run single: %v", err)
@@ -394,7 +394,7 @@ func TestProgramStatementGrantProgramScope(t *testing.T) {
 	// Scope the grant to Educacion (a leaf subtree = {Educacion}). Food Pantry is a
 	// SIBLING and must vanish from every column.
 	p := psParams(f)
-	p.ProgramScope = []int64{f.IDs.Educacion}
+	p.ProgramScope = []reports.ProgramID{reports.ProgramID(f.IDs.Educacion)}
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run scoped: %v", err)

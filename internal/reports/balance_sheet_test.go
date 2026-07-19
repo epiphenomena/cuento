@@ -35,7 +35,7 @@ import (
 // bsGoldenParams: root scope, fixture as-of, USD target, lang en, converted-only.
 func bsGoldenParams(f *fixture.Fixture) reports.Params {
 	return reports.Params{
-		Scope:          f.IDs.Root,
+		Scope:          reports.SubsidiaryID(f.IDs.Root),
 		AsOf:           f.Expected.AsOf, // 2026-06-30
 		TargetCurrency: "USD",
 		Lang:           "en",
@@ -241,7 +241,7 @@ func TestBalanceSheetNativeSplit(t *testing.T) {
 	rep := balanceSheetReport(t)
 
 	// Detail=currency, NO target (native): each line shows native per currency.
-	p := reports.Params{Scope: f.IDs.Root, AsOf: f.Expected.AsOf, Lang: "en", Detail: "currency"}
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), AsOf: f.Expected.AsOf, Lang: "en", Detail: "currency"}
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run detail: %v", err)
@@ -330,12 +330,12 @@ func TestBalanceSheetScope(t *testing.T) {
 	ctx := context.Background()
 	rep := balanceSheetReport(t)
 
-	rootP := reports.Params{Scope: f.IDs.Root, AsOf: f.Expected.AsOf, Lang: "en"}
+	rootP := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), AsOf: f.Expected.AsOf, Lang: "en"}
 	rootT, err := rep.Run(ctx, reports.NewToolkit(f.Store, rootP), rootP)
 	if err != nil {
 		t.Fatalf("run root: %v", err)
 	}
-	leafP := reports.Params{Scope: f.IDs.MX, AsOf: f.Expected.AsOf, Lang: "en"}
+	leafP := reports.Params{Scope: reports.SubsidiaryID(f.IDs.MX), AsOf: f.Expected.AsOf, Lang: "en"}
 	leafT, err := rep.Run(ctx, reports.NewToolkit(f.Store, leafP), leafP)
 	if err != nil {
 		t.Fatalf("run leaf: %v", err)
@@ -394,7 +394,7 @@ func TestBalanceSheetIntercompanyWarning(t *testing.T) {
 	rep := balanceSheetReport(t)
 
 	// Baseline (clean): no warning.
-	p := reports.Params{Scope: f.IDs.Root, AsOf: f.Expected.AsOf, Lang: "en"}
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), AsOf: f.Expected.AsOf, Lang: "en"}
 	clean, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run clean: %v", err)
@@ -459,7 +459,7 @@ func TestBalanceSheetNestedTree(t *testing.T) {
 	rep := balanceSheetReport(t)
 
 	// As-of end of the campaign year, root scope, native (no target), converted-only.
-	p := reports.Params{Scope: f.IDs.Root, AsOf: "2025-12-31", Lang: "en"}
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), AsOf: "2025-12-31", Lang: "en"}
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run balance sheet: %v", err)
@@ -547,7 +547,7 @@ func TestBalanceSheetCTASplit(t *testing.T) {
 	f.ExtendRates(t)
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 	rep := balanceSheetReport(t)
-	p := reports.Params{Scope: f.IDs.Root, AsOf: f.Expected.AsOf, Lang: "en", TargetCurrency: "USD"}
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), AsOf: f.Expected.AsOf, Lang: "en", TargetCurrency: "USD"}
 
 	// Baseline (clean, converted): NO CTA / reconciling / warning rows.
 	clean, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
@@ -579,7 +579,7 @@ func TestBalanceSheetCTASplit(t *testing.T) {
 
 	// The toolkit split is the oracle for the two components.
 	tk := reports.NewToolkit(f.Store, p)
-	split, err := tk.IntercompanyResidualSplit(ctx, reports.Scope{Sub: f.IDs.Root}, f.Expected.AsOf, "USD")
+	split, err := tk.IntercompanyResidualSplit(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)}, f.Expected.AsOf, "USD")
 	if err != nil {
 		t.Fatalf("residual split: %v", err)
 	}
@@ -655,7 +655,7 @@ func TestBalanceSheetCTADetailNoSplit(t *testing.T) {
 	rep := balanceSheetReport(t)
 
 	// Detail=currency WITH a target (native + converted columns).
-	p := reports.Params{Scope: f.IDs.Root, AsOf: f.Expected.AsOf, Lang: "en", TargetCurrency: "USD", Detail: "currency"}
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), AsOf: f.Expected.AsOf, Lang: "en", TargetCurrency: "USD", Detail: "currency"}
 
 	// The clean native without-USD figure (oracle for "not polluted").
 	clean, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)

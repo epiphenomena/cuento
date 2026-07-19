@@ -72,13 +72,13 @@ func TestDrillReconcilesToToolkit(t *testing.T) {
 	asof := fx.Expected.AsOf
 
 	// The toolkit oracle: per-account native balances at ROOT scope, as-of.
-	tk := reports.NewToolkit(st, reports.Params{Scope: ids.Root, AsOf: asof})
-	balances, err := tk.BalancesAsOf(ctx, reports.Scope{Sub: ids.Root}, asof, reports.ConvertOpts{Mode: reports.RateNone})
+	tk := reports.NewToolkit(st, reports.Params{Scope: reports.SubsidiaryID(ids.Root), AsOf: asof})
+	balances, err := tk.BalancesAsOf(ctx, reports.Scope{Sub: reports.SubsidiaryID(ids.Root)}, asof, reports.ConvertOpts{Mode: reports.RateNone})
 	if err != nil {
 		t.Fatalf("BalancesAsOf: %v", err)
 	}
 	native := func(acct int64, ccy string) int64 {
-		for _, a := range balances[acct] {
+		for _, a := range balances[reports.AccountID(acct)] {
 			if a.Currency == ccy {
 				return a.Minor
 			}
@@ -142,11 +142,11 @@ func TestDrillReconcilesToToolkit(t *testing.T) {
 	// PROGRAM oracle: ProgramActivity[Educacion][ProgramSupplies] MXN. Educacion is a
 	// LEAF program, so the toolkit's tree rollup adds nothing below it -- the cell is
 	// exactly the ProgramSupplies MXN activity tagged Educacion.
-	progAct, err := tk.ProgramActivity(ctx, reports.Scope{Sub: ids.Root}, from, to, reports.ConvertOpts{Mode: reports.RateNone})
+	progAct, err := tk.ProgramActivity(ctx, reports.Scope{Sub: reports.SubsidiaryID(ids.Root)}, from, to, reports.ConvertOpts{Mode: reports.RateNone})
 	if err != nil {
 		t.Fatalf("ProgramActivity: %v", err)
 	}
-	wantProg := curAmt(t, progAct[prog][ids.ProgramSupplies], "MXN")
+	wantProg := curAmt(t, progAct[reports.ProgramID(prog)][reports.AccountID(ids.ProgramSupplies)], "MXN")
 	gotProg, nProg := drillSum(t, st, store.DrillFilter{
 		Scope: ids.Root, AccountID: ids.ProgramSupplies, Currency: "MXN",
 		From: from, To: to, ProgramID: &prog,
@@ -160,11 +160,11 @@ func TestDrillReconcilesToToolkit(t *testing.T) {
 
 	// CLASS oracle: FunctionalMatrix[ProgramSupplies][program] MXN (a direct sum, no
 	// rollup).
-	fm, err := tk.FunctionalMatrix(ctx, reports.Scope{Sub: ids.Root}, from, to, reports.ConvertOpts{Mode: reports.RateNone})
+	fm, err := tk.FunctionalMatrix(ctx, reports.Scope{Sub: reports.SubsidiaryID(ids.Root)}, from, to, reports.ConvertOpts{Mode: reports.RateNone})
 	if err != nil {
 		t.Fatalf("FunctionalMatrix: %v", err)
 	}
-	wantClass := curAmt(t, fm[ids.ProgramSupplies][reports.Class(class)], "MXN")
+	wantClass := curAmt(t, fm[reports.AccountID(ids.ProgramSupplies)][reports.Class(class)], "MXN")
 	gotClass, _ := drillSum(t, st, store.DrillFilter{
 		Scope: ids.Root, AccountID: ids.ProgramSupplies, Currency: "MXN",
 		From: from, To: to, Class: &class,
@@ -367,8 +367,8 @@ func TestBalanceSheetDrillReconciles(t *testing.T) {
 	asof := fx.Expected.AsOf
 
 	// Native toolkit oracle at root scope.
-	tk := reports.NewToolkit(st, reports.Params{Scope: ids.Root, AsOf: asof})
-	balances, err := tk.BalancesAsOf(ctx, reports.Scope{Sub: ids.Root}, asof, reports.ConvertOpts{Mode: reports.RateNone})
+	tk := reports.NewToolkit(st, reports.Params{Scope: reports.SubsidiaryID(ids.Root), AsOf: asof})
+	balances, err := tk.BalancesAsOf(ctx, reports.Scope{Sub: reports.SubsidiaryID(ids.Root)}, asof, reports.ConvertOpts{Mode: reports.RateNone})
 	if err != nil {
 		t.Fatalf("BalancesAsOf: %v", err)
 	}
@@ -380,7 +380,7 @@ func TestBalanceSheetDrillReconciles(t *testing.T) {
 	if !ok {
 		t.Fatalf("balance-sheet report not registered")
 	}
-	p := reports.Params{Scope: ids.Root, AsOf: asof, Lang: "en", Detail: "currency"}
+	p := reports.Params{Scope: reports.SubsidiaryID(ids.Root), AsOf: asof, Lang: "en", Detail: "currency"}
 	table, err := rep.Run(ctx, reports.NewToolkit(st, p), p)
 	if err != nil {
 		t.Fatalf("run balance sheet: %v", err)
@@ -392,7 +392,7 @@ func TestBalanceSheetDrillReconciles(t *testing.T) {
 	// liabilities does not change the drilled splits -- the drill lists the raw splits,
 	// whose sum is the stored net-debit balance).
 	nativeFor := func(acct int64, ccy string) (int64, bool) {
-		for _, a := range balances[acct] {
+		for _, a := range balances[reports.AccountID(acct)] {
 			if a.Currency == ccy {
 				return a.Minor, true
 			}
@@ -460,7 +460,7 @@ func TestIncomeStatementDrillReconciles(t *testing.T) {
 		t.Fatalf("income-statement report not registered")
 	}
 	p := reports.Params{
-		Scope: ids.Root, From: from, To: to,
+		Scope: reports.SubsidiaryID(ids.Root), From: from, To: to,
 		Granularity: reports.GranQuarter, TargetCurrency: "USD", Lang: "en",
 	}
 	table, err := rep.Run(ctx, reports.NewToolkit(st, p), p)
@@ -472,11 +472,11 @@ func TestIncomeStatementDrillReconciles(t *testing.T) {
 	// over [pf,pt] at root scope -- the reconciliation oracle (never the drill's output).
 	tk := reports.NewToolkit(st, p)
 	nativeActivity := func(acct int64, ccy, pf, pt string) (int64, bool) {
-		act, err := tk.Activity(ctx, reports.Scope{Sub: ids.Root}, pf, pt, reports.ConvertOpts{Mode: reports.RateNone})
+		act, err := tk.Activity(ctx, reports.Scope{Sub: reports.SubsidiaryID(ids.Root)}, pf, pt, reports.ConvertOpts{Mode: reports.RateNone})
 		if err != nil {
 			t.Fatalf("Activity native: %v", err)
 		}
-		for _, a := range act[acct] {
+		for _, a := range act[reports.AccountID(acct)] {
 			if a.Currency == ccy {
 				return a.Minor, true
 			}

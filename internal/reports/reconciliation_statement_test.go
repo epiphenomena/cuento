@@ -51,7 +51,7 @@ func TestReconciliationStatementGolden(t *testing.T) {
 
 	rep := reconStatementReport(t)
 	recon := f.Expected.Reconciliation
-	p := reports.Params{Scope: f.IDs.Root, Reconciliation: recon.ID, Lang: "en"}
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), Reconciliation: recon.ID, Lang: "en"}
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run reconciliation statement: %v", err)
@@ -115,7 +115,7 @@ func TestReconciliationStatementNoRecon(t *testing.T) {
 	ctx := context.Background()
 	rep := reconStatementReport(t)
 
-	p := reports.Params{Scope: f.IDs.Root, Lang: "en"} // Reconciliation == 0
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), Lang: "en"} // Reconciliation == 0
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run with no recon: %v", err)

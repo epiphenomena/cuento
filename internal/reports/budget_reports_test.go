@@ -72,7 +72,7 @@ func TestCashflowProjectionGolden(t *testing.T) {
 	sp := f.Expected.SampleBudgetPlan
 	rep := budgetReport(t, reports.CashflowProjectionReportID)
 	p := reports.Params{
-		Scope: f.IDs.Root, Budget: sp.Plan, From: sp.From, To: sp.To,
+		Scope: reports.SubsidiaryID(f.IDs.Root), Budget: sp.Plan, From: sp.From, To: sp.To,
 		Granularity: reports.GranMonth, Lang: "en",
 	}
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
@@ -121,7 +121,7 @@ func TestBudgetVarianceGolden(t *testing.T) {
 	sp := f.Expected.SampleBudgetPlan
 	rep := budgetReport(t, reports.BudgetVarianceReportID)
 	p := reports.Params{
-		Scope: f.IDs.Root, Budget: sp.Plan, From: sp.From, To: sp.To,
+		Scope: reports.SubsidiaryID(f.IDs.Root), Budget: sp.Plan, From: sp.From, To: sp.To,
 		Granularity: reports.GranMonth, Lang: "en",
 	}
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
@@ -179,7 +179,7 @@ func TestBudgetReportsNoBudget(t *testing.T) {
 	ctx := context.Background()
 	for _, id := range []string{reports.CashflowProjectionReportID, reports.BudgetVarianceReportID} {
 		rep := budgetReport(t, id)
-		p := reports.Params{Scope: f.IDs.Root, From: "2026-01-01", To: "2026-12-31", Lang: "en"} // Budget == 0
+		p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), From: "2026-01-01", To: "2026-12-31", Lang: "en"} // Budget == 0
 		table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 		if err != nil {
 			t.Fatalf("%s no-budget run: %v", id, err)
@@ -220,7 +220,7 @@ func TestBudgetVarianceGrantProgramScope(t *testing.T) {
 	sp := f.Expected.SampleBudgetPlan
 	rep := budgetReport(t, reports.BudgetVarianceReportID)
 	base := reports.Params{
-		Scope: f.IDs.Root, Budget: sp.Plan, From: sp.From, To: sp.To,
+		Scope: reports.SubsidiaryID(f.IDs.Root), Budget: sp.Plan, From: sp.From, To: sp.To,
 		Granularity: reports.GranMonth, Lang: "en",
 	}
 	baseT, err := rep.Run(ctx, reports.NewToolkit(f.Store, base), base)
@@ -238,7 +238,7 @@ func TestBudgetVarianceGrantProgramScope(t *testing.T) {
 
 	// Scope to Educacion (leaf subtree = {Educacion}): every General-program row vanishes.
 	p := base
-	p.ProgramScope = []int64{f.IDs.Educacion}
+	p.ProgramScope = []reports.ProgramID{reports.ProgramID(f.IDs.Educacion)}
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run scoped: %v", err)

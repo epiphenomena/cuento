@@ -203,14 +203,18 @@ func assertDemoProgramScopedGrant(ctx context.Context, t *testing.T, sqldb *sql.
 	if !ok {
 		t.Fatalf("income_statement not registered")
 	}
+	progScope := make([]reports.ProgramID, len(subtree))
+	for i, id := range subtree {
+		progScope[i] = reports.ProgramID(id)
+	}
 	p := reports.Params{
-		Scope:          rootSub,
+		Scope:          reports.SubsidiaryID(rootSub),
 		From:           "2025-01-01",
 		To:             "2030-12-31",
 		Granularity:    reports.GranNone,
 		TargetCurrency: "USD",
 		Lang:           "en",
-		ProgramScope:   subtree,
+		ProgramScope:   progScope,
 	}
 	table, err := rep.Run(ctx, reports.NewToolkit(st, p), p)
 	if err != nil {

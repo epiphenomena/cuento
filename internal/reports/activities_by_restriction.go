@@ -94,9 +94,9 @@ func runActivitiesByRestriction(ctx context.Context, tk *Toolkit, p Params) (Tab
 	for acct, amts := range act {
 		for _, a := range amts {
 			switch {
-			case revSet[acct]:
+			case revSet[int64(acct)]:
 				revenueTotal[a.Currency] += -a.Minor
-			case expSet[acct]:
+			case expSet[int64(acct)]:
 				expenseTotal[a.Currency] += a.Minor
 			}
 		}
@@ -114,7 +114,7 @@ func runActivitiesByRestriction(ctx context.Context, tk *Toolkit, p Params) (Tab
 	released := abrColumn{}     // restricted-fund applications (expense + non-expense), per ccy
 	capital := map[int64]bool{} // capital-asset accounts a restricted fund applied INTO
 	for _, fund := range restricted {
-		st, err := tk.FundPeriodStatement(ctx, scope, fund, p.From, p.To)
+		st, err := tk.FundPeriodStatement(ctx, scope, FundID(fund), p.From, p.To)
 		if err != nil {
 			return Table{}, err
 		}
@@ -123,7 +123,7 @@ func runActivitiesByRestriction(ctx context.Context, tk *Toolkit, p Params) (Tab
 			released[ccy] += st.AppliedExpense[ccy] + st.AppliedNonExpense[ccy]
 		}
 		for id := range st.CapitalAccounts {
-			capital[id] = true
+			capital[int64(id)] = true
 		}
 	}
 	// The released line's application account set = expense accounts + the capital-asset
@@ -177,7 +177,7 @@ func runActivitiesByRestriction(ctx context.Context, tk *Toolkit, p Params) (Tab
 		// Expenses — in Without only (With 0, Total == Without). Drillable per the expense
 		// account set (all funds; expenses reduce unrestricted net assets after release).
 		expDrill := &Drill{
-			Scope: p.Scope, AccountIDs: expenseIDs, Currency: ccy,
+			Scope: int64(p.Scope), AccountIDs: expenseIDs, Currency: ccy,
 			Mode: DrillPeriod, From: p.From, To: p.To,
 		}
 		b.row("reports.activities_by_restriction.expenses", ccy, RowData,
@@ -257,7 +257,7 @@ func (b *abrBuilder) revenueWithDrill(ccy string, revenueIDs []int64, funds []in
 		return nil
 	}
 	return &Drill{
-		Scope: b.p.Scope, AccountIDs: revenueIDs, Currency: ccy, FundIDs: funds,
+		Scope: int64(b.p.Scope), AccountIDs: revenueIDs, Currency: ccy, FundIDs: funds,
 		Mode: DrillPeriod, From: b.p.From, To: b.p.To,
 	}
 }
@@ -272,7 +272,7 @@ func (b *abrBuilder) releasedDrill(ccy string, appIDs, funds []int64) *Drill {
 		return nil
 	}
 	return &Drill{
-		Scope: b.p.Scope, AccountIDs: appIDs, Currency: ccy, FundIDs: funds,
+		Scope: int64(b.p.Scope), AccountIDs: appIDs, Currency: ccy, FundIDs: funds,
 		Mode: DrillPeriod, From: b.p.From, To: b.p.To,
 	}
 }

@@ -116,7 +116,7 @@ func (tk *Toolkit) planSplitsResolved(ctx context.Context, planID int64) ([]budg
 		ai := info[sp.AccountID]
 		out = append(out, budgetSplitResolved{
 			key: BudgetKey{
-				Account:  sp.AccountID,
+				Account:  AccountID(sp.AccountID),
 				Fund:     fundOrZero(sp.FundID),
 				Program:  progOrZero(sp.ProgramID),
 				Currency: sp.Currency,
@@ -133,7 +133,7 @@ func (tk *Toolkit) planSplitsResolved(ctx context.Context, planID int64) ([]budg
 // fundOrZero maps a nullable fund_id to the fund-0 unrestricted convention (D20).
 func fundOrZero(n sql.NullInt64) FundID {
 	if n.Valid {
-		return n.Int64
+		return FundID(n.Int64)
 	}
 	return 0
 }
@@ -141,7 +141,7 @@ func fundOrZero(n sql.NullInt64) FundID {
 // progOrZero maps a nullable program_id to 0 (no program -- only A/L legs).
 func progOrZero(n sql.NullInt64) ProgramID {
 	if n.Valid {
-		return n.Int64
+		return ProgramID(n.Int64)
 	}
 	return 0
 }
@@ -197,13 +197,13 @@ func (tk *Toolkit) CashflowProjectionPlan(ctx context.Context, s Scope, planID i
 
 	// Start balances: each fund's ACTUAL current-cash balance at the period start
 	// (as-of `from`). This is the resolved per-fund opening (DECISIONS tension 1).
-	startFB, err := tk.store.CurrentCashFundBalancesAsOf(ctx, from, s.Sub)
+	startFB, err := tk.store.CurrentCashFundBalancesAsOf(ctx, from, int64(s.Sub))
 	if err != nil {
 		return nil, fmt.Errorf("cashflow projection: start balances: %w", err)
 	}
 	series := make(map[FundCurrency]ProjectionSeries)
 	for _, fb := range startFB {
-		fc := FundCurrency{Fund: fb.FundID, Currency: fb.Currency}
+		fc := FundCurrency{Fund: FundID(fb.FundID), Currency: fb.Currency}
 		series[fc] = ProjectionSeries{Start: fb.Amount, End: fb.Amount, At: map[string]int64{}}
 	}
 
@@ -307,12 +307,12 @@ func (tk *Toolkit) BudgetVariancePlan(ctx context.Context, s Scope, planID int64
 			return nil, err
 		}
 		key := sp.key
-		key.Subsidiary = plan.SubsidiaryID
+		key.Subsidiary = SubsidiaryID(plan.SubsidiaryID)
 		budgeted[bk{b, key}] += sign * sp.amount
 	}
 
 	// ACTUAL: p15.2 net-debit activity per key, bucketed by each split's date.
-	cells, err := tk.store.BudgetKeyActivity(ctx, from, to, s.Sub)
+	cells, err := tk.store.BudgetKeyActivity(ctx, from, to, int64(s.Sub))
 	if err != nil {
 		return nil, fmt.Errorf("budget variance: actuals: %w", err)
 	}
@@ -320,7 +320,7 @@ func (tk *Toolkit) BudgetVariancePlan(ctx context.Context, s Scope, planID int64
 		// p27.4: filter ACTUAL rows to the granted subtree too, so a scoped variance
 		// report never surfaces a sibling subtree's actuals (BudgetKeyActivity is raw
 		// per-program R/E activity). Empty ProgramScope => no filter.
-		if !tk.Params.InProgramScope(c.ProgramID) {
+		if !tk.Params.InProgramScope(ProgramID(c.ProgramID)) {
 			continue
 		}
 		b, err := bucketKey(c.Date, g)
@@ -328,8 +328,8 @@ func (tk *Toolkit) BudgetVariancePlan(ctx context.Context, s Scope, planID int64
 			return nil, err
 		}
 		key := BudgetKey{
-			Subsidiary: c.SubsidiaryID, Account: c.AccountID, Fund: c.FundID,
-			Program: c.ProgramID, Currency: c.Currency,
+			Subsidiary: SubsidiaryID(c.SubsidiaryID), Account: AccountID(c.AccountID), Fund: FundID(c.FundID),
+			Program: ProgramID(c.ProgramID), Currency: c.Currency,
 		}
 		actual[bk{b, key}] += c.Amount
 	}

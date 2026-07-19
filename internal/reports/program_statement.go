@@ -191,12 +191,12 @@ func programColumns(ctx context.Context, tk *Toolkit, p Params) ([]progCol, erro
 		// Single-program subtree: one column, the chosen program rolled up.
 		var name string
 		for _, n := range tree {
-			if n.ID == p.Program {
+			if n.ID == int64(p.Program) {
 				name = n.Name
 				break
 			}
 		}
-		desc, err := descOf(p.Program)
+		desc, err := descOf(int64(p.Program))
 		if err != nil {
 			return nil, err
 		}
@@ -210,7 +210,7 @@ func programColumns(ctx context.Context, tk *Toolkit, p Params) ([]progCol, erro
 		if err != nil {
 			return nil, err
 		}
-		cols = append(cols, progCol{id: n.ID, name: n.Name, descendants: desc})
+		cols = append(cols, progCol{id: ProgramID(n.ID), name: n.Name, descendants: desc})
 	}
 	return cols, nil
 }
@@ -305,57 +305,57 @@ func (b *psBuilder) section(ccy string, la map[AccountID][]int64, typ, sectionKe
 		}
 		return false
 	}
-	var fold func(id AccountID) []int64
-	fold = func(id AccountID) []int64 {
+	var fold func(id int64) []int64
+	fold = func(id int64) []int64 {
 		sums := make([]int64, n)
 		if !isPlaceholder[id] {
 			if typeOf[id] == typ {
-				if leaf, ok := la[id]; ok && nonzero(leaf) {
-					inSection[id] = true
+				if leaf, ok := la[AccountID(id)]; ok && nonzero(leaf) {
+					inSection[AccountID(id)] = true
 					copy(sums, leaf)
 				}
 			}
-			colSum[id] = sums
+			colSum[AccountID(id)] = sums
 			return sums
 		}
 		for _, c := range children[id] {
-			cs := fold(AccountID(c))
+			cs := fold(c)
 			for i := range sums {
 				sums[i] += cs[i]
 			}
 			if inSection[AccountID(c)] {
-				inSection[id] = true
+				inSection[AccountID(id)] = true
 			}
 		}
-		colSum[id] = sums
+		colSum[AccountID(id)] = sums
 		return sums
 	}
 	for _, r := range roots {
-		fold(AccountID(r))
+		fold(r)
 	}
 
 	b.headerRow(ccy, sectionKey)
 
 	sectionSum := make([]int64, n)
-	var walk func(id AccountID)
-	walk = func(id AccountID) {
-		if !inSection[id] {
+	var walk func(id int64)
+	walk = func(id int64) {
+		if !inSection[AccountID(id)] {
 			return
 		}
 		if isPlaceholder[id] {
-			b.subtotalRow(ccy, TextCell(name[id]), applySign(colSum[id], sign), depth[id])
+			b.subtotalRow(ccy, TextCell(name[id]), applySign(colSum[AccountID(id)], sign), depth[id])
 			for _, c := range children[id] {
-				walk(AccountID(c))
+				walk(c)
 			}
 			return
 		}
-		b.leafRow(ccy, id, name[id], la[id], sign, depth[id])
+		b.leafRow(ccy, AccountID(id), name[id], la[AccountID(id)], sign, depth[id])
 		for i := range sectionSum {
-			sectionSum[i] += colSum[id][i]
+			sectionSum[i] += colSum[AccountID(id)][i]
 		}
 	}
 	for _, r := range roots {
-		walk(AccountID(r))
+		walk(r)
 	}
 
 	b.totalRow(ccy, totalKey, applySign(sectionSum, sign))
@@ -401,7 +401,7 @@ func (b *psBuilder) cellDrill(acct AccountID, ccy string, c progCol, raw int64) 
 		return nil
 	}
 	d := &Drill{
-		Scope:      b.p.Scope,
+		Scope:      int64(b.p.Scope),
 		AccountIDs: []int64{int64(acct)},
 		Currency:   ccy,
 		Mode:       DrillPeriod,

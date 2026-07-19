@@ -165,7 +165,7 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	liabLeaf := map[int64]bsLine{}
 	var assets, liabilities []bsLine
 	for _, node := range tree {
-		amts, ok := balances[node.ID]
+		amts, ok := balances[AccountID(node.ID)]
 		if !ok {
 			continue
 		}
@@ -231,7 +231,7 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	// CREDIT, negative); present it as a positive surplus.
 	surplus := map[string]int64{}
 	for acct, amts := range balances {
-		if !reReport[acct] {
+		if !reReport[int64(acct)] {
 			continue
 		}
 		for _, a := range amts {
@@ -259,7 +259,7 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 		// consolidated elimination, so it is exactly the intercompany set.
 		icByCcy := map[string]int64{}
 		for acct, amts := range balances {
-			if icAccts[acct] {
+			if icAccts[int64(acct)] {
 				for _, a := range amts {
 					icByCcy[a.Currency] += a.Minor
 				}
@@ -686,7 +686,7 @@ func (b *bsBuilder) accountDrill(l bsLine, ccy string) *Drill {
 		return nil
 	}
 	return &Drill{
-		Scope:      b.p.Scope,
+		Scope:      int64(b.p.Scope),
 		AccountIDs: []int64{l.acctID},
 		Currency:   ccy,
 		Mode:       DrillAsOf,
@@ -719,8 +719,8 @@ func (b *bsBuilder) table() Table {
 // descendant closure has >1 sub) -- i.e. it is a consolidation where intercompany
 // balances are internal and eliminated (D19). A leaf (single-sub) scope is not a
 // consolidation: its intercompany accounts are genuine due-to/due-from balances.
-func (tk *Toolkit) isConsolidated(ctx context.Context, scope int64) (bool, error) {
-	desc, err := tk.store.Descendants(ctx, scope)
+func (tk *Toolkit) isConsolidated(ctx context.Context, scope SubsidiaryID) (bool, error) {
+	desc, err := tk.store.Descendants(ctx, int64(scope))
 	if err != nil {
 		return false, err
 	}
@@ -733,7 +733,7 @@ func (tk *Toolkit) isConsolidated(ctx context.Context, scope int64) (bool, error
 // non-empty (purpose/time/perpetual); fund id 0 (unrestricted) is excluded. The
 // asset-side balance is exactly what FundBalancesAsOf returns (a whole-fund sum is
 // zero by conservation, so the asset position is the unexpended restricted resource).
-func (tk *Toolkit) restrictedNetAssets(ctx context.Context, scope int64, d string) (map[string]int64, error) {
+func (tk *Toolkit) restrictedNetAssets(ctx context.Context, scope SubsidiaryID, d string) (map[string]int64, error) {
 	funds, err := tk.store.ListFunds(ctx)
 	if err != nil {
 		return nil, err
@@ -744,7 +744,7 @@ func (tk *Toolkit) restrictedNetAssets(ctx context.Context, scope int64, d strin
 			restricted[f.ID] = true
 		}
 	}
-	fb, err := tk.store.FundBalancesAsOf(ctx, d, scope)
+	fb, err := tk.store.FundBalancesAsOf(ctx, d, int64(scope))
 	if err != nil {
 		return nil, err
 	}

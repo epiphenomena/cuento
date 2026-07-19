@@ -10,7 +10,7 @@ type Params struct {
 	// Scope is the subsidiary the report consolidates: this subsidiary plus ALL its
 	// descendants (D18). It is always set (defaults to the user's default
 	// subsidiary, else the root — full consolidation).
-	Scope int64
+	Scope SubsidiaryID
 
 	// AsOf is the balance-sheet as-of date (YYYY-MM-DD): cumulative balances to this
 	// date. Meaningful when ParamsSpec.AsOf is set.
@@ -53,7 +53,7 @@ type Params struct {
 	// 200. Unlike Scope (always present, every report is scoped), Account is a
 	// report-specific param the web layer parses only for a report whose spec declares
 	// it, and validates against the real leaf-account set.
-	Account int64
+	Account AccountID
 
 	// Fund is the single fund a report-specific "which fund" control names (p15.8 fund
 	// balances & activity): the fund whose period statement the report prints. Meaningful
@@ -63,7 +63,7 @@ type Params struct {
 	// report whose spec declares it, validated against the real fund set (active, plus
 	// closed when a closed fund is explicitly requested). Fund id 0 is never a valid
 	// selection (it is the synthetic unrestricted group, which appears only in the list).
-	Fund int64
+	Fund FundID
 
 	// Reconciliation is the single finalized reconciliation a report-specific "which
 	// reconciliation" control names (p16.4 statement report): the recon whose statement
@@ -86,7 +86,7 @@ type Params struct {
 	// side-by-side column) rather than a single-program subtree. Mirrors Account/Fund:
 	// a report-specific param the web layer parses only for a report whose spec declares
 	// it, validated against the real program set.
-	Program int64
+	Program ProgramID
 
 	// ProgramScope is a GRANT-imposed program-subtree filter (p27.4): when the current
 	// user holds a program-SCOPED report grant for this report's group, the web layer
@@ -99,7 +99,7 @@ type Params struct {
 	// web layer intersects a user Program selection with this scope. Enforced in the
 	// toolkit's program-keyed aggregation (a data-level filter, so subtotals/totals
 	// reflect only the granted subtree), never by dropping rendered rows.
-	ProgramScope []int64
+	ProgramScope []ProgramID
 
 	// Budget is the single budget a report-specific "which budget" control names
 	// (p19.4 actuals-vs-budget + cashflow projection): the budget whose lines drive the
@@ -119,7 +119,7 @@ type Params struct {
 // ids in the granted subtree are visible -- a data-level check the program-keyed
 // toolkit methods apply to each raw split's program before aggregation, so a sibling
 // subtree never contributes to a total.
-func (p Params) InProgramScope(id int64) bool {
+func (p Params) InProgramScope(id ProgramID) bool {
 	if len(p.ProgramScope) == 0 {
 		return true
 	}

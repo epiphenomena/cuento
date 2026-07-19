@@ -99,8 +99,8 @@ func runTrialBalance(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 					return Table{}, err
 				}
 			}
-			leafCells[acctID] = append(leafCells[acctID], curConv{ccy: a.Currency, nat: a.Minor, conv: conv})
-			convSubtree[acctID] += conv
+			leafCells[int64(acctID)] = append(leafCells[int64(acctID)], curConv{ccy: a.Currency, nat: a.Minor, conv: conv})
+			convSubtree[int64(acctID)] += conv
 		}
 	}
 
@@ -175,7 +175,7 @@ func runTrialBalance(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 			// covers the underlying transactions); p15.4+ may drill converted columns
 			// via the same Drill (which still lists native splits).
 			nativeDrill := &Drill{
-				Scope:      p.Scope,
+				Scope:      int64(p.Scope),
 				AccountIDs: []int64{id},
 				Currency:   a.ccy,
 				Mode:       DrillAsOf,

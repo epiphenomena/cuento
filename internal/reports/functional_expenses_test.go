@@ -50,7 +50,7 @@ import (
 // feGoldenParams: root scope, full fixture span, USD target, lang en.
 func feGoldenParams(f *fixture.Fixture) reports.Params {
 	return reports.Params{
-		Scope:          f.IDs.Root,
+		Scope:          reports.SubsidiaryID(f.IDs.Root),
 		From:           f.Expected.ActivityFrom, // 2025-01-01
 		To:             f.Expected.ActivityTo,   // 2026-06-30
 		TargetCurrency: "USD",
@@ -284,13 +284,13 @@ func TestFunctionalExpensesUnmappedLast(t *testing.T) {
 		t.Fatalf("effective codes: %v", err)
 	}
 	// Pick a real mapped expense account (Salaries -> IX.7) and a synthetic unmapped id.
-	if eff[f.IDs.Salaries] != "IX.7" {
-		t.Fatalf("Salaries effective code = %q, want IX.7", eff[f.IDs.Salaries])
+	if eff[reports.AccountID(f.IDs.Salaries)] != "IX.7" {
+		t.Fatalf("Salaries effective code = %q, want IX.7", eff[reports.AccountID(f.IDs.Salaries)])
 	}
 	const unmappedID int64 = -1 // not in eff => "" (Unmapped) bucket
-	rows, err := tk.Group990(ctx, "IX", "USD", map[int64]int64{
-		f.IDs.Salaries: 1_000,
-		unmappedID:     500,
+	rows, err := tk.Group990(ctx, "IX", "USD", map[reports.AccountID]int64{
+		reports.AccountID(f.IDs.Salaries): 1_000,
+		reports.AccountID(unmappedID):     500,
 	})
 	if err != nil {
 		t.Fatalf("group990: %v", err)
@@ -324,13 +324,13 @@ func TestFunctionalExpensesLeafOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("effective codes: %v", err)
 	}
-	if eff[f.IDs.BankFees] != "IX.11g" {
-		t.Errorf("Bank Fees effective code = %q, want IX.11g (own override)", eff[f.IDs.BankFees])
+	if eff[reports.AccountID(f.IDs.BankFees)] != "IX.11g" {
+		t.Errorf("Bank Fees effective code = %q, want IX.11g (own override)", eff[reports.AccountID(f.IDs.BankFees)])
 	}
 	// Its siblings under Expenses inherit IX.24e (no own code).
 	for _, id := range []int64{f.IDs.ProgramSupplies, f.IDs.FoodPurchases, f.IDs.Insurance, f.IDs.EventCosts} {
-		if eff[id] != "IX.24e" {
-			t.Errorf("account %d effective code = %q, want IX.24e (inherited)", id, eff[id])
+		if eff[reports.AccountID(id)] != "IX.24e" {
+			t.Errorf("account %d effective code = %q, want IX.24e (inherited)", id, eff[reports.AccountID(id)])
 		}
 	}
 
@@ -458,7 +458,7 @@ func TestFunctionalExpensesScope(t *testing.T) {
 		t.Fatalf("run root: %v", err)
 	}
 	leafP := rootP
-	leafP.Scope = f.IDs.MX
+	leafP.Scope = reports.SubsidiaryID(f.IDs.MX)
 	leafT, err := rep.Run(ctx, reports.NewToolkit(f.Store, leafP), leafP)
 	if err != nil {
 		t.Fatalf("run leaf: %v", err)
@@ -596,7 +596,7 @@ func TestFunctionalExpensesGrantProgramScope(t *testing.T) {
 	}
 
 	p := base
-	p.ProgramScope = []int64{f.IDs.Educacion}
+	p.ProgramScope = []reports.ProgramID{reports.ProgramID(f.IDs.Educacion)}
 	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
 	if err != nil {
 		t.Fatalf("run scoped: %v", err)
