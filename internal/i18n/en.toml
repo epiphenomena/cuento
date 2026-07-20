@@ -1315,6 +1315,10 @@ other = "Purpose"
 other = "Currency"
 [reports.fund_activity.col.balance]
 other = "Balance"
+[reports.fund_activity.col.spendable]
+other = "Spendable (cash)"
+[reports.fund_activity.col.deployed]
+other = "Deployed / non-cash"
 [reports.fund_activity.col.line]
 other = "Line"
 [reports.fund_activity.col.amount]

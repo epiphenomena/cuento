@@ -1,7 +1,7 @@
-  Fund            Funder                 Restriction         Purpose                             Currency          Balance
-  --------------  ---------------------  ------------------  ----------------------------------  --------  ---------------
-  Beca Agua 2025  Fundacion Agua Limpia  Purpose-restricted  Clean-water education scholarships  MXN        MXN $97,000.00
-                                                                                                 USD           USD $500.00
-  Building Fund   Anonymous Donor        Purpose-restricted  New community building              USD        USD $50,000.00
-  Unrestricted                                                                                   MXN       MXN $304,400.00
-                                                                                                 USD       USD $175,435.00
+  Fund            Funder                 Restriction         Purpose                             Currency          Balance  Spendable (cash)  Deployed / non-cash
+  --------------  ---------------------  ------------------  ----------------------------------  --------  ---------------  ----------------  -------------------
+  Beca Agua 2025  Fundacion Agua Limpia  Purpose-restricted  Clean-water education scholarships  MXN        MXN $97,000.00    MXN $97,000.00            MXN $0.00
+                                                                                                 USD           USD $500.00       USD $500.00            USD $0.00
+  Building Fund   Anonymous Donor        Purpose-restricted  New community building              USD        USD $50,000.00    USD $10,000.00       USD $40,000.00
+  Unrestricted                                                                                   MXN       MXN $304,400.00   MXN $298,000.00        MXN $6,400.00
+                                                                                                 USD       USD $175,435.00    USD $25,435.00      USD $150,000.00

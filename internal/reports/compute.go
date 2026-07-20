@@ -306,6 +306,37 @@ func (tk *Toolkit) FundBalancesAsOf(ctx context.Context, s Scope, d string, o Co
 	return out, nil
 }
 
+// CurrentCashFundBalancesAsOf returns, per fund, the per-currency SPENDABLE (current_cash)
+// balance as of d in the scope's descendant closure, INCLUDING the unrestricted group as
+// fund id 0 (D20). It mirrors FundBalancesAsOf exactly (same shape, same RateNone/
+// RateClosing branch) but sums ONLY the accounts flagged current_cash (p27.1) — the liquid
+// cash still available — where FundBalancesAsOf sums the WHOLE asset side (cash PLUS
+// receivables and capitalized non-cash assets). The difference (balance − spendable) is the
+// fund's non-cash / deployed position.
+func (tk *Toolkit) CurrentCashFundBalancesAsOf(ctx context.Context, s Scope, d string, o ConvertOpts) (map[FundID][]CurAmt, error) {
+	rows, err := tk.store.CurrentCashFundBalancesAsOf(ctx, d, s.Sub)
+	if err != nil {
+		return nil, err
+	}
+	native := make(map[FundID][]CurAmt, len(rows))
+	for _, r := range rows {
+		fund := FundID(r.FundID)
+		native[fund] = append(native[fund], CurAmt{Currency: r.Currency, Minor: r.Amount})
+	}
+	if o.Mode == RateNone {
+		return native, nil
+	}
+	out := make(map[FundID][]CurAmt, len(native))
+	for fund, amts := range native {
+		conv, err := tk.convertClosing(ctx, amts, o.To, d)
+		if err != nil {
+			return nil, err
+		}
+		out[fund] = []CurAmt{conv}
+	}
+	return out, nil
+}
+
 // FundStatement is one fund's period statement (p15.8): the opening and closing
 // SPENDABLE (cash) balances that frame the period, and the RECEIVED / APPLIED flows
 // that move between them, per currency. It is the per-grant funder view (Q3) and the

@@ -74,11 +74,25 @@ func fundListTable(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 			{HeaderKey: "reports.fund_activity.col.purpose", Align: AlignLeft},
 			{HeaderKey: "reports.fund_activity.col.currency", Align: AlignLeft},
 			{HeaderKey: "reports.fund_activity.col.balance", Align: AlignRight},
+			// p27.x: alongside the whole asset-side Balance, show how much of the fund is
+			// still LIQUID (spendable current_cash) vs DEPLOYED (Balance − spendable). This
+			// tells a funder "you gave X; Y is still liquid cash; the rest is deployed."
+			{HeaderKey: "reports.fund_activity.col.spendable", Align: AlignRight},
+			{HeaderKey: "reports.fund_activity.col.deployed", Align: AlignRight},
 		},
 	}
 
 	scope := Scope{Sub: p.Scope}
 	bals, err := tk.FundBalancesAsOf(ctx, scope, p.To, ConvertOpts{Mode: RateNone})
+	if err != nil {
+		return Table{}, err
+	}
+	// Spendable (current_cash) balance per fund/currency, SAME as-of / SAME native
+	// (RateNone) conversion as the Balance figure above — do NOT introduce a different
+	// rule. Spendable accounts ⊆ asset accounts, so its currency set is a subset of the
+	// balance's; we drive the row loop off the balance currencies and look spendable up
+	// (missing => 0), never zipping the two slices positionally.
+	spendable, err := tk.CurrentCashFundBalancesAsOf(ctx, scope, p.To, ConvertOpts{Mode: RateNone})
 	if err != nil {
 		return Table{}, err
 	}
@@ -111,6 +125,8 @@ func fundListTable(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 	for _, id := range fundIDs {
 		amts := bals[id]
 		sort.Slice(amts, func(i, j int) bool { return amts[i].Currency < amts[j].Currency })
+		// Spendable (current_cash) by currency for this fund, looked up per balance row.
+		spendByCcy := amtsByCurrency(spendable[id])
 		meta := funds[id]
 		for i, a := range amts {
 			// The fund/funder/restriction/purpose columns repeat only on the FIRST
@@ -145,9 +161,19 @@ func fundListTable(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 					AsOf:       p.To,
 				})
 			}
+			// Spendable = the current_cash sum for this fund/currency (0 if the fund holds
+			// no cash in this currency). Deployed = Balance − Spendable: the non-cash asset
+			// position (capitalized fixed assets AND receivables), i.e. the portion of the
+			// fund NOT held as liquid cash. Both are plain cells (no drill): unlike the
+			// balance cell they have no current_cash-scoped drill-account set plumbed.
+			spend := spendByCcy[a.Currency]
+			deployed := a.Minor - spend
 			t.Rows = append(t.Rows, Row{
-				Cells: []Cell{nameCell, funderCell, restrCell, purposeCell, TextCell(a.Currency), bal},
-				Kind:  RowData,
+				Cells: []Cell{
+					nameCell, funderCell, restrCell, purposeCell, TextCell(a.Currency),
+					bal, MoneyCell(spend, a.Currency), MoneyCell(deployed, a.Currency),
+				},
+				Kind: RowData,
 			})
 		}
 	}

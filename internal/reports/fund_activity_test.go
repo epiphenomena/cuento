@@ -114,6 +114,51 @@ func TestFundActivityListGolden(t *testing.T) {
 	checkGolden(t, "fund_activity.csv", csvBuf.Bytes())
 }
 
+// TestFundActivityListSpendableDeployed hand-verifies the spendable (current_cash) and
+// deployed (Balance − spendable) cells the LIST view adds. The Building Fund capitalized a
+// building, so its spendable (1,000,000, == the statement's Closing-spendable) is LESS than
+// its 5,000,000 all-asset balance, with 4,000,000 deployed — the discriminating case. Beca
+// Agua is cash-only, so spendable == balance and deployed == 0 in both currencies.
+func TestFundActivityListSpendableDeployed(t *testing.T) {
+	f := fixture.New(t)
+	ctx := context.Background()
+	rep := fundActivityReport(t)
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), To: f.Expected.AsOf, Lang: "en"}
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run fund list: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name                        string
+		ccy                         string
+		wantSpendable, wantDeployed int64
+	}{
+		// Building Fund: spendable < total (the building is deployed).
+		{"Building Fund", "USD", 1_000_000, 4_000_000},
+		// Beca Agua: cash-only => spendable == total, deployed == 0 (both currencies).
+		{"Beca Agua 2025", "MXN", 9_700_000, 0},
+		{"Beca Agua 2025", "USD", 50_000, 0},
+	} {
+		spend, deployed, ok := fundListSpendableDeployed(table, tc.name, tc.ccy)
+		if !ok {
+			t.Errorf("list missing spendable/deployed row for %q %s", tc.name, tc.ccy)
+			continue
+		}
+		if spend != tc.wantSpendable {
+			t.Errorf("%q %s spendable = %d, want %d", tc.name, tc.ccy, spend, tc.wantSpendable)
+		}
+		if deployed != tc.wantDeployed {
+			t.Errorf("%q %s deployed = %d, want %d", tc.name, tc.ccy, deployed, tc.wantDeployed)
+		}
+		// Balance == spendable + deployed by construction (no figure double-counted).
+		bal, _ := fundListBalance(table, tc.name, tc.ccy)
+		if bal != spend+deployed {
+			t.Errorf("%q %s balance %d != spendable %d + deployed %d", tc.name, tc.ccy, bal, spend, deployed)
+		}
+	}
+}
+
 // TestFundActivityListDrillReconciles: each LIST balance cell's drill (the fund's asset
 // splits as-of To) sums to the cell figure (the reconciliation invariant, p15.3d),
 // against the store as oracle.
@@ -129,10 +174,10 @@ func TestFundActivityListDrillReconciles(t *testing.T) {
 
 	sawDrill := false
 	for _, row := range table.Rows {
-		if row.Kind != reports.RowData {
+		if row.Kind != reports.RowData || len(row.Cells) < 6 {
 			continue
 		}
-		cell := row.Cells[len(row.Cells)-1] // balance cell
+		cell := row.Cells[5] // balance cell (col 5; Spendable/Deployed follow at 6/7)
 		if cell.Drill == nil {
 			// The Unrestricted line (fund 0) is intentionally non-drillable (the store
 			// has no NULL-fund drill filter). Every restricted fund cell IS drillable.
@@ -411,6 +456,25 @@ func fundListBalance(t reports.Table, name, ccy string) (int64, bool) {
 		}
 	}
 	return 0, false
+}
+
+// fundListSpendableDeployed returns the spendable (col 6) and deployed (col 7) cells of
+// the LIST DATA row for fund name / currency ccy, tracking the current fund identifier
+// across a multi-currency fund's blank continuation rows (same as fundListBalance).
+func fundListSpendableDeployed(t reports.Table, name, ccy string) (spend, deployed int64, ok bool) {
+	cur := ""
+	for _, row := range t.Rows {
+		if row.Kind != reports.RowData || len(row.Cells) < 8 {
+			continue
+		}
+		if n := row.Cells[0].Text; n != "" {
+			cur = n
+		}
+		if cur == name && row.Cells[4].Text == ccy {
+			return row.Cells[6].Minor, row.Cells[7].Minor, true
+		}
+	}
+	return 0, 0, false
 }
 
 // listRowHasFunder reports whether the LIST row for fund name carries funder in its

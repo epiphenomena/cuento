@@ -1,6 +1,6 @@
-Fund,Funder,Restriction,Purpose,Currency,Balance
-Beca Agua 2025,Fundacion Agua Limpia,Purpose-restricted,Clean-water education scholarships,MXN,97000.00
-,,,,USD,500.00
-Building Fund,Anonymous Donor,Purpose-restricted,New community building,USD,50000.00
-Unrestricted,,,,MXN,304400.00
-,,,,USD,175435.00
+Fund,Funder,Restriction,Purpose,Currency,Balance,Spendable (cash),Deployed / non-cash
+Beca Agua 2025,Fundacion Agua Limpia,Purpose-restricted,Clean-water education scholarships,MXN,97000.00,97000.00,0.00
+,,,,USD,500.00,500.00,0.00
+Building Fund,Anonymous Donor,Purpose-restricted,New community building,USD,50000.00,10000.00,40000.00
+Unrestricted,,,,MXN,304400.00,298000.00,6400.00
+,,,,USD,175435.00,25435.00,150000.00

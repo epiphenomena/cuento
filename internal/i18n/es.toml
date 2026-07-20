@@ -1314,6 +1314,10 @@ other = "Proposito"
 other = "Moneda"
 [reports.fund_activity.col.balance]
 other = "Saldo"
+[reports.fund_activity.col.spendable]
+other = "Disponible (efectivo)"
+[reports.fund_activity.col.deployed]
+other = "Desplegado / no efectivo"
 [reports.fund_activity.col.line]
 other = "Linea"
 [reports.fund_activity.col.amount]
