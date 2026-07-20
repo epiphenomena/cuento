@@ -81,6 +81,17 @@ type fxKey struct {
 // flows at their transaction-date rates (accumulated UNROUNDED, rounded half-even once,
 // matching Activity's RateTxnDate grain, D12); the difference is the gain/loss.
 func (tk *Toolkit) FXRemeasurementAsOf(ctx context.Context, s Scope, d string) (FXRemeasurement, error) {
+	// Per-run memo (p-perf): the Statement of Activities asks for the same boundary date
+	// twice (a column's opening == the previous column's closing under contiguous ByPeriod),
+	// each a full inception-to-date scan. FXRemeasurementAsOf is a pure read of static data,
+	// so caching by (scope, date) is byte-identical. The cached FXRemeasurement is only read
+	// (never mutated) by callers, so sharing the value is safe.
+	key := fxSnapKey{sub: s.Sub, d: d}
+	if tk.fxCache != nil {
+		if r, ok := tk.fxCache[key]; ok {
+			return r, nil
+		}
+	}
 	rows, err := tk.store.SubDatedBalancesAsOf(ctx, d, s.Sub)
 	if err != nil {
 		return FXRemeasurement{}, err
@@ -108,7 +119,7 @@ func (tk *Toolkit) FXRemeasurementAsOf(ctx context.Context, s Scope, d string) (
 		if r.Currency == func0 {
 			basis[k] += float64(r.Amount) // functional-currency flow: rate is identity
 		} else {
-			rr, err := tk.store.RateOn(ctx, r.Currency, func0, r.Date)
+			rr, err := tk.rateOn(ctx, r.Currency, func0, r.Date)
 			if err != nil {
 				return FXRemeasurement{}, err
 			}
@@ -179,6 +190,10 @@ func (tk *Toolkit) FXRemeasurementAsOf(ctx context.Context, s Scope, d string) (
 		})
 		out.ByFunctional[func0] += remeasure
 	}
+	if tk.fxCache == nil {
+		tk.fxCache = make(map[fxSnapKey]FXRemeasurement)
+	}
+	tk.fxCache[key] = out
 	return out, nil
 }
 

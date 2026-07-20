@@ -28,6 +28,38 @@ type Toolkit struct {
 	// run (compute.go's conversion path looks them up per cell). Currencies are
 	// static reference data (D1), so a single fetch per code per run is safe.
 	expCache map[string]int
+
+	// rateCache memoizes SUCCESSFUL on-or-before rate lookups for the duration of one
+	// report run (p-perf). store.RateOn is a deterministic read of static rate reference
+	// data keyed by (base, quote, date), and the DB does not mutate mid-run, so a single
+	// fetch per (base, quote, date) is byte-identical to re-querying — the same reasoning
+	// that already licenses expCache. Converting reports call RateOn once PER cell/row at a
+	// FIXED (base∈{a few codes}, quote=target, date=as-of), so the distinct key set is tiny
+	// and the cache collapses N per-row lookups to a handful. Only successful results are
+	// cached (a missing rate is rare and re-looked-up so error behavior is unchanged). Not
+	// synchronized: like expCache it is only ever touched from the report's own sequential
+	// convert path, never the balance sheet's concurrent restricted-net-assets goroutine
+	// (which does a RateNone fund scan and touches neither cache).
+	rateCache map[rateKey]Rate
+
+	// fxCache memoizes FXRemeasurementAsOf snapshots per (scope, date) for one report run
+	// (p-perf). The Statement of Activities computes the FX remeasurement over each
+	// comparative column as the difference of the column-END and column-START (dayBefore
+	// the next column's start) as-of snapshots; contiguous ByPeriod columns share endpoints
+	// (a column's opening date == the previous column's closing date), so every INTERIOR
+	// boundary date is otherwise computed twice — each a full inception-to-date dated-balance
+	// scan. FXRemeasurementAsOf is a pure read of static ledger/rate data, so caching by
+	// (scope, date) is byte-identical. Same sequential-only access as the other caches.
+	fxCache map[fxSnapKey]FXRemeasurement
+}
+
+// rateKey is the (base, quote, date) tuple a rate lookup is memoized under (p-perf).
+type rateKey struct{ base, quote, date string }
+
+// fxSnapKey is the (scope, as-of date) an FXRemeasurementAsOf snapshot is memoized under.
+type fxSnapKey struct {
+	sub SubsidiaryID
+	d   string
 }
 
 // NewToolkit builds a Toolkit for one report run over st with the resolved params.

@@ -1273,11 +1273,31 @@ func (tk *Toolkit) byWeek(from, to string, f func(pFrom, pTo string) error) erro
 // (staleness) and whether it was reciprocal (p14.1). It surfaces store.ErrRateMissing
 // unwrapped-in-chain so a report can footnote a gap.
 func (tk *Toolkit) RateOn(ctx context.Context, base, quote, d string) (Rate, error) {
+	return tk.rateOn(ctx, base, quote, d)
+}
+
+// rateOn is the memoized on-or-before rate lookup (p-perf): it returns a cached Rate for
+// a (base, quote, date) tuple already seen this run, else queries store.RateOn once and
+// caches the SUCCESS. store.RateOn is a deterministic read of static rate reference data
+// (on-or-before, no mid-run mutation), so caching is byte-identical to re-querying — the
+// same license expCache has. Errors (a missing rate) are NOT cached, so error behavior is
+// unchanged. It is the single funnel RateOn, ConvertMinorAt, and the fx.go basis loop go
+// through so every converting report shares one cache.
+func (tk *Toolkit) rateOn(ctx context.Context, base, quote, d string) (Rate, error) {
+	if tk.rateCache == nil {
+		tk.rateCache = make(map[rateKey]Rate)
+	}
+	k := rateKey{base: base, quote: quote, date: d}
+	if r, ok := tk.rateCache[k]; ok {
+		return r, nil
+	}
 	rr, err := tk.store.RateOn(ctx, base, quote, d)
 	if err != nil {
 		return Rate{}, err
 	}
-	return Rate{Rate: rr.Rate, RateDate: rr.RateDate, Reciprocal: rr.Reciprocal}, nil
+	r := Rate{Rate: rr.Rate, RateDate: rr.RateDate, Reciprocal: rr.Reciprocal}
+	tk.rateCache[k] = r
+	return r, nil
 }
 
 // ConvertMinorAt converts minor units in currency `from` to currency `to` at the
@@ -1288,7 +1308,7 @@ func (tk *Toolkit) ConvertMinorAt(ctx context.Context, minor int64, from, to, d 
 	if from == to {
 		return minor, nil
 	}
-	rr, err := tk.store.RateOn(ctx, from, to, d)
+	rr, err := tk.rateOn(ctx, from, to, d)
 	if err != nil {
 		return 0, err
 	}

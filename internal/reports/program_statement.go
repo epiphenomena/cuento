@@ -139,6 +139,9 @@ func runProgramStatement(ctx context.Context, tk *Toolkit, p Params) (Table, err
 	tree := toTreeNodes(storeTree)
 
 	b := &psBuilder{tk: tk, p: p, tree: tree, converted: converted}
+	// Index the account tree ONCE (constant for the run); section()/sectionSum() reuse it
+	// instead of rebuilding per program × currency (p-perf).
+	b.children, b.roots, b.isPlaceholder, b.name, b.depth, b.typeOf = indexTree(tree)
 	b.columns()
 
 	// The set of currency blocks: every currency that appears anywhere in the rolled
@@ -250,6 +253,17 @@ type psBuilder struct {
 	p         Params
 	tree      []treeNode
 	converted bool
+
+	// Indexed account tree, computed ONCE from `tree` (constant for the run) and reused by
+	// every section()/sectionSum() call (p-perf). indexTree rebuilds children/roots/
+	// placeholder/name/depth/type maps with a per-node depth walk, so re-deriving it per
+	// (program × currency × section) was an O(programs·currencies) redundant rebuild.
+	children      map[AccountID][]AccountID
+	roots         []AccountID
+	isPlaceholder map[AccountID]bool
+	name          map[AccountID]string
+	depth         map[AccountID]int
+	typeOf        map[AccountID]string
 
 	tableCols []Column
 	rows      []Row
@@ -369,10 +383,9 @@ func (b *psBuilder) hasActivity(ccy string, act map[ProgramID]map[AccountID][]Cu
 // sectionSum returns the RAW net-debit sum (leaves of type typ only) over la — used to
 // derive the program's net BEFORE emitting rows (so the header carries the net).
 func (b *psBuilder) sectionSum(la map[AccountID]int64, typ string) int64 {
-	_, _, isPlaceholder, _, _, typeOf := indexTree(b.tree)
 	var sum int64
 	for acct, v := range la {
-		if !isPlaceholder[acct] && typeOf[acct] == typ {
+		if !b.isPlaceholder[acct] && b.typeOf[acct] == typ {
 			sum += v
 		}
 	}
@@ -386,7 +399,7 @@ func (b *psBuilder) sectionSum(la map[AccountID]int64, typ string) int64 {
 // leaves WITH ACTIVITY as indented data rows — then a section total row. `sign` is the display
 // sign (−1 revenue, +1 expense). All rows are indented by depthOffset (the program's depth+1).
 func (b *psBuilder) section(ccy string, la map[AccountID]int64, node *progNode, typ, sectionKey, totalKey string, sign int64, depthOffset int) {
-	children, roots, isPlaceholder, name, depth, typeOf := indexTree(b.tree)
+	children, roots, isPlaceholder, name, depth, typeOf := b.children, b.roots, b.isPlaceholder, b.name, b.depth, b.typeOf
 
 	// Per-node subtotal (this currency), plus whether a node's subtree carries any in-scope
 	// activity of this type — an empty branch drops out entirely (SoA rule).
