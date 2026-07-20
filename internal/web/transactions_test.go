@@ -499,6 +499,35 @@ func TestTxnStableInputIDsAcrossRerender(t *testing.T) {
 	}
 }
 
+// TestTxnAccountOptionShowsTypePrefix: each account option in the transaction
+// editor's account selects shows the SINGULAR account-type label (account.type.*)
+// as the first segment of its displayed full name, separated from the dotted path
+// by " · ". The prefix rides both the visible option text AND data-path so the
+// shared combobox (combofilter.js, which fuzzy-ranks on data-path) can filter by
+// type too. Reuses the existing account.type.* i18n keys; no new keys.
+func TestTxnAccountOptionShowsTypePrefix(t *testing.T) {
+	e := newTxnWebEnv(t)
+
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet,
+		"/transactions/new?subsidiary="+strconv.FormatInt(int64(e.sub1), 10), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET new: %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Checking is an asset leaf in sub1; its option must read "Asset · Checking"
+	// in both the visible text and data-path (so it stays fuzzy-filterable).
+	for _, want := range []string{
+		`>Asset · Checking<`,
+		`data-path="Asset · Checking"`,
+		`>Expense · Salaries<`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("account option missing type prefix %q; body:\n%s", want, body)
+		}
+	}
+}
+
 // TestTxnEditorFullWidth: the full-page editor opts <main> out of the centered
 // reading column (app-main-wide, p23.2) so the split grid can use the horizontal
 // space. The htmx form-region swap is just the form partial, so it does NOT carry

@@ -94,7 +94,7 @@ func TestReviewPostCreatesBalancedTxnAndConverts(t *testing.T) {
 	if !strings.Contains(body, `name="subsidiary" value="1"`) {
 		t.Error("locked subsidiary hidden carrier missing")
 	}
-	if !strings.Contains(body, `selected>Travel</option>`) {
+	if !strings.Contains(body, `selected>Expense · Travel</option>`) {
 		t.Error("expense line not prefilled in the editor")
 	}
 
