@@ -260,7 +260,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
   color: var(--color-text);
 }
 .app-subnav-controls .btn-primary { color: var(--color-primary-text); }
-.app-subnav ul {
+/* p26.11 fix: scope this to the section-nav LINKS list only. A bare `.app-subnav ul`
+   also matched the fuzzy-combobox popup (`ul.combo-list`, rendered inside the report
+   filter bar in `.app-subnav-controls`), leaking `display:flex; flex-direction:row`
+   onto it so the program filter's options laid out horizontally. The links list always
+   carries `.app-subnav-links`, so target that class directly. */
+.app-subnav-links {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-4);
