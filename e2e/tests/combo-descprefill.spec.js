@@ -9,7 +9,7 @@
 // expense_detail.tmpl.
 
 const { test, expect } = require('../fixtures');
-const { openNewAccount, saveAccount } = require('../helpers');
+const { openNewAccount, saveAccount, selectTxnAccount } = require('../helpers');
 
 async function installSettleMarker(page) {
   await page.addInitScript(() => {
@@ -68,8 +68,8 @@ test.describe('combobox + description prefill row-targeting', () => {
     // body row 0 = Savings 40 with the description to recall).
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    await page.locator('#txn-main-account').selectOption({ label: 'Rowtgt Checking' });
-    await page.locator('#txn-account-0').selectOption({ label: 'Rowtgt Savings' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'Rowtgt Checking');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Rowtgt Savings');
     await page.locator('#txn-amount-0').fill('40.00');
     await page.locator('#txn-desc-0').fill('Rowtarget recall');
     await page.getByRole('button', { name: /^save$/i }).click();
@@ -79,7 +79,7 @@ test.describe('combobox + description prefill row-targeting', () => {
     // description on row 1 -- the "next row down" case the user hit.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    await page.locator('#txn-account-0').selectOption({ label: 'Rowtgt Checking' });
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Rowtgt Checking');
     await page.locator('#txn-amount-0').fill('-40.00');
     await expect(page.locator('#txn-desc-1')).toBeVisible(); // trailing row auto-appended
 
@@ -118,8 +118,8 @@ test.describe('combobox + description prefill row-targeting', () => {
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
     // p26.34: header = Checking; body row 0 = Savings 18 with the description to recall.
-    await page.locator('#txn-main-account').selectOption({ label: 'Blur Checking' });
-    await page.locator('#txn-account-0').selectOption({ label: 'Blur Savings' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'Blur Checking');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Blur Savings');
     await page.locator('#txn-amount-0').fill('18.00');
     await page.locator('#txn-desc-0').fill('Blur commit recall');
     await page.getByRole('button', { name: /^save$/i }).click();
@@ -127,7 +127,7 @@ test.describe('combobox + description prefill row-targeting', () => {
 
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    await page.locator('#txn-account-0').selectOption({ label: 'Blur Checking' });
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Blur Checking');
     await page.locator('#txn-amount-0').fill('-18.00');
     await expect(page.locator('#txn-desc-1')).toBeVisible();
 
@@ -251,8 +251,8 @@ test.describe('combobox + description prefill row-targeting', () => {
     // that split is the prefill source for the expense grid.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    await page.locator('#txn-main-account').selectOption({ label: 'ExpTgt Cash' });
-    await page.locator('#txn-account-0').selectOption({ label: 'ExpTgt Rent' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'ExpTgt Cash');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'ExpTgt Rent');
     await page.locator('#txn-amount-0').fill('25.00');
     await page.locator('#txn-desc-0').fill('ExpTgt monthly rent');
     await page.getByRole('button', { name: /^save$/i }).click();
@@ -312,8 +312,8 @@ test.describe('combobox + description prefill row-targeting', () => {
 
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    await page.locator('#txn-main-account').selectOption({ label: 'Locked Cash' });
-    await page.locator('#txn-account-0').selectOption({ label: 'Locked Rent' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'Locked Cash');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Locked Rent');
     await page.locator('#txn-amount-0').fill('30.00');
     await page.locator('#txn-desc-0').fill('Locked scope demo');
     await page.getByRole('button', { name: /^save$/i }).click();

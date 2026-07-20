@@ -21,7 +21,7 @@
 // destination GET response deterministically. RULE 11: all data synthetic.
 
 const { test, expect } = require('../fixtures');
-const { openNewAccount, saveAccount } = require('../helpers');
+const { openNewAccount, saveAccount, selectTxnAccount } = require('../helpers');
 
 function unique() {
   return Math.random().toString(36).slice(2, 8);
@@ -172,7 +172,7 @@ test('expenses review: reviewer posts one report (converts) and rejects another'
   await expect(page.locator('#txn-desc-0')).toHaveValue(postDesc);
 
   // Add the cash counter-side (-40.00) so the txn balances.
-  await page.locator('#txn-account-1').selectOption({ label: cashName });
+  await selectTxnAccount(page.locator('#txn-account-1'), cashName);
   await page.locator('#txn-amount-1').fill('-40.00');
 
   // Post: hx-post -> HX-Redirect to the created txn's history. Wait for that GET.

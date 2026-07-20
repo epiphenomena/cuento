@@ -9,7 +9,7 @@
 // Selectors come from transaction_form.tmpl / register.tmpl / accounts.tmpl.
 
 const { test, expect } = require('../fixtures');
-const { openNewAccount, saveAccount } = require('../helpers');
+const { openNewAccount, saveAccount, selectTxnAccount } = require('../helpers');
 
 // The htmx settle marker (`e2e-settled` on each htmx:afterSettle target) is installed
 // centrally by the `page` fixture — see fixtures.js for why (hx-* triggers on a
@@ -107,8 +107,8 @@ test.describe('transaction editor', () => {
     // = Editor Checking; ONE body row = Editor Savings 25.00 -> the header amount shows
     // -25.00 automatically. (Header presence is asserted separately below.)
     await expect(page.locator('#txn-main-account')).toBeVisible();
-    await page.locator('#txn-main-account').selectOption({ label: 'Editor Checking' });
-    await page.locator('#txn-account-0').selectOption({ label: 'Editor Savings' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'Editor Checking');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Editor Savings');
     await page.locator('#txn-amount-0').fill('25.00');
     // test (c): the header balancing amount auto-fills WITHOUT the user typing it.
     await expect(page.locator('#txn-main-amount')).toHaveValue('-25.00');
@@ -134,8 +134,8 @@ test.describe('transaction editor', () => {
     // with the description to recall).
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    await page.locator('#txn-main-account').selectOption({ label: 'HdrDesc Checking' });
-    await page.locator('#txn-account-0').selectOption({ label: 'HdrDesc Savings' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'HdrDesc Checking');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'HdrDesc Savings');
     await page.locator('#txn-amount-0').fill('40.00');
     await page.locator('#txn-desc-0').fill('Header recall demo');
     await page.getByRole('button', { name: /^save$/i }).click();
@@ -198,12 +198,12 @@ test.describe('transaction editor', () => {
     await expect(page.locator('form#txn-form')).toBeVisible();
 
     // Row 0: pick the ASSET account -> the combined control stays hidden.
-    await page.locator('#txn-account-0').selectOption({ label: 'Editor Bank' });
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Editor Bank');
     await expect(page.locator('#txn-progclass-0')).toBeHidden();
 
     // Row 1: pick the EXPENSE account -> the combined control becomes visible and is
     // prefilled from the account's default class (c:management, "Admin").
-    await page.locator('#txn-account-1').selectOption({ label: 'Editor Rent' });
+    await selectTxnAccount(page.locator('#txn-account-1'), 'Editor Rent');
     await expect(page.locator('#txn-progclass-1')).toBeVisible();
     await expect(page.locator('#txn-progclass-1')).toHaveValue('c:management');
   });
@@ -232,7 +232,7 @@ test.describe('transaction editor', () => {
 
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    await page.locator('#txn-account-0').selectOption({ label: 'Prog Supplies' });
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Prog Supplies');
     const pc0 = page.locator('#txn-progclass-0');
     await expect(pc0).toBeVisible();
     // Defaults to a PROGRAM pick (p:<id>), never blank, even without an account default class.
@@ -253,7 +253,7 @@ test.describe('transaction editor', () => {
     // splits carry a program but no functional class.
     // (Reuse the seeded grant-revenue kind is not available here; assert the class options are
     // HIDDEN once the row's account is not expense by re-picking the asset on this row instead.)
-    await page.locator('#txn-account-0').selectOption({ label: 'Prog Bank' });
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Prog Bank');
     await expect(pc0).toBeHidden();
   });
 
@@ -416,8 +416,8 @@ test.describe('transaction editor', () => {
     // p26.34: main (Live Savings) in the header; Gone Checking -40 in the body row. The
     // header auto-balances to +40. Gone Checking (the to-be-deactivated account) is the
     // BODY split whose row must later render it as a selected unavailable option.
-    await page.locator('#txn-main-account').selectOption({ label: 'Live Savings' });
-    await page.locator('#txn-account-0').selectOption({ label: 'Gone Checking' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'Live Savings');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Gone Checking');
     await page.locator('#txn-amount-0').fill('-40.00');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
@@ -505,13 +505,13 @@ test.describe('transaction editor', () => {
     ).toHaveClass(/txn-memo-cell/);
 
     // Build three data rows with distinguishable memos (auto-append grows the trailing row).
-    await page.locator('#txn-account-0').selectOption({ label: 'Del Savings' });
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Del Savings');
     await page.locator('#txn-memo-0').fill('row-zero-memo');
     await expect(page.locator('#txn-account-1')).toBeVisible();
-    await page.locator('#txn-account-1').selectOption({ label: 'Del Checking' });
+    await selectTxnAccount(page.locator('#txn-account-1'), 'Del Checking');
     await page.locator('#txn-memo-1').fill('row-one-memo');
     await expect(page.locator('#txn-account-2')).toBeVisible();
-    await page.locator('#txn-account-2').selectOption({ label: 'Del Savings' });
+    await selectTxnAccount(page.locator('#txn-account-2'), 'Del Savings');
     await page.locator('#txn-memo-2').fill('row-two-memo');
     await expect(page.locator('#txn-account-3')).toBeVisible();
 
@@ -621,11 +621,11 @@ test.describe('transaction editor', () => {
 
     // Row 0: fund = Alpha Grant, amount +100. Row 1: fund = Beta Grant, amount -60.
     // Overall = +40 (Total chip). Each fund group is nonzero -> a per-fund chip each.
-    await page.locator('#txn-account-0').selectOption({ label: 'Chip Savings' });
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Chip Savings');
     await page.locator('#txn-fund-0').selectOption({ label: 'Alpha Grant' });
     await page.locator('#txn-amount-0').fill('100.00');
     await expect(page.locator('#txn-account-1')).toBeVisible();
-    await page.locator('#txn-account-1').selectOption({ label: 'Chip Checking' });
+    await selectTxnAccount(page.locator('#txn-account-1'), 'Chip Checking');
     await page.locator('#txn-fund-1').selectOption({ label: 'Beta Grant' });
     await page.locator('#txn-amount-1').fill('-60.00');
 
@@ -662,8 +662,8 @@ test.describe('transaction editor', () => {
 
     // Header (balancing) account + a single body leg: Savings +40. The header takes the
     // residual -40, so the OVERALL transaction is balanced (0) even though the body sum is 40.
-    await page.locator('#txn-main-account').selectOption({ label: 'Bal Checking' });
-    await page.locator('#txn-account-0').selectOption({ label: 'Bal Savings' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'Bal Checking');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Bal Savings');
     await page.locator('#txn-amount-0').fill('40.00');
 
     // The header main split's amount previews the -40 residual (proves the body IS balanced
@@ -701,8 +701,8 @@ test.describe('transaction editor', () => {
     // Post a transaction whose HEADER account is Prefill Savings, so the last-used header
     // account becomes Savings.
     await page.goto('/transactions/new');
-    await page.locator('#txn-main-account').selectOption({ label: 'Prefill Savings' });
-    await page.locator('#txn-account-0').selectOption({ label: 'Prefill Checking' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'Prefill Savings');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Prefill Checking');
     await page.locator('#txn-amount-0').fill('50.00');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));

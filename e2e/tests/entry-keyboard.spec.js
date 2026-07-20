@@ -76,7 +76,13 @@ async function selectByKeyboard(page, selector, label) {
   const { targetIndex, currentIndex, value } = await sel.evaluate((el, wantLabel) => {
     const s = /** @type {HTMLSelectElement} */ (el);
     const opts = [...s.options];
-    const ti = opts.findIndex((o) => o.textContent.trim() === wantLabel);
+    // The transaction account options now carry an account-type prefix ("Asset · Cash"),
+    // so match the bare name as the trailing segment after " · " (falling back to an exact
+    // match for any non-prefixed select).
+    const ti = opts.findIndex((o) => {
+      const t = o.textContent.trim();
+      return t === wantLabel || t.endsWith(` · ${wantLabel}`);
+    });
     return { targetIndex: ti, currentIndex: s.selectedIndex, value: ti >= 0 ? opts[ti].value : '' };
   }, label);
   if (targetIndex < 0) throw new Error(`option "${label}" not found in ${selector}`);

@@ -26,7 +26,7 @@
 // / transaction_form.tmpl.
 
 const { test, expect } = require('../fixtures');
-const { openNewAccount, saveAccount } = require('../helpers');
+const { openNewAccount, saveAccount, selectTxnAccount } = require('../helpers');
 
 async function login(page, server) {
   await page.goto('/login');
@@ -67,8 +67,8 @@ async function postDeposit(page, checkingName, incomeName, amount) {
   await expect(page.locator('form#txn-form')).toBeVisible();
   // p26.34: checking is the HEADER (balancing) account (+amount, the residual); income
   // (revenue, program auto-defaults) is the single body row.
-  await page.locator('#txn-main-account').selectOption({ label: checkingName });
-  await page.locator('#txn-account-0').selectOption({ label: incomeName });
+  await selectTxnAccount(page.locator('#txn-main-account'), checkingName);
+  await selectTxnAccount(page.locator('#txn-account-0'), incomeName);
   await page.locator('#txn-amount-0').fill(`-${amount}`);
   await page.getByRole('button', { name: /^save$/i }).click();
   await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
@@ -267,8 +267,8 @@ test('reconcile: add a transaction from the workspace and land back on it', asyn
 
   // Post a second deposit INTO checking (so the new split lands on the recon's account
   // and shows up in the workspace uncleared list): checking header +200, income -200.
-  await page.locator('#txn-main-account').selectOption({ label: checking });
-  await page.locator('#txn-account-0').selectOption({ label: income });
+  await selectTxnAccount(page.locator('#txn-main-account'), checking);
+  await selectTxnAccount(page.locator('#txn-account-0'), income);
   await page.locator('#txn-amount-0').fill('-200.00');
   await page.getByRole('button', { name: /^save$/i }).click();
 

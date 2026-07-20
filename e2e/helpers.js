@@ -56,4 +56,19 @@ async function saveAccount(page) {
   await page.waitForURL('**/accounts');
 }
 
-module.exports = { saveAndReload, openNewAccount, saveAccount };
+// selectTxnAccount picks an account option in a transaction-editor account select
+// (#txn-main-account / #txn-account-N) by its account NAME, tolerant of the account
+// -type prefix the option text now carries. The transaction form renders each option
+// as "<Type> · <dotted path>" (e.g. "Asset · Cash.BOA") so the type is visible and
+// fuzzy-filterable; Playwright's selectOption({label}) is an EXACT match and would no
+// longer find a bare name. We locate the option whose text ends with "· <name>"
+// (the last path segment equals the account's own name), read its real value (the
+// account id), and select by value — so specs keep naming accounts, not type prefixes.
+async function selectTxnAccount(locator, name) {
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const opt = locator.locator('option').filter({ hasText: new RegExp(`·\\s+${esc}$`) });
+  const value = await opt.first().getAttribute('value');
+  await locator.selectOption(value);
+}
+
+module.exports = { saveAndReload, openNewAccount, saveAccount, selectTxnAccount };

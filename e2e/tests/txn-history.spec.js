@@ -11,7 +11,7 @@
 // swap), so they need no settle dance; the editor save is a plain submit.
 
 const { test, expect } = require('../fixtures');
-const { openNewAccount, saveAccount } = require('../helpers');
+const { openNewAccount, saveAccount, selectTxnAccount } = require('../helpers');
 
 // The htmx settle marker is installed centrally by the `page` fixture (fixtures.js);
 // the per-row p12.4 actions (edit/void/duplicate/history) are plain full-page <a>
@@ -49,8 +49,8 @@ async function postTransfer(page, srcName, dstName, amt) {
   await expect(page.locator('form#txn-form')).toBeVisible();
   // p26.34: src is the header (balancing) account; dst is the single body row. The header
   // amount auto-balances to -amt.
-  await page.locator('#txn-main-account').selectOption({ label: srcName });
-  await page.locator('#txn-account-0').selectOption({ label: dstName });
+  await selectTxnAccount(page.locator('#txn-main-account'), srcName);
+  await selectTxnAccount(page.locator('#txn-account-0'), dstName);
   await page.locator('#txn-amount-0').fill(amt);
   await page.locator('#txn-memo').fill('original memo');
   await page.getByRole('button', { name: /^save$/i }).click();

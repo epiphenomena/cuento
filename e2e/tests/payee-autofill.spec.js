@@ -17,7 +17,7 @@
 // race. Strict CSP blocks page.waitForFunction; we use locator waits (auto-retry).
 
 const { test, expect } = require('../fixtures');
-const { openNewAccount, saveAccount } = require('../helpers');
+const { openNewAccount, saveAccount, selectTxnAccount } = require('../helpers');
 
 async function installSettleMarker(page) {
   await page.addInitScript(() => {
@@ -92,8 +92,8 @@ test.describe('per-split description autocomplete + prefill', () => {
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
     // p26.34: header = Checking (balancing); body row 0 = Savings 40 with desc + memo.
-    await page.locator('#txn-main-account').selectOption({ label: 'Desc Checking' });
-    await page.locator('#txn-account-0').selectOption({ label: 'Desc Savings' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'Desc Checking');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Desc Savings');
     await page.locator('#txn-amount-0').fill('40.00');
     await page.locator('#txn-desc-0').fill('Autofill transfer');
     await page.locator('#txn-memo-0').fill('first memo');
@@ -126,8 +126,8 @@ test.describe('per-split description autocomplete + prefill', () => {
     // Seed a split WITH a description on a prior transaction.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    await page.locator('#txn-main-account').selectOption({ label: 'Guard Checking' });
-    await page.locator('#txn-account-0').selectOption({ label: 'Guard Savings' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'Guard Checking');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Guard Savings');
     await page.locator('#txn-amount-0').fill('15.00');
     await page.locator('#txn-desc-0').fill('Guard payment');
     await page.getByRole('button', { name: /^save$/i }).click();
@@ -157,8 +157,8 @@ test.describe('per-split description autocomplete + prefill', () => {
     // Seed a split with a description.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    await page.locator('#txn-main-account').selectOption({ label: 'Clone Checking' });
-    await page.locator('#txn-account-0').selectOption({ label: 'Clone Savings' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'Clone Checking');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Clone Savings');
     await page.locator('#txn-amount-0').fill('22.00');
     await page.locator('#txn-desc-0').fill('Clone recall');
     await page.getByRole('button', { name: /^save$/i }).click();
@@ -169,7 +169,7 @@ test.describe('per-split description autocomplete + prefill', () => {
     // rendered row (proves stripDescField + initDescField re-wired the clone).
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    await page.locator('#txn-account-0').selectOption({ label: 'Clone Checking' });
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Clone Checking');
     await expect(page.locator('#txn-desc-1')).toBeVisible(); // row 1 auto-appended
     const desc1 = page.locator('#txn-desc-1');
     await desc1.click();
@@ -194,8 +194,8 @@ test.describe('per-split description autocomplete + prefill', () => {
     await expect(page.locator('form#txn-form')).toBeVisible();
     // p26.34: header = Exp Cash (balancing asset); body row 0 = Exp Supplies (expense,
     // auto-defaults program/class) 33 with the description to recall.
-    await page.locator('#txn-main-account').selectOption({ label: 'Exp Cash' });
-    await page.locator('#txn-account-0').selectOption({ label: 'Exp Supplies' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'Exp Cash');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Exp Supplies');
     await page.locator('#txn-amount-0').fill('33.00');
     await page.locator('#txn-desc-0').fill('Printer paper');
     await page.getByRole('button', { name: /^save$/i }).click();

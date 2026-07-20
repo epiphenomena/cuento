@@ -21,7 +21,7 @@
 // locator/URL/response waits and a plain page.request fetch for the CSV.
 
 const { test, expect } = require('../fixtures');
-const { saveAndReload, openNewAccount, saveAccount } = require('../helpers');
+const { saveAndReload, openNewAccount, saveAccount, selectTxnAccount } = require('../helpers');
 
 const TB = '/reports/trial_balance';
 const BS = '/reports/balance_sheet';
@@ -219,8 +219,8 @@ test('reports: converting to a rate-less currency shows an inline error, not a 5
   await createAsset(page, 'NoRate Savings');
   await page.goto('/transactions/new');
   await expect(page.locator('form#txn-form')).toBeVisible();
-  await page.locator('#txn-main-account').selectOption({ label: 'NoRate Checking' });
-  await page.locator('#txn-account-0').selectOption({ label: 'NoRate Savings' });
+  await selectTxnAccount(page.locator('#txn-main-account'), 'NoRate Checking');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'NoRate Savings');
   await page.locator('#txn-amount-0').fill('42.00');
   await page.getByRole('button', { name: /^save$/i }).click();
   await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
@@ -377,8 +377,8 @@ test('reports: drill a trial-balance figure to its transactions (each linking to
 
   await page.goto('/transactions/new');
   await expect(page.locator('form#txn-form')).toBeVisible();
-  await page.locator('#txn-main-account').selectOption({ label: 'Drill Checking' });
-  await page.locator('#txn-account-0').selectOption({ label: 'Drill Savings' });
+  await selectTxnAccount(page.locator('#txn-main-account'), 'Drill Checking');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'Drill Savings');
   await page.locator('#txn-amount-0').fill('42.00');
   await page.getByRole('button', { name: /^save$/i }).click();
   await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
@@ -436,8 +436,8 @@ test('reports: the trial balance nests accounts and the tree collapse/expand con
   await expect(page.locator('form#txn-form')).toBeVisible();
   // The child's split-option label is its DOTTED PATH (p26.1: parent.child); the
   // top-level counter's path is just its name.
-  await page.locator('#txn-main-account').selectOption({ label: 'TB Nest Counter' });
-  await page.locator('#txn-account-0').selectOption({ label: 'TB Nest Parent.TB Nest Child' });
+  await selectTxnAccount(page.locator('#txn-main-account'), 'TB Nest Counter');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'TB Nest Parent.TB Nest Child');
   await page.locator('#txn-amount-0').fill('75.00');
   await page.getByRole('button', { name: /^save$/i }).click();
   await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
@@ -506,8 +506,8 @@ test('reports: open the account ledger, pick an account + range, see opening/lin
 
   await page.goto('/transactions/new');
   await expect(page.locator('form#txn-form')).toBeVisible();
-  await page.locator('#txn-main-account').selectOption({ label: 'Ledger Savings' });
-  await page.locator('#txn-account-0').selectOption({ label: 'Ledger Checking' });
+  await selectTxnAccount(page.locator('#txn-main-account'), 'Ledger Savings');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'Ledger Checking');
   await page.locator('#txn-amount-0').fill('55.00');
   await page.getByRole('button', { name: /^save$/i }).click();
   await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
@@ -597,8 +597,8 @@ test('reports: open the functional expenses (990 Part IX), see the 990-line rows
   // in the 990 Part IX matrix.
   await page.goto('/transactions/new');
   await expect(page.locator('form#txn-form')).toBeVisible();
-  await page.locator('#txn-main-account').selectOption({ label: 'FE Bank' });
-  await page.locator('#txn-account-0').selectOption({ label: 'FE Rent' });
+  await selectTxnAccount(page.locator('#txn-main-account'), 'FE Bank');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'FE Rent');
   await expect(page.locator('#txn-progclass-0')).toBeVisible();
   await expect(page.locator('#txn-progclass-0')).toHaveValue('c:management');
   await page.locator('#txn-amount-0').fill('75.00');
@@ -814,8 +814,8 @@ test('reports: open the fund report (list), pick a fund, see its period statemen
   await expect(page.locator('form#txn-form')).toBeVisible();
   // p26.34: Stmt Cash is the header (balancing) account; its fund is DERIVED from the body
   // (single fund), so it lands fund-tagged too. Body = Stmt Gift -100, fund Stmt Fund.
-  await page.locator('#txn-main-account').selectOption({ label: 'Stmt Cash E2E' });
-  await page.locator('#txn-account-0').selectOption({ label: 'Stmt Gift E2E' });
+  await selectTxnAccount(page.locator('#txn-main-account'), 'Stmt Cash E2E');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'Stmt Gift E2E');
   await page.locator('#txn-amount-0').fill('-100.00');
   await page.locator('#txn-fund-0').selectOption({ label: 'Stmt Fund E2E' });
   await page.getByRole('button', { name: /^save$/i }).click();
@@ -826,8 +826,8 @@ test('reports: open the fund report (list), pick a fund, see its period statemen
   await page.goto('/transactions/new');
   await expect(page.locator('form#txn-form')).toBeVisible();
   // Header = Stmt Cash (-40 residual, fund derived); body = Stmt Building +40 fund.
-  await page.locator('#txn-main-account').selectOption({ label: 'Stmt Cash E2E' });
-  await page.locator('#txn-account-0').selectOption({ label: 'Stmt Building E2E' });
+  await selectTxnAccount(page.locator('#txn-main-account'), 'Stmt Cash E2E');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'Stmt Building E2E');
   await page.locator('#txn-amount-0').fill('40.00');
   await page.locator('#txn-fund-0').selectOption({ label: 'Stmt Fund E2E' });
   await page.getByRole('button', { name: /^save$/i }).click();
@@ -901,8 +901,8 @@ test('reports: open the activities-by-restriction statement, see the two restric
   await page.goto('/transactions/new');
   await expect(page.locator('form#txn-form')).toBeVisible();
   // p26.34: Restr Cash is the header (+100 residual, fund derived from the body).
-  await page.locator('#txn-main-account').selectOption({ label: 'Restr Cash E2E' });
-  await page.locator('#txn-account-0').selectOption({ label: 'Restr Gift E2E' });
+  await selectTxnAccount(page.locator('#txn-main-account'), 'Restr Cash E2E');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'Restr Gift E2E');
   await page.locator('#txn-amount-0').fill('-100.00');
   await page.locator('#txn-fund-0').selectOption({ label: 'Restr Fund E2E' });
   await page.getByRole('button', { name: /^save$/i }).click();
@@ -913,8 +913,8 @@ test('reports: open the activities-by-restriction statement, see the two restric
   await page.goto('/transactions/new');
   await expect(page.locator('form#txn-form')).toBeVisible();
   // Header = Restr Cash (-30 residual); body = Restr Cost +30 (expense, class/program default).
-  await page.locator('#txn-main-account').selectOption({ label: 'Restr Cash E2E' });
-  await page.locator('#txn-account-0').selectOption({ label: 'Restr Cost E2E' });
+  await selectTxnAccount(page.locator('#txn-main-account'), 'Restr Cash E2E');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'Restr Cost E2E');
   await page.locator('#txn-amount-0').fill('30.00');
   await page.getByRole('button', { name: /^save$/i }).click();
   await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
@@ -1002,9 +1002,9 @@ test('reports: open the program statement (comparative), see the vertical progra
   // view has a non-empty program column.
   await page.goto('/transactions/new');
   await expect(page.locator('form#txn-form')).toBeVisible();
-  await page.locator('#txn-main-account').selectOption({ label: 'PS Cash E2E' });
+  await selectTxnAccount(page.locator('#txn-main-account'), 'PS Cash E2E');
   // The child leaf's split-option label is its DOTTED PATH (p26.1: parent.child).
-  await page.locator('#txn-account-0').selectOption({ label: 'PS Expenses E2E.PS Cost E2E' });
+  await selectTxnAccount(page.locator('#txn-account-0'), 'PS Expenses E2E.PS Cost E2E');
   // p26.41: the combined program/class control -- pick the program node by label (its value
   // is p:<id>, which decodes to program=PS Outreach + class=program on this expense row).
   await expect(page.locator('#txn-progclass-0')).toBeVisible();
@@ -1159,8 +1159,8 @@ test('reports: open the 990 package, see the four Parts + Unmapped buckets + tot
   await page.goto('/transactions/new');
   await expect(page.locator('form#txn-form')).toBeVisible();
   // p26.34: header = F990 Bank (+90 residual); body = F990 Gift -90 (revenue, program).
-  await page.locator('#txn-main-account').selectOption({ label: 'F990 Bank E2E' });
-  await page.locator('#txn-account-0').selectOption({ label: 'F990 Gift E2E' });
+  await selectTxnAccount(page.locator('#txn-main-account'), 'F990 Bank E2E');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'F990 Gift E2E');
   await page.locator('#txn-amount-0').fill('-90.00');
   await page.getByRole('button', { name: /^save$/i }).click();
   await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
@@ -1169,8 +1169,8 @@ test('reports: open the 990 package, see the four Parts + Unmapped buckets + tot
   await page.goto('/transactions/new');
   await expect(page.locator('form#txn-form')).toBeVisible();
   // Header = F990 Bank (-30 residual); body = F990 Rent +30 (expense, class management).
-  await page.locator('#txn-main-account').selectOption({ label: 'F990 Bank E2E' });
-  await page.locator('#txn-account-0').selectOption({ label: 'F990 Rent E2E' });
+  await selectTxnAccount(page.locator('#txn-main-account'), 'F990 Bank E2E');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'F990 Rent E2E');
   await expect(page.locator('#txn-progclass-0')).toHaveValue('c:management');
   await page.locator('#txn-amount-0').fill('30.00');
   await page.getByRole('button', { name: /^save$/i }).click();
@@ -1194,9 +1194,10 @@ test('reports: open the 990 package, see the four Parts + Unmapped buckets + tot
   await expect(table).toContainText('Part IX');
   await expect(table).toContainText('Part X');
 
-  // Every section renders an explicit (Unmapped) bucket (never drop rows). At least one is
-  // present (Part VIII's is non-empty here: the F990 Gift receipt has no 990 code).
-  await expect(table).toContainText('(Unmapped)');
+  // Every section renders an explicit Unmapped bucket (never drop rows). At least one is
+  // present (Part VIII's is non-empty here: the F990 Gift receipt has no 990 code). The
+  // bucket label is "Unmapped — assign a 990 line" (reports.form_990.unmapped).
+  await expect(table).toContainText('assign a 990 line');
 
   // The Part VIII / Part IX total rows + the Part X balancing identity row.
   await expect(table).toContainText('Total revenue');
@@ -1269,8 +1270,8 @@ test('reports: budget variance renders the monthly grid + toggles the measure wi
   // --- a matching posted revenue receipt (the ACTUAL side) in the plan span ---
   await page.goto('/transactions/new');
   await expect(page.locator('form#txn-form')).toBeVisible();
-  await page.locator('#txn-main-account').selectOption({ label: cashName });
-  await page.locator('#txn-account-0').selectOption({ label: revName });
+  await selectTxnAccount(page.locator('#txn-main-account'), cashName);
+  await selectTxnAccount(page.locator('#txn-account-0'), revName);
   await page.locator('#txn-amount-0').fill('-320.00'); // a revenue credit (net-debit negative)
   await page.locator('#txn-date').fill('2026-02-20');
   await page.getByRole('button', { name: /^save$/i }).click();

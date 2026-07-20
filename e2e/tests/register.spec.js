@@ -9,7 +9,7 @@
 // Selectors come from register.tmpl / accounts.tmpl.
 
 const { test, expect } = require('../fixtures');
-const { openNewAccount, saveAccount } = require('../helpers');
+const { openNewAccount, saveAccount, selectTxnAccount } = require('../helpers');
 
 async function login(page, server) {
   await page.goto('/login');
@@ -98,8 +98,8 @@ test.describe('account register', () => {
     // p26.1: the split <option> label is the dotted ancestor path (Parent.Leaf), so a
     // child account is selected by its full path, not its bare name.
     // p26.34: WF is the header (balancing) account; BOA -12.00 is the body row.
-    await page.locator('#txn-main-account').selectOption({ label: 'Cash P26.WF P26' });
-    await page.locator('#txn-account-0').selectOption({ label: 'Cash P26.BOA P26' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'Cash P26.WF P26');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Cash P26.BOA P26');
     await page.locator('#txn-amount-0').fill('-12.00');
     await page.locator('#txn-memo').fill('rollup transfer');
     await page.getByRole('button', { name: /^save$/i }).click();
@@ -149,8 +149,8 @@ test.describe('account register', () => {
       await expect(page.locator('form#txn-form')).toBeVisible();
       await page.locator('#txn-date').fill(date);
       // p26.34: Cash is the header (balancing) account; Savings +amount is the body row.
-      await page.locator('#txn-main-account').selectOption({ label: 'Cash P269' });
-      await page.locator('#txn-account-0').selectOption({ label: 'Savings P269' });
+      await selectTxnAccount(page.locator('#txn-main-account'), 'Cash P269');
+      await selectTxnAccount(page.locator('#txn-account-0'), 'Savings P269');
       await page.locator('#txn-amount-0').fill(amount);
       await page.locator('#txn-memo').fill(memo);
       await page.getByRole('button', { name: /^save$/i }).click();

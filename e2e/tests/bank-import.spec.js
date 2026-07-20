@@ -22,7 +22,7 @@
 //   - duplicate row:    tr.import-row-duplicate ; flag: span.import-dupe-flag
 
 const { test, expect } = require('../fixtures');
-const { openNewAccount, saveAccount } = require('../helpers');
+const { openNewAccount, saveAccount, selectTxnAccount } = require('../helpers');
 
 // A per-run account name so parallel specs on the worker never collide.
 function uniqueName() {
@@ -432,7 +432,7 @@ test('bank import: review queue -> edit&post one row and discard another', async
   // Add the counter split (the expense account, +30.00) so it balances. p26.41: picking the
   // expense account auto-defaults the combined program/class control to a program pick
   // (p:<id>), which decodes to class=program server-side -- no separate class choice needed.
-  await page.locator('#txn-account-1').selectOption({ label: expenseName });
+  await selectTxnAccount(page.locator('#txn-account-1'), expenseName);
   await page.locator('#txn-amount-1').fill('30.00');
   await expect(page.locator('#txn-progclass-1')).toHaveValue(/^p:\d+$/);
 

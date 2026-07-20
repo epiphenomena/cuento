@@ -26,7 +26,7 @@
 // waits and page.request fetches.
 
 const { test, expect } = require('../fixtures');
-const { saveAndReload, openNewAccount, saveAccount } = require('../helpers');
+const { saveAndReload, openNewAccount, saveAccount, selectTxnAccount } = require('../helpers');
 
 const IS = '/reports/income_statement';
 const DEMOTED = '/reports/balance_sheet'; // demoted (non-program) report in "financial"
@@ -79,8 +79,8 @@ async function createExpenseAccount(page, name) {
 async function postExpense(page, cashAcct, expenseAcct, programLabel) {
   await page.goto('/transactions/new');
   await expect(page.locator('form#txn-form')).toBeVisible();
-  await page.locator('#txn-main-account').selectOption({ label: cashAcct });
-  await page.locator('#txn-account-0').selectOption({ label: expenseAcct });
+  await selectTxnAccount(page.locator('#txn-main-account'), cashAcct);
+  await selectTxnAccount(page.locator('#txn-account-0'), expenseAcct);
   await expect(page.locator('#txn-progclass-0')).toBeVisible();
   await page.locator('#txn-progclass-0').selectOption({ label: programLabel });
   await page.locator('#txn-amount-0').fill('80.00');

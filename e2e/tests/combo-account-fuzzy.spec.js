@@ -13,7 +13,7 @@
 // does not reproduce and the spec stays as a shared fuzzy-match regression guard.
 
 const { test, expect } = require('../fixtures');
-const { openNewAccount, saveAccount } = require('../helpers');
+const { openNewAccount, saveAccount, selectTxnAccount } = require('../helpers');
 
 async function installSettleMarker(page) {
   await page.addInitScript(() => {
@@ -243,8 +243,8 @@ test.describe('Enter and Tab select-and-advance (p28.3)', () => {
     // Seed a prior transaction whose body split carries a recallable description.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    await page.locator('#txn-main-account').selectOption({ label: 'DescAdv Checking' });
-    await page.locator('#txn-account-0').selectOption({ label: 'DescAdv Savings' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'DescAdv Checking');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'DescAdv Savings');
     await page.locator('#txn-amount-0').fill('40.00');
     await page.locator('#txn-desc-0').fill('DescAdvance recall');
     await page.getByRole('button', { name: /^save$/i }).click();
@@ -274,8 +274,8 @@ test.describe('Enter and Tab select-and-advance (p28.3)', () => {
     // Seed a prior transaction whose body split carries a recallable description.
     await page.goto('/transactions/new');
     await expect(page.locator('form#txn-form')).toBeVisible();
-    await page.locator('#txn-main-account').selectOption({ label: 'DescTab Checking' });
-    await page.locator('#txn-account-0').selectOption({ label: 'DescTab Savings' });
+    await selectTxnAccount(page.locator('#txn-main-account'), 'DescTab Checking');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'DescTab Savings');
     await page.locator('#txn-amount-0').fill('40.00');
     await page.locator('#txn-desc-0').fill('DescTab recall');
     await page.getByRole('button', { name: /^save$/i }).click();
