@@ -349,15 +349,17 @@ func TestTrialBalanceReportRenders(t *testing.T) {
 	}
 }
 
-// TestWideMatrixReportsFullWidth (p29.11): a comparative statement (income_statement,
-// program_statement) renders in the FULL-viewport shell (app-main-full) so its many
-// period/program columns show without a horizontal scroll; a narrow report (trial
-// balance) keeps the ordinary wide shell (no app-main-full, so it stays 100rem-capped).
+// TestWideMatrixReportsFullWidth (p29.11): a comparative statement whose columns fan out
+// (income_statement's period columns) renders in the FULL-viewport shell (app-main-full) so
+// they show without a horizontal scroll; a narrow report (trial balance) keeps the ordinary
+// wide shell (no app-main-full, so it stays 100rem-capped). The program statement was a wide
+// matrix (one column per program) but is now the p31 VERTICAL program tree with a single
+// Amount column, so it too is narrow (WideMatrix dropped) — asserted below with trial balance.
 func TestWideMatrixReportsFullWidth(t *testing.T) {
 	h, st, _, sm := reportsApp(t)
 	admin := mkUser(t, st, "admin", "none", true)
 
-	for _, id := range []string{reports.IncomeStatementReportID, reports.ProgramStatementReportID} {
+	for _, id := range []string{reports.IncomeStatementReportID} {
 		rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+id, nil)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s status = %d, want 200", id, rec.Code)
@@ -367,13 +369,16 @@ func TestWideMatrixReportsFullWidth(t *testing.T) {
 		}
 	}
 
-	// A narrow report keeps the ordinary wide shell: wide, but NOT full-viewport.
-	rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.TrialBalanceReportID, nil)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("trial balance status = %d, want 200", rec.Code)
-	}
-	if strings.Contains(rec.Body.String(), "app-main-full") {
-		t.Errorf("trial balance should NOT be full-viewport (a narrow report keeps the 100rem cap)")
+	// Narrow reports keep the ordinary wide shell: wide, but NOT full-viewport. The program
+	// statement (now a vertical program tree, single Amount column) joins the trial balance.
+	for _, id := range []string{reports.TrialBalanceReportID, reports.ProgramStatementReportID} {
+		rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+id, nil)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d, want 200", id, rec.Code)
+		}
+		if strings.Contains(rec.Body.String(), "app-main-full") {
+			t.Errorf("%s should NOT be full-viewport (a narrow report keeps the 100rem cap)", id)
+		}
 	}
 }
 

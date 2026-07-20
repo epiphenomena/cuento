@@ -1379,8 +1379,14 @@ other = "Cambio en activos netos"
 other = "Estado de programas"
 [reports.program_statement.all_programs]
 other = "— todos los programas —"
-[reports.program_statement.col.account]
-other = "Cuenta"
+# p31: el reporte es ahora un árbol de PROGRAMAS cuyas hojas llevan un subárbol de cuentas,
+# por lo que la primera columna contiene tanto encabezados de programa como nombres de
+# cuenta; la columna de dinero es un único Importe por moneda (los programas se apilan
+# verticalmente como una jerarquía colapsable).
+[reports.program_statement.col.program_account]
+other = "Programa / Cuenta"
+[reports.program_statement.col.amount]
+other = "Importe"
 [reports.program_statement.col.currency]
 other = "Moneda"
 [reports.program_statement.section.revenue]

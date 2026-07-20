@@ -983,7 +983,7 @@ async function createProgram(page, name) {
   await expect(page.locator('tr.prog-row', { hasText: name })).toBeVisible();
 }
 
-test('reports: open the program statement (comparative), see program columns + accounts + net, pick a single program, CSV returns', async ({
+test('reports: open the program statement (comparative), see the vertical program tree + accounts + net, pick a single program, CSV returns', async ({
   page,
   server,
 }) => {
@@ -1026,12 +1026,14 @@ test('reports: open the program statement (comparative), see program columns + a
 
   const table = page.locator('table.report-table');
   await expect(table).toBeVisible();
-  // The COMPARATIVE columns: Account + Currency + >=1 program column => >=3 header cells (a
-  // single-column layout could not produce this side-by-side comparison).
+  // p31: the statement is now a VERTICAL program tree — a SINGLE Amount column, not one
+  // column per program. Exactly three header cells: Program / Account | Currency | Amount.
   const headers = page.locator('table.report-table thead th');
-  expect(await headers.count()).toBeGreaterThanOrEqual(3);
-  // The child program is a column header (a stored proper noun rendered verbatim).
-  await expect(page.locator('table.report-table thead')).toContainText('PS Outreach E2E');
+  await expect(headers).toHaveCount(3);
+  // The child program is now a ROW header (a stored proper noun rendered verbatim), nested
+  // under the seeded root "General" — NOT a column header.
+  await expect(table).toContainText('PS Outreach E2E');
+  await expect(page.locator('table.report-table thead')).not.toContainText('PS Outreach E2E');
   // The section labels (localized en) + the net-per-program line.
   await expect(table).toContainText('Revenue');
   await expect(table).toContainText('Expenses');
@@ -1043,27 +1045,29 @@ test('reports: open the program statement (comparative), see program columns + a
   // The account cells are DRILL links (program×account drill).
   await expect(page.locator('a.report-drill-link').first()).toBeVisible();
 
-  // --- p29.15: the statement is now a COLLAPSIBLE ACCOUNT TREE (reusing the p26.25
-  // treetable control). The "Expenses" section renders as a placeholder-parent SUBTOTAL
-  // row (data-depth 0) over its indented leaf accounts (data-depth 1); the collapse/expand
-  // controls hide/reveal the leaves. The seeded expense (PS Cost E2E) sits under Expenses.
+  // --- p31: the statement is a COLLAPSIBLE PROGRAM + ACCOUNT TREE (reusing the p26.25
+  // treetable control). "General" (the seeded root) is a depth-0 program HEADER (subtotal
+  // tier) spanning its own account sections AND the nested child program "PS Outreach E2E"
+  // (depth 1). Under PS Outreach the "PS Expenses E2E" placeholder parent nests its "PS Cost
+  // E2E" leaf. The collapse/expand controls fold whole program subtrees.
   const treeTable = page.locator('table.report-table.tree-table');
   await expect(treeTable).toBeVisible();
-  // "PS Expenses E2E" is a depth-0 placeholder-parent SUBTOTAL; PS Cost E2E is its depth-1
-  // leaf (nested one level deeper).
-  const expensesRow = treeTable.locator('tr.report-row.report-subtotal', { hasText: 'PS Expenses E2E' });
-  const costRow = treeTable.locator('tr.report-row', { hasText: 'PS Cost E2E' });
-  await expect(expensesRow).toHaveAttribute('data-depth', '0');
-  await expect(costRow).toHaveAttribute('data-depth', '1');
+  // The root program "General" is a depth-0 subtotal header; the child program row nests at
+  // depth 1 (a program header, RowSubtotal), and the leaf expense sits deeper still.
+  const generalRow = treeTable.locator('tr.report-row.report-subtotal', { hasText: 'General' }).first();
+  const childProgRow = treeTable.locator('tr.report-row.report-subtotal', { hasText: 'PS Outreach E2E' }).first();
+  const costRow = treeTable.locator('tr.report-row', { hasText: 'PS Cost E2E' }).first();
+  await expect(generalRow).toHaveAttribute('data-depth', '0');
+  await expect(childProgRow).toHaveAttribute('data-depth', '1');
   await expect(costRow).toBeVisible();
 
   // The tree controls are present + revealed by treetable.js (they ship `hidden`).
   const psCollapseAll = page.locator('.report-controls .tree-collapse-all');
   await expect(psCollapseAll).toBeVisible();
-  // Collapse all -> the leaf (PS Cost E2E) hides; its Expenses parent stays.
+  // Collapse all -> the leaf (PS Cost E2E) hides; the root "General" header stays.
   await psCollapseAll.click();
   await expect(costRow).toBeHidden();
-  await expect(expensesRow).toBeVisible();
+  await expect(generalRow).toBeVisible();
   // Expand all -> the leaf reappears.
   await page.locator('.report-controls .tree-expand-all').click();
   await expect(costRow).toBeVisible();

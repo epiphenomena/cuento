@@ -358,19 +358,16 @@ func TestForm990PartIIICrossCheckP1510(t *testing.T) {
 		t.Fatalf("run program statement: %v", err)
 	}
 
-	// p15.10 columns: [Account, Currency, General, Educacion, Food Pantry]. Its section
-	// total rows ("Total revenue" / "Total expenses") carry the per-currency total per
-	// program column. Map program name -> its column index (2 + tree pre-order position).
-	progCol := map[string]int{"General": 2, "Educacion": 3, "Food Pantry": 4}
-
-	// For each program, compare the 990 Part III revenue/expense per currency against the
-	// p15.10 section-total column value for that program.
-	for prog, col := range progCol {
+	// p15.10 (p31) is now a PROGRAM TREE stacked as rows: each program is a header row
+	// (General, Educacion, Food Pantry) spanning its own Revenue/Expense account tree, with
+	// the per-currency "Total revenue"/"Total expenses" section-total rows INSIDE its block
+	// (a single Amount column). Compare each program's section totals per currency.
+	for _, prog := range []string{"General", "Educacion", "Food Pantry"} {
 		for _, sec := range []struct{ psKey, iiiKey string }{
 			{"reports.program_statement.total.revenue", "reports.form_990.iii.revenue"},
 			{"reports.program_statement.total.expenses", "reports.form_990.iii.expenses"},
 		} {
-			psByCcy := psTotalsByCurrency(ps, sec.psKey, col)
+			psByCcy := psTotalsByCurrency(ps, prog, sec.psKey)
 			nineByCcy := f990ProgramSectionByCurrency(nine, prog, sec.iiiKey)
 			// Union the currency sets; an absent entry is 0. p15.10 emits a per-currency
 			// row for EVERY currency present in ANY program column (a program without that
@@ -392,17 +389,38 @@ func TestForm990PartIIICrossCheckP1510(t *testing.T) {
 	}
 }
 
-// psTotalsByCurrency returns the p15.10 section-total row values (per currency) in the
-// given program column index for the rows whose first cell is the section-total label.
-func psTotalsByCurrency(t reports.Table, labelKey string, col int) map[string]int64 {
+// psTotalsByCurrency returns the p15.10 section-total row values (per currency) WITHIN the
+// named program's OWN block (p31): each currency block opens with the program's header
+// (RowSubtotal, first cell == prog) and ends at its Net line (RowTotal); the section-total
+// rows (labelKey) inside carry the per-currency total in the single Amount column. A program
+// with multiple currency blocks contributes one section total per currency.
+func psTotalsByCurrency(t reports.Table, prog, labelKey string) map[string]int64 {
+	col := len(t.Columns) - 1 // single Amount column (last)
 	out := map[string]int64{}
+	in := false
 	for _, row := range t.Rows {
 		if len(row.Cells) <= col {
 			continue
 		}
-		if row.Cells[0].Kind == reports.CellLabel && row.Cells[0].Text == labelKey {
-			ccy := row.Cells[1].Text // Currency column
-			out[ccy] = row.Cells[col].Minor
+		c0 := row.Cells[0]
+		// This program's header (a RowSubtotal TEXT cell == prog) opens its block.
+		if row.Kind == reports.RowSubtotal && c0.Kind == reports.CellText && c0.Text == prog {
+			in = true
+			continue
+		}
+		if !in {
+			continue
+		}
+		// The Net line (RowTotal) ends this program's OWN content — it is emitted after both
+		// section totals and BEFORE any nested child program, so the section-total rows we
+		// collected belong to THIS program only (an account placeholder is also a RowSubtotal
+		// TextCell but nests deeper, so it must NOT be treated as a block boundary).
+		if row.Kind == reports.RowTotal {
+			in = false
+			continue
+		}
+		if row.Kind == reports.RowSectionTotal && c0.Kind == reports.CellLabel && c0.Text == labelKey {
+			out[row.Cells[1].Text] = row.Cells[col].Minor // Currency column is index 1
 		}
 	}
 	return out

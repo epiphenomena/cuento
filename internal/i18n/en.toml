@@ -1380,8 +1380,13 @@ other = "Change in net assets"
 other = "Program statement"
 [reports.program_statement.all_programs]
 other = "— all programs —"
-[reports.program_statement.col.account]
-other = "Account"
+# p31: the report is now a PROGRAM tree whose leaves carry an account subtree, so the
+# first column holds both program headers and account names; the money column is a single
+# per-currency Amount (the programs stack vertically as a collapsible hierarchy).
+[reports.program_statement.col.program_account]
+other = "Program / Account"
+[reports.program_statement.col.amount]
+other = "Amount"
 [reports.program_statement.col.currency]
 other = "Currency"
 [reports.program_statement.section.revenue]
