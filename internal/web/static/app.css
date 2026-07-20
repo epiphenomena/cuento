@@ -519,6 +519,29 @@ input[aria-invalid="true"] {
    stretching the whole row. */
 .schedule-form #sf-custom { min-width: 18rem; }
 
+/* p-golive: the expense-report header (date/description/memo/notes). Editable form is
+   a wrapping row of themed .field controls; the notes textarea gets its own full-width
+   line. The read-only view is a compact two-column definition list. */
+.expense-header-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: flex-start;
+  margin-bottom: var(--space-4);
+}
+.expense-header-form .field { margin-bottom: 0; }
+.expense-header-form .field input { min-width: 12rem; }
+.expense-header-form .field:has(textarea) { flex-basis: 100%; }
+.expense-header-form textarea { min-width: 24rem; width: 100%; max-width: 40rem; }
+.expense-header-view {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-1) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.expense-header-view dt { font-weight: 600; }
+.expense-header-view dd { margin: 0; }
+
 .flash:empty { display: none; }
 .flash {
   max-width: 60rem;

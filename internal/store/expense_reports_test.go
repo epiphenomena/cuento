@@ -372,6 +372,46 @@ func TestUpdateExpenseReportSubsidiary(t *testing.T) {
 	assertLedgerClean(t, d)
 }
 
+// TestSetExpenseReportHeader (p-golive): the report's header fields (date, description,
+// memo, notes) are set on a draft, versioned op='update', round-trip through
+// GetExpenseReport, and leave the ledger Z3-clean (the version snapshot copies all four
+// new columns). A converted report is immutable; a submitted report is a state error.
+func TestSetExpenseReportHeader(t *testing.T) {
+	s, d, ctx, submitterID, acctID := seedExpenseReportEnv(t)
+
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	if err != nil {
+		t.Fatalf("CreateExpenseReport: %v", err)
+	}
+
+	if err := s.SetExpenseReportHeader(ctx, reportID, "2026-03-15", "Team lunch", "receipts attached", "Q1 offsite"); err != nil {
+		t.Fatalf("SetExpenseReportHeader (draft): %v", err)
+	}
+	testutil.AssertVersioned(t, d, "expense_reports", int64(reportID), "update")
+	rep, err := s.GetExpenseReport(context.Background(), reportID)
+	if err != nil {
+		t.Fatalf("GetExpenseReport: %v", err)
+	}
+	if rep.Date != "2026-03-15" || rep.Description != "Team lunch" || rep.Memo != "receipts attached" || rep.Notes != "Q1 offsite" {
+		t.Errorf("header round-trip = {%q %q %q %q}, want {2026-03-15 Team lunch receipts attached Q1 offsite}",
+			rep.Date, rep.Description, rep.Memo, rep.Notes)
+	}
+	// The version snapshot must copy all four columns (else Z3 diverges).
+	assertLedgerClean(t, d)
+
+	// A submitted report is a state error (locked pending review).
+	if _, err := s.AddExpenseReportLine(ctx, reportID, ExpenseReportLineInput{AccountID: acctID, Amount: -100}); err != nil {
+		t.Fatalf("AddExpenseReportLine: %v", err)
+	}
+	if err := s.SubmitExpenseReport(ctx, reportID); err != nil {
+		t.Fatalf("SubmitExpenseReport: %v", err)
+	}
+	if err := s.SetExpenseReportHeader(ctx, reportID, "2026-04-01", "x", "y", "z"); !errors.Is(err, ErrExpenseReportState) {
+		t.Fatalf("set header while submitted = %v, want ErrExpenseReportState", err)
+	}
+	assertLedgerClean(t, d)
+}
+
 // TestDiscardExpenseReport (p25.3): a DRAFT report and its lines hard-delete with
 // op='delete' version rows (audit preserved); a non-draft report is not discardable.
 func TestDiscardExpenseReport(t *testing.T) {

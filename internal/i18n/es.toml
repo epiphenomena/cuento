@@ -1900,6 +1900,22 @@ other = "Reenviar para revisión"
 other = "El informe no necesita cuadrar; un revisor lo finalizará."
 [expense.detail.readonly]
 other = "Este informe está en revisión y no se puede editar."
+[expense.header.title]
+other = "Detalles del informe"
+[expense.header.date]
+other = "Fecha"
+[expense.header.date_hint]
+other = "p. ej. 2026-07-15"
+[expense.header.description]
+other = "Descripción"
+[expense.header.description_hint]
+other = "¿Para qué es este informe?"
+[expense.header.memo]
+other = "Memorándum"
+[expense.header.notes]
+other = "Notas"
+[expense.header.save]
+other = "Guardar detalles"
 [expense.line.col.account]
 other = "Cuenta"
 [expense.line.col.amount]

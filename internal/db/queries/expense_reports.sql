@@ -27,14 +27,14 @@ RETURNING id;
 
 -- name: GetExpenseReport :one
 SELECT id, submitter_id, subsidiary_id, status, review_notes,
-       posted_transaction_id, created_at
+       posted_transaction_id, created_at, date, description, memo, notes
 FROM expense_reports
 WHERE id = ?;
 
 -- name: ListExpenseReportsBySubmitter :many
 -- A submitter's own reports, newest first (the p20.2 my-reports list).
 SELECT id, submitter_id, subsidiary_id, status, review_notes,
-       posted_transaction_id, created_at
+       posted_transaction_id, created_at, date, description, memo, notes
 FROM expense_reports
 WHERE submitter_id = ?
 ORDER BY id DESC;
@@ -42,7 +42,7 @@ ORDER BY id DESC;
 -- name: ListExpenseReportsByStatus :many
 -- Reports in a given status, id-ordered (the p20.3 reviewer queue reads 'submitted').
 SELECT id, submitter_id, subsidiary_id, status, review_notes,
-       posted_transaction_id, created_at
+       posted_transaction_id, created_at, date, description, memo, notes
 FROM expense_reports
 WHERE status = ?
 ORDER BY id;
@@ -54,6 +54,15 @@ ORDER BY id;
 -- (the store passes the current notes through).
 UPDATE expense_reports
 SET status = ?, review_notes = ?
+WHERE id = ?;
+
+-- name: SetExpenseReportHeader :exec
+-- Live update of a report's HEADER fields (p-golive): the report/txn date, a one-line
+-- description, a short memo, and longer notes -- the values the reviewer's convert
+-- prefills into the posted transaction. Editable while draft/rejected (the store guards
+-- the status). All four are plain TEXT ('' = unset).
+UPDATE expense_reports
+SET date = ?, description = ?, memo = ?, notes = ?
 WHERE id = ?;
 
 -- name: SetExpenseReportSubsidiary :exec
@@ -87,9 +96,10 @@ WHERE id = ?;
 -- Params (positional): op, change_id, entity_id -> Op, ID (change_id), ID_2.
 INSERT INTO expense_reports_versions
   (entity_id, change_id, valid_from, op, submitter_id, subsidiary_id, status,
-   review_notes, posted_transaction_id, created_at)
+   review_notes, posted_transaction_id, created_at, date, description, memo, notes)
 SELECT er.id, c.id, c.at, ?, er.submitter_id, er.subsidiary_id, er.status,
-       er.review_notes, er.posted_transaction_id, er.created_at
+       er.review_notes, er.posted_transaction_id, er.created_at,
+       er.date, er.description, er.memo, er.notes
 FROM expense_reports er, changes c
 WHERE c.id = ? AND er.id = ?;
 

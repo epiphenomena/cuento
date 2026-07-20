@@ -423,6 +423,7 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/expenses", ExpenseSubmit, http.HandlerFunc(s.expenseCreate)},
 		{http.MethodGet, "/expenses/{id}", ExpenseSubmit, http.HandlerFunc(s.expenseDetail)},
 		{http.MethodPost, "/expenses/{id}/subsidiary", ExpenseSubmit, http.HandlerFunc(s.expenseSetSubsidiary)},
+		{http.MethodPost, "/expenses/{id}/header", ExpenseSubmit, http.HandlerFunc(s.expenseSetHeader)},
 		{http.MethodPost, "/expenses/{id}/lines", ExpenseSubmit, http.HandlerFunc(s.expenseLinesSave)},
 		{http.MethodPost, "/expenses/{id}/submit", ExpenseSubmit, http.HandlerFunc(s.expenseSubmit)},
 		{http.MethodPost, "/expenses/{id}/resubmit", ExpenseSubmit, http.HandlerFunc(s.expenseResubmit)},

@@ -52,7 +52,7 @@ func (q *Queries) DeleteExpenseReportLine(ctx context.Context, id ids.ExpenseRep
 
 const getExpenseReport = `-- name: GetExpenseReport :one
 SELECT id, submitter_id, subsidiary_id, status, review_notes,
-       posted_transaction_id, created_at
+       posted_transaction_id, created_at, date, description, memo, notes
 FROM expense_reports
 WHERE id = ?
 `
@@ -68,6 +68,10 @@ func (q *Queries) GetExpenseReport(ctx context.Context, id ids.ExpenseReportID) 
 		&i.ReviewNotes,
 		&i.PostedTransactionID,
 		&i.CreatedAt,
+		&i.Date,
+		&i.Description,
+		&i.Memo,
+		&i.Notes,
 	)
 	return i, err
 }
@@ -201,9 +205,10 @@ func (q *Queries) InsertExpenseReportLineVersion(ctx context.Context, arg Insert
 const insertExpenseReportVersion = `-- name: InsertExpenseReportVersion :exec
 INSERT INTO expense_reports_versions
   (entity_id, change_id, valid_from, op, submitter_id, subsidiary_id, status,
-   review_notes, posted_transaction_id, created_at)
+   review_notes, posted_transaction_id, created_at, date, description, memo, notes)
 SELECT er.id, c.id, c.at, ?, er.submitter_id, er.subsidiary_id, er.status,
-       er.review_notes, er.posted_transaction_id, er.created_at
+       er.review_notes, er.posted_transaction_id, er.created_at,
+       er.date, er.description, er.memo, er.notes
 FROM expense_reports er, changes c
 WHERE c.id = ? AND er.id = ?
 `
@@ -266,7 +271,7 @@ func (q *Queries) ListExpenseReportLines(ctx context.Context, reportID ids.Expen
 
 const listExpenseReportsByStatus = `-- name: ListExpenseReportsByStatus :many
 SELECT id, submitter_id, subsidiary_id, status, review_notes,
-       posted_transaction_id, created_at
+       posted_transaction_id, created_at, date, description, memo, notes
 FROM expense_reports
 WHERE status = ?
 ORDER BY id
@@ -290,6 +295,10 @@ func (q *Queries) ListExpenseReportsByStatus(ctx context.Context, status string)
 			&i.ReviewNotes,
 			&i.PostedTransactionID,
 			&i.CreatedAt,
+			&i.Date,
+			&i.Description,
+			&i.Memo,
+			&i.Notes,
 		); err != nil {
 			return nil, err
 		}
@@ -306,7 +315,7 @@ func (q *Queries) ListExpenseReportsByStatus(ctx context.Context, status string)
 
 const listExpenseReportsBySubmitter = `-- name: ListExpenseReportsBySubmitter :many
 SELECT id, submitter_id, subsidiary_id, status, review_notes,
-       posted_transaction_id, created_at
+       posted_transaction_id, created_at, date, description, memo, notes
 FROM expense_reports
 WHERE submitter_id = ?
 ORDER BY id DESC
@@ -330,6 +339,10 @@ func (q *Queries) ListExpenseReportsBySubmitter(ctx context.Context, submitterID
 			&i.ReviewNotes,
 			&i.PostedTransactionID,
 			&i.CreatedAt,
+			&i.Date,
+			&i.Description,
+			&i.Memo,
+			&i.Notes,
 		); err != nil {
 			return nil, err
 		}
@@ -381,6 +394,29 @@ type SetExpenseReportStatusParams struct {
 // (the store passes the current notes through).
 func (q *Queries) SetExpenseReportStatus(ctx context.Context, arg SetExpenseReportStatusParams) error {
 	_, err := q.db.ExecContext(ctx, setExpenseReportStatus, arg.Status, arg.ReviewNotes, arg.ID)
+	return err
+}
+
+const setExpenseReportHeader = `-- name: SetExpenseReportHeader :exec
+UPDATE expense_reports
+SET date = ?, description = ?, memo = ?, notes = ?
+WHERE id = ?
+`
+
+type SetExpenseReportHeaderParams struct {
+	Date        string
+	Description string
+	Memo        string
+	Notes       string
+	ID          ids.ExpenseReportID
+}
+
+// Live update of a report's HEADER fields (p-golive): the report/txn date, a one-line
+// description, a short memo, and longer notes -- the values the reviewer's convert
+// prefills into the posted transaction. Editable while draft/rejected (the store guards
+// the status). All four are plain TEXT (empty string = unset).
+func (q *Queries) SetExpenseReportHeader(ctx context.Context, arg SetExpenseReportHeaderParams) error {
+	_, err := q.db.ExecContext(ctx, setExpenseReportHeader, arg.Date, arg.Description, arg.Memo, arg.Notes, arg.ID)
 	return err
 }
 

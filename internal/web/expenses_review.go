@@ -233,7 +233,21 @@ func (s *server) buildReviewEditorModel(w http.ResponseWriter, r *http.Request, 
 	}
 	model.ExpenseReportID = int64(rep.ID)
 	model.FirstErrorRow = -1
-	model.Date = money.FormatDate(s.now(), dateFormatFor(u))
+	// p-golive: prefill the txn from the report's header fields -- the reviewer's form is
+	// the phase-12 editor, now seeded with the submitter's date/memo/notes. The report's
+	// date drives the txn date (falling back to today when unset); memo/notes are txn-level
+	// and carry straight through. The report's DESCRIPTION lands on the counter-side
+	// (payment) row inside prefillExpenseRows -- this review path renders the FLAT grid
+	// (no header main-description field; MainPresent is false for import/expense review),
+	// so there is no single "main split" input here; the payment line is the natural home
+	// for the report's overall description. The reviewer can still edit any of it.
+	if rep.Date != "" {
+		model.Date = money.FormatDate(parseISOForDisplay(rep.Date), dateFormatFor(u))
+	} else {
+		model.Date = money.FormatDate(s.now(), dateFormatFor(u))
+	}
+	model.Memo = rep.Memo
+	model.Notes = rep.Notes
 	model.Rows = s.prefillExpenseRows(r, model, rep, lines)
 	if err := s.injectRowAccounts(ctx, &model); err != nil { // p26.10: never blank a referenced account
 		s.serverError(w)
@@ -306,8 +320,13 @@ func (s *server) prefillExpenseRows(r *http.Request, model txnEditorModel, rep s
 		}
 		rows = append(rows, row)
 	}
-	// A trailing empty row for the reviewer's counter-side (cash/bank).
-	rows = append(rows, txnRowModel{Index: len(lines)})
+	// A trailing empty row for the reviewer's counter-side (cash/bank). p-golive: seed its
+	// DESCRIPTION with the report's header description so the payment line carries the
+	// report's overall description (the flat review grid has no header main-description
+	// field). The reviewer fills the account/amount; the description is pre-populated and
+	// editable. On POST the p26.x copy-down still propagates a description into any blank
+	// split, so an untouched description flows through to the posted splits.
+	rows = append(rows, txnRowModel{Index: len(lines), Description: rep.Description})
 	return rows
 }
 

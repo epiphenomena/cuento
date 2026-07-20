@@ -160,6 +160,45 @@ func (s *server) expenseSetSubsidiary(w http.ResponseWriter, r *http.Request) {
 	redirectAfterForm(w, r, "/expenses/"+strconv.FormatInt(id, 10))
 }
 
+// expenseSetHeader handles POST /expenses/{id}/header (ExpenseSubmit, p-golive): save
+// the report's date/description/memo/notes header in-page. Like the subsidiary picker it
+// AUTO-SAVES on change (one form carrying ALL FOUR fields; SetExpenseReportHeader writes
+// all four unconditionally, so a partial post would blank the untouched ones -- the
+// template keeps them in ONE form so every save carries the current values). The date is
+// parsed per the user's DateFormat and stored ISO; a blank/unparseable date stores "" (an
+// unset date is legitimate here -- today is only the reviewer's fallback). The store gates
+// editability (draft|rejected); a report that left the editable state under us just no-ops
+// back to the page (ErrExpenseReportState/ErrExpenseReportImmutable), anything else is a
+// real fault. Always PRG-redirects to the detail page. Ownership + editability enforced.
+func (s *server) expenseSetHeader(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	u := currentUser(ctx)
+	id := parseID(r.PathValue("id"))
+	if _, ok := s.loadEditableReport(w, r, id); !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	desc := strings.TrimSpace(r.PostFormValue("description"))
+	memo := strings.TrimSpace(r.PostFormValue("memo"))
+	notes := strings.TrimSpace(r.PostFormValue("notes"))
+	// Parse the date per the user's format; a blank OR unparseable value stores "" (unset).
+	dateISO := ""
+	if t, err := money.ParseDate(strings.TrimSpace(r.PostFormValue("date")), dateFormatFor(u), s.now()); err == nil {
+		dateISO = t.Format("2006-01-02")
+	}
+	if err := s.store.SetExpenseReportHeader(s.actorCtx(ctx), ids.ExpenseReportID(id), dateISO, desc, memo, notes); err != nil {
+		// The report left the editable state under us -> back to the detail page (no 500).
+		if !errors.Is(err, store.ErrExpenseReportState) && !errors.Is(err, store.ErrExpenseReportImmutable) {
+			s.serverError(w)
+			return
+		}
+	}
+	redirectAfterForm(w, r, "/expenses/"+strconv.FormatInt(id, 10))
+}
+
 // expenseDiscard handles POST /expenses/{id}/discard (ExpenseSubmit, p25.3): hard-
 // delete a DRAFT report and its lines (the store guards draft-only). Redirects to the
 // reports list. The UI only offers discard on a draft, so a POST against a non-draft is
@@ -241,7 +280,18 @@ type expenseDetailModel struct {
 	Draft       bool   // draft -> the discard affordance (p25.3)
 	Rejected    bool   // rejected -> the resubmit affordance + reviewer reason show
 	ReviewNotes string // the reviewer's rejection reason (rejected only)
-	Lines       []expenseLineRow
+
+	// p-golive header fields the submitter fills in before submitting: the txn date, a
+	// description (becomes the reviewer's main-split description), a memo, and free-text
+	// notes. Editable inputs when .Editable, else read-only display. Date is already
+	// FORMATTED for display (per the user's DateFormat) here; "" = unset (an empty date
+	// input -- today is only the reviewer's fallback, never seeded on the submitter side).
+	Date        string
+	Description string
+	Memo        string
+	Notes       string
+
+	Lines []expenseLineRow
 
 	// Sub-scoped option lists for the editable grid (p25.4), loaded only when
 	// .Editable: accounts = R/E leaves in the report's sub (each with a dotted Path,
@@ -339,6 +389,16 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 	}
 	if model.Rejected {
 		model.ReviewNotes = rep.ReviewNotes
+	}
+	// p-golive header fields. Description/Memo/Notes carry straight through; Date is stored
+	// ISO ("YYYY-MM-DD" or "") and formatted for display per the user's DateFormat. When
+	// unset it stays "" (an empty date input -- the submitter side never defaults to today;
+	// today is only the reviewer's fallback in buildReviewEditorModel).
+	model.Description = rep.Description
+	model.Memo = rep.Memo
+	model.Notes = rep.Notes
+	if rep.Date != "" {
+		model.Date = money.FormatDate(parseISOForDisplay(rep.Date), dateFormatFor(u))
 	}
 	// p25.3: the subsidiary is editable in-page ONLY while the report is editable AND
 	// has no lines (a line's account/fund options are sub-scoped; the store enforces

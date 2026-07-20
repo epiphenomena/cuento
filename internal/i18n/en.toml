@@ -1904,6 +1904,22 @@ other = "Resubmit for review"
 other = "The report does not need to balance; a reviewer will finalize it."
 [expense.detail.readonly]
 other = "This report is under review and cannot be edited."
+[expense.header.title]
+other = "Report details"
+[expense.header.date]
+other = "Date"
+[expense.header.date_hint]
+other = "e.g. 2026-07-15"
+[expense.header.description]
+other = "Description"
+[expense.header.description_hint]
+other = "What is this report for?"
+[expense.header.memo]
+other = "Memo"
+[expense.header.notes]
+other = "Notes"
+[expense.header.save]
+other = "Save details"
 [expense.line.col.account]
 other = "Account"
 [expense.line.col.amount]

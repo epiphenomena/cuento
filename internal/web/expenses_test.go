@@ -318,6 +318,99 @@ func TestExpenseZeroLineSubmit422(t *testing.T) {
 	}
 }
 
+// TestExpenseHeaderRoundTripAndReviewPrefill (p-golive): a submitter fills the report's
+// date/description/memo/notes header via POST /expenses/{id}/header; the values round-trip
+// on the detail GET (the editable inputs re-show them). After submitting, the reviewer's
+// GET /expenses/review/{id} prefills the phase-12 editor from the same header -- the
+// description as the editor's MAIN-split description, and the date/memo/notes in the txn
+// header fields -- proving the submitter -> reviewer prefill is wired end to end.
+func TestExpenseHeaderRoundTripAndReviewPrefill(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	sub := mkSubmitter(t, st, "sub_header")
+	// An expense leaf with a program + functional class so the reviewer's prefilled row
+	// satisfies the store's gates and the review form opens cleanly.
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	fc := "program"
+	rootProg := ids.ProgramID(1)
+	exp, err := st.CreateAccount(ctx, store.CreateAccountInput{
+		Type: "expense", DefaultCurrency: "USD",
+		Names: map[string]string{"en": "Header Exp"}, Subsidiaries: []ids.SubsidiaryID{1},
+		FunctionalClass: &fc, DefaultProgramID: &rootProg,
+	})
+	if err != nil {
+		t.Fatalf("create expense account: %v", err)
+	}
+
+	rec := asUser(t, h, sm, sub, http.MethodPost, "/expenses", url.Values{"subsidiary_id": {"1"}})
+	repID := reportIDFromRedirect(t, rec)
+
+	// Distinctive marker text so substring assertions can't false-positive on boilerplate.
+	const (
+		wantDate  = "2026-07-15" // test users default to ISO DateFormat -> parse/format is identity
+		wantDesc  = "zap-desc-marker"
+		wantMemo  = "zap-memo-marker"
+		wantNotes = "zap-notes-marker"
+	)
+	form := url.Values{
+		"date":        {wantDate},
+		"description": {wantDesc},
+		"memo":        {wantMemo},
+		"notes":       {wantNotes},
+	}
+	rec = asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+itoa(repID)+"/header", form)
+	if rec.Code >= 400 {
+		t.Fatalf("set header: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// The header persisted (store round-trip).
+	rep, err := st.GetExpenseReport(context.Background(), ids.ExpenseReportID(repID))
+	if err != nil {
+		t.Fatalf("get report: %v", err)
+	}
+	if rep.Date != wantDate || rep.Description != wantDesc || rep.Memo != wantMemo || rep.Notes != wantNotes {
+		t.Fatalf("stored header = date=%q desc=%q memo=%q notes=%q; want %q/%q/%q/%q",
+			rep.Date, rep.Description, rep.Memo, rep.Notes, wantDate, wantDesc, wantMemo, wantNotes)
+	}
+
+	// The editable detail GET re-shows the values in the header inputs.
+	body := asUser(t, h, sm, sub, http.MethodGet, "/expenses/"+itoa(repID), nil).Body.String()
+	for _, want := range []string{
+		`value="` + wantDate + `"`,
+		`value="` + wantDesc + `"`,
+		`value="` + wantMemo + `"`,
+		wantNotes, // notes is a <textarea>, so its value is element content, not an attribute
+		`action="/expenses/` + itoa(repID) + `/header"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("detail GET missing %q; body:\n%s", want, body)
+		}
+	}
+
+	// Submit + add a line so the reviewer can open it. Add the line first (a zero-line
+	// report can't submit), then submit.
+	addLine(t, h, st, sm, sub, repID, exp, "40.00")
+	if rec := asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+itoa(repID)+"/submit", url.Values{}); rec.Code >= 400 {
+		t.Fatalf("submit: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// The reviewer (TxnWrite) opens the review form: the header prefills the phase-12
+	// editor. date/memo/notes server-render in the txn header fields; the report's
+	// DESCRIPTION seeds the counter-side (payment) row's description in the FLAT review
+	// grid (there is no header main-description field on the import/expense-review path,
+	// MainPresent = !flat, so the payment row is the description's home -- p-golive).
+	book := mkUser(t, st, "reviewer_header", "write", false)
+	rec = asUser(t, h, sm, book, http.MethodGet, "/expenses/review/"+itoa(repID), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("review GET = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	rbody := rec.Body.String()
+	for _, want := range []string{wantDate, wantMemo, wantNotes, wantDesc} {
+		if !strings.Contains(rbody, want) {
+			t.Errorf("review editor did not prefill %q from the report header; body:\n%s", want, rbody)
+		}
+	}
+}
+
 // TestExpenseLineOutOfSubIsFieldError: a line on a non-existent account (0) and a line
 // on an out-of-subsidiary / non-R-E account each produce a 422 field error, not a 500
 // or a silent accept.

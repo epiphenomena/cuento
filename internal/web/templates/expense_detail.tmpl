@@ -55,6 +55,49 @@
   </div>
   {{end}}
 
+  {{/* p-golive: the report HEADER (date / description / memo / notes). When editable it is
+       ONE form carrying all four fields (SetExpenseReportHeader writes all four at once, so
+       they must save together -- a per-field post would blank the others). It AUTO-SAVES on
+       change like the subsidiary picker (hx-post + hx-trigger="change" bubbling from any
+       field); the handler PRG-redirects, and redirectAfterForm sets HX-Redirect so htmx
+       re-navigates. It stays a real <form> so a no-JS client works (the <noscript> submit
+       button is the fallback). A SIBLING of the grid/submit forms (never nested). */}}
+  <h2>{{t "expense.header.title"}}</h2>
+  {{if .Editable}}
+  <form method="post" action="/expenses/{{.ID}}/header" class="expense-header-form"
+        hx-post="/expenses/{{.ID}}/header" hx-trigger="change" hx-target="#main" hx-swap="outerHTML">
+    <div class="field">
+      <label for="er-date">{{t "expense.header.date"}}</label>
+      <input type="text" name="date" id="er-date" value="{{.Date}}" autocomplete="off" placeholder="{{t "expense.header.date_hint"}}">
+    </div>
+    <div class="field">
+      <label for="er-description">{{t "expense.header.description"}}</label>
+      <input type="text" name="description" id="er-description" value="{{.Description}}" autocomplete="off" placeholder="{{t "expense.header.description_hint"}}">
+    </div>
+    <div class="field">
+      <label for="er-memo">{{t "expense.header.memo"}}</label>
+      <input type="text" name="memo" id="er-memo" value="{{.Memo}}" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="er-notes">{{t "expense.header.notes"}}</label>
+      <textarea name="notes" id="er-notes" rows="4">{{.Notes}}</textarea>
+    </div>
+    <noscript><button type="submit" class="btn btn-ghost">{{t "expense.header.save"}}</button></noscript>
+  </form>
+  {{else}}
+  {{/* Read-only header (submitted/converted): the stored values, an em-dash when empty. */}}
+  <dl class="expense-header-view">
+    <dt>{{t "expense.header.date"}}</dt>
+    <dd id="er-date-view">{{if .Date}}{{.Date}}{{else}}<span class="muted">&mdash;</span>{{end}}</dd>
+    <dt>{{t "expense.header.description"}}</dt>
+    <dd id="er-description-view">{{if .Description}}{{.Description}}{{else}}<span class="muted">&mdash;</span>{{end}}</dd>
+    <dt>{{t "expense.header.memo"}}</dt>
+    <dd id="er-memo-view">{{if .Memo}}{{.Memo}}{{else}}<span class="muted">&mdash;</span>{{end}}</dd>
+    <dt>{{t "expense.header.notes"}}</dt>
+    <dd id="er-notes-view">{{if .Notes}}{{.Notes}}{{else}}<span class="muted">&mdash;</span>{{end}}</dd>
+  </dl>
+  {{end}}
+
   <h2>{{t "expense.detail.lines"}}</h2>
   {{if .Editable}}
   {{/* p25.4 auto-row grid: ONE bulk-submit form. Each row round-trips its line_id (0 =

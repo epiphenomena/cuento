@@ -145,6 +145,39 @@ func (s *Store) UpdateExpenseReportSubsidiary(ctx context.Context, reportID ids.
 	return nil
 }
 
+// SetExpenseReportHeader sets a report's HEADER fields (p-golive): date, description,
+// memo, notes -- the values the reviewer's convert prefills into the posted transaction
+// (date -> txn date, description -> the main split description, memo -> txn memo, notes
+// -> txn notes). Editable while draft|rejected (a converted report is immutable; a
+// submitted report is locked pending review). Unlike the subsidiary change it has NO
+// no-lines precondition (the header is independent of the line accounts). Versioned
+// op='update'.
+func (s *Store) SetExpenseReportHeader(ctx context.Context, reportID ids.ExpenseReportID, date, description, memo, notes string) error {
+	_, err := s.write(ctx, "expense_report.set_header", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
+			rep, err := loadExpenseReport(ctx, q, reportID)
+			if err != nil {
+				return err
+			}
+			if rep.Status == "converted" {
+				return ErrExpenseReportImmutable
+			}
+			if rep.Status != "draft" && rep.Status != "rejected" {
+				return ErrExpenseReportState
+			}
+			if err := q.SetExpenseReportHeader(ctx, sqlc.SetExpenseReportHeaderParams{
+				Date: date, Description: description, Memo: memo, Notes: notes, ID: reportID,
+			}); err != nil {
+				return fmt.Errorf("set header: %w", err)
+			}
+			return insertExpenseReportVersion(ctx, q, changeID, "update", reportID)
+		})
+	if err != nil {
+		return fmt.Errorf("set expense report %d header: %w", reportID, err)
+	}
+	return nil
+}
+
 // DiscardExpenseReport HARD-deletes a DRAFT report and all its lines (p25.3) under one
 // change. Draft-only (ErrExpenseReportState otherwise): a draft has no
 // posted_transaction_id and nothing references it, so no FK is fought. Each line gets
