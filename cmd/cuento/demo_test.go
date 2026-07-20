@@ -162,7 +162,7 @@ func TestDemoGeneratorAntiDrift(t *testing.T) {
 // holds exactly "financial" scoped to the Educacion program subtree); (b) it FILTERS --
 // running income_statement (a program-dimensioned report) under that subtree shows only
 // Educacion's rows, NOT the Food Pantry sibling; (c) the DENY PRECONDITION holds -- the
-// demoted activities_by_restriction report is in the SAME granted group yet is NOT
+// demoted balance-sheet report is in the SAME granted group yet is NOT
 // program-dimensioned, so a purely program-scoped grant cannot reach it. The runtime 403
 // for such a user is proven by the web layer's TestPermissionMatrix/TestDecidePolicy and
 // the p27.4c e2e (report-grant-scope.spec.js); here we assert the demo satisfies the
@@ -238,17 +238,20 @@ func assertDemoProgramScopedGrant(ctx context.Context, t *testing.T, sqldb *sql.
 		t.Errorf("scoped income_statement leaks Food Pantry's Food Purchases (sibling subtree)")
 	}
 
-	// (c) deny precondition: activities_by_restriction is in the granted "financial" group
-	// but is NOT program-dimensioned -> a purely program-scoped grant cannot reach it.
-	demoted, ok := reports.Default().Get(reports.ActivitiesByRestrictionReportID)
+	// (c) deny precondition: the balance sheet is in the granted "financial" group but is
+	// NOT program-dimensioned -> a purely program-scoped grant cannot reach it. (The
+	// activities-by-restriction report used to serve as this demoted example but has since
+	// moved to the "funds" group; the balance sheet is the demoted non-program financial
+	// report now.)
+	demoted, ok := reports.Default().Get(reports.BalanceSheetReportID)
 	if !ok {
-		t.Fatalf("activities_by_restriction not registered")
+		t.Fatalf("balance_sheet not registered")
 	}
 	if demoted.Group != "financial" {
-		t.Errorf("activities_by_restriction group = %q, want financial (same group as the scoped grant)", demoted.Group)
+		t.Errorf("balance_sheet group = %q, want financial (same group as the scoped grant)", demoted.Group)
 	}
 	if demoted.ProgramDimensioned {
-		t.Errorf("activities_by_restriction is ProgramDimensioned; a scoped grant would reach it (deny precondition broken)")
+		t.Errorf("balance_sheet is ProgramDimensioned; a scoped grant would reach it (deny precondition broken)")
 	}
 }
 

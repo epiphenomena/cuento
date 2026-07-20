@@ -12,7 +12,7 @@
 // route reachability):
 //   - the income_statement (a program-dimensioned report in "financial") shows ONLY
 //     Alpha's expense account, NOT the sibling Beta's (row-filtered to the subtree);
-//   - activities_by_restriction (a DEMOTED, non-program report in "financial") is
+//   - balance_sheet (a DEMOTED, non-program report in "financial") is
 //     DENIED (403) -- a purely program-scoped grant cannot reach a report that has no
 //     program dimension (p27.4b).
 // Finally, back as admin, it CLEARS the scope (org-wide) and confirms the operator now
@@ -29,7 +29,7 @@ const { test, expect } = require('../fixtures');
 const { saveAndReload, openNewAccount, saveAccount } = require('../helpers');
 
 const IS = '/reports/income_statement';
-const ABR = '/reports/activities_by_restriction'; // demoted (non-program) report in "financial"
+const DEMOTED = '/reports/balance_sheet'; // demoted (non-program) report in "financial"
 
 function unique() {
   return Math.random().toString(36).slice(2, 8);
@@ -161,9 +161,9 @@ test('report grant scope: a program-subtree-scoped "financial" grant filters inc
   await expect(table).toContainText(alphaAcct);
   await expect(table).not.toContainText(betaAcct);
 
-  // activities_by_restriction is a DEMOTED (non-program) report in "financial": a purely
+  // balance_sheet is a DEMOTED (non-program) report in "financial": a purely
   // program-scoped grant CANNOT reach it -> 403.
-  const denied = await page.request.get(`${ABR}?scope=1&from=2025-01-01&to=2030-12-31`);
+  const denied = await page.request.get(`${DEMOTED}?scope=1&asof=2030-12-31`);
   expect(denied.status()).toBe(403);
 
   // --- back as admin: CLEAR the scope (org-wide) ---
@@ -193,6 +193,6 @@ test('report grant scope: a program-subtree-scoped "financial" grant filters inc
   await expect(orgTable).toContainText(alphaAcct);
   await expect(orgTable).toContainText(betaAcct);
 
-  const restored = await page.request.get(`${ABR}?scope=1&from=2025-01-01&to=2030-12-31`);
+  const restored = await page.request.get(`${DEMOTED}?scope=1&asof=2030-12-31`);
   expect(restored.status()).toBe(200);
 });

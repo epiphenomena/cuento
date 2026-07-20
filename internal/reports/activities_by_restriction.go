@@ -13,8 +13,11 @@ import (
 // Restrictions — plus a Total column. It is the net-asset flow statement a 990 preparer
 // reads to see how each restriction class changed over the period.
 //
-// GROUP "financial" (the code-declared Groups() doc files p15.9 here — it is a core
-// financial statement, alongside the trial balance / balance sheet / income statement).
+// GROUP "funds" (p-golive: moved out of "financial"). Although it is FASB-shaped, its
+// whole subject is the DONOR/FUND-RESTRICTION flow — the With/Without split and the "net
+// assets released from restrictions" line both derive from the RESTRICTED FUNDS' period
+// statements (FundPeriodStatement). It reads to a funds/donor-restriction audience, not
+// the general-ledger "financial" audience, so it lives alongside the fund reports.
 //
 // NATIVE currency, per-currency rows (Line | Currency | Without | With | Total). The
 // report is NOT converted: the DERIVED "net assets released from restrictions" line must
@@ -43,13 +46,13 @@ import (
 const ActivitiesByRestrictionReportID = "activities_by_restriction"
 
 // registerActivitiesByRestriction registers the activities-by-restriction report (p15.9)
-// into reg under the "financial" group. It offers only the period (from/to); the shared
+// into reg under the "funds" group. It offers only the period (from/to); the shared
 // web params form renders the period + the always-present subsidiary scope selector.
 func registerActivitiesByRestriction(reg *Registry) {
 	reg.Register(Report{
 		ID:         ActivitiesByRestrictionReportID,
 		TitleKey:   "reports.activities_by_restriction.title",
-		Group:      "financial",
+		Group:      "funds",
 		ParamsSpec: ParamsSpec{Period: true},
 		Run:        runActivitiesByRestriction,
 		// p27.4b: NOT ProgramDimensioned. Its whole subject is the WITH/WITHOUT-restriction
@@ -59,8 +62,8 @@ func registerActivitiesByRestriction(reg *Registry) {
 		// applications -- no program dimension. Program-filtering only the revenue/expense
 		// totals while the fund-derived restriction figures stayed org-wide would produce an
 		// incoherent report whose change-in-net-assets no longer reconciles AND still leaks
-		// org-wide rows. So a purely program-scoped grant does NOT reach it; income_statement
-		// keeps the "financial" group's program-scoped reach.
+		// org-wide rows. So a purely program-scoped grant does NOT reach it (regardless of the
+		// group it sits in).
 	})
 }
 

@@ -6,8 +6,9 @@ package reports_test
 // internal/testutil/fixture) — transactions.go is the oracle for the period flows and
 // the fund tagging.
 //
-// GROUP funds — no, "financial" (a net-asset statement; the code-declared Groups()
-// doc already files p15.9 under "financial"). NATIVE currency, per-currency rows
+// GROUP "funds" (p-golive: moved out of "financial" — the With/Without split and the
+// released line are FUND-restriction flows, a funds/donor-restriction audience report).
+// NATIVE currency, per-currency rows
 // (Line | Currency | Without | With | Total): consistent with p15.8 (the D20 released
 // derivation source, also native) so the released line equals Σ p15.8 restricted-fund
 // applications by EXACT int64 equality, and consistent with the balance-sheet

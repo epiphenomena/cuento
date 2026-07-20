@@ -33,8 +33,8 @@ const (
 	// grant (p27.4d): the "financial" report group scoped to the Educacion program
 	// subtree. It demonstrates the p27.4 data-scoping axis in the hosted demo -- this
 	// user's income statement (a program-dimensioned report) shows ONLY Educacion's
-	// rows, and the demoted activities_by_restriction report in the same group is denied
-	// (needs an unscoped grant). Named for the "camp director" persona in PLAN Q5.
+	// rows, and a demoted non-program report in that group (e.g. the balance sheet) is
+	// denied (needs an unscoped grant). Named for the "camp director" persona in PLAN Q5.
 	DemoCampDirectorUser = "campdir"
 	DemoCampDirectorPass = "demo-camp-2026"
 )
@@ -181,8 +181,8 @@ func buildDemoUsers(ctx context.Context, s *store.Store, d *DemoIDs) error {
 
 	// A program-subtree-scoped viewer (p27.4d): read-only, holding the "financial" report
 	// group scoped to the Educacion program subtree. income_statement (program-dimensioned)
-	// then shows only Educacion's rows; activities_by_restriction (demoted, same group) is
-	// denied. GrantReportGroup versions the grant under the actor already in ctx.
+	// then shows only Educacion's rows; a demoted non-program report in that group (e.g. the
+	// balance sheet) is denied. GrantReportGroup versions the grant under the actor in ctx.
 	//
 	// The report groups are code-declared reference data (D10) the SERVE path syncs at
 	// startup (web.SyncReportGroups); the demo generator has no server boot, so sync them
