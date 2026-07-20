@@ -147,7 +147,7 @@ type InsertBudgetSplitParams struct {
 // ===========================================================================
 // Live insert of a budget split. amount is minor units, SIGNED (rule 3); fund_id
 // may be NULL (unrestricted); program_id is NULL only on A/L legs. The store
-// validates the account (leaf in the plan's subsidiary; R/E or open_item A/L), the
+// validates the account (leaf in the plan's subsidiary; R/E or receivable_payable A/L), the
 // fund/program refs+scope, and the program-required/forbidden rule. Returns the id.
 func (q *Queries) InsertBudgetSplit(ctx context.Context, arg InsertBudgetSplitParams) (ids.BudgetSplitID, error) {
 	row := q.db.QueryRowContext(

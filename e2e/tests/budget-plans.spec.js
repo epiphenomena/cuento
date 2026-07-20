@@ -4,11 +4,11 @@
 // db (seeded admin = is_admin -> TxnRead view + TxnWrite manage; seeded root subsidiary
 // "Organization" id 1 + root program "General").
 //
-// A fresh db has no R/E accounts and no open_item A/R account, so as admin the flow
-// first creates: a revenue leaf (R/E -> program REQUIRED) and an open_item ASSET leaf
+// A fresh db has no R/E accounts and no receivable_payable A/R account, so as admin the flow
+// first creates: a revenue leaf (R/E -> program REQUIRED) and an receivable_payable ASSET leaf
 // (A/R -> program FORBIDDEN). Then a budget plan, then the split-entry GRID:
 //   - an R/E split WITH a program saves fine;
-//   - an A/L (open_item) split with NO program saves fine;
+//   - an A/L (receivable_payable) split with NO program saves fine;
 //   - the program rule is proven both ways: an R/E row with NO program is REJECTED
 //     (error.budget_plan.program_required), and an A/L row WITH a program is REJECTED
 //     (error.budget_plan.program_forbidden).
@@ -61,8 +61,8 @@ test('budget-plans: create plan, R/E + open-item splits, program rule, CSV impor
   await expect(page.locator('form#account-form.e2e-settled')).toBeVisible();
   await page.locator('#af-name-en').fill(arName);
   await page.locator('#af-name-es').fill(`${arName} ES`);
-  // The open_item checkbox is gated to asset/liability (p27.1b); it is now visible.
-  await page.locator('input[name="open_item"]').check();
+  // The receivable_payable checkbox is gated to asset/liability (p27.1b); it is now visible.
+  await page.locator('input[name="receivable_payable"]').check();
   acctSub = page.locator('input[name="sub_1"]');
   if (!(await acctSub.isChecked())) await acctSub.check();
   await saveAccount(page);
@@ -110,7 +110,7 @@ test('budget-plans: create plan, R/E + open-item splits, program rule, CSV impor
   await reload;
   await expect(page.locator('#bs-account-0')).toHaveValue(/\d+/);
 
-  // A/L (open_item) row WITH a program -> rejected (program_forbidden). The saved R/E
+  // A/L (receivable_payable) row WITH a program -> rejected (program_forbidden). The saved R/E
   // row occupies index 0; the empty scaffold is a later index -- use the first empty
   // account select the grid auto-appended.
   // Re-open the detail so indices are deterministic (row 0 = the saved R/E split).

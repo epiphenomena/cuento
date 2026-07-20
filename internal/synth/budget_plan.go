@@ -19,7 +19,7 @@ const SampleBudgetPlanSplits = 8
 
 // ExtendSampleBudgetPlan creates a sample budget PLAN (the p27.2 split-derived
 // model) scoped to the US subsidiary, plus several PROJECTED, dated budget-splits
-// across >=2 programs, mixing R/E legs with one open_item A/R leg, on VARIED dates
+// across >=2 programs, mixing R/E legs with one receivable_payable A/R leg, on VARIED dates
 // -- so the p27.3 cash-flow projection and budget-variance reports have data. It is
 // OPT-IN: Build does not call it; the demo generator and the fixture seam call it. It
 // sets ids.SampleBudgetPlan to the created plan id.
@@ -27,7 +27,7 @@ const SampleBudgetPlanSplits = 8
 // This is the split-derived model (the old schedule-based sample was retired in
 // p27.3). Each
 // split carries an explicit date (no schedule object); R/E legs name a program
-// (required; prefilled where an account default exists), the open_item A/R leg
+// (required; prefilled where an account default exists), the receivable_payable A/R leg
 // carries NONE (forbidden on A/L). Currency is the resolved account's default so a
 // split always references an existing currency. Amounts are SYNTHETIC round figures
 // (rule 11).
@@ -65,7 +65,7 @@ func ExtendSampleBudgetPlan(ctx context.Context, s *store.Store, ids *IDs) error
 		// Expense, Educacion program, restricted to BuildingFund.
 		{"Rent Q1 (building fund)", "2026-01-01", ids.Occupancy, &buildingFund, &educacion, 90_000},
 		{"Rent Q2 (building fund)", "2026-04-01", ids.Occupancy, &buildingFund, &educacion, 90_000},
-		// Open-item A/R leg (DueFromMX, open_item asset): an EXPECTED COLLECTION. NO
+		// Open-item A/R leg (DueFromMX, receivable_payable asset): an EXPECTED COLLECTION. NO
 		// program (forbidden on A/L). desc is the party name (design #2).
 		{"RV Mexico settlement", "2026-06-01", ids.DueFromMX, nil, nil, 250_000},
 	}

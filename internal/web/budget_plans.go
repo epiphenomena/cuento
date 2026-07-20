@@ -353,7 +353,7 @@ func (s *server) buildBudgetPlanDetailModel(w http.ResponseWriter, r *http.Reque
 }
 
 // budgetSplitOptions assembles the sub-scoped option lists the grid selects offer:
-// accounts = R/E leaves OR open_item asset/liability leaves in the plan's subsidiary
+// accounts = R/E leaves OR receivable_payable asset/liability leaves in the plan's subsidiary
 // (a budget-split projects an R/E flow or an open-item A/R-A/P line; a plain balance-
 // sheet account is never offered, and the store rejects one out of band); funds =
 // ActiveFunds(sub); programs = all active. Mirrors expenseLineOptions but with the
@@ -366,7 +366,7 @@ func (s *server) budgetSplitOptions(ctx context.Context, sub ids.SubsidiaryID, i
 	}
 	for _, a := range accts {
 		offerable := a.Type == "revenue" || a.Type == "expense" ||
-			(a.OpenItem && (a.Type == "asset" || a.Type == "liability"))
+			(a.ReceivablePayable && (a.Type == "asset" || a.Type == "liability"))
 		if !a.Unavailable && !offerable {
 			continue
 		}
@@ -397,7 +397,7 @@ func (s *server) budgetSplitOptions(ctx context.Context, sub ids.SubsidiaryID, i
 	return accounts, funds, programs, nil
 }
 
-// budgetSplitAccountOffered reports whether acctID is an offered (R/E or open_item A/L)
+// budgetSplitAccountOffered reports whether acctID is an offered (R/E or receivable_payable A/L)
 // leaf in sub -- the web-edge gate mirroring what the grid showed, so a bad account is a
 // per-row error rather than a store 500.
 func (s *server) budgetSplitAccountOffered(ctx context.Context, sub ids.SubsidiaryID, acctID ids.AccountID) bool {

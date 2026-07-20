@@ -759,18 +759,18 @@ func TestCreateFunctionalClassNonExpense(t *testing.T) {
 	}
 }
 
-// accountFlags reads an account's current_cash / open_item live flags.
-func accountFlags(t *testing.T, s *Store, id ids.AccountID) (currentCash, openItem bool) {
+// accountFlags reads an account's current_cash / receivable_payable live flags.
+func accountFlags(t *testing.T, s *Store, id ids.AccountID) (currentCash, receivablePayable bool) {
 	t.Helper()
 	row, err := s.GetAccount(context.Background(), id)
 	if err != nil {
 		t.Fatalf("GetAccount(%d): %v", id, err)
 	}
-	return row.CurrentCash != 0, row.OpenItem != 0
+	return row.CurrentCash != 0, row.ReceivablePayable != 0
 }
 
 // TestCreateAccountFlagsVersioned (p27.1): creating an asset with current_cash +
-// open_item persists both flags on the live row AND the latest version snapshot
+// receivable_payable persists both flags on the live row AND the latest version snapshot
 // (so Z3 stays clean).
 func TestCreateAccountFlagsVersioned(t *testing.T) {
 	d := testutil.NewDB(t)
@@ -778,7 +778,7 @@ func TestCreateAccountFlagsVersioned(t *testing.T) {
 
 	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "asset", DefaultCurrency: "USD", Names: enName("Receivable Cash"),
-		Subsidiaries: []ids.SubsidiaryID{rootID}, CurrentCash: true, OpenItem: true,
+		Subsidiaries: []ids.SubsidiaryID{rootID}, CurrentCash: true, ReceivablePayable: true,
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)
@@ -790,7 +790,7 @@ func TestCreateAccountFlagsVersioned(t *testing.T) {
 	testutil.AssertVersioned(t, d, "accounts", int64(id), "create")
 	// The version snapshot must carry the flags too (Z3 backstop).
 	var vcc, voi int64
-	if err := d.QueryRow(`SELECT current_cash, open_item FROM accounts_versions
+	if err := d.QueryRow(`SELECT current_cash, receivable_payable FROM accounts_versions
 		WHERE entity_id = ? ORDER BY valid_from DESC, id DESC LIMIT 1`, id).Scan(&vcc, &voi); err != nil {
 		t.Fatalf("read version snapshot: %v", err)
 	}
@@ -877,19 +877,19 @@ func TestCreateCurrentCashNonAsset(t *testing.T) {
 	}
 }
 
-// TestCreateOpenItemBadType (p27.1): open_item on a type outside {asset,liability}
-// is rejected cleanly (ErrOpenItemBadType); no trace.
-func TestCreateOpenItemBadType(t *testing.T) {
+// TestCreateReceivablePayableBadType (p27.1): receivable_payable on a type outside {asset,liability}
+// is rejected cleanly (ErrReceivablePayableBadType); no trace.
+func TestCreateReceivablePayableBadType(t *testing.T) {
 	d := testutil.NewDB(t)
 	s := New(d)
 
 	before := countChanges(t, d)
 	_, err := s.CreateAccount(mutCtx(), CreateAccountInput{
 		Type: "equity", DefaultCurrency: "USD", Names: enName("Opening"),
-		Subsidiaries: []ids.SubsidiaryID{rootID}, OpenItem: true,
+		Subsidiaries: []ids.SubsidiaryID{rootID}, ReceivablePayable: true,
 	})
-	if !errors.Is(err, ErrOpenItemBadType) {
-		t.Fatalf("open_item on equity: err = %v, want ErrOpenItemBadType", err)
+	if !errors.Is(err, ErrReceivablePayableBadType) {
+		t.Fatalf("receivable_payable on equity: err = %v, want ErrReceivablePayableBadType", err)
 	}
 	if n := countChanges(t, d); n != before {
 		t.Errorf("changes count = %d, want %d (rejected create leaves no trace)", n, before)
@@ -912,7 +912,7 @@ func TestUpdateAccountFlagsRoundTrip(t *testing.T) {
 	}
 	// Set both flags.
 	if err := s.UpdateAccount(mutCtx(), id, UpdateAccountInput{
-		CurrentCash: ptr(true), OpenItem: ptr(true),
+		CurrentCash: ptr(true), ReceivablePayable: ptr(true),
 	}); err != nil {
 		t.Fatalf("UpdateAccount set flags: %v", err)
 	}
@@ -952,9 +952,9 @@ func TestUpdateCurrentCashNonAsset(t *testing.T) {
 	if !errors.Is(err, ErrCurrentCashNotAsset) {
 		t.Fatalf("current_cash on liability update: err = %v, want ErrCurrentCashNotAsset", err)
 	}
-	// open_item on a liability IS allowed (payable).
-	if err := s.UpdateAccount(mutCtx(), id, UpdateAccountInput{OpenItem: ptr(true)}); err != nil {
-		t.Fatalf("open_item on liability update: %v", err)
+	// receivable_payable on a liability IS allowed (payable).
+	if err := s.UpdateAccount(mutCtx(), id, UpdateAccountInput{ReceivablePayable: ptr(true)}); err != nil {
+		t.Fatalf("receivable_payable on liability update: %v", err)
 	}
 }
 

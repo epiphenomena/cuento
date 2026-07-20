@@ -241,11 +241,11 @@ type AccountEditorOption struct {
 	Type           string
 	DefaultProgram *ids.ProgramID
 	DefaultClass   string // "" = none
-	// OpenItem marks an A/R-A/P open-line account (p27.1). The budget-split editor
-	// (p27.2c) offers R/E leaves AND open_item asset/liability leaves, so it needs
+	// ReceivablePayable marks an A/R-A/P open-line account (p27.1). The budget-split editor
+	// (p27.2c) offers R/E leaves AND receivable_payable asset/liability leaves, so it needs
 	// this flag to include/filter A/L options (the txn/expense editors ignore it).
-	OpenItem      bool
-	SubsidiaryIDs []ids.SubsidiaryID
+	ReceivablePayable bool
+	SubsidiaryIDs     []ids.SubsidiaryID
 	// Unavailable marks an option that would NOT normally be offered (it is inactive,
 	// a placeholder, or outside the editor's subsidiary) but was force-included because
 	// an existing split references it (p26.10). The web layer marks it visibly (an
@@ -315,12 +315,12 @@ func (s *Store) AccountEditorOptionsWith(ctx context.Context, lang string, subID
 			return nil, err
 		}
 		opt := AccountEditorOption{
-			ID:            r.ID,
-			Name:          r.Name,
-			Path:          pathOf(r.ID),
-			Type:          r.Type,
-			OpenItem:      acct.OpenItem != 0,
-			SubsidiaryIDs: subs,
+			ID:                r.ID,
+			Name:              r.Name,
+			Path:              pathOf(r.ID),
+			Type:              r.Type,
+			ReceivablePayable: acct.ReceivablePayable != 0,
+			SubsidiaryIDs:     subs,
 		}
 		opt.DefaultProgram = ids.Ptr[ids.ProgramID](acct.DefaultProgramID)
 		if acct.FunctionalClass.Valid {
@@ -356,13 +356,13 @@ func (s *Store) AccountEditorOptionsWith(ctx context.Context, lang string, subID
 				return nil, err
 			}
 			opt := AccountEditorOption{
-				ID:            id,
-				Name:          nameOf[id],
-				Path:          pathOf(id),
-				Type:          acct.Type,
-				OpenItem:      acct.OpenItem != 0,
-				SubsidiaryIDs: subs,
-				Unavailable:   true,
+				ID:                id,
+				Name:              nameOf[id],
+				Path:              pathOf(id),
+				Type:              acct.Type,
+				ReceivablePayable: acct.ReceivablePayable != 0,
+				SubsidiaryIDs:     subs,
+				Unavailable:       true,
 			}
 			opt.DefaultProgram = ids.Ptr[ids.ProgramID](acct.DefaultProgramID)
 			if acct.FunctionalClass.Valid {

@@ -21,7 +21,7 @@ const SampleBudgetPlanName = synth.SampleBudgetPlanName
 //
 // The plan is US-scoped; its splits span 2026-01-01 .. 2026-06-01 (the report window),
 // mixing revenue/expense legs across the General + Educacion programs (one restricted
-// to the Building Fund) with an open_item A/R leg. The US current-cash accounts
+// to the Building Fund) with an receivable_payable A/R leg. The US current-cash accounts
 // (Checking US) carry base-fixture actuals, so the cash-flow projection shows a
 // non-zero PER-FUND opening; the R/E legs line up with actual activity for a real
 // variance row. Amounts are SYNTHETIC (rule 11).

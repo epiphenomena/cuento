@@ -99,8 +99,8 @@ func TestDemoGeneratorAntiDrift(t *testing.T) {
 	// p27.1 shared account attributes: at least one spendable-cash account, one
 	// open-item receivable (asset -> A/R) and one open-item payable (liability -> A/P).
 	atLeast("current_cash accounts", count(`SELECT count(*) FROM accounts WHERE current_cash = 1`), 1)
-	atLeast("open_item receivables", count(`SELECT count(*) FROM accounts WHERE open_item = 1 AND type = 'asset'`), 1)
-	atLeast("open_item payables", count(`SELECT count(*) FROM accounts WHERE open_item = 1 AND type = 'liability'`), 1)
+	atLeast("receivable_payable receivables", count(`SELECT count(*) FROM accounts WHERE receivable_payable = 1 AND type = 'asset'`), 1)
+	atLeast("receivable_payable payables", count(`SELECT count(*) FROM accounts WHERE receivable_payable = 1 AND type = 'liability'`), 1)
 
 	// p28.7: at least one account carries a free-text note, so the chart's Notes
 	// column (p28.8) shows populated in the demo.
@@ -124,7 +124,7 @@ func TestDemoGeneratorAntiDrift(t *testing.T) {
 	atLeast("open reconciliations", count(`SELECT count(*) FROM reconciliations WHERE status = 'open'`), 1)
 
 	// A budget PLAN with splits (the p27.2 split-derived model): >=1 plan, several
-	// splits across >=2 programs, incl. at least one open_item A/L leg (program NULL).
+	// splits across >=2 programs, incl. at least one receivable_payable A/L leg (program NULL).
 	atLeast("budget plans", count(`SELECT count(*) FROM budget_plans`), 1)
 	atLeast("budget splits", count(`SELECT count(*) FROM budget_splits`), 5)
 	atLeast("budget-split programs", count(`SELECT count(DISTINCT program_id) FROM budget_splits WHERE program_id IS NOT NULL`), 2)

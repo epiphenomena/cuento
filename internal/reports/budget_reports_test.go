@@ -3,7 +3,7 @@ package reports_test
 // p27.3 budget REPORT tests (cash-flow projection + budget variance), over the NEW
 // split-derived model (budget_plans / budget_splits) -- replacing the retired
 // schedule-based p19.4 tests. They run BOTH reports over the canonical, opt-in
-// fixture.ExtendSampleBudgetPlan seam (a US-scoped plan with projected R/E + open_item
+// fixture.ExtendSampleBudgetPlan seam (a US-scoped plan with projected R/E + receivable_payable
 // splits) and pin the redesign's load-bearing behaviors:
 //
 //   - cash-flow projection's PER-FUND opening comes from ACTUAL current-cash balances

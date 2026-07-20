@@ -176,20 +176,20 @@ func (s *Store) MergeAccount(ctx context.Context, src, dst ids.AccountID) error 
 			// the public DeactivateAccount so it rides the SAME change as the
 			// repoints. Every other column is carried through from srcAcct.
 			if err := q.UpdateAccount(ctx, sqlc.UpdateAccountParams{
-				ParentID:         srcAcct.ParentID,
-				Type:             srcAcct.Type,
-				DefaultCurrency:  srcAcct.DefaultCurrency,
-				FunctionalClass:  srcAcct.FunctionalClass,
-				Form990Code:      srcAcct.Form990Code,
-				DefaultProgramID: srcAcct.DefaultProgramID,
-				Intercompany:     srcAcct.Intercompany,
-				Reconcilable:     srcAcct.Reconcilable,
-				Active:           0,
-				SortOrder:        srcAcct.SortOrder,
-				CreatedAt:        srcAcct.CreatedAt,
-				CurrentCash:      srcAcct.CurrentCash,
-				OpenItem:         srcAcct.OpenItem,
-				ID:               src,
+				ParentID:          srcAcct.ParentID,
+				Type:              srcAcct.Type,
+				DefaultCurrency:   srcAcct.DefaultCurrency,
+				FunctionalClass:   srcAcct.FunctionalClass,
+				Form990Code:       srcAcct.Form990Code,
+				DefaultProgramID:  srcAcct.DefaultProgramID,
+				Intercompany:      srcAcct.Intercompany,
+				Reconcilable:      srcAcct.Reconcilable,
+				Active:            0,
+				SortOrder:         srcAcct.SortOrder,
+				CreatedAt:         srcAcct.CreatedAt,
+				CurrentCash:       srcAcct.CurrentCash,
+				ReceivablePayable: srcAcct.ReceivablePayable,
+				ID:                src,
 			}); err != nil {
 				return fmt.Errorf("deactivate source %d: %w", src, err)
 			}

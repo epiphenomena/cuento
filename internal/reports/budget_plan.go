@@ -14,7 +14,7 @@ package reports
 //
 //   - Cash-flow projection classifies each split as an INFLOW or OUTFLOW by the
 //     categorized leg's account TYPE (DECISIONS "Budget redesign"): revenue and an
-//     open_item receivable (asset) are inflows (+cash); expense and an open_item
+//     receivable_payable receivable (asset) are inflows (+cash); expense and an receivable_payable
 //     payable (liability) are outflows (-cash). Opening cash is PER FUND from ACTUALS
 //     (CurrentCashFundBalancesAsOf), not from a budget leg.
 //   - Budget variance signs each split into NET-DEBIT space (expense +, revenue -) so
@@ -76,19 +76,19 @@ type ProjectionSeries struct {
 	At        map[string]int64 // flow date -> running balance just after its flow(s)
 }
 
-// budgetSplitResolved is a budget-split with its account type/open_item resolved --
+// budgetSplitResolved is a budget-split with its account type/receivable_payable resolved --
 // the shape both toolkit methods iterate. Fund 0 = unrestricted (D20). Program 0 =
 // none (only A/L legs, which carry no program).
 type budgetSplitResolved struct {
-	key      BudgetKey
-	amount   int64  // stored POSITIVE magnitude (direction applied by the caller)
-	acctType string // "revenue" | "expense" | "asset" | "liability"
-	openItem bool
-	date     string
+	key               BudgetKey
+	amount            int64  // stored POSITIVE magnitude (direction applied by the caller)
+	acctType          string // "revenue" | "expense" | "asset" | "liability"
+	receivablePayable bool
+	date              string
 }
 
 // planSplitsResolved reads a plan's splits (confirming the plan exists for a clean
-// error on a bad id) and resolves each split's account type + open_item flag from
+// error on a bad id) and resolves each split's account type + receivable_payable flag from
 // the account tree, once per run. It is the shared front-half of both budget-plan
 // report methods.
 func (tk *Toolkit) planSplitsResolved(ctx context.Context, planID BudgetPlanID) ([]budgetSplitResolved, error) {
@@ -104,12 +104,12 @@ func (tk *Toolkit) planSplitsResolved(ctx context.Context, planID BudgetPlanID) 
 		return nil, fmt.Errorf("budget report: load account tree: %w", err)
 	}
 	type acctInfo struct {
-		typ      string
-		openItem bool
+		typ               string
+		receivablePayable bool
 	}
 	info := make(map[AccountID]acctInfo, len(tree))
 	for _, r := range tree {
-		info[r.ID] = acctInfo{typ: r.Type, openItem: r.OpenItem}
+		info[r.ID] = acctInfo{typ: r.Type, receivablePayable: r.ReceivablePayable}
 	}
 	out := make([]budgetSplitResolved, 0, len(splits))
 	for _, sp := range splits {
@@ -121,10 +121,10 @@ func (tk *Toolkit) planSplitsResolved(ctx context.Context, planID BudgetPlanID) 
 				Program:  progOrZero(sp.ProgramID),
 				Currency: sp.Currency,
 			},
-			amount:   sp.Amount,
-			acctType: ai.typ,
-			openItem: ai.openItem,
-			date:     sp.Date,
+			amount:            sp.Amount,
+			acctType:          ai.typ,
+			receivablePayable: ai.receivablePayable,
+			date:              sp.Date,
 		})
 	}
 	return out, nil
@@ -147,21 +147,21 @@ func progOrZero(n sql.NullInt64) ProgramID {
 }
 
 // cashDirection classifies a budget-split's cash direction: +1 for an INFLOW
-// (revenue, or an open_item receivable asset), -1 for an OUTFLOW (expense, or an
-// open_item payable liability). It returns 0 for a split whose account is neither
+// (revenue, or an receivable_payable receivable asset), -1 for an OUTFLOW (expense, or an
+// receivable_payable payable liability). It returns 0 for a split whose account is neither
 // (which the store rejects, so this is a defensive skip, not a live path).
-func cashDirection(acctType string, openItem bool) int64 {
+func cashDirection(acctType string, receivablePayable bool) int64 {
 	switch acctType {
 	case "revenue":
 		return +1
 	case "expense":
 		return -1
 	case "asset":
-		if openItem {
+		if receivablePayable {
 			return +1 // receivable: an expected collection is an inflow
 		}
 	case "liability":
-		if openItem {
+		if receivablePayable {
 			return -1 // payable: an expected settlement is an outflow
 		}
 	}
@@ -222,7 +222,7 @@ func (tk *Toolkit) CashflowProjectionPlan(ctx context.Context, s Scope, planID B
 		if to != "" && sp.date > to {
 			continue
 		}
-		dir := cashDirection(sp.acctType, sp.openItem)
+		dir := cashDirection(sp.acctType, sp.receivablePayable)
 		if dir == 0 {
 			continue
 		}
@@ -264,7 +264,7 @@ func (tk *Toolkit) CashflowProjectionPlan(ctx context.Context, s Scope, planID B
 // exists wherever either side is nonzero.
 //
 // Only R/E splits participate: BudgetKeyActivity returns only program-carrying R/E
-// actuals, so an open_item A/L budget-split has no comparable actual (DECISIONS
+// actuals, so an receivable_payable A/L budget-split has no comparable actual (DECISIONS
 // tension 2 -- A/R-A/P variance is a period-net concern out of this report's scope).
 func (tk *Toolkit) BudgetVariancePlan(ctx context.Context, s Scope, planID BudgetPlanID, from, to string, g Granularity) ([]BudgetVsActualCell, error) {
 	splits, err := tk.planSplitsResolved(ctx, planID)

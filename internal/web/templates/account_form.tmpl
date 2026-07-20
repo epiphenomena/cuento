@@ -90,7 +90,7 @@
   </div>
 
   {{/*
-    p27.1 boolean type-flags. current_cash shows only for ASSET accounts; open_item
+    p27.1 boolean type-flags. current_cash shows only for ASSET accounts; receivable_payable
     for ASSET or LIABILITY. The type-select re-fetch (above) refreshes these regions
     on a type change, exactly like the functional-class / default-program regions.
     The SERVER still enforces the rule (the store rejects a wrong-type flag); this
@@ -107,20 +107,20 @@
   {{end}}
   {{if .IsAssetOrLiability}}
   <div class="field check">
-    <label><input type="checkbox" name="open_item" value="on"{{if .OpenItem}} checked{{end}}
-      {{- if eq .Errors.FirstInvalid "open_item"}} autofocus{{end}}> {{t "accounts.form.open_item"}}</label>
-    <p class="hint">{{t "accounts.form.open_item_help"}}</p>
-    {{with .Errors.ErrorKey "open_item"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+    <label><input type="checkbox" name="receivable_payable" value="on"{{if .ReceivablePayable}} checked{{end}}
+      {{- if eq .Errors.FirstInvalid "receivable_payable"}} autofocus{{end}}> {{t "accounts.form.receivable_payable"}}</label>
+    <p class="hint">{{t "accounts.form.receivable_payable_help"}}</p>
+    {{with .Errors.ErrorKey "receivable_payable"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
   </div>
   {{end}}
   {{/*
-    A wrong-type flag submission (a client sending current_cash/open_item for an
+    A wrong-type flag submission (a client sending current_cash/receivable_payable for an
     ineligible type -- the UI hides the control, so this is an out-of-band submit)
     is rejected by the store; surface that error even when the gated control above
     is hidden, so the 422 re-render is not silent.
   */ -}}
   {{if and (not .IsAsset) (.Errors.ErrorKey "current_cash")}}<p class="field-error" role="alert">{{t (.Errors.ErrorKey "current_cash")}}</p>{{end}}
-  {{if and (not .IsAssetOrLiability) (.Errors.ErrorKey "open_item")}}<p class="field-error" role="alert">{{t (.Errors.ErrorKey "open_item")}}</p>{{end}}
+  {{if and (not .IsAssetOrLiability) (.Errors.ErrorKey "receivable_payable")}}<p class="field-error" role="alert">{{t (.Errors.ErrorKey "receivable_payable")}}</p>{{end}}
 
   {{if .IsExpense}}
   <div class="field">

@@ -21,18 +21,18 @@
 INSERT INTO accounts
   (parent_id, type, default_currency, functional_class, form990_code,
    default_program_id, intercompany, reconcilable, active, sort_order, created_at,
-   current_cash, open_item, notes)
+   current_cash, receivable_payable, notes)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id;
 
 -- name: GetAccount :one
 -- Column order matches the accounts table's PHYSICAL order (default_program_id was
--- ADDed last by 00008; current_cash + open_item ADDed by 00027; notes ADDed last by
+-- ADDed last by 00008; current_cash + receivable_payable ADDed by 00027; notes ADDed last by
 -- 00031), so sqlc maps the result to the sqlc.Account model rather than a bespoke
 -- GetAccountRow -- accounts.go depends on GetAccount returning Account.
 SELECT id, parent_id, type, default_currency, functional_class, form990_code,
        intercompany, reconcilable, active, sort_order, created_at, default_program_id,
-       current_cash, open_item, notes
+       current_cash, receivable_payable, notes
 FROM accounts
 WHERE id = ?;
 
@@ -46,7 +46,7 @@ WHERE id = ?;
 UPDATE accounts
 SET parent_id = ?, type = ?, default_currency = ?, functional_class = ?,
     form990_code = ?, default_program_id = ?, intercompany = ?, reconcilable = ?,
-    active = ?, sort_order = ?, created_at = ?, current_cash = ?, open_item = ?,
+    active = ?, sort_order = ?, created_at = ?, current_cash = ?, receivable_payable = ?,
     notes = ?
 WHERE id = ?;
 
@@ -54,7 +54,7 @@ WHERE id = ?;
 -- Snapshot-from-live version append for accounts (STANDARD single-column entity,
 -- entity_id = accounts.id). Must run AFTER the live write. Snapshot column set
 -- matches 00005_accounts.sql + the 00008 default_program_id ripple + the 00027
--- current_cash/open_item ripple + the 00031 notes ripple exactly: adding a column to
+-- current_cash/receivable_payable ripple + the 00031 notes ripple exactly: adding a column to
 -- accounts requires it here too, or Z3 (current == latest snapshot) diverges for
 -- accounts touched after that migration. Params (plain
 -- positional, each used once): op, change_id, entity_id -> generated fields Op,
@@ -62,10 +62,10 @@ WHERE id = ?;
 INSERT INTO accounts_versions
   (entity_id, change_id, valid_from, op, parent_id, type, default_currency,
    functional_class, form990_code, default_program_id, intercompany, reconcilable,
-   active, sort_order, created_at, current_cash, open_item, notes)
+   active, sort_order, created_at, current_cash, receivable_payable, notes)
 SELECT a.id, c.id, c.at, ?, a.parent_id, a.type, a.default_currency,
        a.functional_class, a.form990_code, a.default_program_id, a.intercompany,
-       a.reconcilable, a.active, a.sort_order, a.created_at, a.current_cash, a.open_item,
+       a.reconcilable, a.active, a.sort_order, a.created_at, a.current_cash, a.receivable_payable,
        a.notes
 FROM accounts a, changes c
 WHERE c.id = ? AND a.id = ?;
@@ -196,18 +196,18 @@ ORDER BY sort, code;
 -- by ORDER BY lang LIMIT 1 so results are stable. The trailing '' keeps the column
 -- non-null (an account with no names at all resolves to empty, and sqlc types the
 -- column as a plain string), so the store's TreeRow mapping is unchanged.
-WITH RECURSIVE tree(id, parent_id, type, active, reconcilable, open_item, current_cash, notes, sort_order, path) AS (
-  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.open_item, a.current_cash, a.notes, a.sort_order,
+WITH RECURSIVE tree(id, parent_id, type, active, reconcilable, receivable_payable, current_cash, notes, sort_order, path) AS (
+  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.receivable_payable, a.current_cash, a.notes, a.sort_order,
          printf('%020d.%020d', a.sort_order, a.id)
   FROM accounts a
   WHERE a.parent_id IS NULL
   UNION ALL
-  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.open_item, a.current_cash, a.notes, a.sort_order,
+  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.receivable_payable, a.current_cash, a.notes, a.sort_order,
          t.path || '/' || printf('%020d.%020d', a.sort_order, a.id)
   FROM accounts a
   JOIN tree t ON a.parent_id = t.id
 )
-SELECT tree.id, tree.parent_id, tree.type, tree.active, tree.reconcilable, tree.open_item, tree.current_cash, tree.notes, tree.sort_order,
+SELECT tree.id, tree.parent_id, tree.type, tree.active, tree.reconcilable, tree.receivable_payable, tree.current_cash, tree.notes, tree.sort_order,
        CAST(COALESCE(
          (SELECT an1.name FROM account_names an1 WHERE an1.account_id = tree.id AND an1.lang = ?),
          (SELECT an2.name FROM account_names an2 WHERE an2.account_id = tree.id AND an2.lang = 'en'),
@@ -227,18 +227,18 @@ ORDER BY tree.path;
 -- Name resolution is the SAME requested-lang -> en -> any COALESCE chain as
 -- AccountTree (p05.3); see that query's comment for the rationale of each branch
 -- and the trailing '' (keeps the column non-null / a plain string in sqlc).
-WITH RECURSIVE tree(id, parent_id, type, active, reconcilable, open_item, current_cash, notes, sort_order, path) AS (
-  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.open_item, a.current_cash, a.notes, a.sort_order,
+WITH RECURSIVE tree(id, parent_id, type, active, reconcilable, receivable_payable, current_cash, notes, sort_order, path) AS (
+  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.receivable_payable, a.current_cash, a.notes, a.sort_order,
          printf('%020d.%020d', a.sort_order, a.id)
   FROM accounts a
   WHERE a.parent_id IS NULL
   UNION ALL
-  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.open_item, a.current_cash, a.notes, a.sort_order,
+  SELECT a.id, a.parent_id, a.type, a.active, a.reconcilable, a.receivable_payable, a.current_cash, a.notes, a.sort_order,
          t.path || '/' || printf('%020d.%020d', a.sort_order, a.id)
   FROM accounts a
   JOIN tree t ON a.parent_id = t.id
 )
-SELECT tree.id, tree.parent_id, tree.type, tree.active, tree.reconcilable, tree.open_item, tree.current_cash, tree.notes, tree.sort_order,
+SELECT tree.id, tree.parent_id, tree.type, tree.active, tree.reconcilable, tree.receivable_payable, tree.current_cash, tree.notes, tree.sort_order,
        CAST(COALESCE(
          (SELECT an1.name FROM account_names an1 WHERE an1.account_id = tree.id AND an1.lang = ?),
          (SELECT an2.name FROM account_names an2 WHERE an2.account_id = tree.id AND an2.lang = 'en'),

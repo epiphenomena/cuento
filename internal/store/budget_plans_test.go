@@ -18,7 +18,7 @@ import (
 
 // splitSetup builds the common references a budget-split needs: a subsidiary, a
 // plan on it, an R/E (expense) account mapped to it, a revenue account, an
-// open_item receivable account, a program, and a fund scoped to the sub.
+// receivable_payable receivable account, a program, and a fund scoped to the sub.
 type splitSetup struct {
 	sub                          ids.SubsidiaryID
 	expense, revenue, receivable ids.AccountID
@@ -51,7 +51,7 @@ func mkSplitSetup(t *testing.T, s *Store) splitSetup {
 		t.Fatalf("create revenue account: %v", err)
 	}
 	receivable, err := s.CreateAccount(mutCtx(), CreateAccountInput{
-		Type: "asset", DefaultCurrency: "USD", Names: enName("Due from"), Subsidiaries: []ids.SubsidiaryID{sub}, OpenItem: true,
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Due from"), Subsidiaries: []ids.SubsidiaryID{sub}, ReceivablePayable: true,
 	})
 	if err != nil {
 		t.Fatalf("create receivable account: %v", err)
@@ -200,9 +200,9 @@ func TestCreateBudgetSplitREProgramRequired(t *testing.T) {
 	}
 }
 
-// TestCreateBudgetSplitOpenItemAL: an open_item receivable split is allowed and
+// TestCreateBudgetSplitReceivablePayableAL: an receivable_payable receivable split is allowed and
 // carries NO program.
-func TestCreateBudgetSplitOpenItemAL(t *testing.T) {
+func TestCreateBudgetSplitReceivablePayableAL(t *testing.T) {
 	d := testutil.NewDB(t)
 	s := New(d)
 	st := mkSplitSetup(t, s)
@@ -235,7 +235,7 @@ func TestCreateBudgetSplitALProgramForbidden(t *testing.T) {
 }
 
 // TestCreateBudgetSplitPlainBalanceSheet: an account that is neither R/E nor an
-// open_item A/L (a plain asset) is REJECTED.
+// receivable_payable A/L (a plain asset) is REJECTED.
 func TestCreateBudgetSplitPlainBalanceSheet(t *testing.T) {
 	d := testutil.NewDB(t)
 	s := New(d)

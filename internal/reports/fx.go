@@ -12,7 +12,7 @@ package reports
 //     in a currency that EQUALS its holding sub's functional currency carries no FX
 //     exposure. A balance in a DIFFERENT currency is a foreign-currency item.
 //   - A foreign-currency MONETARY item (cash / receivable / payable -- flagged
-//     current_cash OR open_item) is remeasured to the functional currency at the
+//     current_cash OR receivable_payable) is remeasured to the functional currency at the
 //     CLOSING rate on the report date, while the historical transactions that built it
 //     were measured at their TRANSACTION-DATE rates. The difference is a remeasurement
 //     gain/loss recognized in INCOME (ASC 830-20-35). Non-monetary items (fixed assets,
@@ -139,7 +139,7 @@ func (tk *Toolkit) FXRemeasurementAsOf(ctx context.Context, s Scope, d string) (
 		if err != nil {
 			return FXRemeasurement{}, err
 		}
-		monetary := acct.CurrentCash == 1 || acct.OpenItem == 1
+		monetary := acct.CurrentCash == 1 || acct.ReceivablePayable == 1
 		if !monetary || acct.Intercompany == 1 {
 			continue // non-monetary -> historical; intercompany -> CTA (p26.70)
 		}

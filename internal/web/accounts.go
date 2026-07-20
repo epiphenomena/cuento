@@ -105,7 +105,7 @@ type acctRow struct {
 	CurrentCash bool
 
 	// BadgeKey is an i18n key for a small identifier tag next to the name (p27.1b):
-	// an open_item ASSET reads as "A/R", an open_item LIABILITY as "A/P" (direction
+	// an receivable_payable ASSET reads as "A/R", an receivable_payable LIABILITY as "A/P" (direction
 	// derived from type). "" = no badge. Kept minimal; does not touch the p26.74 type
 	// grouping.
 	BadgeKey string
@@ -148,12 +148,12 @@ func validAccountType(typ string) string {
 	return ""
 }
 
-// openItemBadgeKey returns the i18n key for an open_item account's chart badge
+// receivablePayableBadgeKey returns the i18n key for an receivable_payable account's chart badge
 // (p27.1b): an asset reads as A/R (receivable), a liability as A/P (payable) -- the
-// direction derives from the account type. "" when the account is not open_item (or
-// somehow open_item on an unexpected type, which Z20 forbids).
-func openItemBadgeKey(openItem bool, typ string) string {
-	if !openItem {
+// direction derives from the account type. "" when the account is not receivable_payable (or
+// somehow receivable_payable on an unexpected type, which Z20 forbids).
+func receivablePayableBadgeKey(receivablePayable bool, typ string) string {
+	if !receivablePayable {
 		return ""
 	}
 	switch typ {
@@ -378,7 +378,7 @@ func (s *server) accountsPage(w http.ResponseWriter, r *http.Request) {
 			Active:       row.Active != 0,
 			Reconcilable: row.Reconcilable,
 			Depth:        depth[row.ID],
-			BadgeKey:     openItemBadgeKey(row.OpenItem, row.Type),
+			BadgeKey:     receivablePayableBadgeKey(row.ReceivablePayable, row.Type),
 			Notes:        row.Notes,
 			CurrentCash:  row.CurrentCash,
 		}
@@ -454,21 +454,21 @@ func (s *server) rootSubsidiary(ctx context.Context) (int64, error) {
 // 990 lines/subs/programs) the selects render, the account's current sub set (for
 // checklist pre-check), and the edit target id (0 = create).
 type accountForm struct {
-	ID               int64 // 0 = create
-	Type             string
-	Currency         string
-	ParentID         int64
-	Names            []nameInput // one per enabled language (p11.4, D14); en first + required
-	Reconcilable     bool
-	Intercompany     bool
-	CurrentCash      bool   // p27.1: spendable-cash marker (asset-only)
-	OpenItem         bool   // p27.1: A/R-A/P open-line marker (asset/liability-only)
-	Notes            string // p28.7: free-text note ABOUT the account
-	FunctionalClass  string
-	DefaultProgram   int64
-	Form990Code      string
-	Form990Effective string // inherited effective code shown as placeholder when unset (D25)
-	CheckedSubs      map[int64]bool
+	ID                int64 // 0 = create
+	Type              string
+	Currency          string
+	ParentID          int64
+	Names             []nameInput // one per enabled language (p11.4, D14); en first + required
+	Reconcilable      bool
+	Intercompany      bool
+	CurrentCash       bool   // p27.1: spendable-cash marker (asset-only)
+	ReceivablePayable bool   // p27.1: A/R-A/P open-line marker (asset/liability-only)
+	Notes             string // p28.7: free-text note ABOUT the account
+	FunctionalClass   string
+	DefaultProgram    int64
+	Form990Code       string
+	Form990Effective  string // inherited effective code shown as placeholder when unset (D25)
+	CheckedSubs       map[int64]bool
 
 	Parents    []store.ParentOption
 	Currencies []currencyOption
@@ -478,7 +478,7 @@ type accountForm struct {
 	IsExpense  bool // type == expense (functional class shown)
 	IsRE       bool // revenue/expense (default program shown)
 	// p27.1: type-gating for the boolean flags. current_cash shows only for assets;
-	// open_item shows for assets/liabilities. The SERVER enforces the rule (the store
+	// receivable_payable shows for assets/liabilities. The SERVER enforces the rule (the store
 	// rejects a wrong-type flag); these just hide the irrelevant control.
 	IsAsset            bool
 	IsAssetOrLiability bool
@@ -609,8 +609,8 @@ func overlayFormValues(form *accountForm, r *http.Request) {
 	if get("current_cash") != "" {
 		form.CurrentCash = true
 	}
-	if get("open_item") != "" {
-		form.OpenItem = true
+	if get("receivable_payable") != "" {
+		form.ReceivablePayable = true
 	}
 	// Notes: a free-text field, so a type-change re-fetch preserves whatever was typed.
 	if v := get("notes"); v != "" {
@@ -657,7 +657,7 @@ func (s *server) accountEditForm(w http.ResponseWriter, r *http.Request) {
 	form.Reconcilable = acct.Reconcilable != 0
 	form.Intercompany = acct.Intercompany != 0
 	form.CurrentCash = acct.CurrentCash != 0
-	form.OpenItem = acct.OpenItem != 0
+	form.ReceivablePayable = acct.ReceivablePayable != 0
 	// Prefill the notes textarea so a no-op edit round-trips (an unedited save must
 	// not blank an existing note; p28.7).
 	if acct.Notes.Valid {
@@ -826,11 +826,11 @@ func (s *server) accountCreate(w http.ResponseWriter, r *http.Request) {
 		Reconcilable:    in.reconcilable,
 		Intercompany:    in.intercompany,
 		// Pass the flags as submitted -- the store validates them against the type
-		// (ErrCurrentCashNotAsset / ErrOpenItemBadType), which the handler maps to a
+		// (ErrCurrentCashNotAsset / ErrReceivablePayableBadType), which the handler maps to a
 		// field error at 422. Not pre-gated by type here so a wrong-type submission is
 		// REJECTED (mapped) rather than silently dropped (p27.1b).
-		CurrentCash: in.currentCash,
-		OpenItem:    in.openItem,
+		CurrentCash:       in.currentCash,
+		ReceivablePayable: in.receivablePayable,
 	}
 	// Notes: always send (a non-nil pointer); "" clears to NULL in the store (p28.7).
 	create.Notes = &in.notes
@@ -881,8 +881,8 @@ func (s *server) accountUpdate(w http.ResponseWriter, r *http.Request) {
 		// absent = unchecked), so always send a non-nil pointer. The store validates
 		// against the account's type and rejects a wrong-type flag (mapped to a field
 		// error at 422). p27.1b.
-		CurrentCash: &in.currentCash,
-		OpenItem:    &in.openItem,
+		CurrentCash:       &in.currentCash,
+		ReceivablePayable: &in.receivablePayable,
 		// Notes is authoritative on a full submit (present = the box's text, empty =
 		// cleared), so always send a non-nil pointer (p28.7).
 		Notes: &in.notes,
@@ -968,19 +968,19 @@ func (s *server) accountDeactivate(w http.ResponseWriter, r *http.Request) {
 // parsedAccountForm is the validated-shape (raw strings turned into typed fields)
 // of a submitted account form; the store does the real validation.
 type parsedAccountForm struct {
-	typ             string
-	currency        string
-	parentID        ids.AccountID
-	names           map[string]string // lang -> submitted name, for each enabled language (p11.4)
-	reconcilable    bool
-	intercompany    bool
-	currentCash     bool   // p27.1
-	openItem        bool   // p27.1
-	notes           string // p28.7: free-text account note
-	functionalClass string
-	defaultProgram  int64
-	form990Code     string
-	subs            []ids.SubsidiaryID
+	typ               string
+	currency          string
+	parentID          ids.AccountID
+	names             map[string]string // lang -> submitted name, for each enabled language (p11.4)
+	reconcilable      bool
+	intercompany      bool
+	currentCash       bool   // p27.1
+	receivablePayable bool   // p27.1
+	notes             string // p28.7: free-text account note
+	functionalClass   string
+	defaultProgram    int64
+	form990Code       string
+	subs              []ids.SubsidiaryID
 }
 
 // parseAccountForm reads the POST form into an accountForm (for re-render) and a
@@ -996,18 +996,18 @@ func (s *server) parseAccountForm(r *http.Request, id ids.AccountID) (accountFor
 	}
 	typ := r.PostFormValue("type")
 	in := parsedAccountForm{
-		typ:             typ,
-		currency:        r.PostFormValue("currency"),
-		parentID:        ids.AccountID(parseID(r.PostFormValue("parent_id"))),
-		names:           map[string]string{},
-		reconcilable:    r.PostFormValue("reconcilable") != "",
-		intercompany:    r.PostFormValue("intercompany") != "",
-		currentCash:     r.PostFormValue("current_cash") != "",
-		openItem:        r.PostFormValue("open_item") != "",
-		notes:           strings.TrimSpace(r.PostFormValue("notes")),
-		functionalClass: r.PostFormValue("functional_class"),
-		defaultProgram:  parseID(r.PostFormValue("default_program")),
-		form990Code:     r.PostFormValue("form990_code"),
+		typ:               typ,
+		currency:          r.PostFormValue("currency"),
+		parentID:          ids.AccountID(parseID(r.PostFormValue("parent_id"))),
+		names:             map[string]string{},
+		reconcilable:      r.PostFormValue("reconcilable") != "",
+		intercompany:      r.PostFormValue("intercompany") != "",
+		currentCash:       r.PostFormValue("current_cash") != "",
+		receivablePayable: r.PostFormValue("receivable_payable") != "",
+		notes:             strings.TrimSpace(r.PostFormValue("notes")),
+		functionalClass:   r.PostFormValue("functional_class"),
+		defaultProgram:    parseID(r.PostFormValue("default_program")),
+		form990Code:       r.PostFormValue("form990_code"),
 	}
 	// Subsidiary checklist: fields named sub_<id> that are set.
 	checked := map[int64]bool{}
@@ -1039,7 +1039,7 @@ func (s *server) parseAccountForm(r *http.Request, id ids.AccountID) (accountFor
 	form.Reconcilable = in.reconcilable
 	form.Intercompany = in.intercompany
 	form.CurrentCash = in.currentCash
-	form.OpenItem = in.openItem
+	form.ReceivablePayable = in.receivablePayable
 	form.Notes = in.notes
 	form.FunctionalClass = in.functionalClass
 	form.DefaultProgram = in.defaultProgram
@@ -1090,8 +1090,8 @@ func accountErrorField(err error) (field, key string) {
 		return "functional_class", "error.account.functional_not_expense"
 	case errors.Is(err, store.ErrCurrentCashNotAsset):
 		return "current_cash", "error.account.current_cash_not_asset"
-	case errors.Is(err, store.ErrOpenItemBadType):
-		return "open_item", "error.account.open_item_bad_type"
+	case errors.Is(err, store.ErrReceivablePayableBadType):
+		return "receivable_payable", "error.account.receivable_payable_bad_type"
 	case errors.Is(err, store.ErrDefaultProgramNotRE):
 		return "default_program", "error.account.default_program_not_re"
 	case errors.Is(err, store.ErrDefaultProgramMissing):

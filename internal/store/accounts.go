@@ -66,10 +66,10 @@ var (
 	// ErrCurrentCashNotAsset: the current_cash flag (spendable-cash marker, p27.1)
 	// is meaningful only on asset accounts. Validated here; a trigger backstops it.
 	ErrCurrentCashNotAsset = errors.New("store: current_cash allowed only on asset accounts")
-	// ErrOpenItemBadType: the open_item flag (A/R-A/P open-line marker, p27.1) is
+	// ErrReceivablePayableBadType: the receivable_payable flag (A/R-A/P open-line marker, p27.1) is
 	// meaningful only on asset (receivable) or liability (payable) accounts.
 	// Validated here; a trigger backstops it.
-	ErrOpenItemBadType = errors.New("store: open_item allowed only on asset or liability accounts")
+	ErrReceivablePayableBadType = errors.New("store: receivable_payable allowed only on asset or liability accounts")
 	// ErrAccountNotFound: the requested account does not exist.
 	ErrAccountNotFound = errors.New("store: account not found")
 )
@@ -94,11 +94,11 @@ type CreateAccountInput struct {
 	Intercompany     bool
 	Reconcilable     bool
 	// CurrentCash marks a spendable-cash account (p27.1); allowed only on asset
-	// accounts (ErrCurrentCashNotAsset). OpenItem marks an A/R-A/P open-line account
+	// accounts (ErrCurrentCashNotAsset). ReceivablePayable marks an A/R-A/P open-line account
 	// (asset -> receivable, liability -> payable); allowed only on asset/liability
-	// accounts (ErrOpenItemBadType).
-	CurrentCash bool
-	OpenItem    bool
+	// accounts (ErrReceivablePayableBadType).
+	CurrentCash       bool
+	ReceivablePayable bool
 	// Notes is an optional free-text description ABOUT the account (nil or "" =
 	// none; p28.7). Nullable, no invariant -- documentation only.
 	Notes     *string
@@ -118,10 +118,10 @@ type UpdateAccountInput struct {
 	DefaultProgramID *ids.ProgramID
 	Intercompany     *bool
 	Reconcilable     *bool
-	// CurrentCash / OpenItem: a non-nil value sets the flag (type-validated against
+	// CurrentCash / ReceivablePayable: a non-nil value sets the flag (type-validated against
 	// the account's type; p27.1). nil leaves it unchanged.
-	CurrentCash *bool
-	OpenItem    *bool
+	CurrentCash       *bool
+	ReceivablePayable *bool
 	// Notes: a non-nil value sets the free-text note ("" clears it to NULL; p28.7).
 	// nil leaves it unchanged.
 	Notes     *string
@@ -148,9 +148,9 @@ func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (ids.A
 		return 0, ErrDefaultProgramNotRE
 	}
 	// The boolean type-flags are type-constrained (p27.1): current_cash asset-only,
-	// open_item asset/liability-only. Reject early (no tx opened) -- the trigger is
+	// receivable_payable asset/liability-only. Reject early (no tx opened) -- the trigger is
 	// the backstop.
-	if err := checkFlagTypes(in.Type, in.CurrentCash, in.OpenItem); err != nil {
+	if err := checkFlagTypes(in.Type, in.CurrentCash, in.ReceivablePayable); err != nil {
 		return 0, err
 	}
 
@@ -193,20 +193,20 @@ func (s *Store) CreateAccount(ctx context.Context, in CreateAccountInput) (ids.A
 			}
 
 			id, err := q.InsertAccount(ctx, sqlc.InsertAccountParams{
-				ParentID:         ids.Null(in.ParentID),
-				Type:             in.Type,
-				DefaultCurrency:  in.DefaultCurrency,
-				FunctionalClass:  nullStringPtr(in.FunctionalClass),
-				Form990Code:      nullStringPtr(in.Form990Code),
-				DefaultProgramID: ids.Null(in.DefaultProgramID),
-				Intercompany:     boolToInt(in.Intercompany),
-				Reconcilable:     boolToInt(in.Reconcilable),
-				Active:           1,
-				SortOrder:        in.SortOrder,
-				CreatedAt:        s.now().Format(time.RFC3339Nano),
-				CurrentCash:      boolToInt(in.CurrentCash),
-				OpenItem:         boolToInt(in.OpenItem),
-				Notes:            nullStringPtr(in.Notes),
+				ParentID:          ids.Null(in.ParentID),
+				Type:              in.Type,
+				DefaultCurrency:   in.DefaultCurrency,
+				FunctionalClass:   nullStringPtr(in.FunctionalClass),
+				Form990Code:       nullStringPtr(in.Form990Code),
+				DefaultProgramID:  ids.Null(in.DefaultProgramID),
+				Intercompany:      boolToInt(in.Intercompany),
+				Reconcilable:      boolToInt(in.Reconcilable),
+				Active:            1,
+				SortOrder:         in.SortOrder,
+				CreatedAt:         s.now().Format(time.RFC3339Nano),
+				CurrentCash:       boolToInt(in.CurrentCash),
+				ReceivablePayable: boolToInt(in.ReceivablePayable),
+				Notes:             nullStringPtr(in.Notes),
 			})
 			if err != nil {
 				return fmt.Errorf("insert account: %w", err)
@@ -298,8 +298,8 @@ func (s *Store) UpdateAccount(ctx context.Context, id ids.AccountID, in UpdateAc
 			if in.CurrentCash != nil {
 				next.CurrentCash = boolToInt(*in.CurrentCash)
 			}
-			if in.OpenItem != nil {
-				next.OpenItem = boolToInt(*in.OpenItem)
+			if in.ReceivablePayable != nil {
+				next.ReceivablePayable = boolToInt(*in.ReceivablePayable)
 			}
 			if in.Notes != nil {
 				// "" clears to NULL; a value sets it (p28.7). No invariant.
@@ -308,7 +308,7 @@ func (s *Store) UpdateAccount(ctx context.Context, id ids.AccountID, in UpdateAc
 			// The boolean type-flags are type-constrained (p27.1). Validate the
 			// resulting state against next.Type so a same-call type change is honored
 			// (types don't change here, but be explicit -- mirrors the R/E checks).
-			if err := checkFlagTypes(next.Type, next.CurrentCash != 0, next.OpenItem != 0); err != nil {
+			if err := checkFlagTypes(next.Type, next.CurrentCash != 0, next.ReceivablePayable != 0); err != nil {
 				return err
 			}
 			if in.SortOrder != nil {
@@ -324,21 +324,21 @@ func (s *Store) UpdateAccount(ctx context.Context, id ids.AccountID, in UpdateAc
 			// next := cur copied DefaultProgramID, so an unrelated update carries
 			// it through unchanged -- it is never silently NULLed (the ripple).
 			if err := q.UpdateAccount(ctx, sqlc.UpdateAccountParams{
-				ParentID:         next.ParentID,
-				Type:             next.Type,
-				DefaultCurrency:  next.DefaultCurrency,
-				FunctionalClass:  next.FunctionalClass,
-				Form990Code:      next.Form990Code,
-				DefaultProgramID: next.DefaultProgramID,
-				Intercompany:     next.Intercompany,
-				Reconcilable:     next.Reconcilable,
-				Active:           next.Active,
-				SortOrder:        next.SortOrder,
-				CreatedAt:        next.CreatedAt,
-				CurrentCash:      next.CurrentCash,
-				OpenItem:         next.OpenItem,
-				Notes:            next.Notes,
-				ID:               id,
+				ParentID:          next.ParentID,
+				Type:              next.Type,
+				DefaultCurrency:   next.DefaultCurrency,
+				FunctionalClass:   next.FunctionalClass,
+				Form990Code:       next.Form990Code,
+				DefaultProgramID:  next.DefaultProgramID,
+				Intercompany:      next.Intercompany,
+				Reconcilable:      next.Reconcilable,
+				Active:            next.Active,
+				SortOrder:         next.SortOrder,
+				CreatedAt:         next.CreatedAt,
+				CurrentCash:       next.CurrentCash,
+				ReceivablePayable: next.ReceivablePayable,
+				Notes:             next.Notes,
+				ID:                id,
 			}); err != nil {
 				return fmt.Errorf("update account %d: %w", id, err)
 			}
@@ -503,21 +503,21 @@ func (s *Store) DeactivateAccount(ctx context.Context, id ids.AccountID) error {
 				return fmt.Errorf("load account %d: %w", id, err)
 			}
 			if err := q.UpdateAccount(ctx, sqlc.UpdateAccountParams{
-				ParentID:         cur.ParentID,
-				Type:             cur.Type,
-				DefaultCurrency:  cur.DefaultCurrency,
-				FunctionalClass:  cur.FunctionalClass,
-				Form990Code:      cur.Form990Code,
-				DefaultProgramID: cur.DefaultProgramID,
-				Intercompany:     cur.Intercompany,
-				Reconcilable:     cur.Reconcilable,
-				Active:           0,
-				SortOrder:        cur.SortOrder,
-				CreatedAt:        cur.CreatedAt,
-				CurrentCash:      cur.CurrentCash,
-				OpenItem:         cur.OpenItem,
-				Notes:            cur.Notes,
-				ID:               id,
+				ParentID:          cur.ParentID,
+				Type:              cur.Type,
+				DefaultCurrency:   cur.DefaultCurrency,
+				FunctionalClass:   cur.FunctionalClass,
+				Form990Code:       cur.Form990Code,
+				DefaultProgramID:  cur.DefaultProgramID,
+				Intercompany:      cur.Intercompany,
+				Reconcilable:      cur.Reconcilable,
+				Active:            0,
+				SortOrder:         cur.SortOrder,
+				CreatedAt:         cur.CreatedAt,
+				CurrentCash:       cur.CurrentCash,
+				ReceivablePayable: cur.ReceivablePayable,
+				Notes:             cur.Notes,
+				ID:                id,
 			}); err != nil {
 				return fmt.Errorf("deactivate account %d: %w", id, err)
 			}
@@ -597,16 +597,16 @@ func (s *Store) ReconciledSplitCount(ctx context.Context, accountID ids.AccountI
 // TreeRow is one account in tree order with its name resolved for the requested
 // lang (empty when that lang has no name -- the en->any fallback is p05.3).
 type TreeRow struct {
-	ID           ids.AccountID
-	ParentID     sql.NullInt64
-	Type         string
-	Active       int64
-	Reconcilable bool
-	OpenItem     bool   // p27.1: A/R-A/P open-line marker (for the chart badge)
-	CurrentCash  bool   // p28.7: spendable-cash marker (for the chart indicator)
-	Notes        string // p28.7: free-text note ABOUT the account ("" = none)
-	SortOrder    int64
-	Name         string
+	ID                ids.AccountID
+	ParentID          sql.NullInt64
+	Type              string
+	Active            int64
+	Reconcilable      bool
+	ReceivablePayable bool   // p27.1: A/R-A/P open-line marker (for the chart badge)
+	CurrentCash       bool   // p28.7: spendable-cash marker (for the chart indicator)
+	Notes             string // p28.7: free-text note ABOUT the account ("" = none)
+	SortOrder         int64
+	Name              string
 }
 
 // Tree returns accounts in pre-order (recursive CTE), names resolved for `lang`
@@ -623,7 +623,7 @@ func (s *Store) Tree(ctx context.Context, lang string, subFilter *ids.Subsidiary
 		}
 		out := make([]TreeRow, len(rows))
 		for i, r := range rows {
-			out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, Reconcilable: r.Reconcilable != 0, OpenItem: r.OpenItem != 0, CurrentCash: r.CurrentCash != 0, Notes: r.Notes.String, SortOrder: r.SortOrder, Name: r.Name}
+			out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, Reconcilable: r.Reconcilable != 0, ReceivablePayable: r.ReceivablePayable != 0, CurrentCash: r.CurrentCash != 0, Notes: r.Notes.String, SortOrder: r.SortOrder, Name: r.Name}
 		}
 		return out, nil
 	}
@@ -633,7 +633,7 @@ func (s *Store) Tree(ctx context.Context, lang string, subFilter *ids.Subsidiary
 	}
 	out := make([]TreeRow, len(rows))
 	for i, r := range rows {
-		out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, Reconcilable: r.Reconcilable != 0, OpenItem: r.OpenItem != 0, CurrentCash: r.CurrentCash != 0, Notes: r.Notes.String, SortOrder: r.SortOrder, Name: r.Name}
+		out[i] = TreeRow{ID: r.ID, ParentID: r.ParentID, Type: r.Type, Active: r.Active, Reconcilable: r.Reconcilable != 0, ReceivablePayable: r.ReceivablePayable != 0, CurrentCash: r.CurrentCash != 0, Notes: r.Notes.String, SortOrder: r.SortOrder, Name: r.Name}
 	}
 	return out, nil
 }
@@ -696,16 +696,16 @@ func typeCompatible(parentType, childType string) bool {
 }
 
 // checkFlagTypes enforces the p27.1 boolean type-flag constraints: current_cash is
-// asset-only (ErrCurrentCashNotAsset); open_item is asset/liability-only
-// (ErrOpenItemBadType, the type deriving A/R vs A/P). A flag left false is always
+// asset-only (ErrCurrentCashNotAsset); receivable_payable is asset/liability-only
+// (ErrReceivablePayableBadType, the type deriving A/R vs A/P). A flag left false is always
 // allowed. Shared by CreateAccount (early, on the input) and UpdateAccount (on the
 // resulting next state); the migration's triggers backstop it.
-func checkFlagTypes(accountType string, currentCash, openItem bool) error {
+func checkFlagTypes(accountType string, currentCash, receivablePayable bool) error {
 	if currentCash && accountType != "asset" {
 		return ErrCurrentCashNotAsset
 	}
-	if openItem && accountType != "asset" && accountType != "liability" {
-		return ErrOpenItemBadType
+	if receivablePayable && accountType != "asset" && accountType != "liability" {
+		return ErrReceivablePayableBadType
 	}
 	return nil
 }

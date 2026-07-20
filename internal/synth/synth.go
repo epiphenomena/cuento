@@ -143,7 +143,7 @@ type IDs struct {
 	// --- Sample budget-PLAN seam (ExtendSampleBudgetPlan, opt-in) --------------
 	// Zero until ExtendSampleBudgetPlan is called. A SAMPLE budget PLAN (the p27.2
 	// split-derived model: a plan + several PROJECTED, dated budget-splits across
-	// >=2 programs, incl. R/E legs AND an open_item A/R leg, on varied dates) so the
+	// >=2 programs, incl. R/E legs AND an receivable_payable A/R leg, on varied dates) so the
 	// p27.3 cash-flow / variance reports have something to show. (The old schedule-
 	// based sample budget was retired in p27.3.)
 	SampleBudgetPlan ids.BudgetPlanID // the sample budget plan

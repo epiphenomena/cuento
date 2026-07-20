@@ -501,9 +501,9 @@ other = "Intercompany"
 other = "Current cash"
 [accounts.form.current_cash_help]
 other = "Counts toward spendable cash in cash-flow projections."
-[accounts.form.open_item]
+[accounts.form.receivable_payable]
 other = "Receivable / Payable"
-[accounts.form.open_item_help]
+[accounts.form.receivable_payable_help]
 other = "Tracks individual open balances by name (the desc/name on each line) until settled — A/R on an asset, A/P on a liability."
 [accounts.form.functional_class]
 other = "Default functional class"
@@ -609,9 +609,9 @@ other = "Equity"
 other = "Revenue"
 [account.type.expense]
 other = "Expense"
-# p27.1b: open-item (A/R–A/P) chart badges. An open_item ASSET reads as A/R
-# (receivable), an open_item LIABILITY as A/P (payable) -- the direction derives
-# from the account type (DECISIONS open_item note). Rendered as a small tag next to
+# p27.1b: open-item (A/R–A/P) chart badges. An receivable_payable ASSET reads as A/R
+# (receivable), an receivable_payable LIABILITY as A/P (payable) -- the direction derives
+# from the account type (DECISIONS receivable_payable note). Rendered as a small tag next to
 # the account name so flagged accounts are identifiable in the tree.
 [account.badge.ar]
 other = "A/R"
@@ -660,7 +660,7 @@ other = "That 990 line is not valid for this account type."
 other = "A functional class applies only to expense accounts."
 [error.account.current_cash_not_asset]
 other = "Current cash applies only to asset accounts."
-[error.account.open_item_bad_type]
+[error.account.receivable_payable_bad_type]
 other = "Receivable / Payable applies only to asset or liability accounts."
 [error.account.default_program_not_re]
 other = "A default program applies only to revenue and expense accounts."

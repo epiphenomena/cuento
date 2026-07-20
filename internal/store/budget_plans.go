@@ -40,7 +40,7 @@ var (
 	// currency does not exist.
 	ErrBudgetSplitRefMissing = errors.New("store: budget split reference not found")
 	// ErrBudgetSplitAccountType: the split's account is neither revenue/expense nor
-	// an open_item receivable/payable -- a budget-split projects an R/E flow or an
+	// an receivable_payable receivable/payable -- a budget-split projects an R/E flow or an
 	// open-item A/R-A/P line, never a plain balance-sheet position (DECISIONS design).
 	ErrBudgetSplitAccountType = errors.New("store: budget split account must be revenue/expense or an open-item receivable/payable")
 	// ErrBudgetSplitAccountNotLeaf: the split's account is a placeholder (non-leaf).
@@ -206,7 +206,7 @@ type BudgetSplitInput struct {
 }
 
 // CreateBudgetSplit adds a projected split to a plan under one change and returns
-// the new id. Validates the account (leaf in the plan's subsidiary; R/E or open_item
+// the new id. Validates the account (leaf in the plan's subsidiary; R/E or receivable_payable
 // A/L), the fund/program refs+scope, and the program-required/forbidden rule inside
 // fn (all roll the change back on rejection). The resolved program (prefilled from
 // the account default on R/E) is what gets stored.
@@ -479,11 +479,11 @@ func resolveBudgetSplit(ctx context.Context, q *sqlc.Queries, planID ids.BudgetP
 		return resolvedBudgetSplit{}, ErrBudgetSplitAccountNotLeaf
 	}
 
-	// Account category: revenue/expense OR an open_item receivable/payable (asset/
-	// liability). Plain balance-sheet accounts and non-open_item A/L are rejected.
+	// Account category: revenue/expense OR an receivable_payable receivable/payable (asset/
+	// liability). Plain balance-sheet accounts and non-receivable_payable A/L are rejected.
 	isRE := acct.Type == "revenue" || acct.Type == "expense"
-	isOpenItemAL := acct.OpenItem == 1 && (acct.Type == "asset" || acct.Type == "liability")
-	if !isRE && !isOpenItemAL {
+	isReceivablePayableAL := acct.ReceivablePayable == 1 && (acct.Type == "asset" || acct.Type == "liability")
+	if !isRE && !isReceivablePayableAL {
 		return resolvedBudgetSplit{}, ErrBudgetSplitAccountType
 	}
 

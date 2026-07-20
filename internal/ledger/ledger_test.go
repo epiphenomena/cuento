@@ -496,11 +496,11 @@ func TestZ8Z9CleanRecon(t *testing.T) {
 	exec(t, w.d, `INSERT INTO accounts_versions
 		(entity_id, change_id, valid_from, op, parent_id, type, default_currency,
 		 functional_class, default_program_id, form990_code, intercompany, reconcilable,
-		 active, sort_order, created_at, current_cash, open_item)
+		 active, sort_order, created_at, current_cash, receivable_payable)
 		SELECT id, (SELECT MAX(id) FROM changes), (SELECT MAX(at) FROM changes), 'update',
 		 parent_id, type, default_currency, functional_class, default_program_id,
 		 form990_code, intercompany, reconcilable, active, sort_order, created_at,
-		 current_cash, open_item
+		 current_cash, receivable_payable
 		FROM accounts WHERE id = ?`, w.checkingUS)
 	chkSplit := ids.SplitID(0)
 	if err := w.d.QueryRow(`SELECT id FROM splits WHERE account_id = ? AND transaction_id = ?`,
@@ -773,7 +773,7 @@ func TestZ19UnmappedActiveLeaf(t *testing.T) {
 	}
 }
 
-// --- Z20: current_cash / open_item only on allowed account types (p27.1) ------
+// --- Z20: current_cash / receivable_payable only on allowed account types (p27.1) ------
 
 func TestZ20CurrentCashWrongType(t *testing.T) {
 	w := newWorld(t)
@@ -785,11 +785,11 @@ func TestZ20CurrentCashWrongType(t *testing.T) {
 	exec(t, w.d, `INSERT INTO accounts_versions
 		(entity_id, change_id, valid_from, op, parent_id, type, default_currency,
 		 functional_class, default_program_id, form990_code, intercompany, reconcilable,
-		 active, sort_order, created_at, current_cash, open_item)
+		 active, sort_order, created_at, current_cash, receivable_payable)
 		SELECT id, (SELECT MAX(id) FROM changes), (SELECT MAX(at) FROM changes), 'update',
 		 parent_id, type, default_currency, functional_class, default_program_id,
 		 form990_code, intercompany, reconcilable, active, sort_order, created_at,
-		 current_cash, open_item
+		 current_cash, receivable_payable
 		FROM accounts WHERE id = ?`, w.dueTo)
 	vs := checkAll(t, w.d)
 	got := rulesOf(vs)
@@ -806,19 +806,19 @@ func TestZ20CurrentCashWrongType(t *testing.T) {
 	}
 }
 
-func TestZ20OpenItemWrongType(t *testing.T) {
+func TestZ20ReceivablePayableWrongType(t *testing.T) {
 	w := newWorld(t)
-	// open_item=1 on an EQUITY account is invalid (allowed only asset/liability).
-	dropTriggers(t, w.d, "trg_accounts_open_item_al_only_update")
-	exec(t, w.d, `UPDATE accounts SET open_item = 1 WHERE id = ?`, w.equity)
+	// receivable_payable=1 on an EQUITY account is invalid (allowed only asset/liability).
+	dropTriggers(t, w.d, "trg_accounts_receivable_payable_al_only_update")
+	exec(t, w.d, `UPDATE accounts SET receivable_payable = 1 WHERE id = ?`, w.equity)
 	exec(t, w.d, `INSERT INTO accounts_versions
 		(entity_id, change_id, valid_from, op, parent_id, type, default_currency,
 		 functional_class, default_program_id, form990_code, intercompany, reconcilable,
-		 active, sort_order, created_at, current_cash, open_item)
+		 active, sort_order, created_at, current_cash, receivable_payable)
 		SELECT id, (SELECT MAX(id) FROM changes), (SELECT MAX(at) FROM changes), 'update',
 		 parent_id, type, default_currency, functional_class, default_program_id,
 		 form990_code, intercompany, reconcilable, active, sort_order, created_at,
-		 current_cash, open_item
+		 current_cash, receivable_payable
 		FROM accounts WHERE id = ?`, w.equity)
 	got := rulesOf(checkAll(t, w.d))
 	if !got["Z20"] {

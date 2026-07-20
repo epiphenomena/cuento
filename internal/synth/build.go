@@ -53,21 +53,21 @@ func buildOrg(ctx context.Context, s *store.Store, ids *IDs) error {
 
 // acctSpec is one account to create (concise, named fields).
 type acctSpec struct {
-	dst          *entids.AccountID
-	parent       *entids.AccountID
-	typ          string
-	nameEN       string
-	nameES       string
-	currency     string
-	subs         []entids.SubsidiaryID
-	reconcilable bool
-	intercompany bool
-	currentCash  bool   // p27.1: spendable-cash marker (asset-only)
-	openItem     bool   // p27.1: A/R-A/P open-line marker (asset/liability-only)
-	notes        string // p28.7: free-text note ABOUT the account (synthetic, rule 11)
-	fClass       *string
-	defProgram   *entids.ProgramID
-	code         *string
+	dst               *entids.AccountID
+	parent            *entids.AccountID
+	typ               string
+	nameEN            string
+	nameES            string
+	currency          string
+	subs              []entids.SubsidiaryID
+	reconcilable      bool
+	intercompany      bool
+	currentCash       bool   // p27.1: spendable-cash marker (asset-only)
+	receivablePayable bool   // p27.1: A/R-A/P open-line marker (asset/liability-only)
+	notes             string // p28.7: free-text note ABOUT the account (synthetic, rule 11)
+	fClass            *string
+	defProgram        *entids.ProgramID
+	code              *string
 }
 
 // buildAccounts creates the ~22 accounts exactly per Appendix D, capturing each id
@@ -89,12 +89,12 @@ func buildAccounts(ctx context.Context, s *store.Store, ids *IDs) error {
 		{dst: &ids.Savings, typ: "asset", nameEN: "Savings", nameES: "Ahorros", currency: "USD", subs: []entids.SubsidiaryID{ids.Root}},
 		{dst: &ids.CashMXN, typ: "asset", nameEN: "Cash MXN", nameES: "Efectivo MXN", currency: "MXN", subs: []entids.SubsidiaryID{ids.MX}},
 		{dst: &ids.Building, typ: "asset", nameEN: "Building", nameES: "Edificio", currency: "USD", subs: []entids.SubsidiaryID{ids.US}, code: ptr("X.10")},
-		{dst: &ids.DueFromMX, typ: "asset", nameEN: "Due from RV Mexico", nameES: "Por cobrar de RV Mexico", currency: "USD", subs: []entids.SubsidiaryID{ids.US}, intercompany: true, openItem: true, notes: "Intercompany receivable; settle against Due to RV Internacional each period."},
+		{dst: &ids.DueFromMX, typ: "asset", nameEN: "Due from RV Mexico", nameES: "Por cobrar de RV Mexico", currency: "USD", subs: []entids.SubsidiaryID{ids.US}, intercompany: true, receivablePayable: true, notes: "Intercompany receivable; settle against Due to RV Internacional each period."},
 		{dst: &ids.FXClearing, typ: "asset", nameEN: "FX Clearing", nameES: "Compensacion de cambio", currency: "USD", subs: all},
 
 		// --- Liabilities ---
 		{dst: &ids.CreditCard, typ: "liability", nameEN: "Credit Card", nameES: "Tarjeta de credito", currency: "USD", subs: []entids.SubsidiaryID{ids.US}, reconcilable: true},
-		{dst: &ids.DueToIntl, typ: "liability", nameEN: "Due to RV Internacional", nameES: "Por pagar a RV Internacional", currency: "USD", subs: []entids.SubsidiaryID{ids.MX}, intercompany: true, openItem: true},
+		{dst: &ids.DueToIntl, typ: "liability", nameEN: "Due to RV Internacional", nameES: "Por pagar a RV Internacional", currency: "USD", subs: []entids.SubsidiaryID{ids.MX}, intercompany: true, receivablePayable: true},
 
 		// --- Equity ---
 		{dst: &ids.OpeningBalances, typ: "equity", nameEN: "Opening Balances", nameES: "Saldos iniciales", currency: "USD", subs: all},
@@ -136,19 +136,19 @@ func buildAccounts(ctx context.Context, s *store.Store, ids *IDs) error {
 // createAccount posts one account with an en + es name and stores its id.
 func createAccount(ctx context.Context, s *store.Store, sp acctSpec) error {
 	id, err := s.CreateAccount(ctx, store.CreateAccountInput{
-		ParentID:         sp.parent,
-		Type:             sp.typ,
-		DefaultCurrency:  sp.currency,
-		Names:            map[string]string{"en": sp.nameEN, "es": sp.nameES},
-		Subsidiaries:     sp.subs,
-		FunctionalClass:  sp.fClass,
-		Form990Code:      sp.code,
-		DefaultProgramID: sp.defProgram,
-		Intercompany:     sp.intercompany,
-		Reconcilable:     sp.reconcilable,
-		CurrentCash:      sp.currentCash,
-		OpenItem:         sp.openItem,
-		Notes:            notesPtr(sp.notes),
+		ParentID:          sp.parent,
+		Type:              sp.typ,
+		DefaultCurrency:   sp.currency,
+		Names:             map[string]string{"en": sp.nameEN, "es": sp.nameES},
+		Subsidiaries:      sp.subs,
+		FunctionalClass:   sp.fClass,
+		Form990Code:       sp.code,
+		DefaultProgramID:  sp.defProgram,
+		Intercompany:      sp.intercompany,
+		Reconcilable:      sp.reconcilable,
+		CurrentCash:       sp.currentCash,
+		ReceivablePayable: sp.receivablePayable,
+		Notes:             notesPtr(sp.notes),
 	})
 	if err != nil {
 		return fmt.Errorf("create account %q: %w", sp.nameEN, err)

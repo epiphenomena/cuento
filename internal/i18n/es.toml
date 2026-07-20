@@ -496,9 +496,9 @@ other = "Intercompania"
 other = "Efectivo disponible"
 [accounts.form.current_cash_help]
 other = "Cuenta como efectivo disponible en las proyecciones de flujo de caja."
-[accounts.form.open_item]
+[accounts.form.receivable_payable]
 other = "Por cobrar / Por pagar"
-[accounts.form.open_item_help]
+[accounts.form.receivable_payable_help]
 other = "Rastrea saldos abiertos individuales por nombre (la descripcion/nombre de cada linea) hasta su liquidacion — C/C en un activo, C/P en un pasivo."
 [accounts.form.functional_class]
 other = "Clase funcional predeterminada"
@@ -604,8 +604,8 @@ other = "Ingreso"
 [account.type.expense]
 other = "Gasto"
 # p27.1b: insignias de partida abierta (C/C–C/P) en el catalogo. Un activo con
-# open_item se lee como C/C (por cobrar), un pasivo con open_item como C/P (por
-# pagar) -- la direccion deriva del tipo de cuenta (nota open_item en DECISIONS).
+# receivable_payable se lee como C/C (por cobrar), un pasivo con receivable_payable como C/P (por
+# pagar) -- la direccion deriva del tipo de cuenta (nota receivable_payable en DECISIONS).
 [account.badge.ar]
 other = "C/C"
 [account.badge.ap]
@@ -653,7 +653,7 @@ other = "Esa linea 990 no es valida para este tipo de cuenta."
 other = "Una clase funcional aplica solo a cuentas de gasto."
 [error.account.current_cash_not_asset]
 other = "El efectivo disponible aplica solo a cuentas de activo."
-[error.account.open_item_bad_type]
+[error.account.receivable_payable_bad_type]
 other = "Por cobrar / Por pagar aplica solo a cuentas de activo o pasivo."
 [error.account.default_program_not_re]
 other = "Un programa predeterminado aplica solo a cuentas de ingreso y gasto."

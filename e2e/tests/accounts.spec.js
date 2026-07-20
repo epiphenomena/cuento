@@ -292,29 +292,29 @@ test.describe('chart of accounts', () => {
     expect(acctDepth).toBeGreaterThan(0);
   });
 
-  // p27.1b: the shared account attributes current_cash + open_item. The two
-  // checkboxes are type-gated server-side (current_cash asset-only; open_item
+  // p27.1b: the shared account attributes current_cash + receivable_payable. The two
+  // checkboxes are type-gated server-side (current_cash asset-only; receivable_payable
   // asset/liability-only) using the same htmx type-refetch machinery as the
-  // functional-class / default-program regions. Creating an open_item ASSET shows
+  // functional-class / default-program regions. Creating an receivable_payable ASSET shows
   // the A/R badge on the chart; switching type to equity hides both controls.
-  test('current_cash + open_item flags gate by type and label A/R on the chart', async ({ page, server }) => {
+  test('current_cash + receivable_payable flags gate by type and label A/R on the chart', async ({ page, server }) => {
     await login(page, server);
 
     await page.goto('/accounts/new');
     // On the default (asset) type both flag checkboxes are present.
     await expect(page.locator('input[name="current_cash"]')).toBeVisible();
-    await expect(page.locator('input[name="open_item"]')).toBeVisible();
+    await expect(page.locator('input[name="receivable_payable"]')).toBeVisible();
 
     // Create an open-item receivable asset that is also spendable cash.
     await page.locator('#af-name-en').fill('AR Cash E2E');
     await page.locator('input[name="current_cash"]').check();
-    await page.locator('input[name="open_item"]').check();
+    await page.locator('input[name="receivable_payable"]').check();
     const rootSub = page.locator('input[name="sub_1"]');
     if (!(await rootSub.isChecked())) await rootSub.check();
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL(/\/accounts$/);
 
-    // The chart shows the A/R badge next to the open_item asset's name, and (p28.8)
+    // The chart shows the A/R badge next to the receivable_payable asset's name, and (p28.8)
     // the current-cash indicator badge stays visible too.
     const row = page.locator('tr.acct-row', { hasText: 'AR Cash E2E' });
     await expect(row).toBeVisible();
@@ -330,14 +330,14 @@ test.describe('chart of accounts', () => {
     await toEquity;
     await expect(page.locator('#af-type')).toHaveValue('equity');
     await expect(page.locator('input[name="current_cash"]')).toHaveCount(0);
-    await expect(page.locator('input[name="open_item"]')).toHaveCount(0);
+    await expect(page.locator('input[name="receivable_payable"]')).toHaveCount(0);
 
-    // Switching to LIABILITY shows open_item (payable) but NOT current_cash.
+    // Switching to LIABILITY shows receivable_payable (payable) but NOT current_cash.
     const toLiability = page.waitForResponse((r) => r.url().includes('/accounts/new') && r.request().method() === 'GET');
     await page.locator('#af-type').selectOption('liability');
     await toLiability;
     await expect(page.locator('#af-type')).toHaveValue('liability');
-    await expect(page.locator('input[name="open_item"]')).toBeVisible();
+    await expect(page.locator('input[name="receivable_payable"]')).toBeVisible();
     await expect(page.locator('input[name="current_cash"]')).toHaveCount(0);
   });
 

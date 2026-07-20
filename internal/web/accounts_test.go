@@ -345,7 +345,7 @@ func TestAccountsCreateInvalidShowsFieldError(t *testing.T) {
 }
 
 // TestAccountsCreateWithFlags (p27.1b): creating an asset with current_cash +
-// open_item persists both flags, and the open_item asset shows the A/R badge on the
+// receivable_payable persists both flags, and the receivable_payable asset shows the A/R badge on the
 // chart.
 func TestAccountsCreateWithFlags(t *testing.T) {
 	h, st, sm := accountsApp(t)
@@ -357,7 +357,7 @@ func TestAccountsCreateWithFlags(t *testing.T) {
 	form.Set("name_en", "Grants Receivable")
 	form.Set("sub_1", "1")
 	form.Set("current_cash", "on")
-	form.Set("open_item", "on")
+	form.Set("receivable_payable", "on")
 
 	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts", form)
 	if rec.Code >= 400 {
@@ -371,18 +371,18 @@ func TestAccountsCreateWithFlags(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetAccount: %v", err)
 	}
-	if acct.CurrentCash != 1 || acct.OpenItem != 1 {
-		t.Errorf("stored flags = (cc=%d, oi=%d), want (1,1)", acct.CurrentCash, acct.OpenItem)
+	if acct.CurrentCash != 1 || acct.ReceivablePayable != 1 {
+		t.Errorf("stored flags = (cc=%d, oi=%d), want (1,1)", acct.CurrentCash, acct.ReceivablePayable)
 	}
-	// The chart page shows the A/R badge for the open_item asset.
+	// The chart page shows the A/R badge for the receivable_payable asset.
 	page := asUser(t, h, sm, book, http.MethodGet, "/accounts", nil)
 	if body := page.Body.String(); !strings.Contains(body, "A/R") {
-		t.Errorf("chart missing A/R badge for the open_item asset; body: %s", body)
+		t.Errorf("chart missing A/R badge for the receivable_payable asset; body: %s", body)
 	}
 }
 
-// TestAccountsCreateWrongTypeFlagRejected (p27.1b): open_item on an EQUITY account
-// is rejected server-side (the store's ErrOpenItemBadType), mapped to a field error
+// TestAccountsCreateWrongTypeFlagRejected (p27.1b): receivable_payable on an EQUITY account
+// is rejected server-side (the store's ErrReceivablePayableBadType), mapped to a field error
 // at 422 -- proving the server enforces the type rule even if a client submits the
 // flag for an ineligible type.
 func TestAccountsCreateWrongTypeFlagRejected(t *testing.T) {
@@ -394,16 +394,16 @@ func TestAccountsCreateWrongTypeFlagRejected(t *testing.T) {
 	form.Set("currency", "USD")
 	form.Set("name_en", "Opening Balances")
 	form.Set("sub_1", "1")
-	form.Set("open_item", "on") // invalid on equity
+	form.Set("receivable_payable", "on") // invalid on equity
 
 	rec := asUser(t, h, sm, book, http.MethodPost, "/accounts", form)
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Fatalf("wrong-type flag status = %d, want 422; body: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	// The localized open_item error string must be present.
+	// The localized receivable_payable error string must be present.
 	if !strings.Contains(body, "Receivable / Payable") && !strings.Contains(body, "asset or liability") {
-		t.Errorf("422 body missing the open_item type error; body: %s", body)
+		t.Errorf("422 body missing the receivable_payable type error; body: %s", body)
 	}
 	// The rejected account was not created.
 	if accountIDByName(t, st, "Opening Balances") != 0 {

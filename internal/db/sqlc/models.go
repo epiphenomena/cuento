@@ -11,21 +11,21 @@ import (
 )
 
 type Account struct {
-	ID               ids.AccountID
-	ParentID         sql.NullInt64
-	Type             string
-	DefaultCurrency  string
-	FunctionalClass  sql.NullString
-	Form990Code      sql.NullString
-	Intercompany     int64
-	Reconcilable     int64
-	Active           int64
-	SortOrder        int64
-	CreatedAt        string
-	DefaultProgramID sql.NullInt64
-	CurrentCash      int64
-	OpenItem         int64
-	Notes            sql.NullString
+	ID                ids.AccountID
+	ParentID          sql.NullInt64
+	Type              string
+	DefaultCurrency   string
+	FunctionalClass   sql.NullString
+	Form990Code       sql.NullString
+	Intercompany      int64
+	Reconcilable      int64
+	Active            int64
+	SortOrder         int64
+	CreatedAt         string
+	DefaultProgramID  sql.NullInt64
+	CurrentCash       int64
+	ReceivablePayable int64
+	Notes             sql.NullString
 }
 
 type AccountName struct {
@@ -59,25 +59,25 @@ type AccountSubsidiary struct {
 }
 
 type AccountsVersion struct {
-	ID               int64
-	EntityID         ids.AccountID
-	ChangeID         ids.ChangeID
-	ValidFrom        string
-	Op               string
-	ParentID         sql.NullInt64
-	Type             string
-	DefaultCurrency  string
-	FunctionalClass  sql.NullString
-	Form990Code      sql.NullString
-	Intercompany     int64
-	Reconcilable     int64
-	Active           int64
-	SortOrder        int64
-	CreatedAt        string
-	DefaultProgramID sql.NullInt64
-	CurrentCash      sql.NullInt64
-	OpenItem         sql.NullInt64
-	Notes            sql.NullString
+	ID                int64
+	EntityID          ids.AccountID
+	ChangeID          ids.ChangeID
+	ValidFrom         string
+	Op                string
+	ParentID          sql.NullInt64
+	Type              string
+	DefaultCurrency   string
+	FunctionalClass   sql.NullString
+	Form990Code       sql.NullString
+	Intercompany      int64
+	Reconcilable      int64
+	Active            int64
+	SortOrder         int64
+	CreatedAt         string
+	DefaultProgramID  sql.NullInt64
+	CurrentCash       sql.NullInt64
+	ReceivablePayable sql.NullInt64
+	Notes             sql.NullString
 }
 
 // BudgetPlan is the p27.2 split-derived budget container (a named plan scoped to
