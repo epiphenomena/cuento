@@ -691,6 +691,18 @@ input[aria-invalid="true"] {
   border-radius: var(--radius);
   color: var(--color-muted, inherit);
 }
+/* p11.1: an "active" badge reads as affirmative (not muted) so the account
+   settings status line reads at a glance; inherits the base .badge chrome. */
+.badge-active { color: var(--color-success, inherit); }
+/* p11.1: the account-settings active/inactive status line sits above the form,
+   a single flex row: label, status badge, toggle button. */
+.account-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.account-status-label { color: var(--color-muted, inherit); }
 /* p28.8: the chart's per-account free-text Notes column (replaces the redundant
    Type). Muted + small so it reads as secondary annotation, not the account name. */
 .acct-notes { font-size: 0.85em; color: var(--color-muted, inherit); }

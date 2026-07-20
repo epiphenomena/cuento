@@ -173,6 +173,10 @@
           <form method="post" action="/accounts/{{.ID}}/deactivate" class="inline">
             <button type="submit" class="btn btn-ghost">{{t "accounts.deactivate"}}</button>
           </form>
+          {{else}}
+          <form method="post" action="/accounts/{{.ID}}/activate" class="inline">
+            <button type="submit" class="btn btn-ghost">{{t "accounts.reactivate"}}</button>
+          </form>
           {{end}}
         </td>
       </tr>

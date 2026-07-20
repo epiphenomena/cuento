@@ -18,6 +18,26 @@
 {{template "shell-open" (shellTitle . $title)}}
   {{- with .Page}}
   <h1>{{if .ID}}{{t "accounts.form.edit_title"}}{{else}}{{t "accounts.form.new_title"}}{{end}}</h1>
+  {{/* p11.1: the active/inactive status + toggle lives OUTSIDE #account-form (HTML
+       forbids nested forms, and the type-select re-swaps only #account-form, which
+       would duplicate a sibling on every type change). Edit-only ({{if .ID}}). The
+       toggle posts to the activate/deactivate route (its own tiny form). */}}
+  {{if .ID}}
+  <div class="account-status">
+    <span class="account-status-label">{{t "accounts.status.label"}}</span>
+    {{if .Active}}
+    <span class="badge badge-active">{{t "accounts.status.active"}}</span>
+    <form method="post" action="/accounts/{{.ID}}/deactivate" class="inline">
+      <button type="submit" class="btn btn-ghost">{{t "accounts.deactivate"}}</button>
+    </form>
+    {{else}}
+    <span class="badge">{{t "accounts.status.inactive"}}</span>
+    <form method="post" action="/accounts/{{.ID}}/activate" class="inline">
+      <button type="submit" class="btn btn-ghost">{{t "accounts.reactivate"}}</button>
+    </form>
+    {{end}}
+  </div>
+  {{end}}
   {{template "account-form" .}}
   {{- end}}
 {{template "shell-close" .}}

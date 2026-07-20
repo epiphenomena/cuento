@@ -421,6 +421,65 @@ func TestDeactivate(t *testing.T) {
 	testutil.AssertVersioned(t, d, "accounts", int64(acct), "update")
 }
 
+// TestActivate: ActivateAccount flips active back to 1 and appends op='update'
+// (the reactivate path, mirror of DeactivateAccount). A top-level account (no
+// parent) always reactivates.
+func TestActivate(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	acct, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Revived"), Subsidiaries: []ids.SubsidiaryID{rootID},
+	})
+	if err != nil {
+		t.Fatalf("create acct: %v", err)
+	}
+	if err := s.DeactivateAccount(mutCtx(), acct); err != nil {
+		t.Fatalf("DeactivateAccount: %v", err)
+	}
+	if err := s.ActivateAccount(mutCtx(), acct); err != nil {
+		t.Fatalf("ActivateAccount: %v", err)
+	}
+	if _, _, _, active := getAccount(t, s, acct); active != 1 {
+		t.Errorf("live active = %d, want 1", active)
+	}
+	testutil.AssertVersioned(t, d, "accounts", int64(acct), "update")
+}
+
+// TestActivateRejectsInactiveParent: reactivating a child whose parent is inactive
+// is refused (ErrParentInactive) -- an active child under an inactive parent is
+// nonsensical. The rejected op rolls back: the child stays inactive with no audit
+// trace from the failed attempt.
+func TestActivateRejectsInactiveParent(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	parent, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type: "asset", DefaultCurrency: "USD", Names: enName("Parent"), Subsidiaries: []ids.SubsidiaryID{rootID},
+	})
+	if err != nil {
+		t.Fatalf("create parent: %v", err)
+	}
+	child, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		ParentID: &parent, Type: "asset", DefaultCurrency: "USD", Names: enName("Child"), Subsidiaries: []ids.SubsidiaryID{rootID},
+	})
+	if err != nil {
+		t.Fatalf("create child: %v", err)
+	}
+	if err := s.DeactivateAccount(mutCtx(), child); err != nil {
+		t.Fatalf("deactivate child: %v", err)
+	}
+	if err := s.DeactivateAccount(mutCtx(), parent); err != nil {
+		t.Fatalf("deactivate parent: %v", err)
+	}
+	if err := s.ActivateAccount(mutCtx(), child); !errors.Is(err, ErrParentInactive) {
+		t.Fatalf("ActivateAccount(child) err = %v, want ErrParentInactive", err)
+	}
+	if _, _, _, active := getAccount(t, s, child); active != 0 {
+		t.Errorf("child active = %d after rejected activate, want 0", active)
+	}
+}
+
 // TestTreeOrdering: Tree returns accounts in tree (pre-order) order, resolving
 // the requested lang's name via a plain join (empty when absent; en->any fallback
 // is p05.3 and NOT built here).

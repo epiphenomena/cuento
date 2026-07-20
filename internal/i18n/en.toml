@@ -438,8 +438,16 @@ other = "Merge accounts"
 other = "Reconcile"
 [accounts.deactivate]
 other = "Deactivate"
+[accounts.reactivate]
+other = "Reactivate"
 [accounts.inactive]
 other = "inactive"
+[accounts.status.label]
+other = "Status"
+[accounts.status.active]
+other = "Active"
+[accounts.status.inactive]
+other = "Inactive"
 [accounts.empty]
 other = "No accounts yet."
 [accounts.balances_as_of]

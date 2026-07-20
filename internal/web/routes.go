@@ -238,6 +238,7 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/accounts", TxnWrite, http.HandlerFunc(s.accountCreate)},
 		{http.MethodPost, "/accounts/{id}", TxnWrite, http.HandlerFunc(s.accountUpdate)},
 		{http.MethodPost, "/accounts/{id}/deactivate", TxnWrite, http.HandlerFunc(s.accountDeactivate)},
+		{http.MethodPost, "/accounts/{id}/activate", TxnWrite, http.HandlerFunc(s.accountActivate)},
 		// p11.3 subsidiaries admin (Appendix B/F: /admin/** = Admin). The tree list
 		// (GET), the inline create/edit form fetches (GET .../new, .../{id}/edit), and
 		// the create/update/deactivate mutations are ALL Admin -- subsidiaries are org

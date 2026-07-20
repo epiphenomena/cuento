@@ -433,8 +433,16 @@ other = "Combinar cuentas"
 other = "Conciliar"
 [accounts.deactivate]
 other = "Desactivar"
+[accounts.reactivate]
+other = "Reactivar"
 [accounts.inactive]
 other = "inactiva"
+[accounts.status.label]
+other = "Estado"
+[accounts.status.active]
+other = "Activa"
+[accounts.status.inactive]
+other = "Inactiva"
 [accounts.empty]
 other = "Aun no hay cuentas."
 [accounts.balances_as_of]

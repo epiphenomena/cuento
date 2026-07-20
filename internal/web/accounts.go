@@ -468,6 +468,7 @@ type accountForm struct {
 	DefaultProgram    int64
 	Form990Code       string
 	Form990Effective  string // inherited effective code shown as placeholder when unset (D25)
+	Active            bool   // current active state (edit form only; drives the settings status panel)
 	CheckedSubs       map[int64]bool
 
 	Parents    []store.ParentOption
@@ -654,6 +655,7 @@ func (s *server) accountEditForm(w http.ResponseWriter, r *http.Request) {
 	if acct.ParentID.Valid {
 		form.ParentID = acct.ParentID.Int64
 	}
+	form.Active = acct.Active != 0
 	form.Reconcilable = acct.Reconcilable != 0
 	form.Intercompany = acct.Intercompany != 0
 	form.CurrentCash = acct.CurrentCash != 0
@@ -961,6 +963,27 @@ func (s *server) accountDeactivate(w http.ResponseWriter, r *http.Request) {
 		}
 		s.serverError(w)
 		return
+	}
+	http.Redirect(w, r, "/accounts", http.StatusSeeOther)
+}
+
+// accountActivate handles POST /accounts/{id}/activate (TxnWrite): the reactivate
+// path (active=1, history intact). ErrParentInactive is a benign precondition
+// failure reachable from the chart list (an inactive child of an inactive parent
+// still shows a Reactivate button) -- it is NOT a server error, so we simply
+// redirect back to the list, where the row stays visibly inactive.
+func (s *server) accountActivate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := ids.AccountID(parseID(r.PathValue("id")))
+	if err := s.store.ActivateAccount(s.actorCtx(ctx), id); err != nil {
+		if errors.Is(err, store.ErrAccountNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		if !errors.Is(err, store.ErrParentInactive) {
+			s.serverError(w)
+			return
+		}
 	}
 	http.Redirect(w, r, "/accounts", http.StatusSeeOther)
 }

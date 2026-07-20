@@ -72,6 +72,9 @@ var (
 	ErrReceivablePayableBadType = errors.New("store: receivable_payable allowed only on asset or liability accounts")
 	// ErrAccountNotFound: the requested account does not exist.
 	ErrAccountNotFound = errors.New("store: account not found")
+	// ErrParentInactive: ActivateAccount refuses to reactivate an account whose
+	// parent is inactive -- an active child under an inactive parent is nonsensical.
+	ErrParentInactive = errors.New("store: parent account is inactive")
 )
 
 // CreateAccountInput is the desired state of a NEW account. ParentID is a pointer:
@@ -525,6 +528,62 @@ func (s *Store) DeactivateAccount(ctx context.Context, id ids.AccountID) error {
 		})
 	if err != nil {
 		return fmt.Errorf("deactivate account %d: %w", id, err)
+	}
+	return nil
+}
+
+// ActivateAccount sets active=1, op='update' (the reactivate path, mirror of
+// DeactivateAccount). It refuses (ErrParentInactive) to reactivate a child whose
+// parent is inactive -- an active child under an inactive parent is nonsensical.
+// A top-level account (no parent) always reactivates; reactivating an already-
+// active account is a harmless no-op that still versions (like any update).
+func (s *Store) ActivateAccount(ctx context.Context, id ids.AccountID) error {
+	_, err := s.write(ctx, "account.activate", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
+			cur, err := q.GetAccount(ctx, id)
+			if err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					return ErrAccountNotFound
+				}
+				return fmt.Errorf("load account %d: %w", id, err)
+			}
+			// Guard: an active child may not sit under an inactive parent. The
+			// rejected op rolls the change row back, leaving no audit trace.
+			if cur.ParentID.Valid {
+				parent, err := q.GetAccount(ctx, ids.AccountID(cur.ParentID.Int64))
+				if err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						return ErrAccountNotFound
+					}
+					return fmt.Errorf("load parent %d: %w", cur.ParentID.Int64, err)
+				}
+				if parent.Active == 0 {
+					return ErrParentInactive
+				}
+			}
+			if err := q.UpdateAccount(ctx, sqlc.UpdateAccountParams{
+				ParentID:          cur.ParentID,
+				Type:              cur.Type,
+				DefaultCurrency:   cur.DefaultCurrency,
+				FunctionalClass:   cur.FunctionalClass,
+				Form990Code:       cur.Form990Code,
+				DefaultProgramID:  cur.DefaultProgramID,
+				Intercompany:      cur.Intercompany,
+				Reconcilable:      cur.Reconcilable,
+				Active:            1,
+				SortOrder:         cur.SortOrder,
+				CreatedAt:         cur.CreatedAt,
+				CurrentCash:       cur.CurrentCash,
+				ReceivablePayable: cur.ReceivablePayable,
+				Notes:             cur.Notes,
+				ID:                id,
+			}); err != nil {
+				return fmt.Errorf("activate account %d: %w", id, err)
+			}
+			return insertAccountVersion(ctx, q, changeID, "update", id)
+		})
+	if err != nil {
+		return fmt.Errorf("activate account %d: %w", id, err)
 	}
 	return nil
 }
