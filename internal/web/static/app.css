@@ -663,9 +663,23 @@ input[aria-invalid="true"] {
 .accounts-subnav {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  /* Top-align the row: the filter form carries the (opacity-0) "updating..."
+     indicator BELOW its fieldset, so a flex-end row would bottom-align the whole
+     form and shove the filter fields up relative to the sibling .chart-search
+     (the p30/p31 search-offset bug). Aligning tops lines up every label+control
+     column -- all controls are the same height -- independent of the indicator. */
+  align-items: flex-start;
   gap: var(--space-1) var(--space-3);
   width: 100%;
+}
+/* Keep the transient "updating..." pill OUT of the form's block height so the form
+   hugs its fieldset (no dead space below the filters); it overlays at the row's
+   start-edge when a filter request is in flight. */
+.accounts-subnav .accounts-filters { position: relative; }
+.accounts-subnav .subnav-updating {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  left: 0;
 }
 /* p30.3: the filter form must size to its content so the ephemeral Search sits on the
    SAME row as Subsidiary/Type/Active, not wrap below it. The generic subnav rule
