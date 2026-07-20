@@ -171,6 +171,14 @@ func (s *server) routes() []Route {
 		{http.MethodGet, "/more", AnyUser, http.HandlerFunc(s.moreHub)},
 		{http.MethodGet, "/settings", AnyUser, http.HandlerFunc(s.settingsPage)},
 		{http.MethodPost, "/settings", AnyUser, http.HandlerFunc(s.settingsUpdate)},
+		// A user sets THEIR OWN display name (the name reports/expense forms can use).
+		// Its own AnyUser route (a small form on the settings page) because display_name
+		// is the first FREE-TEXT self-field: an empty submit is a real user mistake
+		// needing a field-level error, unlike the fixed-select preferences on POST
+		// /settings. A VERSIONED change (store.SetUserDisplayName). The literal
+		// ".../display-name" is distinct from the ".../settings" POST; the matrix picks
+		// it up (rule 8).
+		{http.MethodPost, "/settings/display-name", AnyUser, http.HandlerFunc(s.settingsDisplayName)},
 		// A minimal Admin landing so the perm-gated nav has a real, Admin-only
 		// target NOW (the shell must prove "Admin sees the admin entry, a non-admin
 		// does not" -- DoD). The real /admin pages (users, subsidiaries, ops) land
@@ -195,6 +203,11 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/admin/users/{id}/enable", Admin, http.HandlerFunc(s.userEnable)},
 		{http.MethodPost, "/admin/users/{id}/reset-password", Admin, http.HandlerFunc(s.userResetPassword)},
 		{http.MethodPost, "/admin/users/{id}/txn-perm", Admin, http.HandlerFunc(s.userSetTxnPerm)},
+		// An admin edits a user's display name (a small labeled form on the detail
+		// page). A VERSIONED change naming the acting admin (SetUserDisplayName); the
+		// system user is refused first (AdminUserByID). The literal ".../display-name"
+		// is distinct from the other action segments; the matrix picks it up (rule 8).
+		{http.MethodPost, "/admin/users/{id}/display-name", Admin, http.HandlerFunc(s.userSetDisplayName)},
 		{http.MethodPost, "/admin/users/{id}/grants", Admin, http.HandlerFunc(s.userSetGrants)},
 		// p20.2: the admin toggle for the p20.1 can_submit_expenses capability (the
 		// standalone ExpenseSubmit right). p20.1 deferred this UI ("Admin manages it,

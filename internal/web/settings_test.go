@@ -281,3 +281,57 @@ func TestSettingsPermAnyUser(t *testing.T) {
 		t.Errorf("anon GET /settings = %d, want 302 to login", rec.Code)
 	}
 }
+
+// TestSettingsDisplayNameSelfService: a logged-in user sets THEIR OWN display name
+// via POST /settings/display-name; the live row reflects the trimmed value and the
+// subsequent GET /settings prefills it. AnyUser (no txn perm needed).
+func TestSettingsDisplayNameSelfService(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	uid := mkUser(t, st, "namer", "none", false)
+
+	form := url.Values{"display_name": {"  Nadia Namer  "}}
+	rec := asUser(t, h, sm, uid, http.MethodPost, "/settings/display-name", form)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("POST /settings/display-name = %d, want 303 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if loc := rec.Header().Get("Location"); !strings.HasPrefix(loc, "/settings") {
+		t.Errorf("redirect Location = %q, want /settings...", loc)
+	}
+
+	// Persisted trimmed.
+	cu, err := st.UserByID(context.Background(), uid)
+	if err != nil {
+		t.Fatalf("UserByID: %v", err)
+	}
+	if cu.DisplayName != "Nadia Namer" {
+		t.Fatalf("display_name = %q, want trimmed %q", cu.DisplayName, "Nadia Namer")
+	}
+
+	// The subsequent GET prefills the new name into the input value.
+	body := asUser(t, h, sm, uid, http.MethodGet, "/settings", nil).Body.String()
+	if !strings.Contains(body, `value="Nadia Namer"`) {
+		t.Errorf("GET /settings does not prefill the new name; body: %s", body)
+	}
+}
+
+// TestSettingsDisplayNameRejectsEmpty: an empty name (the field is free text, so a
+// real user can submit it blank) is a 422 re-render with the inline error, and
+// nothing is persisted (the original name stays).
+func TestSettingsDisplayNameRejectsEmpty(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	uid := mkUser(t, st, "blanker", "none", false)
+
+	form := url.Values{"display_name": {"   "}}
+	rec := asUser(t, h, sm, uid, http.MethodPost, "/settings/display-name", form)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("empty-name POST = %d, want 422", rec.Code)
+	}
+	// Nothing persisted: the name stays the creation default (the username).
+	cu, err := st.UserByID(context.Background(), uid)
+	if err != nil {
+		t.Fatalf("UserByID: %v", err)
+	}
+	if cu.DisplayName != "blanker" {
+		t.Errorf("display_name = %q, want unchanged blanker (empty POST must not persist)", cu.DisplayName)
+	}
+}

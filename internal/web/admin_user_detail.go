@@ -372,6 +372,52 @@ func (s *server) userSetCanSubmit(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, userDetailURL(int64(id)), http.StatusSeeOther)
 }
 
+// userSetDisplayName handles POST /admin/users/{id}/display-name (Admin): an admin
+// edits a user's display name under one versioned change naming the acting admin
+// (SetUserDisplayName). The subject must be a real, manageable user (the system
+// user is refused first via AdminUserByID -> back to the list; unknown id 404s),
+// mirroring userSetCanSubmit. An empty / over-long name is a 422 re-render with a
+// page-level field error; success 303-redirects back to the detail page (PRG).
+func (s *server) userSetDisplayName(w http.ResponseWriter, r *http.Request) {
+	id := ids.UserID(parseID(r.PathValue("id")))
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	// Confirm the subject is a real, manageable user before the versioned write
+	// (refuses id 1 / unknown), mirroring userSetCanSubmit -- so a stray id cannot
+	// write a version row.
+	if _, err := s.store.AdminUserByID(r.Context(), id); err != nil {
+		if errors.Is(err, store.ErrSystemUser) {
+			http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+			return
+		}
+		if errors.Is(err, store.ErrUserNotFound) {
+			http.NotFound(w, r)
+			return
+		}
+		s.serverError(w)
+		return
+	}
+	name := r.PostFormValue("display_name")
+	if err := s.store.SetUserDisplayName(s.actorCtx(r.Context()), id, name); err != nil {
+		switch {
+		case errors.Is(err, store.ErrSystemUser):
+			http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+		case errors.Is(err, store.ErrUserNotFound):
+			http.NotFound(w, r)
+		case errors.Is(err, store.ErrEmptyDisplayName):
+			s.renderUserDetailError(w, r, id, "display_name", "settings.name.error.empty")
+		case errors.Is(err, store.ErrDisplayNameTooLong):
+			s.renderUserDetailError(w, r, id, "display_name", "settings.name.error.too_long")
+		default:
+			s.serverError(w)
+		}
+		return
+	}
+	http.Redirect(w, r, userDetailURL(int64(id)), http.StatusSeeOther)
+}
+
 // renderUserDetailError re-renders the detail page at 422 with a field error (the
 // crafted-bad-perm path). It reloads the page model so the current state is shown.
 func (s *server) renderUserDetailError(w http.ResponseWriter, r *http.Request, id ids.UserID, field, key string) {

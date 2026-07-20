@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"cuento/internal/db/sqlc"
 	"cuento/internal/ids"
@@ -124,6 +125,58 @@ func (s *Store) SetUserPassword(ctx context.Context, userID ids.UserID, password
 		})
 	if err != nil {
 		return fmt.Errorf("set user password (id %d): %w", userID, err)
+	}
+	return nil
+}
+
+// MaxDisplayNameLen is a generous rune cap on a user's display name, applied only
+// by SetUserDisplayName as an abuse guard. It is ADDITIVE: CreateUser applies no
+// length validation, so this cap is deliberately large enough that any name an
+// admin could create at creation time stays re-saveable here. Runes (not bytes) so
+// a non-ASCII name is not penalized.
+const MaxDisplayNameLen = 200
+
+// ErrEmptyDisplayName is returned by SetUserDisplayName when the trimmed name is
+// empty. display_name is NOT NULL, so a blank name is rejected before the write
+// funnel opens (no version row). Unlike the fixed-select settings, display_name is
+// free text, so an empty submit is a real user mistake — the web layer maps it to a
+// field-level 422, not a crafted-only path.
+var ErrEmptyDisplayName = errors.New("store: display name must not be empty")
+
+// ErrDisplayNameTooLong is returned by SetUserDisplayName when the trimmed name
+// exceeds MaxDisplayNameLen runes (the additive abuse guard). The web layer maps it
+// to a field-level 422.
+var ErrDisplayNameTooLong = errors.New("store: display name too long")
+
+// SetUserDisplayName trims and persists a user's display_name on the live row and
+// appends an op='update' users_versions row under ONE change (rule 5), so the audit
+// trail records who renamed whom. It is shared by the self-service /settings field
+// (a user renames THEMSELVES) and the admin edit page (an admin renames a user);
+// the system-user guard lives in the admin HANDLER (via AdminUserByID), not here —
+// the current user is never id 1. The name is trimmed and rejected when empty
+// (ErrEmptyDisplayName, display_name is NOT NULL) or over MaxDisplayNameLen runes
+// (ErrDisplayNameTooLong); both checks run BEFORE the write funnel so a rejected
+// write leaves no trace. The version append is the same snapshot-from-live query
+// CreateUser uses (display_name IS in the snapshot; password_hash never is).
+func (s *Store) SetUserDisplayName(ctx context.Context, userID ids.UserID, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ErrEmptyDisplayName
+	}
+	if utf8.RuneCountInString(name) > MaxDisplayNameLen {
+		return ErrDisplayNameTooLong
+	}
+	_, err := s.write(ctx, "user.display_name", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
+			if err := q.SetUserDisplayName(ctx, sqlc.SetUserDisplayNameParams{
+				DisplayName: name, ID: userID,
+			}); err != nil {
+				return fmt.Errorf("set display_name: %w", err)
+			}
+			return insertUserVersion(ctx, q, changeID, "update", userID)
+		})
+	if err != nil {
+		return fmt.Errorf("set user display_name (id %d): %w", userID, err)
 	}
 	return nil
 }
@@ -385,11 +438,15 @@ type Credentials struct {
 type CurrentUser struct {
 	ID       ids.UserID
 	Username string
-	Disabled bool
-	TxnPerm  string
-	IsAdmin  bool
-	Locale   string
-	Theme    string
+	// DisplayName is the user's editable display name (self-service /settings), carried
+	// so the settings page can prefill the field without a second read. Falls back to
+	// nothing here — a user always has a non-empty display_name (set at creation).
+	DisplayName string
+	Disabled    bool
+	TxnPerm     string
+	IsAdmin     bool
+	Locale      string
+	Theme       string
 	// Money/date display settings (p11.1): carried so every render path can honor
 	// per-user formatting (rule 10) without a second query. Raw column strings
 	// (DB defaults US/signed/minus/ISO for an untouched session); the web layer
@@ -441,6 +498,7 @@ func (s *Store) UserByID(ctx context.Context, id ids.UserID) (CurrentUser, error
 	cu := CurrentUser{
 		ID:           row.ID,
 		Username:     row.Username,
+		DisplayName:  row.DisplayName,
 		Disabled:     row.DisabledAt.Valid,
 		TxnPerm:      row.TxnPerm,
 		IsAdmin:      row.IsAdmin != 0,

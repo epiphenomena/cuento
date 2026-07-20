@@ -271,6 +271,25 @@ func (q *Queries) SetUserDisabled(ctx context.Context, arg SetUserDisabledParams
 	return err
 }
 
+const setUserDisplayName = `-- name: SetUserDisplayName :exec
+UPDATE users SET display_name = ? WHERE id = ?
+`
+
+type SetUserDisplayNameParams struct {
+	DisplayName string
+	ID          ids.UserID
+}
+
+// Live update of a user's display_name (self-service /settings and admin edit).
+// Versioned as op='update'; display_name IS part of the users_versions snapshot,
+// so the audit trail records who renamed whom. The store trims + rejects an empty
+// value (display_name is NOT NULL) before this runs; password_hash is untouched
+// (and never in the snapshot, rule 5).
+func (q *Queries) SetUserDisplayName(ctx context.Context, arg SetUserDisplayNameParams) error {
+	_, err := q.db.ExecContext(ctx, setUserDisplayName, arg.DisplayName, arg.ID)
+	return err
+}
+
 const setUserPassword = `-- name: SetUserPassword :exec
 UPDATE users SET password_hash = ? WHERE id = ?
 `
@@ -367,7 +386,7 @@ func (q *Queries) UpdateUserSettings(ctx context.Context, arg UpdateUserSettings
 }
 
 const userByID = `-- name: UserByID :one
-SELECT id, username, disabled_at, txn_perm, is_admin, locale, theme,
+SELECT id, username, display_name, disabled_at, txn_perm, is_admin, locale, theme,
        date_format, number_format, display_mode, neg_style,
        default_subsidiary_id, can_submit_expenses, default_program_id
 FROM users
@@ -377,6 +396,7 @@ WHERE id = ?
 type UserByIDRow struct {
 	ID                  ids.UserID
 	Username            string
+	DisplayName         string
 	DisabledAt          sql.NullString
 	TxnPerm             string
 	IsAdmin             int64
@@ -410,6 +430,7 @@ func (q *Queries) UserByID(ctx context.Context, id ids.UserID) (UserByIDRow, err
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
+		&i.DisplayName,
 		&i.DisabledAt,
 		&i.TxnPerm,
 		&i.IsAdmin,

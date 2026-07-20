@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 
 	"cuento/internal/ids"
@@ -376,5 +377,106 @@ func TestEnableUserMissingID(t *testing.T) {
 	err := s.EnableUser(ctx, ids.UserID(9999))
 	if !errors.Is(err, ErrUserNotFound) {
 		t.Fatalf("EnableUser(missing) = %v, want ErrUserNotFound", err)
+	}
+}
+
+// TestSetUserDisplayNameUpdatesAndVersioned proves SetUserDisplayName trims and
+// persists the new display name on the live row and appends an op='update'
+// users_versions snapshot (rule 5) tied to the acting actor — the audit trail
+// records who renamed whom. It also confirms a surrounding-whitespace value is
+// stored trimmed (the store is the guard, not the form).
+func TestSetUserDisplayNameUpdatesAndVersioned(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	ctx := WithActor(context.Background(), Actor{ID: 1})
+
+	id, err := s.CreateUser(ctx, CreateUserInput{Username: "erin", DisplayName: "Erin"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	if err := s.SetUserDisplayName(ctx, id, "  Erin O'Neil  "); err != nil {
+		t.Fatalf("SetUserDisplayName: %v", err)
+	}
+
+	got, err := s.AdminUserByID(ctx, id)
+	if err != nil {
+		t.Fatalf("AdminUserByID: %v", err)
+	}
+	if got.DisplayName != "Erin O'Neil" {
+		t.Fatalf("display_name = %q, want trimmed %q", got.DisplayName, "Erin O'Neil")
+	}
+
+	testutil.AssertVersioned(t, d, "users", int64(id), "update")
+
+	var vName string
+	var vActor int64
+	err = d.QueryRow(
+		`SELECT v.display_name, c.actor_id
+		   FROM users_versions v JOIN changes c ON c.id = v.change_id
+		  WHERE v.entity_id = ? AND v.op = 'update'
+		  ORDER BY v.valid_from DESC, v.id DESC LIMIT 1`, id,
+	).Scan(&vName, &vActor)
+	if err != nil {
+		t.Fatalf("read update version: %v", err)
+	}
+	if vName != "Erin O'Neil" {
+		t.Errorf("version snapshot display_name = %q, want %q", vName, "Erin O'Neil")
+	}
+	if vActor != 1 {
+		t.Errorf("version actor_id = %d, want 1 (the acting user)", vActor)
+	}
+}
+
+// TestSetUserDisplayNameRejectsEmpty proves a blank / whitespace-only name is a
+// clean ErrEmptyDisplayName (display_name is NOT NULL) rejected BEFORE the write
+// funnel opens, so no version row is written. display_name is the first free-text
+// user field, so an empty submit is a real (not merely crafted) path.
+func TestSetUserDisplayNameRejectsEmpty(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	ctx := WithActor(context.Background(), Actor{ID: 1})
+
+	id, err := s.CreateUser(ctx, CreateUserInput{Username: "frank", DisplayName: "Frank"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	for _, in := range []string{"", "   ", "\t\n"} {
+		if err := s.SetUserDisplayName(ctx, id, in); !errors.Is(err, ErrEmptyDisplayName) {
+			t.Fatalf("SetUserDisplayName(%q) = %v, want ErrEmptyDisplayName", in, err)
+		}
+	}
+
+	// The rejection left the original name intact and appended no version row.
+	got, err := s.AdminUserByID(ctx, id)
+	if err != nil {
+		t.Fatalf("AdminUserByID: %v", err)
+	}
+	if got.DisplayName != "Frank" {
+		t.Errorf("display_name = %q, want unchanged Frank (rejected write must not persist)", got.DisplayName)
+	}
+}
+
+// TestSetUserDisplayNameRejectsTooLong proves the additive abuse-guard rune cap
+// (CreateUser applies none; this cap is documented as additive to this method).
+// The rejection is a clean ErrDisplayNameTooLong before the write funnel opens.
+func TestSetUserDisplayNameRejectsTooLong(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	ctx := WithActor(context.Background(), Actor{ID: 1})
+
+	id, err := s.CreateUser(ctx, CreateUserInput{Username: "gwen", DisplayName: "Gwen"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+
+	long := strings.Repeat("x", MaxDisplayNameLen+1)
+	if err := s.SetUserDisplayName(ctx, id, long); !errors.Is(err, ErrDisplayNameTooLong) {
+		t.Fatalf("SetUserDisplayName(too long) = %v, want ErrDisplayNameTooLong", err)
+	}
+	// A name AT the cap is accepted.
+	if err := s.SetUserDisplayName(ctx, id, strings.Repeat("y", MaxDisplayNameLen)); err != nil {
+		t.Fatalf("SetUserDisplayName(at cap): %v", err)
 	}
 }

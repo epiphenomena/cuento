@@ -346,6 +346,48 @@ func TestAdminSetTxnPerm(t *testing.T) {
 	}
 }
 
+// TestAdminSetDisplayName: an admin edits a user's display name over HTTP; the live
+// row reflects the trimmed value and the change is versioned (op=update, actor = the
+// admin). An empty name is a 422 that persists nothing.
+func TestAdminSetDisplayName(t *testing.T) {
+	h, st, sm, db := adminApp(t)
+	admin := mkUser(t, st, "boss", "none", true)
+	target := mkUser(t, st, "worker", "none", false)
+
+	form := url.Values{}
+	form.Set("display_name", "  Wendy Worker  ")
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/display-name", form)
+	if rec.Code >= 400 {
+		t.Fatalf("set display_name returned %d, body: %s", rec.Code, rec.Body.String())
+	}
+	u, err := st.AdminUserByID(context.Background(), target)
+	if err != nil {
+		t.Fatalf("AdminUserByID: %v", err)
+	}
+	if u.DisplayName != "Wendy Worker" {
+		t.Errorf("display_name = %q, want trimmed %q", u.DisplayName, "Wendy Worker")
+	}
+	testutil.AssertVersioned(t, db, "users", int64(target), "update")
+	if got := testutil.LatestVersionActor(t, db, "users", int64(target)); got != int64(admin) {
+		t.Errorf("display_name change actor = %d, want admin %d", got, admin)
+	}
+
+	// An empty name is a 422 and persists nothing (the name stays as just set).
+	empty := url.Values{}
+	empty.Set("display_name", "  ")
+	rec2 := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/display-name", empty)
+	if rec2.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("empty admin display_name = %d, want 422", rec2.Code)
+	}
+	u2, err := st.AdminUserByID(context.Background(), target)
+	if err != nil {
+		t.Fatalf("AdminUserByID: %v", err)
+	}
+	if u2.DisplayName != "Wendy Worker" {
+		t.Errorf("display_name = %q, want unchanged after empty POST", u2.DisplayName)
+	}
+}
+
 // TestAdminGrantsRoundTrip: an admin grants then revokes a report group over HTTP;
 // the user's grants reflect each step, versioned and named to the admin.
 func TestAdminGrantsRoundTrip(t *testing.T) {

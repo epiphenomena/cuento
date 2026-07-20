@@ -26,6 +26,27 @@
   <p class="error" role="alert">{{t "settings.error.invalid"}}</p>
   {{end}}
 
+  {{/* A user's OWN display name (the name reports/expense forms can use). Its own
+       small form posting to /settings/display-name -- a free-text field, so it
+       carries an inline field-level error (empty / too long) unlike the fixed
+       selects below. */}}
+  <form method="post" action="/settings/display-name" class="settings-name-form">
+    {{if .NameSaved}}
+    <p class="notice" role="status">{{t "settings.name.saved"}}</p>
+    {{end}}
+    <div class="field">
+      <label for="setting-name">{{t "settings.name.label"}}</label>
+      <input id="setting-name" name="display_name" type="text" value="{{.DisplayName}}"
+             autocomplete="name" maxlength="200"
+             {{- if .DisplayNameError}} autofocus aria-invalid="true"{{end}}>
+      {{if .DisplayNameError}}<p class="error" role="alert">{{t .DisplayNameError}}</p>{{end}}
+      <p class="hint">{{t "settings.name.hint"}}</p>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">{{t "settings.name.save"}}</button>
+    </div>
+  </form>
+
   <form method="post" action="/settings" class="settings-form">
     <div class="field">
       <label for="setting-locale">{{t "settings.language"}}</label>

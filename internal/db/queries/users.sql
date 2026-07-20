@@ -49,6 +49,14 @@ SET locale = ?, date_format = ?, number_format = ?, display_mode = ?,
     neg_style = ?, theme = ?, default_subsidiary_id = ?, default_program_id = ?
 WHERE id = ?;
 
+-- name: SetUserDisplayName :exec
+-- Live update of a user's display_name (self-service /settings and admin edit).
+-- Versioned as op='update'; display_name IS part of the users_versions snapshot,
+-- so the audit trail records who renamed whom. The store trims + rejects an empty
+-- value (display_name is NOT NULL) before this runs; password_hash is untouched
+-- (and never in the snapshot, rule 5).
+UPDATE users SET display_name = ? WHERE id = ?;
+
 -- name: SetUserDisabled :exec
 -- Live update of a user's disabled_at (p06.4 `user disable`). A disabled user
 -- cannot log in (login enforces this). Versioned as op='update'; disabled_at IS
@@ -120,7 +128,9 @@ WHERE username = ?;
 -- p20.1 adds can_submit_expenses (the standalone expense-submit capability,
 -- INDEPENDENT of txn_perm): the auth middleware resolves it here so decide() can
 -- gate the ExpenseSubmit perm per-request without a second query.
-SELECT id, username, disabled_at, txn_perm, is_admin, locale, theme,
+-- Adds display_name so the self-service /settings page can prefill the user's own
+-- editable name without a second query (the field a user sets for reports/expenses).
+SELECT id, username, display_name, disabled_at, txn_perm, is_admin, locale, theme,
        date_format, number_format, display_mode, neg_style,
        default_subsidiary_id, can_submit_expenses, default_program_id
 FROM users

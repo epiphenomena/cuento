@@ -129,6 +129,18 @@ other = "Settings"
 other = "These preferences apply only to your account and change how dates and amounts are shown to you."
 [settings.saved]
 other = "Your settings were saved."
+[settings.name.label]
+other = "Name"
+[settings.name.hint]
+other = "The name shown for you on reports and expense forms."
+[settings.name.saved]
+other = "Your name was saved."
+[settings.name.save]
+other = "Save name"
+[settings.name.error.empty]
+other = "Name must not be empty."
+[settings.name.error.too_long]
+other = "Name is too long."
 [settings.language]
 other = "Language"
 [settings.date_format]
@@ -233,6 +245,10 @@ other = "No access"
 other = "Read only"
 [admin.users.perm.write]
 other = "Read and write"
+[admin.users.display_name_title]
+other = "Display name"
+[admin.users.save_display_name]
+other = "Save name"
 [admin.users.txn_perm_title]
 other = "Transaction permission"
 [admin.users.save_perm]

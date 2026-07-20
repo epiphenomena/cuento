@@ -45,6 +45,15 @@ type settingOption struct {
 // and the ordered field errors (for a crafted-invalid POST). It follows the form
 // model shape -- its own value fields plus an embedded formErrors named Errors.
 type settingsForm struct {
+	// DisplayName is the user's own editable display name (the p-adhoc self-service
+	// field reports/expense forms can use). It has its OWN small form posting to
+	// /settings/display-name (a free-text field with a field-level empty/too-long
+	// error), separate from the fixed-select preferences below.
+	DisplayName string
+	// DisplayNameError is the i18n key of a display-name field error (empty / too
+	// long), rendered inline on the name form. Empty means no error.
+	DisplayNameError string
+
 	Locale         string
 	DateFormat     string
 	NumberFormat   string
@@ -63,8 +72,11 @@ type settingsForm struct {
 	Subs         []subOption
 	Programs     []programOption
 
-	Saved  bool
-	Errors formErrors
+	Saved bool
+	// NameSaved is the PRG marker for a successful display-name save (its own form),
+	// so the name-saved notice sits on the name form, not the preferences form.
+	NameSaved bool
+	Errors    formErrors
 }
 
 // The fixed option vocabularies (mirroring the store validators + format.go). Kept
@@ -117,6 +129,7 @@ func (s *server) settingsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form, err := s.buildSettingsForm(r, settingsForm{
+		DisplayName:    u.DisplayName,
 		Locale:         u.Locale,
 		DateFormat:     u.DateFormat,
 		NumberFormat:   u.NumberFormat,
@@ -131,6 +144,7 @@ func (s *server) settingsPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form.Saved = settingsSavedNotice(r)
+	form.NameSaved = r.URL.Query().Get("named") != ""
 	s.render(w, r, http.StatusOK, "settings.tmpl", s.newShellPage(r, form))
 }
 
@@ -191,6 +205,10 @@ func (s *server) settingsUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	form := settingsForm{
+		// DisplayName is edited by its OWN form (POST /settings/display-name), not this
+		// prefs POST, so echo the stored value here so a crafted-invalid prefs re-render
+		// keeps the name input populated rather than blanking it.
+		DisplayName:  u.DisplayName,
 		Locale:       r.PostFormValue("locale"),
 		DateFormat:   r.PostFormValue("date_format"),
 		NumberFormat: r.PostFormValue("number_format"),
@@ -273,6 +291,69 @@ func (s *server) settingsUpdate(w http.ResponseWriter, r *http.Request) {
 	// theme and the browser reload lands on a GET. A "saved" marker is carried in the
 	// query so the GET can show the notice without a session round-trip.
 	http.Redirect(w, r, "/settings?saved=1", http.StatusSeeOther)
+}
+
+// settingsDisplayName handles POST /settings/display-name (AnyUser): a user sets
+// THEIR OWN display name (the name reports/expense forms can use) under one
+// versioned change (store.SetUserDisplayName). display_name is free text, so an
+// empty or over-long value is a REAL user mistake (not a crafted-only path): it
+// re-renders the whole settings page at 422 with an inline field error + autofocus
+// on the name input. Success 303-redirects back to GET /settings with a name-saved
+// marker (PRG).
+func (s *server) settingsDisplayName(w http.ResponseWriter, r *http.Request) {
+	u := currentUser(r.Context())
+	if u == nil {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+		return
+	}
+	name := r.PostFormValue("display_name")
+	if err := s.store.SetUserDisplayName(store.WithActor(r.Context(), store.Actor{ID: u.ID}), u.ID, name); err != nil {
+		switch {
+		case errors.Is(err, store.ErrEmptyDisplayName):
+			s.renderDisplayNameError(w, r, name, "settings.name.error.empty")
+		case errors.Is(err, store.ErrDisplayNameTooLong):
+			s.renderDisplayNameError(w, r, name, "settings.name.error.too_long")
+		default:
+			s.serverError(w)
+		}
+		return
+	}
+	// PRG back to GET /settings with a name-saved marker (distinct from the prefs
+	// "saved" marker so the notice sits on the right form).
+	http.Redirect(w, r, "/settings?named=1", http.StatusSeeOther)
+}
+
+// renderDisplayNameError re-renders the full settings page at 422 with the name
+// field's inline error (autofocus lands on it), echoing the submitted value so the
+// user can fix it. Prefills the rest of the form from the stored settings (the name
+// form is independent of the preferences form).
+func (s *server) renderDisplayNameError(w http.ResponseWriter, r *http.Request, submitted, key string) {
+	u := currentUser(r.Context())
+	if u == nil {
+		http.Redirect(w, r, "/login", http.StatusFound)
+		return
+	}
+	built, err := s.buildSettingsForm(r, settingsForm{
+		DisplayName:      submitted,
+		DisplayNameError: key,
+		Locale:           u.Locale,
+		DateFormat:       u.DateFormat,
+		NumberFormat:     u.NumberFormat,
+		DisplayMode:      u.DisplayMode,
+		NegStyle:         u.NegStyle,
+		Theme:            u.Theme,
+		DefaultSub:       derefID(u.DefaultSubsidiaryID),
+		DefaultProgram:   derefID(u.DefaultProgramID),
+	})
+	if err != nil {
+		s.serverError(w)
+		return
+	}
+	s.render(w, r, http.StatusUnprocessableEntity, "settings.tmpl", s.newShellPage(r, built))
 }
 
 // renderSettingsError re-renders the full settings page at 422 with the field's

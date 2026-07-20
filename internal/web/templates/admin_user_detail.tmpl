@@ -23,6 +23,21 @@
   <p class="error" role="alert">{{t .ErrorKey}}</p>
   {{end}}
 
+  <section class="display-name-section">
+    <h2>{{t "admin.users.display_name_title"}}</h2>
+    <form method="post" action="/admin/users/{{.ID}}/display-name" class="display-name-form">
+      <div class="field">
+        <label for="ud-display-name">{{t "admin.users.form.display_name"}}</label>
+        <input id="ud-display-name" name="display_name" type="text" value="{{.DisplayName}}"
+               autocomplete="off" maxlength="200"
+               {{- if eq .ErrorField "display_name"}} autofocus aria-invalid="true"{{end}}>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">{{t "admin.users.save_display_name"}}</button>
+      </div>
+    </form>
+  </section>
+
   <section class="perm-section">
     <h2>{{t "admin.users.txn_perm_title"}}</h2>
     <form method="post" action="/admin/users/{{.ID}}/txn-perm" class="txn-perm-form">

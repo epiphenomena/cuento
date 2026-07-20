@@ -123,6 +123,18 @@ other = "Ajustes"
 other = "Estas preferencias solo se aplican a tu cuenta y cambian como se te muestran las fechas y los importes."
 [settings.saved]
 other = "Se guardaron tus ajustes."
+[settings.name.label]
+other = "Nombre"
+[settings.name.hint]
+other = "El nombre que se muestra para ti en los informes y los formularios de gastos."
+[settings.name.saved]
+other = "Se guardo tu nombre."
+[settings.name.save]
+other = "Guardar nombre"
+[settings.name.error.empty]
+other = "El nombre no puede estar vacio."
+[settings.name.error.too_long]
+other = "El nombre es demasiado largo."
 [settings.language]
 other = "Idioma"
 [settings.date_format]
@@ -227,6 +239,10 @@ other = "Sin acceso"
 other = "Solo lectura"
 [admin.users.perm.write]
 other = "Lectura y escritura"
+[admin.users.display_name_title]
+other = "Nombre visible"
+[admin.users.save_display_name]
+other = "Guardar nombre"
 [admin.users.txn_perm_title]
 other = "Permiso de transacciones"
 [admin.users.save_perm]
