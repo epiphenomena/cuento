@@ -88,7 +88,10 @@
   <input type="text" id="acct-search" class="chart-search-input"
          placeholder="{{t "accounts.search.placeholder"}}" autocomplete="off">
 </div>
-</div>
+{{/* p30.5: the New/Merge actions live INSIDE the same flex row as the filters + search
+     (.accounts-subnav is width:100%), pushed to the RIGHT via margin-left:auto so the
+     whole toolbar is a single row — filters left, actions right — wrapping only when the
+     viewport is too narrow. */}}
 <div class="subnav-actions">
   {{/* p26.7: New opens a dedicated full page (GET /accounts/new) -- a plain link, so
        the form is always on-screen even when the tree is scrolled. Merge stays inline
@@ -98,6 +101,7 @@
           hx-get="/accounts/merge" hx-target="#account-form" hx-swap="outerHTML">
     {{t "accounts.merge"}}
   </button>
+</div>
 </div>
 {{- end}}
 {{- end}}

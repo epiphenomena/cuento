@@ -380,16 +380,51 @@ textarea {
   background: var(--color-surface);
 }
 
-/* p30.4: theme native checkboxes app-wide (the Active-only filter, account/grant flag
-   checkboxes, everywhere). accent-color tints the box + check with the primary token,
-   which resolves per-theme via light-dark(). One global rule — not per page. The
+/* p30.5: fully custom checkboxes app-wide (the Active-only filter, account flag
+   checkboxes current_cash/receivable_payable, grant/budget/expense checkboxes,
+   everywhere). The former `accent-color` only tinted the CHECKED tick and left the
+   UNCHECKED box as the unstyled UA default (visibly wrong on dark themes). We now
+   render BOTH states from theme tokens: appearance:none strips the native box, then a
+   themed border + surface fill draws the empty box, and :checked fills with the primary
+   token and draws a CSS-only rotated-border tick (::after). All colors are single
+   light-dark() tokens, so it themes for light/dark automatically. The
    `<label><input>…</label>` markup and the shared focus-visible ring (see :where(...)
    above) are untouched, so keyboard operation and accessibility are preserved. */
 input[type="checkbox"] {
-  accent-color: var(--color-primary);
-  width: 1rem;
-  height: 1rem;
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 1.05rem;
+  height: 1.05rem;
+  flex-shrink: 0;
+  margin: 0;
+  border: var(--border);
+  border-radius: 4px;
+  background: var(--color-surface);
   vertical-align: middle;
+  cursor: pointer;
+}
+input[type="checkbox"]:checked {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+/* CSS-only tick: a rotated L drawn from two borders, in the on-primary token so it
+   stays legible on the primary fill in every theme. */
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 0.32rem;
+  top: 0.14rem;
+  width: 0.28rem;
+  height: 0.55rem;
+  border: solid var(--color-primary-text);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+/* Disabled matches the p28 disabled-control convention (dimmed + not-allowed). */
+input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 /* p26.87: the new-user password field + its Regenerate button on one row. The button
    is server-rendered `hidden` (no-JS fallback) and pwgen.js unhides it, so the wrap
@@ -634,9 +669,18 @@ input[aria-invalid="true"] {
 .app-subnav-controls .accounts-subnav .accounts-filters { width: auto; }
 /* The search box is a label-above column just like the .report-field filters, so it aligns
    with Subsidiary/Type/Active in the shared flex row. */
+/* p30.5: the search column mirrors the sibling .report-field filters (Subsidiary/Type)
+   EXACTLY — same label font/weight/margin and the same base input chrome (border/radius/
+   surface/padding from the shared select,input[type=text] rule) — so its box metrics and
+   vertical alignment line up with the other filter controls on the row. */
 .chart-search { display: flex; flex-direction: column; }
 .chart-search label { font-weight: 600; font-size: 0.85rem; margin-bottom: 0; }
 .chart-search-input { min-width: 14rem; }
+/* p30.5: New/Merge actions now share the .accounts-subnav flex row; margin-left:auto
+   pushes them to the far right of the (width:100%) toolbar so it reads as one row —
+   filters left, actions right. align-self keeps the button group centered against the
+   flex-end-aligned filter controls. */
+.accounts-subnav .subnav-actions { margin-left: auto; align-self: center; }
 /* While searching (chartsearch.js adds `searching`), an author `display` rule wins
    over the UA `[hidden]{display:none}` treetable uses -- so search visibility governs
    without the two mechanisms fighting over `tr.hidden`. Rows not marked
@@ -753,8 +797,40 @@ input[aria-invalid="true"] {
 .htmx-indicator { opacity: 0; transition: opacity 0.15s ease-in; }
 .report-params.htmx-request .htmx-indicator,
 .subnav-filters.htmx-request .htmx-indicator { opacity: 1; }
+/* p30.5: the "updating…" cue reads as an obvious (but tasteful) working badge — a
+   primary-tinted pill with stronger text + a small spinner — so a filter change is
+   clearly acknowledged. The show/hide channel is untouched: opacity is still flipped
+   0->1 by .htmx-request (above); the animation lives on the ::before spinner only, so it
+   never fights the fade. */
 .report-updating,
-.subnav-updating { font-size: 0.85rem; color: var(--color-text-muted); align-self: center; }
+.subnav-updating {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: center;
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  background: var(--color-surface-alt);
+}
+.report-updating::before,
+.subnav-updating::before {
+  content: "";
+  width: 0.8rem;
+  height: 0.8rem;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: cuento-spin 0.7s linear infinite;
+}
+@keyframes cuento-spin { to { transform: rotate(360deg); } }
+/* Respect reduced-motion: keep the badge, drop the spin. */
+@media (prefers-reduced-motion: reduce) {
+  .report-updating::before,
+  .subnav-updating::before { animation: none; }
+}
 .report-export { margin: var(--space-3) 0; }
 .report-table { width: 100%; border-collapse: collapse; margin-top: var(--space-4); }
 /* p30.7: a comparative statement's width scales with its GRANULARITY. In the
