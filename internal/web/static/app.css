@@ -231,6 +231,22 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* Tighten the inter-control gap so the whole bar fits one desktop line. */
 .subnav-filters { gap: var(--space-1) var(--space-2); }
 .subnav-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2); }
+/* Reusable second-nav "left content / right actions" primitive. A page that wants
+   its filters/search on the LEFT and its action buttons pinned to the far RIGHT of
+   the section bar wraps them in a .subnav-split and makes the action group the
+   trailing .subnav-actions child: the container spans the full bar width, and
+   margin-left:auto pushes the actions to the right edge (the same mechanism that
+   pins .app-newtxn / logout in the top nav). Full width is load-bearing — without
+   it the auto-margin has no free space to consume and the pin is a no-op. flex-wrap
+   keeps the actions dropping below the left content on a too-narrow viewport. */
+.subnav-split {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-1) var(--space-3);
+  width: 100%;
+}
+.subnav-split .subnav-actions { margin-left: auto; align-self: center; }
 /* p26.11: after p26.7 the New/Merge/Reconcile triggers in the section bar are anchors
    (<a class="btn ...">). The generic nav-link rule `.app-subnav a` (specificity 0,1,1)
    sets color:var(--color-text-muted) and out-specifies the `.btn`/`.btn-primary` color
@@ -683,18 +699,12 @@ input[aria-invalid="true"] {
    the second-level nav toolbar (a SIBLING of the filter form, .accounts-subnav), rendered
    as a label-above .report-field like the reports/filter controls. Typing narrows the
    visible rows client-side; it never submits. */
-.accounts-subnav {
-  display: flex;
-  flex-wrap: wrap;
-  /* Top-align the row: the filter form carries the (opacity-0) "updating..."
-     indicator BELOW its fieldset, so a flex-end row would bottom-align the whole
-     form and shove the filter fields up relative to the sibling .chart-search
-     (the p30/p31 search-offset bug). Aligning tops lines up every label+control
-     column -- all controls are the same height -- independent of the indicator. */
-  align-items: flex-start;
-  gap: var(--space-1) var(--space-3);
-  width: 100%;
-}
+/* The accounts toolbar is a .subnav-split (full-width flex row, tops aligned, New/Merge
+   pinned right) plus the accounts-only wiring below. The base layout — display/flex-wrap/
+   align-items:flex-start/gap/width:100% — comes from .subnav-split; flex-start top-aligns
+   the row so the filter form's (opacity-0) "updating..." indicator below its fieldset can't
+   bottom-align the form and shove the filter fields up relative to the sibling .chart-search
+   (the p30/p31 search-offset bug). */
 /* Keep the transient "updating..." pill OUT of the form's block height so the form
    hugs its fieldset (no dead space below the filters); it overlays at the row's
    start-edge when a filter request is in flight. */
@@ -720,11 +730,7 @@ input[aria-invalid="true"] {
 .chart-search { display: flex; flex-direction: column; }
 .chart-search label { font-weight: 600; font-size: 0.85rem; margin-bottom: 0; }
 .chart-search-input { min-width: 14rem; }
-/* p30.5: New/Merge actions now share the .accounts-subnav flex row; margin-left:auto
-   pushes them to the far right of the (width:100%) toolbar so it reads as one row —
-   filters left, actions right. align-self keeps the button group centered against the
-   flex-end-aligned filter controls. */
-.accounts-subnav .subnav-actions { margin-left: auto; align-self: center; }
+/* New/Merge pinning is handled by the reusable .subnav-split .subnav-actions rule above. */
 /* While searching (chartsearch.js adds `searching`), an author `display` rule wins
    over the UA `[hidden]{display:none}` treetable uses -- so search visibility governs
    without the two mechanisms fighting over `tr.hidden`. Rows not marked
