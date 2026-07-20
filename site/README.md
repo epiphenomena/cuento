@@ -32,14 +32,23 @@ jekyll serve
 
 GitHub's branch-based Pages deployment can serve only the repository root or the
 `/docs` folder, and both are occupied here (the root is the application, and
-`docs/` holds internal working documents that must not be published). Serve this
-`site/` folder with a GitHub Actions workflow instead:
+`docs/` holds internal working documents that must not be published). So the
+`site/` folder is built and published by a GitHub Actions workflow.
 
-1. Add a workflow that builds this directory with `actions/jekyll-build-pages`
-   using `source: ./site`, uploads the result with
-   `actions/upload-pages-artifact`, and deploys it with `actions/deploy-pages`.
-2. In the repository settings, under **Pages** (Build and deployment), set the
-   source to **GitHub Actions**.
+The ready-to-use workflow is kept at [`deploy/pages-workflow.yml`](../deploy/pages-workflow.yml).
+It is stored there — not under `.github/workflows/` — because a Personal Access
+Token without the `workflow` scope is refused when a push touches
+`.github/workflows/`. Add it through the GitHub web UI (which is allowed to
+commit workflow files) instead:
 
-The `repo_url` in `_config.yml` (shown in the header and footer) is a
-placeholder — replace it with the real repository URL before publishing.
+1. On github.com: repo → **Actions** tab → **New workflow** → **set up a workflow
+   yourself**. Name it `pages.yml` and paste the contents of
+   `deploy/pages-workflow.yml` (everything from `name:` down). Commit to `main`.
+2. Repo → **Settings** → **Pages** → **Build and deployment** → **Source**:
+   **GitHub Actions**.
+
+The workflow builds `site/` with the pinned Jekyll (`~> 4.4`) from the Gemfile,
+applies the project-page base path, and deploys with `actions/deploy-pages`. It
+needs no API key or secret (it uses the built-in `GITHUB_TOKEN`), and runs on
+every push to `main` that touches `site/**`. The site publishes at
+`https://epiphenomena.github.io/cuento/`.
