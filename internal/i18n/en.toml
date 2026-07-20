@@ -1292,7 +1292,7 @@ other = "Line"
 [reports.functional_expenses.col.total]
 other = "Total"
 [reports.functional_expenses.unmapped]
-other = "(Unmapped)"
+other = "Unmapped — assign a 990 line"
 [reports.functional_expenses.total]
 other = "Total functional expenses"
 
@@ -1402,7 +1402,7 @@ other = "Currency"
 [reports.form_990.col.amount]
 other = "Amount"
 [reports.form_990.unmapped]
-other = "(Unmapped)"
+other = "Unmapped — assign a 990 line"
 [reports.form_990.part.iii]
 other = "Part III — Program service accomplishments"
 [reports.form_990.part.viii]

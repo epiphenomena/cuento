@@ -13,19 +13,20 @@
 >  Expenses                                    USD         USD $1,500.00
    Food Pantry                                                         0
 >  Expenses                                    MXN         MXN $1,500.00
-   (Unmapped)                                                          0
+   Unmapped — assign a 990 line                                        0
    Part VIII — Statement of revenue
    1e — Government grants (contributions)      USD         USD $7,815.94
    1f — All other contributions and gifts      USD        USD $52,750.00
    2 — Program service revenue                 USD         USD $1,200.00
-   (Unmapped)                                  USD         USD $3,000.00
+>  Unmapped — assign a 990 line                USD         USD $3,000.00
+   Event Income                                USD         USD $3,000.00
 =  Total revenue                               USD        USD $64,765.94
    Part IX — Statement of functional expenses
    7 — Other salaries and wages                USD        USD $16,500.00
    11g — Fees for services -- other            USD            USD $25.00
    16 — Occupancy                              USD         USD $3,050.00
    24e — All other expenses                    USD         USD $4,195.88
-   (Unmapped)                                  USD             USD $0.00
+   Unmapped — assign a 990 line                USD             USD $0.00
 =  Total functional expenses                   USD        USD $23,770.88
    Part X — Balance sheet
    Checking US                                 USD        USD $35,935.00
@@ -36,7 +37,7 @@
 >  Total assets                                USD       USD $238,111.80
    Credit Card                                 USD         USD $3,000.00
 >  Total liabilities                           USD         USD $3,000.00
-   (Unmapped)                                  USD             USD $0.00
+   Unmapped — assign a 990 line                USD             USD $0.00
    Net assets without donor restrictions       USD       USD $179,252.68
    Net assets with donor restrictions          USD        USD $55,859.12
 >  Total net assets                            USD       USD $235,111.80

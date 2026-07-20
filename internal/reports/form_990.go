@@ -147,10 +147,14 @@ func (b *f990Builder) lineRowText(text, ccy string, minor int64, d *Drill, inden
 	})
 }
 
-// unmappedRow appends the explicit Unmapped bucket line (a localized "(Unmapped)" LABEL
-// + currency + amount). Rendered even when empty (minor 0, no currency) so the mechanism
-// is always present (Z19 — never drop rows).
-func (b *f990Builder) unmappedRow(ccy string, minor int64, d *Drill) {
+// unmappedRow appends the explicit Unmapped bucket line: a localized actionable-flag
+// LABEL ("Unmapped — assign a 990 line") + currency + the bucket total. kind lets a
+// NON-EMPTY bucket render the flag as an emphasized RowSubtotal (so it stands out AND is
+// skipped by the section's line-sum footing, since the specific accounts are listed as
+// RowData detail beneath it — no double-count), while an EMPTY bucket renders a plain
+// RowData 0 line. Rendered even when empty (minor 0, no currency) so the mechanism is
+// always present (Z19 — never drop rows).
+func (b *f990Builder) unmappedRow(ccy string, minor int64, d *Drill, kind RowKind) {
 	amt := MoneyCell(minor, ccy)
 	if d != nil {
 		amt = amt.WithDrill(d)
@@ -158,8 +162,43 @@ func (b *f990Builder) unmappedRow(ccy string, minor int64, d *Drill) {
 	b.rows = append(b.rows, Row{
 		Cells:  []Cell{LabelCell("reports.form_990.unmapped"), TextCell(ccy), amt},
 		Indent: 1,
-		Kind:   RowData,
+		Kind:   kind,
 	})
+}
+
+// unmappedDetailRows lists, beneath the Unmapped flag row, the SPECIFIC accounts that
+// have activity but no effective 990 code — by NAME, with the amount to be mapped — so a
+// 990 preparer sees exactly which accounts still need a line. byAcct maps each unmapped
+// account id to its (display-signed, converted) amount. Rows are RowData indented under
+// the flag (Z19 — the accounts are surfaced, never silently folded into a lump total);
+// they are the section's contributing figures, so ONLY these detail rows are summed into
+// the section footing (the flag row above is a non-summed RowSubtotal memo).
+func (b *f990Builder) unmappedDetailRows(ctx context.Context, byAcct map[AccountID]int64, ccy string) {
+	if len(byAcct) == 0 {
+		return
+	}
+	names, err := accountNameMap(ctx, b.tk, b.p.LangOr())
+	if err != nil {
+		names = nil
+	}
+	accts := make([]AccountID, 0, len(byAcct))
+	for acct := range byAcct {
+		accts = append(accts, acct)
+	}
+	sort.Slice(accts, func(i, j int) bool {
+		ni, nj := names[accts[i]], names[accts[j]]
+		if ni != nj {
+			return ni < nj
+		}
+		return accts[i] < accts[j]
+	})
+	for _, acct := range accts {
+		b.rows = append(b.rows, Row{
+			Cells:  []Cell{TextCell(names[acct]), TextCell(ccy), MoneyCell(byAcct[acct], ccy)},
+			Indent: 2,
+			Kind:   RowData,
+		})
+	}
 }
 
 // subtotalRow appends an emphasized subtotal/total row (a localized LABEL + currency +
@@ -234,7 +273,7 @@ func (b *f990Builder) partIII(ctx context.Context) error {
 
 	// Unmapped bucket: a program with an activity account of NO recognized R/E type — none
 	// can exist (D24), so this is structurally empty. Rendered anyway (the mechanism).
-	b.unmappedRow("", 0, nil)
+	b.unmappedRow("", 0, nil, RowData)
 	return nil
 }
 
@@ -358,13 +397,20 @@ func (b *f990Builder) partVIII(ctx context.Context) error {
 		d := b.periodLineDrill(acctsByCode[lr.Code], ccysByCode[lr.Code])
 		if lr.Unmapped {
 			seenUnmapped = true
-			b.unmappedRow(target, amt, d)
+			// Flag row (emphasized, non-summed) + the SPECIFIC unmapped accounts by name
+			// beneath it, so the preparer sees exactly which accounts still need a 990 line.
+			b.unmappedRow(target, amt, d, RowSubtotal)
+			byAcct := map[AccountID]int64{}
+			for _, acct := range acctsByCode[""] {
+				byAcct[acct] = -leaf[acct] // display revenue as a positive inflow
+			}
+			b.unmappedDetailRows(ctx, byAcct, target)
 		} else {
 			b.lineRowText(labelOf[lr.Code], target, amt, d, 1)
 		}
 	}
 	if !seenUnmapped {
-		b.unmappedRow(target, 0, nil) // always present, even when empty
+		b.unmappedRow(target, 0, nil, RowData) // always present, even when empty
 	}
 	b.subtotalRow("reports.form_990.viii.total", target, total, RowTotal)
 	return nil
@@ -424,6 +470,15 @@ func (b *f990Builder) partIX(ctx context.Context) error {
 		}
 	}
 
+	// Per-account converted expense total (Σ classes) — for listing the SPECIFIC unmapped
+	// expense accounts by name beneath the flag row.
+	perAcct := map[AccountID]int64{}
+	for acct, byClass := range conv {
+		for _, amts := range byClass {
+			perAcct[acct] += classMinor(amts, target)
+		}
+	}
+
 	var grand int64
 	emit := func(code, label string, unmapped bool) {
 		total, ok := byCode[code]
@@ -433,7 +488,16 @@ func (b *f990Builder) partIX(ctx context.Context) error {
 		grand += total
 		d := b.periodLineDrill(acctsByCode[code], ccysByCode[code])
 		if unmapped {
-			b.unmappedRow(target, total, d)
+			// Flag row (emphasized, non-summed) + the SPECIFIC unmapped expense accounts by
+			// name beneath it, so a preparer sees exactly which accounts still need a 990 line.
+			// Empty on this fixture (every expense inherits IX.24e), but a real chart will have
+			// unmapped expense leaves — this surfaces them instead of folding them into a lump.
+			b.unmappedRow(target, total, d, RowSubtotal)
+			byAcct := map[AccountID]int64{}
+			for _, acct := range acctsByCode[""] {
+				byAcct[acct] = perAcct[acct]
+			}
+			b.unmappedDetailRows(ctx, byAcct, target)
 		} else {
 			b.lineRowText(label, target, total, d, 1)
 		}
@@ -444,7 +508,7 @@ func (b *f990Builder) partIX(ctx context.Context) error {
 	if _, ok := byCode[""]; ok {
 		emit("", "", true)
 	} else {
-		b.unmappedRow(target, 0, nil) // always present, even when empty
+		b.unmappedRow(target, 0, nil, RowData) // always present, even when empty
 	}
 	b.subtotalRow("reports.form_990.ix.total", target, grand, RowTotal)
 	return nil
@@ -609,7 +673,7 @@ func (b *f990Builder) balanceAccountLine(ctx context.Context, l bsLine, asOf, ta
 func (b *f990Builder) unmappedBalanceBucket(ctx context.Context, lines []bsLine) {
 	eff, err := b.tk.EffectiveCodes(ctx)
 	if err != nil {
-		b.unmappedRow(b.target, 0, nil)
+		b.unmappedRow(b.target, 0, nil, RowData)
 		return
 	}
 	var total int64
@@ -631,7 +695,7 @@ func (b *f990Builder) unmappedBalanceBucket(ctx context.Context, lines []bsLine)
 		}
 	}
 	if len(accts) == 0 || !single {
-		b.unmappedRow(b.target, 0, nil)
+		b.unmappedRow(b.target, 0, nil, RowData)
 		return
 	}
 	// Non-empty single-currency unmapped bucket: convert + drill (defensive; empty here).
@@ -642,7 +706,7 @@ func (b *f990Builder) unmappedBalanceBucket(ctx context.Context, lines []bsLine)
 		}
 	}
 	d := &Drill{Scope: b.p.Scope, AccountIDs: dedupSortInts(accts), Currency: ccy, Mode: DrillAsOf, AsOf: b.p.To}
-	b.unmappedRow(b.target, conv, d)
+	b.unmappedRow(b.target, conv, d, RowData)
 }
 
 // convertedSubtotal emits a per-currency-summed line converted to the target at the

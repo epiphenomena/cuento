@@ -1290,7 +1290,7 @@ other = "Linea"
 [reports.functional_expenses.col.total]
 other = "Total"
 [reports.functional_expenses.unmapped]
-other = "(No asignado)"
+other = "Sin asignar — asigne una línea del 990"
 [reports.functional_expenses.total]
 other = "Total de gastos funcionales"
 
@@ -1402,7 +1402,7 @@ other = "Moneda"
 [reports.form_990.col.amount]
 other = "Importe"
 [reports.form_990.unmapped]
-other = "(Sin asignar)"
+other = "Sin asignar — asigne una línea del 990"
 [reports.form_990.part.iii]
 other = "Parte III — Logros de servicios del programa"
 [reports.form_990.part.viii]

@@ -469,6 +469,28 @@ func TestForm990UnmappedBucketsPresent(t *testing.T) {
 	if !found {
 		t.Errorf("Part VIII Unmapped bucket missing the 300,000 Event Income figure")
 	}
+
+	// The flag must surface the SPECIFIC unmapped account BY NAME so the preparer knows
+	// exactly which account to map: an "Event Income" detail row (RowData) sits beneath the
+	// Part VIII Unmapped flag, carrying its 300,000 (positive inflow) figure. The flag row
+	// itself is an emphasized RowSubtotal (skipped by the section footing; the detail row is
+	// the summed figure) — assert the account name is present with its amount.
+	ei, ok := f990RowFor(table, "Event Income")
+	if !ok {
+		t.Fatal("Part VIII Unmapped: no 'Event Income' detail row (unmapped account not surfaced by name)")
+	}
+	if ei[2].Kind != reports.CellMoney || ei[2].Blank || ei[2].Minor != 300_000 {
+		t.Errorf("Event Income detail amount = %+v, want money 300,000", ei[2])
+	}
+	// The Part VIII Unmapped flag row is an emphasized RowSubtotal carrying the bucket total.
+	for _, row := range table.Rows {
+		if len(row.Cells) > 0 && row.Cells[0].Kind == reports.CellLabel &&
+			row.Cells[0].Text == "reports.form_990.unmapped" && row.Cells[2].Minor == 300_000 {
+			if row.Kind != reports.RowSubtotal {
+				t.Errorf("Part VIII Unmapped flag row kind = %v, want RowSubtotal (non-summed memo)", row.Kind)
+			}
+		}
+	}
 }
 
 // TestForm990PartVIIIDrillReconciles: a SINGLE-native-currency Part VIII revenue LINE's

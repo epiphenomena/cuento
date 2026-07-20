@@ -12,19 +12,20 @@ Expenses,MXN,5000.00
 Expenses,USD,1500.00
 Food Pantry,,0
 Expenses,MXN,1500.00
-(Unmapped),,0
+Unmapped — assign a 990 line,,0
 Part VIII — Statement of revenue,,
 1e — Government grants (contributions),USD,7815.94
 1f — All other contributions and gifts,USD,52750.00
 2 — Program service revenue,USD,1200.00
-(Unmapped),USD,3000.00
+Unmapped — assign a 990 line,USD,3000.00
+Event Income,USD,3000.00
 Total revenue,USD,64765.94
 Part IX — Statement of functional expenses,,
 7 — Other salaries and wages,USD,16500.00
 11g — Fees for services -- other,USD,25.00
 16 — Occupancy,USD,3050.00
 24e — All other expenses,USD,4195.88
-(Unmapped),USD,0.00
+Unmapped — assign a 990 line,USD,0.00
 Total functional expenses,USD,23770.88
 Part X — Balance sheet,,
 Checking US,USD,35935.00
@@ -35,7 +36,7 @@ Building,USD,160000.00
 Total assets,USD,238111.80
 Credit Card,USD,3000.00
 Total liabilities,USD,3000.00
-(Unmapped),USD,0.00
+Unmapped — assign a 990 line,USD,0.00
 Net assets without donor restrictions,USD,179252.68
 Net assets with donor restrictions,USD,55859.12
 Total net assets,USD,235111.80
