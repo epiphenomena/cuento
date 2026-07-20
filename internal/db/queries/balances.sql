@@ -137,6 +137,38 @@ WHERE t.deleted = 0
 GROUP BY COALESCE(sp.fund_id, 0), t.currency
 ORDER BY fund_id, t.currency;
 
+-- name: MonetaryFundBalancesAsOf :many
+-- Per (fund, currency): the fund's cumulative MONETARY net balance to asof in
+-- scope -- the sum over MONETARY accounts only: assets flagged current_cash or
+-- receivable_payable PLUS every liability account. INCLUDES the unrestricted group
+-- (NULL fund_id -> fund id 0 via COALESCE, D20).
+--
+-- This is the "still restricted" residual for the net-assets-with-donor-
+-- restrictions line (p-golive): a restricted grant deployed into a NON-MONETARY
+-- asset (land, a building) has SATISFIED its purpose and is released from
+-- restriction, so only the fund's monetary position (spendable cash, receivables,
+-- net of liabilities owed) remains restricted. Liability splits are stored NEGATIVE
+-- (credit), so the raw SUM yields monetary assets MINUS liabilities -- the fund's
+-- net monetary position. Mirrors FundBalancesAsOf but swaps the a.type='asset'
+-- filter for the monetary predicate. Params: scopeSub, asof.
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT COALESCE(sp.fund_id, 0) AS fund_id, t.currency,
+       CAST(SUM(sp.amount) AS INTEGER) AS balance
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+JOIN accounts a ON a.id = sp.account_id
+WHERE t.deleted = 0
+  AND ((a.type = 'asset' AND (a.current_cash = 1 OR a.receivable_payable = 1))
+       OR a.type = 'liability')
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY COALESCE(sp.fund_id, 0), t.currency
+ORDER BY fund_id, t.currency;
+
 -- name: FunctionalActivity :many
 -- Per (expense account, functional_class, currency): signed activity over the
 -- period in scope. Only expense splits carry a class (D21), so the NOT NULL filter

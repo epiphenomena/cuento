@@ -11,8 +11,8 @@
    Credit Card                              USD $3,000.00
 #  Total liabilities                        USD $3,000.00
    Net assets
-   Net assets without donor restrictions  USD $179,252.68
+   Net assets without donor restrictions  USD $219,252.68
    of which change in net assets to date   USD $40,724.72
-   Net assets with donor restrictions      USD $55,859.12
+   Net assets with donor restrictions      USD $15,859.12
 #  Total net assets                       USD $235,111.80
 =  Total liabilities and net assets       USD $238,111.80

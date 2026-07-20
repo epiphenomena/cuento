@@ -238,14 +238,13 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 
 	var withRestriction map[string]int64
 	if fundFilter {
-		// Single-fund "with donor restrictions": the fund's OWN asset-side (unexpended)
-		// balance when the fund is RESTRICTED (purpose/time/perpetual), else empty. By fund
-		// conservation the fund's A - L (the plug above) already equals its net-asset
-		// balance, so for a restricted fund with == the plug's asset-side and without nets
-		// to the fund's own liabilities offset; for an unrestricted fund with == 0 and the
-		// whole plug reads as without-restriction. This mirrors the org-wide restrictedNetAssets
-		// (restricted funds' asset-side balances) narrowed to the one chosen fund.
-		wr, err := tk.fundRestrictedNetAssets(ctx, p.Fund, assetTotal)
+		// Single-fund "with donor restrictions": the fund's OWN still-restricted MONETARY
+		// balance (current_cash + receivable_payable assets net of liabilities) when the
+		// fund is RESTRICTED (purpose/time/perpetual), else empty. The fund's DEPLOYED
+		// non-monetary assets (a capitalized building) are released, so without = plug
+		// (A - L) - monetary = the deployed amount. This mirrors the org-wide
+		// restrictedNetAssets narrowed to the one chosen fund.
+		wr, err := tk.fundRestrictedNetAssets(ctx, p.Scope, p.AsOf, p.Fund)
 		if err != nil {
 			return Table{}, err
 		}
@@ -777,11 +776,20 @@ func (tk *Toolkit) isConsolidated(ctx context.Context, scope SubsidiaryID) (bool
 }
 
 // restrictedNetAssets returns, per currency, the sum of the RESTRICTED funds'
-// asset-side (unexpended) balances as of d in the scope -- "net assets with donor
-// restrictions" (Q3, D20). A fund is restricted when its Restriction field is
-// non-empty (purpose/time/perpetual); fund id 0 (unrestricted) is excluded. The
-// asset-side balance is exactly what FundBalancesAsOf returns (a whole-fund sum is
-// zero by conservation, so the asset position is the unexpended restricted resource).
+// still-restricted MONETARY net balances as of d in the scope -- "net assets with
+// donor restrictions" (Q3, D20, p-golive). A fund is restricted when its Restriction
+// field is non-empty (purpose/time/perpetual); fund id 0 (unrestricted) is excluded.
+//
+// The restricted figure is the fund's MONETARY position (MonetaryFundBalancesAsOf:
+// current_cash + receivable_payable assets, net of liabilities), NOT the whole asset
+// side. A restricted grant DEPLOYED into a non-monetary asset (land, a building) has
+// satisfied its purpose and is RELEASED from restriction; only the spendable cash /
+// receivables still owed to the purpose (net of liabilities) remain restricted. The
+// released amount = full asset side - monetary, which the balance sheet surfaces in
+// "without restrictions" (without = total NA - with), keeping with + without == total
+// NA exactly. This makes the point-in-time line articulate with the flow report's
+// "net assets released from restrictions" (which already releases on acquisition via
+// AppliedNonExpense).
 func (tk *Toolkit) restrictedNetAssets(ctx context.Context, scope SubsidiaryID, d string) (map[string]int64, error) {
 	funds, err := tk.store.ListFunds(ctx)
 	if err != nil {
@@ -793,7 +801,7 @@ func (tk *Toolkit) restrictedNetAssets(ctx context.Context, scope SubsidiaryID, 
 			restricted[f.ID] = true
 		}
 	}
-	fb, err := tk.store.FundBalancesAsOf(ctx, d, scope)
+	fb, err := tk.store.MonetaryFundBalancesAsOf(ctx, d, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -826,12 +834,14 @@ func (tk *Toolkit) FundBalancesAsOfByAccount(ctx context.Context, f FundID, s Sc
 }
 
 // fundRestrictedNetAssets returns the single fund's "net assets with donor restrictions"
-// per currency: the fund's asset-side balance (assetTotal, already positive-normalized)
-// when the fund is RESTRICTED (non-empty Restriction), else an empty map (an unrestricted
-// fund contributes nothing to the restricted line, so its whole plug reads as
-// without-restriction). It mirrors restrictedNetAssets narrowed to one fund. assetTotal is
-// the caller's already-computed per-currency asset section total for this fund.
-func (tk *Toolkit) fundRestrictedNetAssets(ctx context.Context, f FundID, assetTotal map[string]int64) (map[string]int64, error) {
+// per currency: the fund's still-restricted MONETARY net balance (current_cash +
+// receivable_payable assets, net of liabilities -- MonetaryFundBalancesAsOf) when the
+// fund is RESTRICTED (non-empty Restriction), else an empty map (an unrestricted fund
+// contributes nothing to the restricted line, so its whole plug reads as
+// without-restriction). It mirrors the org-wide restrictedNetAssets narrowed to one
+// fund: the fund's DEPLOYED non-monetary assets (a capitalized building) are released,
+// so with = monetary and the released remainder falls into without (= plug - with).
+func (tk *Toolkit) fundRestrictedNetAssets(ctx context.Context, scope SubsidiaryID, d string, f FundID) (map[string]int64, error) {
 	funds, err := tk.store.ListFunds(ctx)
 	if err != nil {
 		return nil, err
@@ -847,8 +857,14 @@ func (tk *Toolkit) fundRestrictedNetAssets(ctx context.Context, f FundID, assetT
 	if !restricted {
 		return out, nil
 	}
-	for ccy, v := range assetTotal {
-		out[ccy] = v
+	fb, err := tk.store.MonetaryFundBalancesAsOf(ctx, d, scope)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range fb {
+		if r.FundID == f {
+			out[r.Currency] += r.Amount
+		}
 	}
 	return out, nil
 }

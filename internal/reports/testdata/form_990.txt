@@ -38,7 +38,7 @@
    Credit Card                                 USD         USD $3,000.00
 >  Total liabilities                           USD         USD $3,000.00
    Unmapped — assign a 990 line                USD             USD $0.00
-   Net assets without donor restrictions       USD       USD $179,252.68
-   Net assets with donor restrictions          USD        USD $55,859.12
+   Net assets without donor restrictions       USD       USD $219,252.68
+   Net assets with donor restrictions          USD        USD $15,859.12
 >  Total net assets                            USD       USD $235,111.80
 =  Total liabilities and net assets            USD       USD $238,111.80

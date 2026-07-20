@@ -104,14 +104,16 @@ func nameAmount(t reports.Table, name string) (int64, bool) {
 //	USD Liabilities =    300,000  (Credit Card 300,000; Due to Intl 1,000,000 ELIMINATED)
 //	USD Net assets  = 21,293,500  (= Assets - Liabilities, the plug; FX Clearing's
 //	                               974,000 debit is now a contra-equity component)
-//	  with          =  5,050,000  (Beca Agua 50,000 + Building Fund 5,000,000)
-//	  without       = 16,243,500  (= 21,293,500 - 5,050,000; NOT fund-0 18,517,500)
+//	  with          =  1,050,000  (Beca Agua 50,000 + Building Fund MONETARY 1,000,000;
+//	                               the Building 4,000,000 is DEPLOYED into a non-monetary
+//	                               asset -> released from restriction, p-golive)
+//	  without       = 20,243,500  (= 21,293,500 - 1,050,000; absorbs the 4,000,000 release)
 //	  surplus       =  3,567,500  (NetIncome from inception, positive)
 //	MXN Assets      = 40,140,000  (Checking MX 39,500,000 + Cash MXN 640,000;
 //	                               FX Clearing 500,000 is EQUITY-class now)
 //	MXN Liabilities =          0
 //	MXN Net assets  = 40,140,000
-//	  with          =  9,700,000  (Beca Agua)
+//	  with          =  9,700,000  (Beca Agua; cash-only, nothing deployed to release)
 //	  without       = 30,440,000
 //	  surplus       =  9,140,000
 func TestBalanceSheetGolden(t *testing.T) {
@@ -138,9 +140,10 @@ func TestBalanceSheetGolden(t *testing.T) {
 	//                      = 21,593,500 + 2,217,680 (2,217,679.56 -> even) = 23,811,180
 	//   Liabilities        = 300,000 (USD only; Due-to eliminated)
 	//   Net assets         = Assets - Liab = 23,511,180
-	//   with               = 5,050,000 USD + 9,700,000 MXN/18.10
-	//                      = 5,050,000 + 535,912 (535,911.60 -> 535,912) = 5,585,912
-	//   without            = 23,511,180 - 5,585,912 = 17,925,268
+	//   with               = 1,050,000 USD + 9,700,000 MXN/18.10  (Building Fund monetary
+	//                        1,000,000; the Building 4,000,000 released, p-golive)
+	//                      = 1,050,000 + 535,912 (535,911.60 -> 535,912) = 1,585,912
+	//   without            = 23,511,180 - 1,585,912 = 21,925,268  (absorbs the release)
 	//   surplus            = 3,567,500 USD + 9,140,000 MXN/18.10
 	//                      = 3,567,500 + 504,972 (91,400.00/18.10 = 5,049.72) = 4,072,472
 	//
@@ -150,8 +153,8 @@ func TestBalanceSheetGolden(t *testing.T) {
 		"reports.balance_sheet.total.assets":                 23_811_180,
 		"reports.balance_sheet.total.liabilities":            300_000,
 		"reports.balance_sheet.total.net_assets":             23_511_180,
-		"reports.balance_sheet.na.without":                   17_925_268,
-		"reports.balance_sheet.na.with":                      5_585_912,
+		"reports.balance_sheet.na.without":                   21_925_268,
+		"reports.balance_sheet.na.with":                      1_585_912,
 		"reports.balance_sheet.na.surplus_of_which":          4_072_472,
 		"reports.balance_sheet.total.liabilities_net_assets": 23_811_180,
 	}
@@ -234,10 +237,16 @@ func TestBalanceSheetGolden(t *testing.T) {
 //	Building      +4,000,000  (asset)   ┴ Assets total 5,000,000
 //	Liabilities            0
 //	Net assets (plug A-L)  5,000,000  == FundBalancesAsOf{BuildingFund,USD} (list view)
-//	  with donor restrictions = 5,000,000  (the fund IS restricted, so with == its
-//	                                         asset-side balance)
-//	  without                 =         0  (= 5,000,000 - 5,000,000)
+//	  with donor restrictions = 1,000,000  (the fund IS restricted; with == its MONETARY
+//	                                         balance = Checking US cash. The Building
+//	                                         4,000,000 is DEPLOYED into a non-monetary
+//	                                         asset -> released from restriction, p-golive)
+//	  without                 = 4,000,000  (= 5,000,000 - 1,000,000; the released Building)
 //	  surplus to date         = 5,000,000  (the Contributions revenue, presented positive)
+//
+// This is the p-golive ARTICULATION oracle: with (1,000,000) + without (4,000,000) ==
+// total net assets (5,000,000) unchanged, and the released amount (4,000,000) is exactly
+// the Building the fund capitalized — restriction satisfied on acquisition.
 func TestBalanceSheetFundFilter(t *testing.T) {
 	f := fixture.New(t)
 	ctx := context.Background()
@@ -259,8 +268,8 @@ func TestBalanceSheetFundFilter(t *testing.T) {
 		"reports.balance_sheet.total.assets":                 5_000_000,
 		"reports.balance_sheet.total.liabilities":            0,
 		"reports.balance_sheet.total.net_assets":             5_000_000,
-		"reports.balance_sheet.na.with":                      5_000_000,
-		"reports.balance_sheet.na.without":                   0,
+		"reports.balance_sheet.na.with":                      1_000_000,
+		"reports.balance_sheet.na.without":                   4_000_000,
 		"reports.balance_sheet.na.surplus_of_which":          5_000_000,
 		"reports.balance_sheet.total.liabilities_net_assets": 5_000_000,
 	}
@@ -377,9 +386,9 @@ func TestBalanceSheetNativeSplit(t *testing.T) {
 		{"reports.balance_sheet.total.liabilities", "USD", 300_000},   // post-collapse (DueToIntl eliminated)
 		{"reports.balance_sheet.total.net_assets", "USD", 21_293_500}, // = assets - liabilities; FX Clearing contra-equity debit 974,000
 		{"reports.balance_sheet.total.net_assets", "MXN", 40_140_000},
-		{"reports.balance_sheet.na.with", "USD", 5_050_000},
-		{"reports.balance_sheet.na.with", "MXN", 9_700_000},
-		{"reports.balance_sheet.na.without", "USD", 16_243_500}, // discriminator: NOT 18,517,500 (net_assets - with)
+		{"reports.balance_sheet.na.with", "USD", 1_050_000},     // Beca Agua 50,000 + Building Fund MONETARY 1,000,000 (Building 4,000,000 released, p-golive)
+		{"reports.balance_sheet.na.with", "MXN", 9_700_000},     // Beca Agua cash-only; nothing deployed
+		{"reports.balance_sheet.na.without", "USD", 20_243_500}, // = net_assets 21,293,500 - with 1,050,000 (absorbs the 4,000,000 release)
 		{"reports.balance_sheet.na.without", "MXN", 30_440_000},
 		{"reports.balance_sheet.na.surplus_of_which", "USD", 3_567_500},
 		{"reports.balance_sheet.na.surplus_of_which", "MXN", 9_140_000},
@@ -395,9 +404,9 @@ func TestBalanceSheetNativeSplit(t *testing.T) {
 		}
 	}
 
-	// THE DISCRIMINATOR, spelled out: USD without-restriction (16,243,500) must NOT
-	// equal the fund-0 asset figure (17,543,500). A "without = fund 0" bug would
-	// return 17,543,500 here.
+	// THE DISCRIMINATOR, spelled out: USD without-restriction (20,243,500) is derived as
+	// total net assets - with (fund tagging), NOT the fund-0 asset figure (17,543,500). A
+	// "without = fund 0" bug would return 17,543,500 here.
 	usdWithout, _ := native("reports.balance_sheet.na.without", "USD")
 	if usdWithout == 17_543_500 {
 		t.Errorf("USD without-restriction == fund-0 asset figure 17,543,500: 'without = fund 0' bug")

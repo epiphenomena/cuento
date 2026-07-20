@@ -243,6 +243,31 @@ func (s *Store) CurrentCashFundBalancesAsOf(ctx context.Context, asof string, sc
 	return out, nil
 }
 
+// MonetaryFundBalancesAsOf returns, per (fund, currency), the fund's cumulative
+// MONETARY net balance to asof in scopeSub's descendant closure -- the sum over
+// monetary accounts only: assets flagged current_cash or receivable_payable PLUS
+// every liability (liabilities stored negative, so the result nets monetary assets
+// minus liabilities). INCLUDING the unrestricted group (fund id 0, D20). It is the
+// "still restricted" residual for net assets with donor restrictions (p-golive):
+// a restricted grant deployed into a NON-MONETARY asset (land, a building) has
+// satisfied its purpose and is released, so only the fund's net monetary position
+// remains restricted. Unlike FundBalancesAsOf (the whole asset side, which keeps a
+// deployed building restricted forever), this releases capitalized non-cash assets.
+func (s *Store) MonetaryFundBalancesAsOf(ctx context.Context, asof string, scopeSub ids.SubsidiaryID) ([]FundCurrencyAmount, error) {
+	rows, err := s.q.MonetaryFundBalancesAsOf(ctx, sqlc.MonetaryFundBalancesAsOfParams{
+		ID:   int64(scopeSub),
+		Date: asof,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store: monetary fund balances as of %s (scope %d): %w", asof, scopeSub, err)
+	}
+	out := make([]FundCurrencyAmount, len(rows))
+	for i, r := range rows {
+		out[i] = FundCurrencyAmount{FundID: r.FundID, Currency: r.Currency, Amount: r.Balance}
+	}
+	return out, nil
+}
+
 // FunctionalActivity returns, per (expense account, functional class, currency),
 // the signed activity over from <= date <= to in scopeSub's descendant closure.
 // Only expense splits carry a class (D21), so the result contains exactly the

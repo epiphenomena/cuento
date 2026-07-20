@@ -547,6 +547,67 @@ func (q *Queries) CurrentCashFundBalancesAsOf(ctx context.Context, arg CurrentCa
 	return items, nil
 }
 
+const monetaryFundBalancesAsOf = `-- name: MonetaryFundBalancesAsOf :many
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT COALESCE(sp.fund_id, 0) AS fund_id, t.currency,
+       CAST(SUM(sp.amount) AS INTEGER) AS balance
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+JOIN accounts a ON a.id = sp.account_id
+WHERE t.deleted = 0
+  AND ((a.type = 'asset' AND (a.current_cash = 1 OR a.receivable_payable = 1))
+       OR a.type = 'liability')
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY COALESCE(sp.fund_id, 0), t.currency
+ORDER BY fund_id, t.currency
+`
+
+type MonetaryFundBalancesAsOfParams struct {
+	ID   int64
+	Date string
+}
+
+type MonetaryFundBalancesAsOfRow struct {
+	FundID   ids.FundID
+	Currency string
+	Balance  int64
+}
+
+// Per (fund, currency): the fund's cumulative MONETARY net balance to asof in
+// scope -- assets flagged current_cash or receivable_payable PLUS every liability
+// account (liabilities stored negative, so the SUM nets monetary assets minus
+// liabilities). The "still restricted" residual for net assets with donor
+// restrictions (p-golive): a grant deployed into a non-monetary asset has satisfied
+// its purpose and is released. INCLUDES the unrestricted group (fund id 0 via
+// COALESCE, D20). Params: scopeSub, asof.
+func (q *Queries) MonetaryFundBalancesAsOf(ctx context.Context, arg MonetaryFundBalancesAsOfParams) ([]MonetaryFundBalancesAsOfRow, error) {
+	rows, err := q.db.QueryContext(ctx, monetaryFundBalancesAsOf, arg.ID, arg.Date)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MonetaryFundBalancesAsOfRow
+	for rows.Next() {
+		var i MonetaryFundBalancesAsOfRow
+		if err := rows.Scan(&i.FundID, &i.Currency, &i.Balance); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const periodActivity = `-- name: PeriodActivity :many
 WITH RECURSIVE scope(id) AS (
   SELECT s.id FROM subsidiaries s WHERE s.id = ?
