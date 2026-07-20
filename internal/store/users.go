@@ -188,6 +188,42 @@ func (s *Store) DisableUser(ctx context.Context, userID ids.UserID) error {
 	return nil
 }
 
+// EnableUser clears a user's disabled_at (re-enabling login) on the live row and
+// appends an op='update' users_versions row under ONE change (the mirror of
+// DisableUser). disabled_at IS part of the users_versions snapshot, so the audit
+// trail records who re-enabled the account and when.
+//
+// The system user (id 1) can never be managed (ErrSystemUser). Unlike disable,
+// enable needs no last-admin guard — re-enabling never locks anyone out. The
+// existence check runs BEFORE the write funnel so a crafted/missing id is a clean
+// ErrUserNotFound and no empty change row is committed (rule 14). Enabling an
+// already-enabled user is a harmless no-op write (disabled_at stays NULL).
+func (s *Store) EnableUser(ctx context.Context, userID ids.UserID) error {
+	if userID == systemUserID {
+		return ErrSystemUser
+	}
+	if _, err := s.q.GetUserRow(ctx, userID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		return fmt.Errorf("enable user (id %d): load: %w", userID, err)
+	}
+	_, err := s.write(ctx, "user.enable", "",
+		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
+			if err := q.SetUserDisabled(ctx, sqlc.SetUserDisabledParams{
+				DisabledAt: sql.NullString{Valid: false},
+				ID:         userID,
+			}); err != nil {
+				return fmt.Errorf("clear disabled: %w", err)
+			}
+			return insertUserVersion(ctx, q, changeID, "update", userID)
+		})
+	if err != nil {
+		return fmt.Errorf("enable user (id %d): %w", userID, err)
+	}
+	return nil
+}
+
 // ErrInvalidTxnPerm is returned by SetUserTxnPerm when the requested value is not
 // one of none/read/write. The migration's CHECK is only a backstop; the store is
 // the guard (mirroring ErrInvalidSetting / ErrInvalidTheme). The web layer maps it

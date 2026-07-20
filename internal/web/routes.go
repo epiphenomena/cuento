@@ -192,6 +192,7 @@ func (s *server) routes() []Route {
 		{http.MethodPost, "/admin/users", Admin, http.HandlerFunc(s.userCreate)},
 		{http.MethodGet, "/admin/users/{id}", Admin, http.HandlerFunc(s.userDetailPage)},
 		{http.MethodPost, "/admin/users/{id}/disable", Admin, http.HandlerFunc(s.userDisable)},
+		{http.MethodPost, "/admin/users/{id}/enable", Admin, http.HandlerFunc(s.userEnable)},
 		{http.MethodPost, "/admin/users/{id}/reset-password", Admin, http.HandlerFunc(s.userResetPassword)},
 		{http.MethodPost, "/admin/users/{id}/txn-perm", Admin, http.HandlerFunc(s.userSetTxnPerm)},
 		{http.MethodPost, "/admin/users/{id}/grants", Admin, http.HandlerFunc(s.userSetGrants)},

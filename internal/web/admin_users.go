@@ -28,9 +28,9 @@ import (
 
 // ---- list page -----------------------------------------------------------
 
-// adminUserRow is one rendered list row: the user plus a joined, comma-free view
-// of its report grants (for a compact list cell). Grants are the group names the
-// user holds; the per-user page manages them.
+// adminUserRow is one rendered list row: the identity + role + txn-perm + status
+// the list shows. Report grants are NOT on the row — they are dense and editable
+// only on the per-user detail page, so the list stays scannable.
 type adminUserRow struct {
 	ID          int64
 	Username    string
@@ -38,7 +38,6 @@ type adminUserRow struct {
 	IsAdmin     bool
 	TxnPerm     string
 	Disabled    bool
-	Grants      []string
 }
 
 // usersPageModel is the GET /admin/users model: the rows, the create-form option
@@ -72,8 +71,9 @@ func (s *server) usersPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, http.StatusOK, "admin_users.tmpl", s.newShellPage(r, model))
 }
 
-// buildUsersPage assembles the list rows (with each user's grants) and the create
-// form's option data.
+// buildUsersPage assembles the list rows and the create form's option data. Report
+// grants are omitted from the row (edited on the per-user detail page), so the list
+// does no per-user grant query.
 func (s *server) buildUsersPage(r *http.Request) (usersPageModel, error) {
 	ctx := r.Context()
 	users, err := s.store.ListUsers(ctx)
@@ -82,19 +82,9 @@ func (s *server) buildUsersPage(r *http.Request) (usersPageModel, error) {
 	}
 	model := usersPageModel{TxnPerms: txnPermOptions()}
 	for _, u := range users {
-		grants, err := s.store.ReportGrants(ctx, u.ID)
-		if err != nil {
-			return usersPageModel{}, err
-		}
-		// The list row shows the granted GROUP names only (the per-group program scope
-		// surfaces on the user-detail page, p27.4).
-		names := make([]string, 0, len(grants))
-		for _, g := range grants {
-			names = append(names, g.Group)
-		}
 		model.Rows = append(model.Rows, adminUserRow{
 			ID: int64(u.ID), Username: u.Username, DisplayName: u.DisplayName,
-			IsAdmin: u.IsAdmin, TxnPerm: u.TxnPerm, Disabled: u.Disabled, Grants: names,
+			IsAdmin: u.IsAdmin, TxnPerm: u.TxnPerm, Disabled: u.Disabled,
 		})
 	}
 	return model, nil
@@ -193,6 +183,20 @@ func (s *server) userCreate(w http.ResponseWriter, r *http.Request) {
 func (s *server) userDisable(w http.ResponseWriter, r *http.Request) {
 	id := ids.UserID(parseID(r.PathValue("id")))
 	if err := s.store.DisableUser(s.actorCtx(r.Context()), id); err != nil {
+		s.renderUsersGuard(w, r, err)
+		return
+	}
+	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+}
+
+// userEnable handles POST /admin/users/{id}/enable (Admin): clear disabled_at to
+// re-enable a disabled operator, the mirror of userDisable. The store refuses the
+// system user (ErrSystemUser) and 404s a missing id; both are mapped by
+// renderUsersGuard. Enabling never locks out the admin surface, so there is no
+// last-admin guard here.
+func (s *server) userEnable(w http.ResponseWriter, r *http.Request) {
+	id := ids.UserID(parseID(r.PathValue("id")))
+	if err := s.store.EnableUser(s.actorCtx(r.Context()), id); err != nil {
 		s.renderUsersGuard(w, r, err)
 		return
 	}

@@ -41,6 +41,20 @@
     </form>
   </section>
 
+  <section class="reset-pw-section">
+    <h2>{{t "admin.users.reset_password"}}</h2>
+    <form method="post" action="/admin/users/{{.ID}}/reset-password" class="reset-pw-form">
+      <div class="field">
+        <label for="ud-password">{{t "admin.users.new_password"}}</label>
+        <input id="ud-password" name="password" type="password" autocomplete="new-password"
+               aria-label="{{t "admin.users.new_password"}}">
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">{{t "admin.users.reset_password"}}</button>
+      </div>
+    </form>
+  </section>
+
   <section class="submit-section">
     <h2>{{t "admin.users.submit_title"}}</h2>
     <p class="hint">{{t "admin.users.submit_intro"}}</p>

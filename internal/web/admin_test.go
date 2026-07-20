@@ -204,6 +204,81 @@ func TestAdminUserDisable(t *testing.T) {
 	}
 }
 
+// TestAdminUsersListNoInlineResetForm: the list no longer carries the inline
+// password-reset form (it moved to the per-user edit page); the reset action posts
+// only from the detail page now.
+func TestAdminUsersListNoInlineResetForm(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	admin := mkUser(t, st, "boss", "none", true)
+	target := mkUser(t, st, "clerk", "write", false)
+
+	rec := asUser(t, h, sm, admin, http.MethodGet, "/admin/users", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /admin/users: status=%d", rec.Code)
+	}
+	if strings.Contains(rec.Body.String(), "/admin/users/"+itoa(int64(target))+"/reset-password") {
+		t.Errorf("list still contains an inline reset-password form; it should live on the edit page")
+	}
+}
+
+// TestAdminUsersListShowsEnableOnDisabled: a disabled user's row offers Enable (not
+// Disable) and posts to the /enable route.
+func TestAdminUsersListShowsEnableOnDisabled(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	admin := mkUser(t, st, "boss", "none", true)
+	target := mkUser(t, st, "goner", "write", false)
+	if err := st.DisableUser(store.WithActor(context.Background(), store.Actor{ID: 1}), target); err != nil {
+		t.Fatalf("DisableUser: %v", err)
+	}
+
+	rec := asUser(t, h, sm, admin, http.MethodGet, "/admin/users", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /admin/users: status=%d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "/admin/users/"+itoa(int64(target))+"/enable") {
+		t.Errorf("disabled user row does not offer an Enable action; body: %s", rec.Body.String())
+	}
+}
+
+// TestAdminUserEnable: an admin enables a disabled user over HTTP; the live row is
+// re-enabled.
+func TestAdminUserEnable(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	admin := mkUser(t, st, "boss", "none", true)
+	target := mkUser(t, st, "backfromexile", "write", false)
+	if err := st.DisableUser(store.WithActor(context.Background(), store.Actor{ID: 1}), target); err != nil {
+		t.Fatalf("DisableUser: %v", err)
+	}
+
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/users/"+itoa(int64(target))+"/enable", url.Values{})
+	if rec.Code >= 400 {
+		t.Fatalf("enable returned %d, body: %s", rec.Code, rec.Body.String())
+	}
+	u, err := st.AdminUserByID(context.Background(), target)
+	if err != nil {
+		t.Fatalf("AdminUserByID: %v", err)
+	}
+	if u.Disabled {
+		t.Errorf("user still disabled after POST enable")
+	}
+}
+
+// TestAdminUserDetailHasResetForm: the per-user edit page carries the reset-password
+// form (it moved here off the list).
+func TestAdminUserDetailHasResetForm(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	admin := mkUser(t, st, "boss", "none", true)
+	target := mkUser(t, st, "editme", "write", false)
+
+	rec := asUser(t, h, sm, admin, http.MethodGet, "/admin/users/"+itoa(int64(target)), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /admin/users/{id}: status=%d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "/admin/users/"+itoa(int64(target))+"/reset-password") {
+		t.Errorf("edit page does not contain the reset-password form; body: %s", rec.Body.String())
+	}
+}
+
 // TestAdminLastAdminGuardHTTP: disabling the SOLE admin over HTTP is blocked with a
 // 422 and the last-admin error message (the guard, no execution).
 func TestAdminLastAdminGuardHTTP(t *testing.T) {

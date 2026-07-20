@@ -191,8 +191,6 @@ other = "Report-group access and expense-submit are set on the user's own page, 
 other = "New user"
 [admin.users.empty]
 other = "No users yet."
-[admin.users.is_admin]
-other = "Admin"
 [admin.users.enabled]
 other = "Enabled"
 [admin.users.disabled]
@@ -201,6 +199,8 @@ other = "Disabled"
 other = "Permissions"
 [admin.users.disable]
 other = "Disable"
+[admin.users.enable]
+other = "Enable"
 [admin.users.reset_password]
 other = "Reset password"
 [admin.users.new_password]
@@ -209,14 +209,20 @@ other = "New password"
 other = "Saved."
 [admin.users.admin_note]
 other = "This user is an admin and has every permission."
+[admin.users.col.name]
+other = "Name"
 [admin.users.col.username]
-other = "User"
+other = "Username"
+[admin.users.col.role]
+other = "Role"
 [admin.users.col.admin]
 other = "Admin"
+[admin.users.role.admin]
+other = "Admin"
+[admin.users.role.user]
+other = "User"
 [admin.users.col.txn_perm]
 other = "Transactions"
-[admin.users.col.grants]
-other = "Report groups"
 [admin.users.col.status]
 other = "Status"
 [admin.users.col.actions]

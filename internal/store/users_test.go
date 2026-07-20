@@ -317,3 +317,64 @@ func TestCreateUserWithoutPasswordHash(t *testing.T) {
 		t.Errorf("password_hash = %v, want NULL for a passwordless user", ph)
 	}
 }
+
+// TestEnableUserClearsDisabledAndVersioned proves the re-enable path (mirror of
+// DisableUser): after disabling a user, EnableUser clears disabled_at on the live
+// row AND appends an op='update' users_versions snapshot (rule 5). Asserting
+// versioning alone is not enough — the live disabled_at must be NULL again.
+func TestEnableUserClearsDisabledAndVersioned(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	ctx := WithActor(context.Background(), Actor{ID: 1})
+
+	id, err := s.CreateUser(ctx, CreateUserInput{Username: "eve", DisplayName: "Eve", TxnPerm: "read"})
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	if err := s.DisableUser(ctx, id); err != nil {
+		t.Fatalf("DisableUser: %v", err)
+	}
+
+	if err := s.EnableUser(ctx, id); err != nil {
+		t.Fatalf("EnableUser: %v", err)
+	}
+
+	// Live row: disabled_at is cleared.
+	var da any
+	if err := d.QueryRow(`SELECT disabled_at FROM users WHERE id = ?`, id).Scan(&da); err != nil {
+		t.Fatalf("read disabled_at: %v", err)
+	}
+	if da != nil {
+		t.Errorf("disabled_at = %v, want NULL after EnableUser", da)
+	}
+
+	// The enable is versioned as op='update'.
+	testutil.AssertVersioned(t, d, "users", int64(id), "update")
+}
+
+// TestEnableUserRejectsSystemUser proves the system-user guard: EnableUser refuses
+// the seeded machine actor (id 1) with ErrSystemUser and writes nothing.
+func TestEnableUserRejectsSystemUser(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	ctx := WithActor(context.Background(), Actor{ID: 1})
+
+	err := s.EnableUser(ctx, systemUserID)
+	if !errors.Is(err, ErrSystemUser) {
+		t.Fatalf("EnableUser(system) = %v, want ErrSystemUser", err)
+	}
+}
+
+// TestEnableUserMissingID proves a crafted/missing id is a clean ErrUserNotFound
+// (the existence check runs before the write funnel opens, so no empty change row
+// is committed — rule 14).
+func TestEnableUserMissingID(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	ctx := WithActor(context.Background(), Actor{ID: 1})
+
+	err := s.EnableUser(ctx, ids.UserID(9999))
+	if !errors.Is(err, ErrUserNotFound) {
+		t.Fatalf("EnableUser(missing) = %v, want ErrUserNotFound", err)
+	}
+}

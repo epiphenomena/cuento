@@ -185,8 +185,6 @@ other = "El acceso a grupos de informes y el envio de gastos se configuran en la
 other = "Nuevo usuario"
 [admin.users.empty]
 other = "Aun no hay usuarios."
-[admin.users.is_admin]
-other = "Administrador"
 [admin.users.enabled]
 other = "Habilitado"
 [admin.users.disabled]
@@ -195,6 +193,8 @@ other = "Deshabilitado"
 other = "Permisos"
 [admin.users.disable]
 other = "Deshabilitar"
+[admin.users.enable]
+other = "Habilitar"
 [admin.users.reset_password]
 other = "Restablecer contrasena"
 [admin.users.new_password]
@@ -203,14 +203,20 @@ other = "Nueva contrasena"
 other = "Guardado."
 [admin.users.admin_note]
 other = "Este usuario es administrador y tiene todos los permisos."
+[admin.users.col.name]
+other = "Nombre"
 [admin.users.col.username]
 other = "Usuario"
+[admin.users.col.role]
+other = "Rol"
 [admin.users.col.admin]
 other = "Administrador"
+[admin.users.role.admin]
+other = "Administrador"
+[admin.users.role.user]
+other = "Usuario"
 [admin.users.col.txn_perm]
 other = "Transacciones"
-[admin.users.col.grants]
-other = "Grupos de informes"
 [admin.users.col.status]
 other = "Estado"
 [admin.users.col.actions]

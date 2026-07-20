@@ -36,10 +36,10 @@
   <table class="data-table admin-users-table">
     <thead>
       <tr>
+        <th>{{t "admin.users.col.name"}}</th>
         <th>{{t "admin.users.col.username"}}</th>
-        <th>{{t "admin.users.col.admin"}}</th>
+        <th>{{t "admin.users.col.role"}}</th>
         <th>{{t "admin.users.col.txn_perm"}}</th>
-        <th>{{t "admin.users.col.grants"}}</th>
         <th>{{t "admin.users.col.status"}}</th>
         <th>{{t "admin.users.col.actions"}}</th>
       </tr>
@@ -48,23 +48,21 @@
       {{range .Rows}}
       <tr class="user-row{{if .Disabled}} user-disabled{{end}}" data-username="{{.Username}}">
         <td class="user-name">
-          <a href="/admin/users/{{.ID}}">{{.Username}}</a>
-          {{if .DisplayName}}<span class="user-display">{{.DisplayName}}</span>{{end}}
+          <a href="/admin/users/{{.ID}}">{{if .DisplayName}}{{.DisplayName}}{{else}}{{.Username}}{{end}}</a>
         </td>
-        <td>{{if .IsAdmin}}{{t "admin.users.is_admin"}}{{else}}&mdash;{{end}}</td>
+        <td class="user-username">{{.Username}}</td>
+        <td class="user-role">{{if .IsAdmin}}{{t "admin.users.role.admin"}}{{else}}{{t "admin.users.role.user"}}{{end}}</td>
         <td class="user-perm">{{t (printf "admin.users.perm.%s" .TxnPerm)}}</td>
-        <td class="user-grants">
-          {{- range $i, $g := .Grants}}{{if $i}}, {{end}}{{$g}}{{else}}&mdash;{{end -}}
+        <td class="user-status">
+          {{if .Disabled}}<span class="badge">{{t "admin.users.disabled"}}</span>{{else}}<span class="badge badge-active">{{t "admin.users.enabled"}}</span>{{end}}
         </td>
-        <td>{{if .Disabled}}<span class="badge">{{t "admin.users.disabled"}}</span>{{else}}{{t "admin.users.enabled"}}{{end}}</td>
         <td class="user-actions">
-          <a class="btn btn-ghost" href="/admin/users/{{.ID}}">{{t "admin.users.permissions"}}</a>
-          {{if not .Disabled}}
-          <form method="post" action="/admin/users/{{.ID}}/reset-password" class="inline reset-pw-form">
-            <input name="password" type="password" autocomplete="new-password"
-                   placeholder="{{t "admin.users.new_password"}}" aria-label="{{t "admin.users.new_password"}}">
-            <button type="submit" class="btn btn-ghost">{{t "admin.users.reset_password"}}</button>
+          <a class="btn btn-ghost" href="/admin/users/{{.ID}}">{{t "common.edit"}}</a>
+          {{if .Disabled}}
+          <form method="post" action="/admin/users/{{.ID}}/enable" class="inline enable-form">
+            <button type="submit" class="btn btn-ghost">{{t "admin.users.enable"}}</button>
           </form>
+          {{else}}
           <form method="post" action="/admin/users/{{.ID}}/disable" class="inline disable-form">
             <button type="submit" class="btn btn-ghost">{{t "admin.users.disable"}}</button>
           </form>

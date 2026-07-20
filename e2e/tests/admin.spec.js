@@ -106,7 +106,7 @@ test('admin: create a user, set its permission, grant a report group, add a curr
   await expect(row.locator('.user-perm')).toHaveText(/no access/i);
 
   // --- set the user's txn_perm on the per-user detail page ---
-  await row.getByRole('link', { name: /permissions/i }).click();
+  await row.getByRole('link', { name: /^edit$/i }).click();
   await page.waitForURL('**/admin/users/*');
   await expect(page.locator('#ud-perm')).toBeVisible();
   await page.locator('#ud-perm').selectOption('write');
@@ -127,11 +127,10 @@ test('admin: create a user, set its permission, grant a report group, add a curr
   // The grant persisted: the box is checked on the fresh render.
   await expect(page.locator('form.grants-form input[type="checkbox"]').first()).toBeChecked();
 
-  // The list also shows the grant in the user's row (a non-empty grants cell).
+  // The list reflects the perm change on the user's row. (Report grants are no
+  // longer shown on the list row — they are edited on the per-user page.)
   await page.goto('/admin/users');
   const listRow = page.locator(`tr.user-row[data-username="${username}"]`);
-  await expect(listRow.locator('.user-grants')).not.toHaveText('—');
-  // And the perm change shows too.
   await expect(listRow.locator('.user-perm')).toHaveText(/read and write/i);
 
   // --- add a currency ---

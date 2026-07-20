@@ -128,7 +128,7 @@ test('report grant scope: a program-subtree-scoped "financial" grant filters inc
 
   // --- grant "financial" SCOPED to the Alpha program subtree via the per-group picker ---
   const opRow = page.locator(`tr.user-row[data-username="${operator}"]`);
-  await opRow.getByRole('link', { name: /permissions/i }).click();
+  await opRow.getByRole('link', { name: /^edit$/i }).click();
   await page.waitForURL('**/admin/users/*');
 
   const financialBox = page.locator('form.grants-form input[name="grant_financial"]');
@@ -173,7 +173,7 @@ test('report grant scope: a program-subtree-scoped "financial" grant filters inc
   await page.goto('/admin/users');
   await page
     .locator(`tr.user-row[data-username="${operator}"]`)
-    .getByRole('link', { name: /permissions/i })
+    .getByRole('link', { name: /^edit$/i })
     .click();
   await page.waitForURL('**/admin/users/*');
   // Keep the box checked, reset the program scope to org-wide (the empty first option).
