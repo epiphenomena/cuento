@@ -218,6 +218,99 @@ func TestBalanceSheetGolden(t *testing.T) {
 	checkGolden(t, "balance_sheet.csv", csvBuf.Bytes())
 }
 
+// TestBalanceSheetFundFilter runs the Statement of Position NARROWED to the Building
+// Fund (p15.4 fund selector) and hand-verifies that it presents that single fund's OWN
+// position, that the identity A = L + NA holds for the fund (its net assets == its fund
+// balance), and that a single-fund view has NO intercompany elimination.
+//
+// HAND-VERIFIED (Building Fund, USD-native, as-of 2026-06-30 — the fixture oracle):
+// the fund is US-only, restricted ("purpose"), and its ledger is:
+//   - Contributions (revenue) received     5,000,000 minor (a credit)
+//   - Building purchase: Building +4,000,000 (asset) / Checking US -4,000,000 (asset)
+//
+// so its per-account balances are:
+//
+//	Checking US   +1,000,000  (asset)   ┐
+//	Building      +4,000,000  (asset)   ┴ Assets total 5,000,000
+//	Liabilities            0
+//	Net assets (plug A-L)  5,000,000  == FundBalancesAsOf{BuildingFund,USD} (list view)
+//	  with donor restrictions = 5,000,000  (the fund IS restricted, so with == its
+//	                                         asset-side balance)
+//	  without                 =         0  (= 5,000,000 - 5,000,000)
+//	  surplus to date         = 5,000,000  (the Contributions revenue, presented positive)
+func TestBalanceSheetFundFilter(t *testing.T) {
+	f := fixture.New(t)
+	ctx := context.Background()
+	rep := balanceSheetReport(t)
+
+	// USD-native (no target currency) so every figure is the exact fixture minor unit.
+	p := reports.Params{
+		Scope: reports.SubsidiaryID(f.IDs.Root),
+		AsOf:  f.Expected.AsOf, // 2026-06-30
+		Lang:  "en",
+		Fund:  reports.FundID(f.IDs.BuildingFund),
+	}
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run fund-filtered balance sheet: %v", err)
+	}
+
+	want := map[string]int64{
+		"reports.balance_sheet.total.assets":                 5_000_000,
+		"reports.balance_sheet.total.liabilities":            0,
+		"reports.balance_sheet.total.net_assets":             5_000_000,
+		"reports.balance_sheet.na.with":                      5_000_000,
+		"reports.balance_sheet.na.without":                   0,
+		"reports.balance_sheet.na.surplus_of_which":          5_000_000,
+		"reports.balance_sheet.total.liabilities_net_assets": 5_000_000,
+	}
+	for key, w := range want {
+		got, ok := labelAmount(table, key)
+		if !ok {
+			t.Errorf("no row for label %q", key)
+			continue
+		}
+		if got != w {
+			t.Errorf("fund-filtered %q = %d, want %d", key, got, w)
+		}
+	}
+
+	// The identity holds for the single fund: Assets == Liabilities + Net Assets.
+	if want["reports.balance_sheet.total.assets"] !=
+		want["reports.balance_sheet.total.liabilities"]+want["reports.balance_sheet.total.net_assets"] {
+		t.Errorf("fund identity broken: A %d != L %d + NA %d",
+			want["reports.balance_sheet.total.assets"],
+			want["reports.balance_sheet.total.liabilities"],
+			want["reports.balance_sheet.total.net_assets"])
+	}
+	// without + with == net assets.
+	if want["reports.balance_sheet.na.without"]+want["reports.balance_sheet.na.with"] !=
+		want["reports.balance_sheet.total.net_assets"] {
+		t.Errorf("without + with != net assets for the fund")
+	}
+
+	// The fund's own asset accounts appear as rows; unrelated MX accounts do NOT (the
+	// Building Fund is US-only, holds only Checking US + Building).
+	if _, ok := nameAmount(table, "Building"); !ok {
+		t.Errorf("Building asset row missing from the Building Fund statement")
+	}
+	if _, ok := nameAmount(table, "Checking MX"); ok {
+		t.Errorf("Checking MX (not a Building Fund account) leaked into the fund statement")
+	}
+
+	// NO intercompany warning/elimination for a single-fund view (not a consolidation).
+	for _, row := range table.Rows {
+		if row.Kind == reports.RowWarning {
+			t.Errorf("intercompany warning row present on a single-fund statement: %+v", row)
+		}
+	}
+	for _, name := range []string{"Due from RV Mexico", "Due to RV Internacional"} {
+		if _, ok := nameAmount(table, name); ok {
+			t.Errorf("intercompany account %q appeared in a single-fund view (should be absent — the fund holds none)", name)
+		}
+	}
+}
+
 // hasDrill reports whether the account row named name carries a drillable cell.
 func hasDrill(t reports.Table, name string) bool {
 	for _, row := range t.Rows {

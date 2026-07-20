@@ -47,10 +47,14 @@ const IncomeStatementReportID = "income_statement"
 // currency controls; the shared web params form renders them from the ParamsSpec.
 func registerIncomeStatement(reg *Registry) {
 	reg.Register(Report{
-		ID:         IncomeStatementReportID,
-		TitleKey:   "reports.income_statement.title",
-		Group:      "financial",
-		ParamsSpec: ParamsSpec{Period: true, Granularity: true, Currency: true},
+		ID:       IncomeStatementReportID,
+		TitleKey: "reports.income_statement.title",
+		Group:    "financial",
+		// p15.5 filters: Fund + Program narrow the statement to one fund's and/or one
+		// program's R/E flows (the "— all funds —" / "— all programs —" defaults leave the
+		// org-wide statement byte-identical). Program is the user SELECTOR; ProgramDimensioned
+		// (below) is the DISTINCT grant-subtree filter -- both funnel into Params.ProgramScope.
+		ParamsSpec: ParamsSpec{Period: true, Granularity: true, Currency: true, Fund: true, Program: true},
 		Run:        runIncomeStatement,
 		Tree:       true, // p26.26: the R/E tree nests placeholder parents over leaves.
 		// p29.11: the monthly/quarterly comparative statement fans into many period
@@ -79,6 +83,29 @@ type period struct {
 // closing with the net surplus/deficit (Revenue - Expense) per column.
 func runIncomeStatement(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 	target := p.TargetCurrency
+
+	// PROGRAM selector (p15.5): a user PROGRAM pick narrows the statement to that
+	// program's subtree (self + descendants, D24), reusing the p27.4 program-scope
+	// machinery -- resolve the pick to its subtree ids and INTERSECT with any grant-
+	// imposed ProgramScope (a grant clamps what the user may see; the web layer already
+	// clamped an out-of-scope pick to 0). The resolved scope goes on BOTH the toolkit's
+	// live Params (which periodActivityRows reads) and the local p, so the fund-filtered
+	// and program-scoped reads honor it. No pick + no grant leaves ProgramScope empty, so
+	// the unscoped path is byte-for-byte unchanged (goldens do not move).
+	if p.Program != 0 {
+		scope, err := tk.programSelectionScope(ctx, p.Program, p.ProgramScope)
+		if err != nil {
+			return Table{}, err
+		}
+		p.ProgramScope = scope
+		tk.Params.ProgramScope = scope
+	} else if len(p.ProgramScope) != 0 {
+		// A grant scope with no user pick: mirror it onto the toolkit (already set by the
+		// web layer, but keep the two in lockstep for a hand-built Params in tests).
+		tk.Params.ProgramScope = p.ProgramScope
+	}
+	// A FUND pick must reach periodActivityRows via the toolkit's live Params too.
+	tk.Params.Fund = p.Fund
 
 	periods, err := buildPeriods(tk, p)
 	if err != nil {

@@ -58,10 +58,13 @@ const BalanceSheetReportID = "balance_sheet"
 // controls.
 func registerBalanceSheet(reg *Registry) {
 	reg.Register(Report{
-		ID:         BalanceSheetReportID,
-		TitleKey:   "reports.balance_sheet.title",
-		Group:      "financial",
-		ParamsSpec: ParamsSpec{AsOf: true, Currency: true, Detail: true},
+		ID:       BalanceSheetReportID,
+		TitleKey: "reports.balance_sheet.title",
+		Group:    "financial",
+		// p15.4 filter: Fund narrows the statement to one fund's OWN position (the
+		// "— all funds —" default leaves the org-wide statement byte-identical). A single
+		// fund is not a consolidation, so it carries no intercompany elimination/CTA.
+		ParamsSpec: ParamsSpec{AsOf: true, Currency: true, Detail: true, Fund: true},
 		Run:        runBalanceSheet,
 		Tree:       true, // p26.26: A/L/net-asset sections nest their account lines.
 	})
@@ -102,13 +105,33 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 		m   map[string]int64
 		err error
 	}
-	rnaCh := make(chan rnaResult, 1)
-	go func() {
-		m, err := tk.restrictedNetAssets(ctx, p.Scope, p.AsOf)
-		rnaCh <- rnaResult{m, err}
-	}()
+	// FUND selector (p15.4): a fund-scoped Statement of Position presents that single
+	// fund's OWN assets, liabilities, and net assets. Its per-account balances come from
+	// the fund-filtered ledger (FundBalancesAsOfByAccount), NOT the whole-scope
+	// SubtreeBalancesAsOf. A single fund is NOT a consolidation, so there is no
+	// intercompany elimination or CTA reclassification (icAccts stays empty, consolidated
+	// false below). "With donor restrictions" for a single fund is the fund's OWN
+	// asset-side balance when the fund is restricted, else zero -- computed from the same
+	// fund balances rather than the org-wide restricted-fund scan. When no fund is chosen
+	// this whole branch is skipped, so the org-wide statement is byte-identical (goldens
+	// do not move).
+	fundFilter := p.Fund != 0
 
-	balances, err := tk.BalancesAsOf(ctx, Scope{Sub: p.Scope}, p.AsOf, ConvertOpts{Mode: RateNone})
+	rnaCh := make(chan rnaResult, 1)
+	if !fundFilter {
+		go func() {
+			m, err := tk.restrictedNetAssets(ctx, p.Scope, p.AsOf)
+			rnaCh <- rnaResult{m, err}
+		}()
+	}
+
+	var balances map[AccountID][]CurAmt
+	var err error
+	if fundFilter {
+		balances, err = tk.FundBalancesAsOfByAccount(ctx, p.Fund, Scope{Sub: p.Scope}, p.AsOf)
+	} else {
+		balances, err = tk.BalancesAsOf(ctx, Scope{Sub: p.Scope}, p.AsOf, ConvertOpts{Mode: RateNone})
+	}
 	if err != nil {
 		return Table{}, err
 	}
@@ -139,6 +162,12 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	consolidated, err := tk.isConsolidated(ctx, p.Scope)
 	if err != nil {
 		return Table{}, err
+	}
+	// A single-fund view is never a consolidation: the fund's intercompany legs (if any)
+	// are its genuine due-to/due-from balances, shown as ordinary rows, never eliminated
+	// or reclassified into a CTA line (p15.4 fund filter).
+	if fundFilter {
+		consolidated = false
 	}
 	icAccts := map[AccountID]bool{}
 	if consolidated {
@@ -207,11 +236,27 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 		netAssetsTotal[ccy] -= v
 	}
 
-	rna := <-rnaCh
-	if rna.err != nil {
-		return Table{}, rna.err
+	var withRestriction map[string]int64
+	if fundFilter {
+		// Single-fund "with donor restrictions": the fund's OWN asset-side (unexpended)
+		// balance when the fund is RESTRICTED (purpose/time/perpetual), else empty. By fund
+		// conservation the fund's A - L (the plug above) already equals its net-asset
+		// balance, so for a restricted fund with == the plug's asset-side and without nets
+		// to the fund's own liabilities offset; for an unrestricted fund with == 0 and the
+		// whole plug reads as without-restriction. This mirrors the org-wide restrictedNetAssets
+		// (restricted funds' asset-side balances) narrowed to the one chosen fund.
+		wr, err := tk.fundRestrictedNetAssets(ctx, p.Fund, assetTotal)
+		if err != nil {
+			return Table{}, err
+		}
+		withRestriction = wr
+	} else {
+		rna := <-rnaCh
+		if rna.err != nil {
+			return Table{}, rna.err
+		}
+		withRestriction = rna.m
 	}
-	withRestriction := rna.m
 	withoutRestriction := map[string]int64{}
 	for ccy, v := range netAssetsTotal {
 		withoutRestriction[ccy] = v - withRestriction[ccy]
@@ -757,6 +802,53 @@ func (tk *Toolkit) restrictedNetAssets(ctx context.Context, scope SubsidiaryID, 
 		if r.FundID != 0 && restricted[r.FundID] {
 			out[r.Currency] += r.Amount
 		}
+	}
+	return out, nil
+}
+
+// FundBalancesAsOfByAccount returns ONE fund's per-(account, currency) native cumulative
+// balances as of d in the scope (p15.4 fund selector). It mirrors BalancesAsOf(RateNone)
+// but reads the fund-filtered store query, so the balance sheet's classification/plug/
+// identity logic runs unchanged over a single fund's ledger. Native only (the balance
+// sheet converts downstream); a fund's whole-fund sum is zero by conservation (D20/Z10),
+// so its Assets - Liabilities equals its net-asset balance and A = L + NA holds.
+func (tk *Toolkit) FundBalancesAsOfByAccount(ctx context.Context, f FundID, s Scope, d string) (map[AccountID][]CurAmt, error) {
+	rows, err := tk.store.FundSubtreeBalancesAsOf(ctx, f, d, s.Sub)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[AccountID][]CurAmt, len(rows))
+	for _, r := range rows {
+		acct := AccountID(r.AccountID)
+		out[acct] = append(out[acct], CurAmt{Currency: r.Currency, Minor: r.Amount})
+	}
+	return out, nil
+}
+
+// fundRestrictedNetAssets returns the single fund's "net assets with donor restrictions"
+// per currency: the fund's asset-side balance (assetTotal, already positive-normalized)
+// when the fund is RESTRICTED (non-empty Restriction), else an empty map (an unrestricted
+// fund contributes nothing to the restricted line, so its whole plug reads as
+// without-restriction). It mirrors restrictedNetAssets narrowed to one fund. assetTotal is
+// the caller's already-computed per-currency asset section total for this fund.
+func (tk *Toolkit) fundRestrictedNetAssets(ctx context.Context, f FundID, assetTotal map[string]int64) (map[string]int64, error) {
+	funds, err := tk.store.ListFunds(ctx)
+	if err != nil {
+		return nil, err
+	}
+	restricted := false
+	for _, fd := range funds {
+		if fd.ID == f {
+			restricted = fd.Restriction != ""
+			break
+		}
+	}
+	out := map[string]int64{}
+	if !restricted {
+		return out, nil
+	}
+	for ccy, v := range assetTotal {
+		out[ccy] = v
 	}
 	return out, nil
 }

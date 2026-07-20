@@ -143,6 +143,63 @@ func (s *Store) PeriodActivity(ctx context.Context, from, to string, scopeSub id
 	return out, nil
 }
 
+// FundSubtreeBalancesAsOf returns, per (account, currency), the cumulative signed
+// balance of ONE fund's non-deleted splits whose transaction date <= asof and whose
+// subsidiary is in scopeSub's descendant closure (D18). It is the fund-FILTERED
+// variant of SubtreeBalancesAsOf -- the source for the Statement of Position's FUND
+// selector (p15.4): a single fund's OWN assets/liabilities/net-assets. Because every
+// transaction nets to zero within a fund group (D20/Z10), the fund's A - L equals its
+// net-asset balance, so the balance-sheet identity holds for the fund.
+func (s *Store) FundSubtreeBalancesAsOf(ctx context.Context, fundID ids.FundID, asof string, scopeSub ids.SubsidiaryID) ([]AccountCurrencyAmount, error) {
+	rows, err := s.q.FundSubtreeBalancesAsOf(ctx, sqlc.FundSubtreeBalancesAsOfParams{
+		ID:     int64(scopeSub),
+		FundID: sql.NullInt64{Int64: int64(fundID), Valid: true},
+		Date:   asof,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store: fund subtree balances (fund %d) as of %s (scope %d): %w", fundID, asof, scopeSub, err)
+	}
+	out := make([]AccountCurrencyAmount, len(rows))
+	for i, r := range rows {
+		out[i] = AccountCurrencyAmount{AccountID: r.AccountID, Currency: r.Currency, Amount: r.Balance}
+	}
+	return out, nil
+}
+
+// FundPeriodActivity returns, per (program, account, currency), the signed activity
+// over the closed interval from <= date <= to in scopeSub's descendant closure (D18)
+// restricted to ONE fund. It is the fund-FILTERED variant of PeriodActivity -- the
+// source for the Statement of Activities' FUND selector (p15.5). It keeps the program
+// dimension (nullable, ProgramID 0 = untagged) so the SAME rows can ALSO be narrowed
+// to a program subtree in the report layer when a user picks both a fund and a
+// program. Rows are raw per (program, account); the report layer keeps only R/E
+// accounts, exactly as it does over PeriodActivity.
+func (s *Store) FundPeriodActivity(ctx context.Context, fundID ids.FundID, from, to string, scopeSub ids.SubsidiaryID) ([]ProgramCell, error) {
+	rows, err := s.q.FundPeriodActivity(ctx, sqlc.FundPeriodActivityParams{
+		ID:     int64(scopeSub),
+		FundID: sql.NullInt64{Int64: int64(fundID), Valid: true},
+		Date:   from,
+		Date_2: to,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store: fund period activity (fund %d) %s..%s (scope %d): %w", fundID, from, to, scopeSub, err)
+	}
+	out := make([]ProgramCell, len(rows))
+	for i, r := range rows {
+		// program_id is nullable here (a fund's asset/liability legs carry none); an
+		// untagged split maps to ProgramID 0, which the report layer's InProgramScope
+		// treats as out-of-any-subtree, so only R/E (program-tagged) rows survive a
+		// program filter.
+		out[i] = ProgramCell{
+			ProgramID: ids.ProgramID(r.ProgramID.Int64),
+			AccountID: r.AccountID,
+			Currency:  r.Currency,
+			Amount:    r.Activity,
+		}
+	}
+	return out, nil
+}
+
 // FundBalancesAsOf returns, per (fund, currency), the fund's cumulative
 // unexpended balance to asof in scopeSub's descendant closure, INCLUDING the
 // unrestricted group (fund id 0, D20). It is the ASSET-side sum: a whole-fund sum

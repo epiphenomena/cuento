@@ -208,6 +208,61 @@ WHERE t.deleted = 0
 GROUP BY sp.program_id, sp.account_id, t.currency
 ORDER BY sp.program_id, sp.account_id, t.currency;
 
+-- name: FundPeriodActivity :many
+-- Per (account, program, currency): signed activity over from <= date <= to in
+-- scope, restricted to ONE fund (sp.fund_id = ?). It is the fund-FILTERED variant
+-- of PeriodActivity, used by the Statement of Activities' FUND selector (p15.5): a
+-- fund-scoped income statement lists only the revenue/expense flows tagged that
+-- fund. The program_id column is kept (nullable) so the SAME row set can ALSO be
+-- narrowed to a program subtree in the report layer (InProgramScope) when a user
+-- picks BOTH a fund and a program -- one query serves both filters. Only a real fund
+-- (>0) is ever a valid selection (fund 0 is the synthetic unrestricted group,
+-- list-only), so the exact-match sp.fund_id = ? never needs a NULL branch. Non-R/E
+-- splits of the fund (its asset/liability legs) are returned too but the caller keeps
+-- only R/E accounts, exactly as it does over PeriodActivity. Params: scopeSub, from,
+-- to, fund_id.
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT sp.account_id, sp.program_id, t.currency,
+       CAST(SUM(sp.amount) AS INTEGER) AS activity
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+WHERE t.deleted = 0
+  AND sp.fund_id = ?
+  AND t.date >= ?
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY sp.account_id, sp.program_id, t.currency
+ORDER BY sp.account_id, sp.program_id, t.currency;
+
+-- name: FundSubtreeBalancesAsOf :many
+-- Per (account, currency): cumulative signed balance of ONE fund's non-deleted
+-- splits whose txn date <= asof in scope (sp.fund_id = ?). It is the fund-FILTERED
+-- variant of SubtreeBalancesAsOf, the source for the Statement of Position's FUND
+-- selector (p15.4): a fund-scoped balance sheet lists that fund's OWN assets,
+-- liabilities, and net assets. Because every transaction nets to zero WITHIN a fund
+-- group (D20/Z10), the fund's Assets - Liabilities equals its net-asset (fund)
+-- balance, so the balance-sheet identity A = L + NA holds for the single fund exactly
+-- as it does org-wide. Only a real fund (>0) is ever selected. Params: scopeSub,
+-- fund_id, asof.
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT sp.account_id, t.currency, CAST(SUM(sp.amount) AS INTEGER) AS balance
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+WHERE t.deleted = 0
+  AND sp.fund_id = ?
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY sp.account_id, t.currency
+ORDER BY sp.account_id, t.currency;
+
 -- name: BudgetKeyActivity :many
 -- Per (subsidiary, account, fund, program, currency, date): signed net-debit
 -- activity of the revenue/expense splits over from <= date <= to in scope. This is

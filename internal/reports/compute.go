@@ -169,6 +169,18 @@ func (tk *Toolkit) BalancesAsOf(ctx context.Context, s Scope, d string, o Conver
 // CALLER (Activity) still drops excl[AccountID] rows over this output exactly as it does
 // over the unscoped store.PeriodActivity rows -- the helper does not (re)apply excl itself.
 func (tk *Toolkit) periodActivityRows(ctx context.Context, from, to string, sub ids.SubsidiaryID) ([]store.AccountCurrencyAmount, error) {
+	// FUND selector (p15.5): a fund-scoped Statement of Activities reads only the R/E
+	// flows tagged the chosen fund, via the fund-filtered store query. It carries the
+	// program dimension too, so a user who picks BOTH a fund and a program (folded into
+	// ProgramScope by the report) filters on the same rows. When no fund is chosen this
+	// branch is skipped entirely, so the unscoped path is byte-for-byte unchanged.
+	if tk.Params.Fund != 0 {
+		rows, err := tk.store.FundPeriodActivity(ctx, tk.Params.Fund, from, to, sub)
+		if err != nil {
+			return nil, err
+		}
+		return collapseProgramCells(rows, tk.Params), nil
+	}
 	if len(tk.Params.ProgramScope) == 0 {
 		return tk.store.PeriodActivity(ctx, from, to, sub)
 	}
@@ -176,16 +188,24 @@ func (tk *Toolkit) periodActivityRows(ctx context.Context, from, to string, sub 
 	if err != nil {
 		return nil, err
 	}
-	// Collapse the in-scope program rows to (account, currency), summing across the
-	// granted subtree's programs; a sibling subtree's split is dropped BEFORE the sum,
-	// so it contributes to no cell (including a rolled account total downstream).
+	return collapseProgramCells(rows, tk.Params), nil
+}
+
+// collapseProgramCells folds program-keyed activity cells down to (account, currency),
+// dropping every row whose program is outside the active program scope (InProgramScope:
+// a grant subtree AND/OR a user's program selection, both carried in Params.ProgramScope)
+// BEFORE the sum, so a sibling subtree contributes to no cell (including a rolled account
+// total downstream). It is the shared collapse the program-scoped PeriodActivity path and
+// the fund-filtered path both use; the caller preserves AccountID so the D19 IC-exclusion
+// still applies over the output.
+func collapseProgramCells(rows []store.ProgramCell, p Params) []store.AccountCurrencyAmount {
 	type key struct {
 		acct AccountID
 		ccy  string
 	}
 	sum := make(map[key]int64, len(rows))
 	for _, r := range rows {
-		if !tk.Params.InProgramScope(ProgramID(r.ProgramID)) {
+		if !p.InProgramScope(ProgramID(r.ProgramID)) {
 			continue
 		}
 		sum[key{r.AccountID, r.Currency}] += r.Amount
@@ -194,7 +214,7 @@ func (tk *Toolkit) periodActivityRows(ctx context.Context, from, to string, sub 
 	for k, amt := range sum {
 		out = append(out, store.AccountCurrencyAmount{AccountID: k.acct, Currency: k.ccy, Amount: amt})
 	}
-	return out, nil
+	return out
 }
 
 // Activity returns, per account, the per-currency signed activity over [from,to] in
@@ -1376,6 +1396,36 @@ func (tk *Toolkit) consolidatedICExclusions(ctx context.Context, scope ids.Subsi
 		set[AccountID(id)] = true
 	}
 	return set, nil
+}
+
+// programSelectionScope resolves a user's PROGRAM pick to the ProgramScope a
+// program-dimensioned report filters on: the picked program's subtree (self +
+// descendants, D24) INTERSECTED with any grant-imposed scope. When grant is empty
+// (admin / unscoped grant) the subtree is returned verbatim. When grant is non-empty
+// only the picked-subtree ids that are ALSO granted survive, so a user can never widen
+// past their grant (the web layer additionally clamps an out-of-grant pick to 0, so the
+// intersection here is normally the whole picked subtree). The result is never empty for
+// a valid in-grant pick (a subtree always includes self). p15.5 reuses this for the
+// income statement's fund/program filters.
+func (tk *Toolkit) programSelectionScope(ctx context.Context, pick ProgramID, grant []ProgramID) ([]ProgramID, error) {
+	subtree, err := tk.store.ProgramSubtree(ctx, pick)
+	if err != nil {
+		return nil, err
+	}
+	if len(grant) == 0 {
+		return subtree, nil
+	}
+	granted := make(map[ProgramID]bool, len(grant))
+	for _, id := range grant {
+		granted[id] = true
+	}
+	out := make([]ProgramID, 0, len(subtree))
+	for _, id := range subtree {
+		if granted[id] {
+			out = append(out, id)
+		}
+	}
+	return out, nil
 }
 
 // reAccounts returns the set of revenue/expense account ids (for NetIncome). It

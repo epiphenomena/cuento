@@ -665,6 +665,127 @@ func (q *Queries) ProgramActivity(ctx context.Context, arg ProgramActivityParams
 	return items, nil
 }
 
+const fundPeriodActivity = `-- name: FundPeriodActivity :many
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT sp.account_id, sp.program_id, t.currency,
+       CAST(SUM(sp.amount) AS INTEGER) AS activity
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+WHERE t.deleted = 0
+  AND sp.fund_id = ?
+  AND t.date >= ?
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY sp.account_id, sp.program_id, t.currency
+ORDER BY sp.account_id, sp.program_id, t.currency
+`
+
+type FundPeriodActivityParams struct {
+	ID     int64
+	FundID sql.NullInt64
+	Date   string
+	Date_2 string
+}
+
+type FundPeriodActivityRow struct {
+	AccountID ids.AccountID
+	ProgramID sql.NullInt64
+	Currency  string
+	Activity  int64
+}
+
+// Per (account, program, currency): signed activity over from <= date <= to in
+// scope, restricted to ONE fund. The fund-FILTERED variant of PeriodActivity for
+// the Statement of Activities' FUND selector (p15.5). Params: scopeSub, fund_id,
+// from, to.
+func (q *Queries) FundPeriodActivity(ctx context.Context, arg FundPeriodActivityParams) ([]FundPeriodActivityRow, error) {
+	rows, err := q.db.QueryContext(ctx, fundPeriodActivity, arg.ID, arg.FundID, arg.Date, arg.Date_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FundPeriodActivityRow
+	for rows.Next() {
+		var i FundPeriodActivityRow
+		if err := rows.Scan(
+			&i.AccountID,
+			&i.ProgramID,
+			&i.Currency,
+			&i.Activity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const fundSubtreeBalancesAsOf = `-- name: FundSubtreeBalancesAsOf :many
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT sp.account_id, t.currency, CAST(SUM(sp.amount) AS INTEGER) AS balance
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+WHERE t.deleted = 0
+  AND sp.fund_id = ?
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY sp.account_id, t.currency
+ORDER BY sp.account_id, t.currency
+`
+
+type FundSubtreeBalancesAsOfParams struct {
+	ID     int64
+	FundID sql.NullInt64
+	Date   string
+}
+
+type FundSubtreeBalancesAsOfRow struct {
+	AccountID ids.AccountID
+	Currency  string
+	Balance   int64
+}
+
+// Per (account, currency): cumulative signed balance of ONE fund's non-deleted
+// splits whose txn date <= asof in scope. The fund-FILTERED variant of
+// SubtreeBalancesAsOf for the Statement of Position's FUND selector (p15.4).
+// Params: scopeSub, fund_id, asof.
+func (q *Queries) FundSubtreeBalancesAsOf(ctx context.Context, arg FundSubtreeBalancesAsOfParams) ([]FundSubtreeBalancesAsOfRow, error) {
+	rows, err := q.db.QueryContext(ctx, fundSubtreeBalancesAsOf, arg.ID, arg.FundID, arg.Date)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FundSubtreeBalancesAsOfRow
+	for rows.Next() {
+		var i FundSubtreeBalancesAsOfRow
+		if err := rows.Scan(&i.AccountID, &i.Currency, &i.Balance); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const registerPage = `-- name: RegisterPage :many
 WITH RECURSIVE des(id) AS (
   SELECT a.id FROM accounts a WHERE a.id = ?

@@ -420,6 +420,154 @@ func TestIncomeStatementNativeNet(t *testing.T) {
 	}
 }
 
+// TestIncomeStatementFundFilter narrows the Statement of Activities to ONE fund (Beca
+// Agua, p15.5 fund selector) and hand-verifies the fund's R/E flows via the native
+// (rate-independent) data layer, plus that unrelated accounts drop from the render.
+//
+// HAND-VERIFIED (Beca Agua, native, full span — the fixture oracle):
+//
+//	Revenue  GovGrants  USD 200,000  (2,000.00) + MXN 10,000,000 (100,000.00)  [credits]
+//	Expense             USD 150,000  (1,500.00) + MXN    300,000 (3,000.00)    [debits]
+//
+// So the fund's native R/E net-debit sums are USD -50,000 (200,000 credit - 150,000
+// debit => surplus, net-debit negative) and MXN -9,700,000; presented as a positive
+// surplus USD 50,000 / MXN 9,700,000.
+func TestIncomeStatementFundFilter(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := context.Background()
+
+	// Fund in Params => periodActivityRows reads the fund-filtered store query.
+	p := isGoldenParams(f)
+	p.Granularity = reports.GranNone
+	p.Fund = reports.FundID(f.IDs.BecaAgua)
+	tk := reports.NewToolkit(f.Store, p)
+
+	nat, err := tk.Activity(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)},
+		f.Expected.ActivityFrom, f.Expected.ActivityTo, reports.ConvertOpts{Mode: reports.RateNone})
+	if err != nil {
+		t.Fatalf("fund-filtered activity native: %v", err)
+	}
+	// Sum the R/E accounts' native activity: it must equal Beca Agua's flows ONLY.
+	reIDs := []reports.AccountID{
+		f.IDs.Contributions, f.IDs.GovernmentGrants, f.IDs.ProgramFees, f.IDs.EventIncome,
+		f.IDs.Salaries, f.IDs.ProgramSupplies, f.IDs.FoodPurchases, f.IDs.Occupancy,
+		f.IDs.Insurance, f.IDs.BankFees, f.IDs.EventCosts,
+	}
+	var usd, mxn int64
+	for _, id := range reIDs {
+		for _, a := range nat[reports.AccountID(id)] {
+			switch a.Currency {
+			case "USD":
+				usd += a.Minor
+			case "MXN":
+				mxn += a.Minor
+			}
+		}
+	}
+	if usd != -50_000 {
+		t.Errorf("Beca Agua native USD R/E net = %d, want -50000 (200,000 credit - 150,000 debit)", usd)
+	}
+	if mxn != -9_700_000 {
+		t.Errorf("Beca Agua native MXN R/E net = %d, want -9700000 (10,000,000 credit - 300,000 debit)", mxn)
+	}
+	// Only Beca Agua's revenue account (GovernmentGrants) carries revenue; Contributions
+	// (Building Fund) and EventIncome (unrestricted) do NOT belong to Beca Agua.
+	if _, ok := nat[reports.AccountID(f.IDs.GovernmentGrants)]; !ok {
+		t.Errorf("GovernmentGrants (Beca Agua revenue) missing from fund-filtered activity")
+	}
+	if _, ok := nat[reports.AccountID(f.IDs.Contributions)]; ok {
+		t.Errorf("Contributions (Building Fund) leaked into the Beca Agua fund-filtered activity")
+	}
+
+	// The rendered report reflects the filter: Contributions and Event Income drop out.
+	rep := incomeStatementReport(t)
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run fund-filtered income statement: %v", err)
+	}
+	if _, ok := isRowFor(table, "Contributions"); ok {
+		t.Errorf("Contributions (not a Beca Agua flow) rendered in the fund-filtered statement")
+	}
+	if _, ok := isRowFor(table, "Government Grants"); !ok {
+		t.Errorf("Government Grants (Beca Agua revenue) missing from the fund-filtered statement")
+	}
+}
+
+// TestIncomeStatementProgramFilter narrows the Statement of Activities to ONE program
+// (Educacion, a leaf program, p15.5 program selector) and hand-verifies the program's
+// R/E flows via the native data layer, reusing the p27.4 ProgramScope machinery.
+//
+// HAND-VERIFIED (Educacion, native, full span — from Expected.ProgramActivity):
+//
+//	Revenue  GovGrants  USD 200,000 + MXN 10,000,000 ; ProgramFees USD 120,000  [credits]
+//	Expense  ProgramSupplies  USD 150,000 + MXN 500,000                          [debits]
+//
+// So native R/E net-debit: USD = -(200,000+120,000) + 150,000 = -170,000; MXN =
+// -10,000,000 + 500,000 = -9,500,000; presented positive as surplus 170,000 / 9,500,000.
+func TestIncomeStatementProgramFilter(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := context.Background()
+
+	// A user program pick resolves to its subtree; Educacion is a leaf, so the subtree is
+	// {Educacion}. periodActivityRows reads ProgramScope directly, so set it here (the
+	// report's Run resolves p.Program -> this same scope).
+	p := isGoldenParams(f)
+	p.Granularity = reports.GranNone
+	p.ProgramScope = []reports.ProgramID{reports.ProgramID(f.IDs.Educacion)}
+	tk := reports.NewToolkit(f.Store, p)
+
+	nat, err := tk.Activity(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)},
+		f.Expected.ActivityFrom, f.Expected.ActivityTo, reports.ConvertOpts{Mode: reports.RateNone})
+	if err != nil {
+		t.Fatalf("program-filtered activity native: %v", err)
+	}
+	reIDs := []reports.AccountID{
+		f.IDs.Contributions, f.IDs.GovernmentGrants, f.IDs.ProgramFees, f.IDs.EventIncome,
+		f.IDs.Salaries, f.IDs.ProgramSupplies, f.IDs.FoodPurchases, f.IDs.Occupancy,
+		f.IDs.Insurance, f.IDs.BankFees, f.IDs.EventCosts,
+	}
+	var usd, mxn int64
+	for _, id := range reIDs {
+		for _, a := range nat[reports.AccountID(id)] {
+			switch a.Currency {
+			case "USD":
+				usd += a.Minor
+			case "MXN":
+				mxn += a.Minor
+			}
+		}
+	}
+	if usd != -170_000 {
+		t.Errorf("Educacion native USD R/E net = %d, want -170000", usd)
+	}
+	if mxn != -9_500_000 {
+		t.Errorf("Educacion native MXN R/E net = %d, want -9500000", mxn)
+	}
+	// FoodPurchases is a Food Pantry / General flow, NOT Educacion => absent.
+	if _, ok := nat[reports.AccountID(f.IDs.FoodPurchases)]; ok {
+		t.Errorf("FoodPurchases (not Educacion) leaked into the Educacion program-filtered activity")
+	}
+
+	// The report resolves the same scope from p.Program and renders it: verify via the
+	// user-selection path (p.Program set, ProgramScope left for the report to resolve).
+	rep := incomeStatementReport(t)
+	pp := isGoldenParams(f)
+	pp.Granularity = reports.GranNone
+	pp.Program = reports.ProgramID(f.IDs.Educacion)
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, pp), pp)
+	if err != nil {
+		t.Fatalf("run program-filtered income statement: %v", err)
+	}
+	if _, ok := isRowFor(table, "Food Purchases"); ok {
+		t.Errorf("Food Purchases (not Educacion) rendered in the program-filtered statement")
+	}
+	if _, ok := isRowFor(table, "Program Supplies"); !ok {
+		t.Errorf("Program Supplies (Educacion expense) missing from the program-filtered statement")
+	}
+}
+
 // TestIncomeStatementScope: root vs a leaf sub (RV Mexico) differ. RV Mexico (leaf,
 // descendant closure D18) carries only MX-posted R/E; US-only revenue (Contributions,
 // USD) does not appear in the leaf. Native-independent (structural presence).
