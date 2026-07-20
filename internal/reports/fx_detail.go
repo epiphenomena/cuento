@@ -26,13 +26,13 @@ import (
 const FXDetailReportID = "fx_detail"
 
 // registerFXDetail registers the FX conversion-details report (p31) into reg under the
-// "financial" group. It offers only the as-of control; the scope selector is always
+// "tax" group. It offers only the as-of control; the scope selector is always
 // shown, and the functional/target currency is a property of each sub (not chosen).
 func registerFXDetail(reg *Registry) {
 	reg.Register(Report{
 		ID:         FXDetailReportID,
 		TitleKey:   "reports.fx_detail.title",
-		Group:      "financial",
+		Group:      "tax",
 		ParamsSpec: ParamsSpec{AsOf: true},
 		Run:        runFXDetail,
 	})
