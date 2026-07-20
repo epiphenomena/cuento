@@ -50,6 +50,40 @@ func adminUserByUsername(t *testing.T, st *store.Store, username string) ids.Use
 	return 0
 }
 
+// TestAdminIndexRendersCards (p13.2 cards): GET /admin (Admin) renders every admin
+// destination as a CARD (shared hub-cards partial), not the old plain bullet list. It
+// asserts each of the six hrefs is present as a card and that the old admin-links markup
+// is gone, pinning both the card look and the full destination set.
+func TestAdminIndexRendersCards(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	admin := mkUser(t, st, "boss", "none", true)
+
+	rec := asUser(t, h, sm, admin, http.MethodGet, "/admin", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /admin: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+
+	if !strings.Contains(body, `class="hub-card"`) {
+		t.Errorf("admin index is not rendered as cards (no hub-card); body: %s", body)
+	}
+	if strings.Contains(body, "admin-links") {
+		t.Errorf("admin index still carries the old admin-links markup; body: %s", body)
+	}
+	for _, href := range []string{
+		"/admin/users",
+		"/admin/subsidiaries",
+		"/admin/currencies",
+		"/admin/rates",
+		"/admin/org",
+		"/admin/ops",
+	} {
+		if !strings.Contains(body, `href="`+href+`"`) {
+			t.Errorf("admin index missing card for %q; body: %s", href, body)
+		}
+	}
+}
+
 // TestAdminUsersPageRenders: GET /admin/users (Admin) renders the list including a
 // created operator.
 func TestAdminUsersPageRenders(t *testing.T) {

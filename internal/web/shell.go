@@ -732,7 +732,28 @@ func (s *server) moreHub(w http.ResponseWriter, r *http.Request) {
 // p10.2 stub to a real index once the users/currencies pages landed. Ops (p18.3)
 // will add its link here later.
 func (s *server) adminIndex(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, http.StatusOK, "admin.tmpl", s.newShellPage(r, nil))
+	ctx := r.Context()
+	u := currentUser(ctx)
+	// Render the admin destinations as CARDS (p13.2 cards) using the SAME data the /more
+	// "All" landing draws its Admin section from: the nav.admin group in allCardGroups().
+	// Reusing that one list keeps /admin and the /more Admin section in lockstep (same
+	// destinations, labels, descriptions, order) and routes both through the shared
+	// hub-cards partial. visibleAllCards localizes + perm/registration-filters; /admin is
+	// Admin-gated and every card is an Admin-perm registered route, so all six appear.
+	cards := s.visibleAllCards(ctx, u, adminGroupCards())
+	s.render(w, r, http.StatusOK, "admin.tmpl", s.newShellPage(r, cards))
+}
+
+// adminGroupCards returns the nav.admin group's hubCards from allCardGroups() — the single
+// source of truth for the admin destinations, shared by the /admin index and the /more
+// Admin section so the two can never drift.
+func adminGroupCards() []hubCard {
+	for _, g := range allCardGroups() {
+		if g.LabelKey == "nav.admin" {
+			return g.Cards
+		}
+	}
+	return nil
 }
 
 // styleguide is the -dev-only GET /styleguide component gallery. It is registered

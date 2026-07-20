@@ -1,20 +1,17 @@
 {{/*
   p13.2 Admin index (GET /admin, Admin). The section hub linking every admin area:
-  users, subsidiaries, currencies, and org settings. Replaces the p10.2 stub. Reuses
-  the base.tmpl shell partials; every string via {{t}} (rule 9); no inline script
-  (rule 12).
+  users, subsidiaries, currencies, rates, org settings, and ops. Rendered as a grid of
+  CARDS (matching the /reports index and /more "All" landing) via the shared "hub-cards"
+  partial — same .hub-card look, but under this page's own <h1> with NO redundant
+  per-section <h2> (Admin is a single group whose name is the page title). .Page is the
+  resolved []hubCardItem built in adminIndex from the nav.admin group (shell.go), so
+  /admin and the /more Admin section stay in sync. Reuses base.tmpl shell partials; every
+  string via {{t}} (rule 9); no inline script (rule 12).
 */ -}}
 {{define "admin.tmpl" -}}
 {{template "shell-open" (shellTitle . (t "nav.admin"))}}
   <h1>{{t "nav.admin"}}</h1>
   <p class="hint">{{t "admin.intro"}}</p>
-  <ul class="admin-links">
-    <li><a href="/admin/users">{{t "admin.users.title"}}</a></li>
-    <li><a href="/admin/subsidiaries">{{t "subsidiaries.title"}}</a></li>
-    <li><a href="/admin/currencies">{{t "admin.currencies.title"}}</a></li>
-    <li><a href="/admin/rates">{{t "admin.rates.title"}}</a></li>
-    <li><a href="/admin/org">{{t "org.title"}}</a></li>
-    <li><a href="/admin/ops">{{t "admin.ops.title"}}</a></li>
-  </ul>
+  {{template "hub-cards" .Page}}
 {{template "shell-close" .}}
 {{- end}}

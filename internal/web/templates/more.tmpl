@@ -17,17 +17,26 @@
 {{define "card-section" -}}
 <section class="hub-section">
   <h2 class="hub-section-title">{{.Label}}</h2>
-  <ul class="hub-cards">
-    {{range .Cards}}
-    <li class="hub-card">
-      <a class="hub-card-link" href="{{.Href}}">
-        <span class="hub-card-label">{{if .Icon}}{{template "icon" .Icon}}{{end}}{{.Label}}</span>
-        {{- if .Desc}}<span class="hub-card-desc">{{.Desc}}</span>{{end}}
-      </a>
-    </li>
-    {{end}}
-  </ul>
+  {{template "hub-cards" .Cards}}
 </section>
+{{- end}}
+
+{{- /* p13.2 (cards): the bare card grid (no section header). Dot is a []hubCardItem.
+     Extracted from card-section so the /admin index — a SINGLE group whose name is the
+     page title — can render the same card look under its own <h1> WITHOUT a redundant
+     per-section <h2>. /more and /reports still go through card-section (unchanged
+     output); only the inner <ul> lives here now. */ -}}
+{{define "hub-cards" -}}
+<ul class="hub-cards">
+  {{range .}}
+  <li class="hub-card">
+    <a class="hub-card-link" href="{{.Href}}">
+      <span class="hub-card-label">{{if .Icon}}{{template "icon" .Icon}}{{end}}{{.Label}}</span>
+      {{- if .Desc}}<span class="hub-card-desc">{{.Desc}}</span>{{end}}
+    </a>
+  </li>
+  {{end}}
+</ul>
 {{- end}}
 
 {{define "all-cards" -}}
