@@ -33,12 +33,11 @@
    Savings                                     USD        USD $20,000.00
    Cash MXN                                    USD           USD $353.59
    Building                                    USD       USD $160,000.00
-   FX Clearing                                 USD        USD $10,016.24
->  Total assets                                USD       USD $248,128.04
+>  Total assets                                USD       USD $238,111.80
    Credit Card                                 USD         USD $3,000.00
 >  Total liabilities                           USD         USD $3,000.00
    (Unmapped)                                  USD             USD $0.00
-   Net assets without donor restrictions       USD       USD $189,268.92
+   Net assets without donor restrictions       USD       USD $179,252.68
    Net assets with donor restrictions          USD        USD $55,859.12
->  Total net assets                            USD       USD $245,128.04
-=  Total liabilities and net assets            USD       USD $248,128.04
+>  Total net assets                            USD       USD $235,111.80
+=  Total liabilities and net assets            USD       USD $238,111.80

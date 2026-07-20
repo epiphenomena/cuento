@@ -277,8 +277,8 @@ func expectedFor(ids IDs) Expected {
 			{ids.BecaAgua, "MXN", 9_700_000},
 			{ids.BecaAgua, "USD", 50_000},
 			{ids.BuildingFund, "USD", 5_000_000},
-			{0, "MXN", 30_940_000}, // unrestricted
-			{0, "USD", 18_517_500}, // unrestricted
+			{0, "MXN", 30_440_000}, // unrestricted (FX Clearing MXN 500,000 is equity-class, out of the asset-side sum)
+			{0, "USD", 17_543_500}, // unrestricted (FX Clearing USD 974,000 is equity-class, out of the asset-side sum)
 		},
 
 		Functional: []FunctionalCell{

@@ -90,13 +90,14 @@ func buildAccounts(ctx context.Context, s *store.Store, ids *IDs) error {
 		{dst: &ids.CashMXN, typ: "asset", nameEN: "Cash MXN", nameES: "Efectivo MXN", currency: "MXN", subs: []entids.SubsidiaryID{ids.MX}},
 		{dst: &ids.Building, typ: "asset", nameEN: "Building", nameES: "Edificio", currency: "USD", subs: []entids.SubsidiaryID{ids.US}, code: ptr("X.10")},
 		{dst: &ids.DueFromMX, typ: "asset", nameEN: "Due from RV Mexico", nameES: "Por cobrar de RV Mexico", currency: "USD", subs: []entids.SubsidiaryID{ids.US}, intercompany: true, receivablePayable: true, notes: "Intercompany receivable; settle against Due to RV Internacional each period."},
-		{dst: &ids.FXClearing, typ: "asset", nameEN: "FX Clearing", nameES: "Compensacion de cambio", currency: "USD", subs: all},
 
 		// --- Liabilities ---
 		{dst: &ids.CreditCard, typ: "liability", nameEN: "Credit Card", nameES: "Tarjeta de credito", currency: "USD", subs: []entids.SubsidiaryID{ids.US}, reconcilable: true},
 		{dst: &ids.DueToIntl, typ: "liability", nameEN: "Due to RV Internacional", nameES: "Por pagar a RV Internacional", currency: "USD", subs: []entids.SubsidiaryID{ids.MX}, intercompany: true, receivablePayable: true},
 
-		// --- Equity ---
+		// --- Equity (FX Clearing is the equity-class cross-currency clearing/suspense
+		// account, D3; its foreign-currency balance is NOT remeasured to income) ---
+		{dst: &ids.FXClearing, typ: "equity", nameEN: "FX Clearing", nameES: "Compensacion de cambio", currency: "USD", subs: all},
 		{dst: &ids.OpeningBalances, typ: "equity", nameEN: "Opening Balances", nameES: "Saldos iniciales", currency: "USD", subs: all},
 
 		// --- Revenue (placeholder parent, NO own code) ---

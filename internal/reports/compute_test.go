@@ -91,7 +91,8 @@ func TestBalancesAsOfRootVsLeafScope(t *testing.T) {
 // rounded HALF-EVEN once per output cell. Hand-checked cells:
 //
 //	BecaAgua MXN 9,700,000 / 18.10 = 535,911.60.. -> 535,912
-//	unrestricted MXN 30,940,000 / 18.10 = 1,709,392.26.. -> 1,709,392
+//	unrestricted MXN 30,440,000 / 18.10 = 1,681,767.95.. -> 1,681,768
+//	  (FX Clearing MXN 500,000 is EQUITY-class now, out of the fund-asset sum)
 //	all USD funds pass through unchanged.
 func TestFundBalancesClosingConversion(t *testing.T) {
 	f := fixture.New(t)
@@ -108,7 +109,7 @@ func TestFundBalancesClosingConversion(t *testing.T) {
 	want := map[reports.FundID]int64{
 		f.IDs.BecaAgua:     535_912 + 50_000,       // MXN 9.7M->535,912 plus its USD 50,000 leg
 		f.IDs.BuildingFund: 5_000_000,              // USD pass-through
-		0:                  1_709_392 + 18_517_500, // unrestricted MXN->USD + USD leg
+		0:                  1_681_768 + 17_543_500, // unrestricted MXN->USD + USD leg (FX Clearing now equity -> out of fund-asset sum)
 	}
 	for fund, wantUSD := range want {
 		got, ok := find(fb[reports.FundID(fund)], "USD")
@@ -201,8 +202,9 @@ func TestNetIncomeClosing(t *testing.T) {
 }
 
 // TestFundBalancesUnrestrictedLine: FundBalancesAsOf includes the unrestricted line
-// as fund id 0 (D20). Native (Mode: None): unrestricted MXN 30,940,000 and USD
-// 18,517,500 straight from the oracle.
+// as fund id 0 (D20). Native (Mode: None): unrestricted MXN 30,440,000 and USD
+// 17,543,500 straight from the oracle (FX Clearing is EQUITY-class now, so its
+// MXN 500,000 / USD 974,000 are out of the asset-side fund-balance sum).
 func TestFundBalancesUnrestrictedLine(t *testing.T) {
 	f := fixture.New(t)
 	ctx := context.Background()
@@ -211,11 +213,11 @@ func TestFundBalancesUnrestrictedLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FundBalancesAsOf native: %v", err)
 	}
-	if m, ok := find(fb[0], "MXN"); !ok || m != 30_940_000 {
-		t.Errorf("unrestricted MXN = %d/%v, want 30940000", m, ok)
+	if m, ok := find(fb[0], "MXN"); !ok || m != 30_440_000 {
+		t.Errorf("unrestricted MXN = %d/%v, want 30440000", m, ok)
 	}
-	if u, ok := find(fb[0], "USD"); !ok || u != 18_517_500 {
-		t.Errorf("unrestricted USD = %d/%v, want 18517500", u, ok)
+	if u, ok := find(fb[0], "USD"); !ok || u != 17_543_500 {
+		t.Errorf("unrestricted USD = %d/%v, want 17543500", u, ok)
 	}
 }
 

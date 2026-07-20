@@ -1,31 +1,35 @@
 package reports
 
 // fx.go is the Phase 31 FX-remeasurement toolkit (ASC 830-20): the report-time
-// computation that recognizes the FX gain/loss on foreign-currency MONETARY balances
-// as income (the change in net assets), rather than letting it disappear into the
-// balance-sheet net-asset plug. It is the shared core behind the FX-detail report and
-// the Statement-of-Activities "FX gain/loss" line, and it is a pure read (rule 2).
+// computation that recognizes the FX gain/loss on foreign-currency BALANCE-CARRYING
+// accounts (assets and liabilities) as income (the change in net assets), rather than
+// letting it disappear into the balance-sheet net-asset plug. It is the shared core
+// behind the FX-detail report and the Statement-of-Activities "FX gain/loss" line, and
+// it is a pure read (rule 2).
 //
 // The accounting, precisely (docs/DECISIONS.md p31):
 //
 //   - Each subsidiary's FUNCTIONAL currency is its base_currency (D18). A balance held
 //     in a currency that EQUALS its holding sub's functional currency carries no FX
 //     exposure. A balance in a DIFFERENT currency is a foreign-currency item.
-//   - A foreign-currency MONETARY item (cash / receivable / payable -- flagged
-//     current_cash OR receivable_payable) is remeasured to the functional currency at the
-//     CLOSING rate on the report date, while the historical transactions that built it
-//     were measured at their TRANSACTION-DATE rates. The difference is a remeasurement
-//     gain/loss recognized in INCOME (ASC 830-20-35). Non-monetary items (fixed assets,
-//     inventory, prepaid) stay at historical rate and produce no remeasurement -- the
-//     current fixture holds no foreign non-monetary balance, so that path is a
-//     documented boundary (docs/DECISIONS.md p31), not exercised here.
+//   - The discriminator is the account's TYPE. ASSET and LIABILITY accounts are
+//     balance-carrying: a foreign-currency asset/liability balance is remeasured to the
+//     functional currency at the CLOSING rate on the report date, while the historical
+//     transactions that built it were measured at their TRANSACTION-DATE rates. The
+//     difference is a remeasurement gain/loss recognized in INCOME (ASC 830-20-35).
+//     REVENUE and EXPENSE accounts are flows, measured at their transaction-date rates
+//     and not remeasured. EQUITY accounts are excluded (equity translates to CTA, and
+//     the equity-class FX Clearing counter-leg must not be remeasured to income).
+//     Remeasuring every foreign asset/liability at the closing rate matches the balance
+//     sheet's own closing conversion, so the statement articulation is exact for every
+//     balance-carrying account.
 //   - INTERCOMPANY balances are EXCLUDED from the income path: their FX effect is a
 //     foreign-entity TRANSLATION adjustment routed to the Cumulative Translation
 //     Adjustment within Net Assets (equity), which cuento already carves out of the
 //     consolidation residual (p26.70 / IntercompanyResidualSplit). Recognizing an
 //     intercompany leg's remeasurement in income would double-count against that CTA
-//     and strand its equal-and-opposite FX-Clearing leg (which is equity-class, not
-//     monetary), so the discriminator is the account's `intercompany` flag.
+//     and strand its equal-and-opposite FX-Clearing leg (which is equity-class), so
+//     intercompany asset/liability balances are routed to CTA, not income.
 //
 // The remeasurement is computed in each holding sub's FUNCTIONAL currency. When a sub's
 // functional currency is the reporting currency (the common case, and every exposed sub
@@ -38,8 +42,9 @@ import (
 	"math"
 )
 
-// FXItem is one foreign-currency monetary balance and its ASC 830-20 remeasurement
-// detail, all amounts in the holding subsidiary's FUNCTIONAL currency (minor units).
+// FXItem is one foreign-currency asset/liability balance and its ASC 830-20
+// remeasurement detail, all amounts in the holding subsidiary's FUNCTIONAL currency
+// (minor units).
 type FXItem struct {
 	Sub             SubsidiaryID // the holding subsidiary
 	Functional      string       // sub.base_currency (the functional/target currency)
@@ -54,7 +59,7 @@ type FXItem struct {
 }
 
 // FXRemeasurement is the Phase 31 remeasurement result for a scope as of a date: the
-// per-item detail (foreign, monetary, NON-intercompany balances) and the total
+// per-item detail (foreign, asset/liability, NON-intercompany balances) and the total
 // remeasurement gain/loss per functional currency.
 type FXRemeasurement struct {
 	AsOf         string
@@ -71,7 +76,7 @@ type fxKey struct {
 }
 
 // FXRemeasurementAsOf computes the ASC 830-20 remeasurement gain/loss on every
-// foreign-currency, monetary, NON-intercompany balance in the scope's descendant
+// foreign-currency, asset/liability, NON-intercompany balance in the scope's descendant
 // closure as of d. Each item's balance is valued at the closing rate and its building
 // flows at their transaction-date rates (accumulated UNROUNDED, rounded half-even once,
 // matching Activity's RateTxnDate grain, D12); the difference is the gain/loss.
@@ -133,15 +138,19 @@ func (tk *Toolkit) FXRemeasurementAsOf(ctx context.Context, s Scope, d string) (
 		if k.ccy == func0 {
 			continue // functional-currency balance: no FX exposure
 		}
-		// Monetary AND non-intercompany gate. The candidate set (foreign-currency
-		// balances) is small, so a per-account read is cheap and clear.
+		// Account-TYPE AND non-intercompany gate. Asset/liability balances are
+		// balance-carrying (remeasured at closing); revenue/expense are flows and
+		// equity is excluded. The candidate set (foreign-currency balances) is small,
+		// so a per-account read is cheap and clear.
 		acct, err := tk.store.GetAccount(ctx, k.acct)
 		if err != nil {
 			return FXRemeasurement{}, err
 		}
-		monetary := acct.CurrentCash == 1 || acct.ReceivablePayable == 1
-		if !monetary || acct.Intercompany == 1 {
-			continue // non-monetary -> historical; intercompany -> CTA (p26.70)
+		if acct.Type != "asset" && acct.Type != "liability" {
+			continue // revenue/expense -> flow; equity -> translation/CTA
+		}
+		if acct.Intercompany == 1 {
+			continue // intercompany -> CTA (p26.70)
 		}
 
 		nativeMinor := native[k]
