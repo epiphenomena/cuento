@@ -11,7 +11,9 @@
       {%- endfor -%}
     </nav>
     <div class="site-footer__meta">
-      <a href="{{ site.repo_url }}" rel="noopener" target="_blank">Repository</a>
+      <span class="site-footer__heading">Project</span>
+      <a href="{{ site.repo_url }}" rel="noopener" target="_blank">View on GitHub →</a>
+      <a href="{{ '/features.html' | relative_url }}">Feature tour</a>
       <p class="site-footer__note">One process. One VM. One SQLite file.</p>
     </div>
   </div>

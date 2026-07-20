@@ -7,9 +7,15 @@ nav_order: 5
 # Features
 
 The feature set below is what the application actually does; each item maps to
-built, tested functionality.
+built, tested functionality. It is organized in four groups: the **accounting
+core** (the ledger and its dimensions), **currency** (multi-currency and GAAP
+FX), the **report catalog**, and the **workflows** that get data in and out
+(import, reconciliation, budgeting, expense reports, the bilingual UI, and the
+historical importer).
 
-## Double-entry fund accounting
+## The accounting core
+
+### Double-entry fund accounting
 
 cuento is a double-entry ledger where **funds are a first-class split
 dimension**. Every transaction balances to zero in its currency and to zero
@@ -19,7 +25,7 @@ the top line. Unrestricted activity is simply the null-fund group. Reports deriv
 the GAAP "released from restrictions" presentation from fund tagging rather than
 journaling transfer entries.
 
-## Donor-restricted funds
+### Donor-restricted funds
 
 A fund documents a grant or restricted gift: funder, purpose, restriction type
 (purpose / time / perpetual), and dates. A fund scopes to one or more
@@ -29,7 +35,7 @@ with a warning badge on a negative balance; the fund statement gives one fund's
 period activity broken into opening, received, applied (expenses versus
 non-expense applications like asset purchases and loan principal), and closing.
 
-## Multi-subsidiary and consolidation
+### Multi-subsidiary and consolidation
 
 Subsidiaries form a tree with a single root, each with a base currency. An account
 maps to one or more subsidiaries, with the invariant that a parent's subsidiary
@@ -41,7 +47,7 @@ due-to/due-from accounts; a consolidated report that covers both sides collapses
 those accounts after asserting they net to zero, and renders a warning row rather
 than silently dropping a nonzero net.
 
-## Programs and functional classes
+### Programs and functional classes
 
 Programs are a separate tree (a dimension), seeded with a single "General" root as
 the unallocated default. Every revenue and expense split carries a program;
@@ -53,7 +59,9 @@ come from the class, Part III rows from the program. Keeping both as dimensions
 lets the chart of accounts hold natural categories (salaries, supplies, occupancy)
 without duplicating the tree per program or per class.
 
-## Exact, multi-currency money
+## Currency
+
+### Exact, multi-currency money
 
 Amounts are stored as integer minor units. Transactions are single-currency;
 cross-currency flows pass through a multicurrency FX Clearing account, whose
@@ -67,7 +75,7 @@ the change in net assets (ASC 830-20), while a foreign entity's translation for
 consolidation stays in equity as a Cumulative Translation Adjustment (ASC
 830-30). See **Foreign currency (ASC 830)** below.
 
-## Foreign currency (ASC 830)
+### Foreign currency (ASC 830)
 
 Each subsidiary's functional currency is its base currency — a management
 determination (ASC 830-10-45), not something cuento derives. A balance held in a
@@ -159,7 +167,9 @@ underlying splits. Each report also exports to CSV.
 - **Budget reports** — forecast, actuals-vs-budget, and cashflow projection,
   bucketed by period and broken out per fund.
 
-## Bank-CSV import
+## Workflows
+
+### Bank-CSV import
 
 Bank data enters only as an uploaded CSV. The mapping UI presents the file's
 actual columns and lets the user tag each one (date, description, amount, or a
@@ -170,7 +180,7 @@ for review, and posted through the phase-12 editor — with the counter-side and
 its fund and functional class prefilled from the payee template — so every
 imported entry goes through the same invariants and audit trail as manual entry.
 
-## Reconciliation
+### Reconciliation
 
 A reconciliation is per account and currency and spans all funds, because a bank
 statement covers one balance regardless of how the money is restricted. The
@@ -179,7 +189,7 @@ zero. Finalizing locks the cleared splits (amount, account, transaction, date,
 fund); editing or voiding them requires an audited reopen, and a reopen is refused
 while a later finalized reconciliation exists on the same account and currency.
 
-## Budgeting
+### Budgeting
 
 Budget lines are keyed by subsidiary, account, fund, and program, with an
 amount-per-occurrence and a named, reusable schedule that generates concrete
@@ -191,7 +201,7 @@ imported date list, with a weekend-adjustment policy for day-of-month kinds.
 Forecasts, actuals-vs-budget, and cashflow projection all break out by fund, so
 restricted and unrestricted net assets are projected separately.
 
-## Expense reports
+### Expense reports
 
 A submission-then-review workflow decoupled from book-editing. A low-privilege
 submitter — who may have no ledger access at all — enters expense (and revenue)
@@ -201,7 +211,7 @@ posts a real, versioned transaction linked back to its source report, or rejects
 it with a reason that routes it back to the submitter. A converted report is
 immutable and shows its resulting transaction.
 
-## Bilingual interface
+### Bilingual interface
 
 The UI is bilingual (English and Spanish) from embedded catalogs, with a test
 enforcing identical key sets across the two so translations stay honest. Every
@@ -211,7 +221,7 @@ stored data. Adding a language is adding one catalog file. Each user's locale,
 date format, number format, display mode, negative style, theme, default
 subsidiary, and default program are personal settings.
 
-## The historical importer
+### The historical importer
 
 `cmd/ledgerimport` is a one-shot, local-only tool that builds the production
 database from a cleaned full-ledger CSV plus a reviewed mapping file (which assigns

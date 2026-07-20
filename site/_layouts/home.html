@@ -11,16 +11,112 @@
         <h1 class="hero__headline">{{ page.hero.headline }}</h1>
         <p class="hero__lede">{{ page.hero.lede }}</p>
         <div class="hero__actions">
-          <a class="btn btn--primary" href="{{ page.hero.primary.url | relative_url }}">{{ page.hero.primary.label }}</a>
+          {%- assign pri_url = page.hero.primary.url -%}
+          {%- if pri_url == "repo" -%}{%- assign pri_url = site.repo_url -%}{%- assign pri_ext = true -%}{%- else -%}{%- assign pri_url = pri_url | relative_url -%}{%- assign pri_ext = false -%}{%- endif -%}
+          <a class="btn btn--primary" href="{{ pri_url }}"{% if pri_ext %} rel="noopener" target="_blank"{% endif %}>{{ page.hero.primary.label }}</a>
           {%- assign sec_url = page.hero.secondary.url -%}
-          {%- if sec_url == "repo" -%}{%- assign sec_url = site.repo_url -%}{%- else -%}{%- assign sec_url = sec_url | relative_url -%}{%- endif -%}
-          <a class="btn btn--ghost" href="{{ sec_url }}"{% if page.hero.secondary.url == "repo" %} rel="noopener" target="_blank"{% endif %}>{{ page.hero.secondary.label }} →</a>
+          {%- if sec_url == "repo" -%}{%- assign sec_url = site.repo_url -%}{%- assign sec_ext = true -%}{%- else -%}{%- assign sec_url = sec_url | relative_url -%}{%- assign sec_ext = false -%}{%- endif -%}
+          <a class="btn btn--ghost" href="{{ sec_url }}"{% if sec_ext %} rel="noopener" target="_blank"{% endif %}>{{ page.hero.secondary.label }} →</a>
         </div>
-        <ul class="hero__facts">
-          <li><strong>One binary</strong> · one SQLite file</li>
-          <li><strong>Server-rendered</strong> HTML + pinned htmx</li>
-          <li><strong>Bilingual</strong> English / Spanish</li>
+        {%- if page.hero.tags -%}
+        <ul class="hero__tags">
+          {%- for tag in page.hero.tags -%}
+          <li>{{ tag }}</li>
+          {%- endfor -%}
         </ul>
+        {%- endif -%}
+      </div>
+    </section>
+
+    <section class="features">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>{{ page.features_heading }}</h2>
+          <p>{{ page.features_lede }}</p>
+        </div>
+        <ul class="feature-grid">
+          {%- for f in page.features -%}
+          <li class="feature">
+            <span class="feature__glyph" aria-hidden="true">
+              {%- case f.glyph -%}
+              {%- when 'scale' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 21h10M5 7h14M5 7l-2.5 6a3 3 0 0 0 5 0L5 7Zm14 0-2.5 6a3 3 0 0 0 5 0L19 7Z"/></svg>
+              {%- when 'lock' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>
+              {%- when 'tree' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="4" rx="1"/><rect x="3" y="17" width="6" height="4" rx="1"/><rect x="15" y="17" width="6" height="4" rx="1"/><path d="M12 7v4M6 17v-3h12v3M12 11v3"/></svg>
+              {%- when 'coins' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="9" cy="7" rx="6" ry="3"/><path d="M3 7v5c0 1.66 2.69 3 6 3M15 12.35A6 6 0 0 1 21 15c0 1.66-2.69 3-6 3s-6-1.34-6-3v-5"/><path d="M21 12v3M21 15v3c0 1.66-2.69 3-6 3s-6-1.34-6-3"/></svg>
+              {%- when 'grid' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></svg>
+              {%- when 'chart' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v16h16"/><path d="M8 15v3M12 10v8M16 6v12"/></svg>
+              {%- when 'import' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11M8 10l4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+              {%- when 'calendar' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+              {%- when 'history' -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 4v4h4M12 8v4l3 2"/></svg>
+              {%- else -%}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/></svg>
+              {%- endcase -%}
+            </span>
+            <h3 class="feature__title">{{ f.title }}</h3>
+            <p class="feature__body">{{ f.body }}</p>
+          </li>
+          {%- endfor -%}
+        </ul>
+      </div>
+    </section>
+
+    <section class="compare">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>{{ page.compare_heading }}</h2>
+          <p>{{ page.compare_lede }}</p>
+        </div>
+        <div class="compare__scroll">
+          <table class="compare__table">
+            <thead>
+              <tr>
+                <th scope="col"><span class="compare__axis-head">Consideration</span></th>
+                {%- for col in page.compare_cols -%}
+                <th scope="col"{% if forloop.first %} class="compare__own"{% endif %}>{{ col }}</th>
+                {%- endfor -%}
+              </tr>
+            </thead>
+            <tbody>
+              {%- for row in page.compare_rows -%}
+              <tr>
+                <th scope="row">{{ row.axis }}</th>
+                <td class="compare__own">{{ row.cuento }}</td>
+                <td>{{ row.saas }}</td>
+                <td>{{ row.enterprise }}</td>
+                <td>{{ row.sheets }}</td>
+              </tr>
+              {%- endfor -%}
+            </tbody>
+          </table>
+        </div>
+        <p class="compare__note">{{ page.compare_note }}</p>
+      </div>
+    </section>
+
+    <section class="story">
+      <div class="wrap story__inner">
+        {%- if page.story_heading -%}<h2>{{ page.story_heading }}</h2>{%- endif -%}
+        {{ content }}
+      </div>
+    </section>
+
+    <section class="tech">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>{{ page.tech_heading }}</h2>
+          <p>{{ page.tech_lede }}</p>
+        </div>
+        <div class="tech__layout">
+          <ul class="tech__list">
+            {%- for t in page.tech -%}
+            <li>{{ t }}</li>
+            {%- endfor -%}
+          </ul>
+          <div class="tech__links">
+            {%- for link in page.tech_links -%}
+            <a class="tech__link" href="{{ link.url | relative_url }}">{{ link.label }} →</a>
+            {%- endfor -%}
+          </div>
+        </div>
       </div>
     </section>
 
@@ -42,12 +138,6 @@
       </div>
     </section>
 
-    <section class="story">
-      <div class="wrap story__inner">
-        {{ content }}
-      </div>
-    </section>
-
     <section class="docs-index">
       <div class="wrap">
         <div class="section-head">
@@ -65,6 +155,16 @@
           </li>
           {%- endfor -%}
         </ul>
+      </div>
+    </section>
+
+    <section class="cta-band">
+      <div class="wrap cta-band__inner">
+        <div>
+          <h2 class="cta-band__title">An open ledger you own outright.</h2>
+          <p class="cta-band__text">One binary, one SQLite file, MIT licensed. Read the code, run it yourself.</p>
+        </div>
+        <a class="btn btn--primary" href="{{ site.repo_url }}" rel="noopener" target="_blank">View on GitHub →</a>
       </div>
     </section>
   </main>

@@ -44,9 +44,8 @@ docs:
       each with the reason behind it and a link to the mechanism that
       satisfies it.
 
-# The repository link shown in the header and footer. This is a PLACEHOLDER —
-# replace it with the real repository URL when the project is published.
-repo_url: "https://github.com"
+# The repository link shown in the header, hero, and footer.
+repo_url: "https://github.com/epiphenomena/cuento"
 
 # Exclude site scaffolding from the build output.
 exclude:

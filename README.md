@@ -278,8 +278,9 @@ in-process autocert TLS) is documented in `docs/deploy.md`; the CLI reference is
 
 The `docs/` folder holds internal working documents (decisions, deploy runbook,
 CLI reference, security threat model). The **published** documentation site is a
-self-contained Jekyll site in [`site/`](site/), themed with
-[just-the-docs](https://just-the-docs.com/) (sidebar navigation + search):
+self-contained Jekyll site in [`site/`](site/) — a hand-written product showcase
+(feature cards, a comparison, and the deeper docs pages) with its own layouts and
+a single stylesheet, no remote theme, so it builds on plain Jekyll offline:
 
 - [Overview](site/index.md)
 - [Architecture](site/architecture.md)
