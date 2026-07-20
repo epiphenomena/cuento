@@ -168,6 +168,16 @@
 {{define "register.tmpl" -}}
 {{template "shell-open" (shellTitle . (t "register.title"))}}
   {{- with .Page}}
+  {{/* p31: non-blocking post-save notice. The transaction editor redirects here with
+       ?main_desc=<N> when the saved txn's MAIN-header split carried a description; the
+       header memo is the usual place, so this is a heads-up (the save was allowed). N is
+       how many blank line-splits inherited the description via the server copy-down. No
+       inline style (strict CSP): reuse the styled success-alert class. */}}
+  {{if .MainDescNotice}}
+  <p class="alert alert-warn" role="status">
+    {{if gt .MainDescCopies 0}}{{tn "txn.main_desc_notice.copied" .MainDescCopies}}{{else}}{{t "txn.main_desc_notice.plain"}}{{end}}
+  </p>
+  {{end}}
   <h1>{{t "register.title"}}: {{.AccountName}}</h1>
   <p><a href="/accounts">{{t "register.back_to_accounts"}}</a>
      {{/* p12.2: open the transaction editor for a new entry (the register is the

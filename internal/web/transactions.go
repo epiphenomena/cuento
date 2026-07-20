@@ -539,7 +539,8 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID ids.Tra
 	// The body `splits` become positions 1..m. Echo the header onto the model so a 422
 	// re-render keeps it, and expose the residual for display.
 	exp := s.currencyExponent(ctx, currency)
-	numMains := 0 // p26.34: split-index offset for error attribution (mains are prepended)
+	numMains := 0        // p26.34: split-index offset for error attribution (mains are prepended)
+	mainDescCopies := -1 // p31: >=0 once the main-header carries a description (warn marker); count of body lines it was copied into
 	if mh, ok := parseMainHeader(r); ok {
 		model.MainPresent = true
 		model.MainAccount = mh.AccountID
@@ -549,6 +550,23 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID ids.Tra
 		model.MainClass = mh.Class
 		model.MainSplitID = mh.SplitID
 		s.injectMainAccount(ctx, &model)
+		// p31 copy-down: the header (main) split's description is the transaction's
+		// canonical memo. When it is non-empty, fill any BODY split whose own description
+		// is blank with it (splits that already carry their own description are left
+		// alone). This runs on `splits` while it is still BODY-ONLY -- autoBalanceMain has
+		// not yet prepended the mains -- so it can never touch a main split (and
+		// autoBalanceMain already stamps mh.Description onto the mains it builds). Server-
+		// side so it holds regardless of client JS, for BOTH create and update (this is the
+		// shared path). mainDescCopies >= 0 also arms the post-save warning below.
+		if mh.Description != "" {
+			mainDescCopies = 0
+			for i := range splits {
+				if splits[i].Description == "" {
+					splits[i].Description = mh.Description
+					mainDescCopies++
+				}
+			}
+		}
 		splits, numMains = autoBalanceMain(mh, splits)
 		// The main residual for the header amount display (recomputed live client-side too).
 		if len(splits) > 0 {
@@ -591,8 +609,10 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID ids.Tra
 	// HX-Redirect so htmx does a full-page client navigation. A non-htmx (no-JS)
 	// submit gets the normal 303 (handler redirect, distinct from the enforcement 302).
 	dest := "/accounts"
+	toRegister := false // the destination is an account register (which renders the p31 banner)
 	if len(splits) > 0 {
 		dest = "/accounts/" + strconv.FormatInt(int64(splits[0].AccountID), 10) + "/register"
+		toRegister = true
 	}
 	// p26.50: when the editor was opened FROM a reconciliation workspace (`from`), Save
 	// returns to THAT workspace -- the new/edited split then appears in the uncleared
@@ -601,6 +621,18 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID ids.Tra
 	// destination is unchanged for every other entry point, so no existing flow regresses.
 	if o := reconOriginDest(model.Origin); o != "" {
 		dest = o
+		toRegister = false // the recon workspace does not render the register banner
+	}
+	// p31: when the main-header split carried a description, ride a NON-BLOCKING notice
+	// marker on the redirect (PRG query param, the app's settings-notice pattern) so the
+	// destination register surfaces a "heads up" banner -- the header memo is the usual
+	// place for a transaction memo, so a description on the main split is unusual, but the
+	// save is allowed. The count reports how many blank body lines the copy-down filled.
+	// Only the account-register destination renders the banner, so the marker is scoped to
+	// it; a recon-workspace return skips the advisory (the deterministic copy-down still
+	// ran) rather than trailing a dead query param onto a page that never shows it.
+	if mainDescCopies >= 0 && toRegister {
+		dest = appendQueryParam(dest, "main_desc", strconv.Itoa(mainDescCopies))
 	}
 	if r.Header.Get("HX-Request") == "true" {
 		w.Header().Set("HX-Redirect", dest)
@@ -1336,6 +1368,19 @@ func txnTitleKey(isEdit bool) string {
 }
 
 // --- small helpers --------------------------------------------------------
+
+// appendQueryParam appends key=value to a same-site path/URL, choosing "?" or "&"
+// based on whether the dest already carries a query string. dest here is always a
+// server-built local path (/accounts/<id>/register or a recon workspace), so a plain
+// concatenation is safe; value is a small integer. Used for the p31 post-save notice
+// marker (the PRG pattern the settings "saved" notice uses).
+func appendQueryParam(dest, key, value string) string {
+	sep := "?"
+	if strings.ContainsRune(dest, '?') {
+		sep = "&"
+	}
+	return dest + sep + key + "=" + value
+}
 
 // idsCSV renders a slice of ids as a comma-separated string (the data-subsidiaries
 // attribute the client re-filter reads).

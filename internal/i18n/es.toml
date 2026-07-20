@@ -898,6 +898,16 @@ other = "Descripcion"
 other = "Cuenta principal"
 [txn.main.amount]
 other = "Importe de balance"
+# p31 aviso posterior al guardado (no bloqueante): el asiento PRINCIPAL (cabecera) del
+# movimiento guardado llevaba una descripción. La nota de la cabecera es el lugar habitual
+# para la nota del movimiento, así que esto es un aviso (el guardado se permitió). `.copied`
+# es un mensaje con conteo (las líneas en blanco que heredaron la descripción por la
+# copia automática del servidor); `.plain` se muestra cuando no se copió nada.
+[txn.main_desc_notice.copied]
+one = "Atención: el asiento principal llevaba una descripción; se copió a %d línea sin ella."
+other = "Atención: el asiento principal llevaba una descripción; se copió a %d líneas sin ella."
+[txn.main_desc_notice.plain]
+other = "Atención: el asiento principal llevaba una descripción. La nota de la cabecera es el lugar habitual para la nota del movimiento."
 [txn.col.fund]
 other = "Fondo"
 # p26.45 combined program/class column sub-label (the merged control from p26.41).

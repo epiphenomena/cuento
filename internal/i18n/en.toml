@@ -905,6 +905,16 @@ other = "Description"
 other = "Main account"
 [txn.main.amount]
 other = "Balancing amount"
+# p31 post-save notice (non-blocking): the saved transaction's MAIN-header split
+# carried a description. The header memo is the usual place for a transaction memo, so
+# this is a heads-up (the save was allowed). `.copied` is a count message (the blank
+# line-splits that inherited the description via the server copy-down); `.plain` shows
+# when nothing was copied (every line already had its own description).
+[txn.main_desc_notice.copied]
+one = "Heads up: the main split carried a description; it was copied to %d line without one."
+other = "Heads up: the main split carried a description; it was copied to %d lines without one."
+[txn.main_desc_notice.plain]
+other = "Heads up: the main split carried a description. The header memo is the usual place for a transaction memo."
 [txn.col.fund]
 other = "Fund"
 # p26.45 combined program/class column sub-label (the merged control from p26.41).

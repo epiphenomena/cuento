@@ -446,6 +446,13 @@ input[type="checkbox"]:disabled {
   background: var(--color-success-bg);
   color: var(--color-success);
 }
+/* Caution variant (p31: a non-blocking "heads up" advisory -- not an error, not a
+   success). Amber tone so it reads as unusual-but-allowed. */
+.alert-warn {
+  border-color: var(--color-warning);
+  background: var(--color-warning-bg);
+  color: var(--color-warning);
+}
 /* Per-field validation error (p10.3 form-error convention): a small danger-toned
    message under the field, plus a danger border on the invalid input. Styles live
    here, never inline (strict CSP, rule 12). */

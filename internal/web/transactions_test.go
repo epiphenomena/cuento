@@ -1249,6 +1249,194 @@ func TestTxnMainHeaderMissingAccount(t *testing.T) {
 	}
 }
 
+// p31 main-header description copy-down + warning. When the MAIN (position-0 header)
+// split carries a description, the server (i) copies it into every BODY split whose own
+// description is blank -- leaving non-blank ones alone -- and (ii) surfaces a NON-BLOCKING
+// post-save notice (the ?main_desc=<N> PRG marker on the redirect, rendered as a banner on
+// the destination register). These run on the SHARED create/update path, so a single site
+// covers both /transactions (create) and /transactions/{id} (update).
+
+// twoBodyMainHeaderForm builds a header-flow POST: MAIN = Checking header with `mainDesc`,
+// body = two Salaries expense splits (fund Beca, program Educacion, class program) that sum
+// to 100 so the single-fund main balances. Body descriptions are set from d0/d1.
+func (e *txnWebEnv) twoBodyMainHeaderForm(mainDesc, d0, d1 string) url.Values {
+	main := splitFull{AccountID: e.checking, Description: mainDesc}
+	body := []splitFull{
+		{AccountID: e.salaries, Amount: 6000, FundID: ni(e.fund), ProgramID: ni(e.progEdu), FunctionalClass: ns("program"), Description: d0},
+		{AccountID: e.salaries, Amount: 4000, FundID: ni(e.fund), ProgramID: ni(e.progEdu), FunctionalClass: ns("program"), Description: d1},
+	}
+	return mainHeaderForm(e.sub1, main, body)
+}
+
+// bodyDescByAmount returns the stored body-split descriptions keyed by their amount (the
+// body salaries splits are +6000 / +4000; the fanned main on Checking is negative and
+// skipped). Amounts are unique per body row here, so this reads back which description each
+// line ended up with.
+func bodyDescByAmount(t *testing.T, e *txnWebEnv, id ids.TransactionID) map[int64]string {
+	t.Helper()
+	out := map[int64]string{}
+	for _, s := range splitStatesByPosition(t, e, id) {
+		if s.Amount > 0 { // body lines are positive; the balancing main is negative
+			out[s.Amount] = s.Description
+		}
+	}
+	return out
+}
+
+// TestTxnMainDescCopyDownFillsBlank (p31 i): the main-header description fills a body split
+// whose own description is BLANK.
+func TestTxnMainDescCopyDownFillsBlank(t *testing.T) {
+	e := newTxnWebEnv(t)
+
+	f := e.twoBodyMainHeaderForm("Header memo text", "", "Line two own desc")
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions", f)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create: status=%d, body=%s", rec.Code, rec.Body.String())
+	}
+
+	desc := bodyDescByAmount(t, e, latestTxnID(t, e))
+	// (i) blank line inherited the main description.
+	if desc[6000] != "Header memo text" {
+		t.Fatalf("blank body line not filled with main desc; got %q", desc[6000])
+	}
+	// (ii) the line with its own description is untouched.
+	if desc[4000] != "Line two own desc" {
+		t.Fatalf("own-desc body line was clobbered; got %q", desc[4000])
+	}
+}
+
+// TestTxnMainDescCopyDownPreservesOwn (p31 ii): a body split that already carries its own
+// description is NOT overwritten even though the main has a (different) description.
+func TestTxnMainDescCopyDownPreservesOwn(t *testing.T) {
+	e := newTxnWebEnv(t)
+
+	f := e.twoBodyMainHeaderForm("Header memo text", "Own zero", "Own one")
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions", f)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create: status=%d, body=%s", rec.Code, rec.Body.String())
+	}
+
+	desc := bodyDescByAmount(t, e, latestTxnID(t, e))
+	if desc[6000] != "Own zero" || desc[4000] != "Own one" {
+		t.Fatalf("own descriptions were clobbered by copy-down: %+v", desc)
+	}
+	// The marker still reports zero copies (the warning fires regardless, but N=0).
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "main_desc=0") {
+		t.Fatalf("redirect should carry main_desc=0 (no lines copied); got %q", loc)
+	}
+}
+
+// TestTxnMainDescNoCopyWhenBlankMain (p31 iii): when the main-header description is EMPTY,
+// nothing is copied AND no warning marker is emitted.
+func TestTxnMainDescNoCopyWhenBlankMain(t *testing.T) {
+	e := newTxnWebEnv(t)
+
+	f := e.twoBodyMainHeaderForm("", "", "Line two own desc")
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions", f)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create: status=%d, body=%s", rec.Code, rec.Body.String())
+	}
+
+	desc := bodyDescByAmount(t, e, latestTxnID(t, e))
+	// The blank line stays blank (no main desc to copy); the own-desc line is untouched.
+	if desc[6000] != "" {
+		t.Fatalf("blank line should stay blank when main desc is empty; got %q", desc[6000])
+	}
+	if desc[4000] != "Line two own desc" {
+		t.Fatalf("own-desc line changed unexpectedly; got %q", desc[4000])
+	}
+	// No warning marker when the main has no description.
+	if loc := rec.Header().Get("Location"); strings.Contains(loc, "main_desc") {
+		t.Fatalf("no warning marker expected when main desc is empty; got %q", loc)
+	}
+}
+
+// TestTxnMainDescWarningSurfaced (p31 iv): a save whose main-header split carries a
+// description emits the non-blocking warning marker on the redirect, and the destination
+// register renders it as a visible banner (server-observable, CSP-safe -- no inline JS).
+func TestTxnMainDescWarningSurfaced(t *testing.T) {
+	e := newTxnWebEnv(t)
+
+	f := e.twoBodyMainHeaderForm("Header memo text", "", "Line two own desc")
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions", f)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("create: status=%d, body=%s", rec.Code, rec.Body.String())
+	}
+	loc := rec.Header().Get("Location")
+	// One blank body line was filled -> main_desc=1 rides the redirect.
+	if !strings.Contains(loc, "main_desc=1") {
+		t.Fatalf("warning marker main_desc=1 not on redirect; got %q", loc)
+	}
+
+	// Following the redirect renders the register with the banner text (the count message).
+	reg := asUser(t, e.h, e.sm, e.book, http.MethodGet, loc, nil)
+	if reg.Code != http.StatusOK {
+		t.Fatalf("register GET after save: %d", reg.Code)
+	}
+	rb := reg.Body.String()
+	if !strings.Contains(rb, i18n.TN("en", "txn.main_desc_notice.copied", 1)) {
+		t.Fatalf("post-save warning banner not rendered on the register; body:\n%s", rb)
+	}
+	// The banner reuses the styled caution-alert class (no inline style; strict CSP).
+	if !strings.Contains(rb, `class="alert alert-warn"`) {
+		t.Fatalf("warning banner missing the alert-warn class; body:\n%s", rb)
+	}
+}
+
+// TestTxnMainDescCopyDownOnUpdate (p31, both-paths): the copy-down + warning run on the
+// SHARED create/update path, so an UPDATE (POST /transactions/{id}) that gives the main
+// header a description also fills a blank body line and emits the marker. Seed a txn, then
+// re-post it through the header form with a main description and one blank body line.
+func TestTxnMainDescCopyDownOnUpdate(t *testing.T) {
+	e := newTxnWebEnv(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// Seed: MAIN = Checking (no desc) at position 0; body = two Salaries lines (Beca /
+	// Educacion / program) that sum to 100, both with their own descriptions.
+	fund, prog := e.fund, e.progEdu
+	id, err := e.st.PostTransaction(ctx, store.PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.sub1, Currency: "USD",
+		Splits: []store.SplitInput{
+			{AccountID: e.checking, Amount: -10000, FundID: &fund, Position: 0},
+			{AccountID: e.salaries, Amount: 6000, FundID: &fund, ProgramID: &prog, FunctionalClass: strptr("program"), Description: "keep me", Position: 1},
+			{AccountID: e.salaries, Amount: 4000, FundID: &fund, ProgramID: &prog, FunctionalClass: strptr("program"), Description: "also mine", Position: 2},
+		},
+	})
+	must(t, err, "seed txn")
+	live := splitStatesByPosition(t, e, id)
+
+	// Re-post via the header form: main (Checking) now carries a description; body line 0
+	// is BLANKED (should inherit), body line 1 keeps its own description. Round-trip split
+	// ids so UpdateTransaction diffs by id (trap 1).
+	main := live[0]
+	main.Description = "Updated header memo"
+	body := []splitFull{
+		{AccountID: e.salaries, Amount: 6000, FundID: ni(e.fund), ProgramID: ni(e.progEdu), FunctionalClass: ns("program"), Description: "", ID: live[1].ID},
+		{AccountID: e.salaries, Amount: 4000, FundID: ni(e.fund), ProgramID: ni(e.progEdu), FunctionalClass: ns("program"), Description: "also mine", ID: live[2].ID},
+	}
+	f := mainHeaderForm(e.sub1, main, body)
+	f.Set("main_split_id", itoa(int64(main.ID)))
+	f.Set("split_id_0", itoa(int64(live[1].ID)))
+	f.Set("split_id_1", itoa(int64(live[2].ID)))
+
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(int64(id)), f)
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("update: status=%d, body=%s", rec.Code, rec.Body.String())
+	}
+
+	desc := bodyDescByAmount(t, e, id)
+	if desc[6000] != "Updated header memo" {
+		t.Fatalf("blanked body line did not inherit main desc on update; got %q", desc[6000])
+	}
+	if desc[4000] != "also mine" {
+		t.Fatalf("own-desc body line clobbered on update; got %q", desc[4000])
+	}
+	// The warning marker rides the update redirect too (one line copied).
+	if loc := rec.Header().Get("Location"); !strings.Contains(loc, "main_desc=1") {
+		t.Fatalf("update redirect missing main_desc=1; got %q", loc)
+	}
+}
+
 // --- helpers --------------------------------------------------------------
 
 // nn/ni/ns build the *int64 (store.SplitInput) / sql.NullInt64 (splitFull) / sql.NullString

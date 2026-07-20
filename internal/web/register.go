@@ -289,6 +289,13 @@ type registerPageModel struct {
 	Funds    []regFilterOption
 	Subs     []regFilterOption
 	Programs []regFilterOption
+
+	// p31 post-save notice: set when the transaction editor redirected here after a save
+	// whose MAIN-header split carried a description (the ?main_desc=<N> PRG marker). The
+	// register shows a non-blocking "heads up" banner reminding the user the header memo is
+	// the usual place; MainDescCopies is how many blank body lines the copy-down filled.
+	MainDescNotice bool
+	MainDescCopies int
 }
 
 // registerPage handles GET /accounts/{id}/register (TxnRead). A normal GET renders
@@ -348,6 +355,17 @@ func (s *server) registerPage(w http.ResponseWriter, r *http.Request) {
 		FilterFund:   derefID(filters.FundID),
 		FilterSub:    derefID(filters.Subsidiary),
 		FilterProg:   derefID(filters.ProgramID),
+	}
+
+	// p31: a ?main_desc=<N> marker means the txn editor redirected here after saving a
+	// transaction whose main-header split carried a description (PRG, the settings-notice
+	// pattern). Surface a non-blocking banner on the full page (the fragment/results swaps
+	// below never render it, so it only shows on the post-save navigation).
+	if v := r.URL.Query().Get("main_desc"); v != "" {
+		model.MainDescNotice = true
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			model.MainDescCopies = n
+		}
 	}
 
 	// A cursor-carrying request is the sentinel's page fetch: render ONLY the rows
