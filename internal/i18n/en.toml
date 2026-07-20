@@ -245,14 +245,16 @@ other = "Grant read access to report groups. Admins already see every report."
 other = "No report groups are defined yet."
 [admin.users.save_grants]
 other = "Save report access"
-[admin.users.grant_scope_label]
-other = "Program scope"
 [admin.users.grant_scope_org_wide]
 other = "Whole organization"
 [admin.users.grant_scope_current]
 other = "Current scope:"
 [admin.users.grant_scope_hint]
 other = "Limit this grant to one program and its sub-programs. Leave as whole organization for org-wide access."
+[admin.users.grant_group_access]
+other = "Grant access to this report group"
+[admin.users.grant_scope_for]
+other = "Program scope for %s"
 [admin.users.form.title]
 other = "New user"
 [admin.users.form.username]

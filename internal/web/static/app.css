@@ -2039,4 +2039,41 @@ button.datefield-title:hover { background: var(--color-surface-alt); }
   white-space: nowrap;
   border: 0;
 }
+
+/* Admin user permissions: each report group is its own labeled card (fieldset +
+   legend = the translated group name) so its grant checkbox and — for a
+   program-dimensioned group — its program-scope selector read as one unit and there
+   is no doubt which group a scope applies to. One form wraps every card; the single
+   Save button diffs the whole desired set server-side. */
+.grant-groups {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  margin-bottom: var(--space-4);
+}
+.grant-group {
+  margin: 0;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: var(--border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+.grant-group > legend {
+  padding: 0 var(--space-2);
+  font-weight: 600;
+}
+.grant-group .grant-row { margin-bottom: 0; }
+/* The program-scope selector is subordinate to the group's grant checkbox: indent it
+   under the checkbox and tie it visually to the card with a left rule. The handler
+   ignores program_<group> for an ungranted group, so leaving it enabled is safe. */
+.grant-group .grant-scope {
+  margin-top: var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.grant-group .grant-scope > label { font-weight: 500; }
+.grant-group .grant-scope-current { margin: 0; }
 .hist-empty { color: var(--color-text-muted); }

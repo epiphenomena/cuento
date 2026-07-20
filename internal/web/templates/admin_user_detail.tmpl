@@ -76,33 +76,41 @@
     <p class="hint">{{t "admin.users.grants_intro"}}</p>
     <form method="post" action="/admin/users/{{.ID}}/grants" class="grants-form">
       {{- $programs := .Programs}}
-      {{- range $grant := .Grants}}
-      <div class="field field-check grant-row">
-        <label>
-          <input type="checkbox" name="grant_{{$grant.Name}}" value="1"{{if $grant.Granted}} checked{{end}}>
-          {{$grant.Name}}
-        </label>
-        {{- if $grant.ScopeSelectable}}
-        <div class="grant-scope">
-          <label for="grant-scope-{{$grant.Name}}">{{t "admin.users.grant_scope_label"}}</label>
-          {{/* p29.13: fuzzy program combobox (combo-input) with the dotted hierarchy in data-path. */}}
-          <select id="grant-scope-{{$grant.Name}}" name="program_{{$grant.Name}}" class="combo-input">
-            <option value="">{{t "admin.users.grant_scope_org_wide"}}</option>
-            {{- range $programs}}
-            <option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $grant.ScopeID}} selected{{end}}>{{.Name}}</option>
+      {{- if .Grants}}
+      <div class="grant-groups">
+        {{- range $grant := .Grants}}
+        {{- $label := t (printf "reports.group.%s" $grant.Name)}}
+        <fieldset class="grant-group{{if $grant.ScopeSelectable}} grant-group-scoped{{end}}">
+          <legend>{{$label}}</legend>
+          <div class="field field-check grant-row">
+            <label>
+              <input type="checkbox" name="grant_{{$grant.Name}}" value="1"{{if $grant.Granted}} checked{{end}}>
+              {{t "admin.users.grant_group_access"}}
+            </label>
+          </div>
+          {{- if $grant.ScopeSelectable}}
+          <div class="grant-scope">
+            <label for="grant-scope-{{$grant.Name}}">{{t "admin.users.grant_scope_for" $label}}</label>
+            {{/* p29.13: fuzzy program combobox (combo-input) with the dotted hierarchy in data-path. */}}
+            <select id="grant-scope-{{$grant.Name}}" name="program_{{$grant.Name}}" class="combo-input">
+              <option value="">{{t "admin.users.grant_scope_org_wide"}}</option>
+              {{- range $programs}}
+              <option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $grant.ScopeID}} selected{{end}}>{{.Name}}</option>
+              {{- end}}
+            </select>
+            {{- if $grant.Granted}}
+            <p class="hint grant-scope-current">
+              {{t "admin.users.grant_scope_current"}}
+              {{- if $grant.ScopeName}} {{$grant.ScopeName}}{{else}} {{t "admin.users.grant_scope_org_wide"}}{{end}}
+            </p>
             {{- end}}
-          </select>
-          {{- if $grant.Granted}}
-          <p class="hint grant-scope-current">
-            {{t "admin.users.grant_scope_current"}}
-            {{- if $grant.ScopeName}} {{$grant.ScopeName}}{{else}} {{t "admin.users.grant_scope_org_wide"}}{{end}}
-          </p>
+            <p class="hint">{{t "admin.users.grant_scope_hint"}}</p>
+          </div>
           {{- end}}
-          <p class="hint">{{t "admin.users.grant_scope_hint"}}</p>
-        </div>
+        </fieldset>
         {{- end}}
       </div>
-      {{else}}
+      {{- else}}
       <p class="hint">{{t "admin.users.no_groups"}}</p>
       {{- end}}
       <div class="form-actions">
