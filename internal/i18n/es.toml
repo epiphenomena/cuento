@@ -741,6 +741,12 @@ other = "Subsidiaria padre"
 other = "Moneda base"
 [subsidiaries.form.root_note]
 other = "Esta es la subsidiaria raiz; no tiene padre y no se puede mover."
+[subsidiaries.form.default_ap_account]
+other = "Cuenta por pagar predeterminada"
+[subsidiaries.form.default_ap_none]
+other = "— Ninguna —"
+[error.subsidiary.default_ap_scope]
+other = "La cuenta elegida debe ser una cuenta de pasivo activa en esta subsidiaria."
 [error.subsidiary.second_root]
 other = "Una subsidiaria debe tener un padre; ya existe una raiz."
 [error.subsidiary.parent_missing]

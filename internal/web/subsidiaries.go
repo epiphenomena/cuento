@@ -103,7 +103,21 @@ type subsidiaryForm struct {
 	Parents    []subOption
 	Currencies []currencyOption
 
+	// DefaultAPAccountID is the subsidiary's current default AP account (0 = none).
+	// APAccounts are the eligible candidates (active LIABILITY leaves in this
+	// subsidiary's scope); the picker is offered only when editing an existing
+	// subsidiary that has candidates (a fresh child has no accounts yet).
+	DefaultAPAccountID int64
+	APAccounts         []apAccountOption
+
 	Errors formErrors
+}
+
+// apAccountOption is one selectable default-AP candidate: its id and the dotted
+// account path shown in the picker.
+type apAccountOption struct {
+	ID   int64
+	Path string
 }
 
 // subsidiaryNewForm handles GET /admin/subsidiaries/new (Admin): the empty create
@@ -139,6 +153,9 @@ func (s *server) subsidiaryEditForm(w http.ResponseWriter, r *http.Request) {
 	form.IsRoot = !sub.ParentID.Valid
 	if sub.ParentID.Valid {
 		form.ParentID = sub.ParentID.Int64
+	}
+	if sub.DefaultApAccountID.Valid {
+		form.DefaultAPAccountID = sub.DefaultApAccountID.Int64
 	}
 	s.render(w, r, http.StatusOK, "subsidiary-form", form)
 }
@@ -181,6 +198,22 @@ func (s *server) buildSubsidiaryForm(ctx context.Context, id ids.SubsidiaryID) (
 	for _, c := range curs {
 		if c.Active != 0 {
 			form.Currencies = append(form.Currencies, currencyOption{Code: c.Code, Name: c.Name})
+		}
+	}
+
+	// Default-AP candidates: active LIABILITY (payable) leaves in THIS subsidiary's
+	// scope. AP is a liability, so the picker is filtered to liability accounts; the
+	// store still validates the chosen id (exist/active/scope). Offered only when
+	// editing an existing subsidiary (id != 0) -- a fresh child has no accounts yet.
+	if id != 0 {
+		opts, err := s.store.AccountEditorOptions(ctx, langOf(ctx), id)
+		if err != nil {
+			return form, err
+		}
+		for _, o := range opts {
+			if o.Type == "liability" {
+				form.APAccounts = append(form.APAccounts, apAccountOption{ID: int64(o.ID), Path: o.Path})
+			}
 		}
 	}
 	return form, nil
@@ -228,6 +261,22 @@ func (s *server) subsidiaryUpdate(w http.ResponseWriter, r *http.Request) {
 		Name:         &in.name,
 		BaseCurrency: &in.baseCurrency,
 	}
+	// Default AP account. The store field is ALWAYS-APPLIED (nil clears it), but the
+	// form OMITS the picker when the subsidiary has no candidate accounts (a fresh
+	// child, or one whose only candidates went inactive). So only apply from the form
+	// when the field was actually SUBMITTED: a positive value sets it, an explicit 0
+	// ("None") clears it. When the field is ABSENT (picker omitted), re-supply the
+	// CURRENT value so an unrelated edit (e.g. a rename) never silently wipes a set AP
+	// account and never writes an unintended versioned snapshot (rule 14).
+	if r.PostForm.Has("default_ap_account_id") {
+		if in.defaultAPAccountID > 0 {
+			ap := in.defaultAPAccountID
+			upd.DefaultAPAccountID = &ap
+		}
+	} else if cur, gerr := s.store.GetSubsidiary(ctx, id); gerr == nil && cur.DefaultApAccountID.Valid {
+		v := ids.AccountID(cur.DefaultApAccountID.Int64)
+		upd.DefaultAPAccountID = &v
+	}
 	// A positive parent selection is a MOVE target; the store validates it against
 	// root-immovability and cycles. Selecting nothing (0) leaves the parent as-is.
 	// Reparenting the ROOT is still attempted (the form for the root omits the
@@ -273,6 +322,9 @@ type parsedSubsidiaryForm struct {
 	name         string
 	parentID     ids.SubsidiaryID
 	baseCurrency string
+	// defaultAPAccountID is the selected default AP account (0 = none). Always
+	// applied on update (the store clears it on 0, validates it otherwise).
+	defaultAPAccountID ids.AccountID
 }
 
 // parseSubsidiaryForm reads the POST form into a subsidiaryForm (for a 422
@@ -286,9 +338,10 @@ func (s *server) parseSubsidiaryForm(r *http.Request, id ids.SubsidiaryID) (subs
 		return subsidiaryForm{}, parsedSubsidiaryForm{}, err
 	}
 	in := parsedSubsidiaryForm{
-		name:         r.PostFormValue("name"),
-		parentID:     ids.SubsidiaryID(parseID(r.PostFormValue("parent_id"))),
-		baseCurrency: r.PostFormValue("base_currency"),
+		name:               r.PostFormValue("name"),
+		parentID:           ids.SubsidiaryID(parseID(r.PostFormValue("parent_id"))),
+		baseCurrency:       r.PostFormValue("base_currency"),
+		defaultAPAccountID: ids.AccountID(parseID(r.PostFormValue("default_ap_account_id"))),
 	}
 	form, err := s.buildSubsidiaryForm(r.Context(), id)
 	if err != nil {
@@ -298,6 +351,7 @@ func (s *server) parseSubsidiaryForm(r *http.Request, id ids.SubsidiaryID) (subs
 	form.Name = in.name
 	form.ParentID = int64(in.parentID)
 	form.BaseCurrency = in.baseCurrency
+	form.DefaultAPAccountID = int64(in.defaultAPAccountID)
 	// On edit, mark the root so the template still omits the parent select.
 	if id != 0 {
 		if sub, gerr := s.store.GetSubsidiary(r.Context(), id); gerr == nil {
@@ -336,6 +390,8 @@ func subsidiaryErrorField(err error) (field, key string) {
 		return "parent_id", "error.subsidiary.root_immovable"
 	case errors.Is(err, store.ErrCycle):
 		return "parent_id", "error.subsidiary.cycle"
+	case errors.Is(err, store.ErrDefaultAPAccountScope):
+		return "default_ap_account_id", "error.subsidiary.default_ap_scope"
 	default:
 		return "", ""
 	}

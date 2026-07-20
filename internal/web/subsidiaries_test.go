@@ -108,6 +108,85 @@ func TestSubsidiariesRename(t *testing.T) {
 	}
 }
 
+// TestSubsidiariesSetDefaultAPAccount: an Admin sets a subsidiary's default AP
+// account through the edit form (the submitted account is an active in-scope
+// liability leaf); the live row records it.
+func TestSubsidiariesSetDefaultAPAccount(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	admin := mkUser(t, st, "admin2", "none", true)
+
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	sub, err := st.CreateSubsidiary(ctx, store.CreateSubsidiaryInput{ParentID: 1, Name: "Branch", BaseCurrency: "USD"})
+	if err != nil {
+		t.Fatalf("seed sub: %v", err)
+	}
+	ap, err := st.CreateAccount(ctx, store.CreateAccountInput{
+		Type: "liability", DefaultCurrency: "USD",
+		Names:        map[string]string{"en": "Accounts Payable", "es": "Cuentas por pagar"},
+		Subsidiaries: []ids.SubsidiaryID{sub},
+	})
+	if err != nil {
+		t.Fatalf("seed AP account: %v", err)
+	}
+
+	form := url.Values{}
+	form.Set("name", "Branch")
+	form.Set("parent_id", "1")
+	form.Set("base_currency", "USD")
+	form.Set("default_ap_account_id", itoa(int64(ap)))
+
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/subsidiaries/"+itoa(int64(sub)), form)
+	if rec.Code >= 400 {
+		t.Fatalf("set AP returned %d, body: %s", rec.Code, rec.Body.String())
+	}
+	got, _ := st.GetSubsidiary(context.Background(), sub)
+	if !got.DefaultApAccountID.Valid || got.DefaultApAccountID.Int64 != int64(ap) {
+		t.Errorf("default_ap_account_id = %+v, want %d", got.DefaultApAccountID, ap)
+	}
+}
+
+// TestSubsidiariesRenamePreservesAP: an unrelated edit (rename) that OMITS the
+// default_ap_account_id field must NOT clear a previously set AP account. The form
+// omits the picker when a subsidiary has no candidate accounts, so an absent field
+// must be treated as "leave as-is" -- not as a clear (which would wipe the field
+// and write an unintended versioned snapshot, rule 14).
+func TestSubsidiariesRenamePreservesAP(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	admin := mkUser(t, st, "admin2", "none", true)
+
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	sub, err := st.CreateSubsidiary(ctx, store.CreateSubsidiaryInput{ParentID: 1, Name: "Branch", BaseCurrency: "USD"})
+	if err != nil {
+		t.Fatalf("seed sub: %v", err)
+	}
+	ap, err := st.CreateAccount(ctx, store.CreateAccountInput{
+		Type: "liability", DefaultCurrency: "USD",
+		Names:        map[string]string{"en": "AP", "es": "AP"},
+		Subsidiaries: []ids.SubsidiaryID{sub},
+	})
+	if err != nil {
+		t.Fatalf("seed AP account: %v", err)
+	}
+	if err := st.UpdateSubsidiary(ctx, sub, store.UpdateSubsidiaryInput{DefaultAPAccountID: &ap}); err != nil {
+		t.Fatalf("set AP: %v", err)
+	}
+
+	// Rename WITHOUT resubmitting default_ap_account_id (as the picker-less form does).
+	form := url.Values{}
+	form.Set("name", "Renamed Branch")
+	form.Set("parent_id", "1")
+	form.Set("base_currency", "USD")
+
+	rec := asUser(t, h, sm, admin, http.MethodPost, "/admin/subsidiaries/"+itoa(int64(sub)), form)
+	if rec.Code >= 400 {
+		t.Fatalf("rename returned %d, body: %s", rec.Code, rec.Body.String())
+	}
+	got, _ := st.GetSubsidiary(context.Background(), sub)
+	if !got.DefaultApAccountID.Valid || got.DefaultApAccountID.Int64 != int64(ap) {
+		t.Errorf("AP account wiped by an unrelated rename: got %+v, want %d", got.DefaultApAccountID, ap)
+	}
+}
+
 // TestSubsidiariesMove: editing a subsidiary's parent moves it under a new
 // parent.
 func TestSubsidiariesMove(t *testing.T) {

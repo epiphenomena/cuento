@@ -46,6 +46,10 @@ var (
 	ErrRootImmovable = errors.New("store: the root subsidiary cannot be moved")
 	// ErrHasActiveChildren: deactivation is blocked while active children remain.
 	ErrHasActiveChildren = errors.New("store: subsidiary has active children")
+	// ErrDefaultAPAccountScope: the chosen default AP account is missing, inactive,
+	// or not mapped to this subsidiary. Mirrors the budget-split scope-error style:
+	// one sentinel covers the whole "not an eligible account here" family.
+	ErrDefaultAPAccountScope = errors.New("store: default AP account missing, inactive, or out of subsidiary scope")
 )
 
 // CreateSubsidiaryInput is the desired state of a NEW child subsidiary. ParentID
@@ -67,6 +71,13 @@ type UpdateSubsidiaryInput struct {
 	Name         *string
 	BaseCurrency *string
 	SortOrder    *int64
+	// DefaultAPAccountID is an EXCEPTION to this struct's diff-style leave-as-is
+	// contract: it is ALWAYS applied (nil clears the field to NULL, non-nil sets
+	// it). Every caller re-supplies the current value (the edit form re-sends the
+	// prefilled option), so "leave untouched" is never needed for it. A non-nil
+	// value must reference an active account mapped to this subsidiary
+	// (ErrDefaultAPAccountScope otherwise).
+	DefaultAPAccountID *ids.AccountID
 }
 
 // CreateSubsidiary creates a child subsidiary and returns its new id. It rejects
@@ -156,13 +167,41 @@ func (s *Store) UpdateSubsidiary(ctx context.Context, id ids.SubsidiaryID, in Up
 				next.ParentID = sql.NullInt64{Int64: int64(*in.ParentID), Valid: true}
 			}
 
+			// Default AP account is always-applied (see UpdateSubsidiaryInput): nil
+			// clears it; a non-nil value must be an active account mapped to THIS
+			// subsidiary (mirrors the budget-split account-scope check, D18).
+			next.DefaultApAccountID = ids.Null(in.DefaultAPAccountID)
+			if in.DefaultAPAccountID != nil {
+				acct, err := q.GetAccount(ctx, *in.DefaultAPAccountID)
+				if err != nil {
+					if errors.Is(err, sql.ErrNoRows) {
+						return ErrDefaultAPAccountScope
+					}
+					return fmt.Errorf("load default AP account %d: %w", *in.DefaultAPAccountID, err)
+				}
+				if acct.Active == 0 {
+					return ErrDefaultAPAccountScope
+				}
+				mapped, err := q.HasAccountSubsidiaryMap(ctx, sqlc.HasAccountSubsidiaryMapParams{
+					AccountID:    *in.DefaultAPAccountID,
+					SubsidiaryID: id,
+				})
+				if err != nil {
+					return fmt.Errorf("default AP account-sub map %d: %w", *in.DefaultAPAccountID, err)
+				}
+				if !mapped {
+					return ErrDefaultAPAccountScope
+				}
+			}
+
 			if err := q.UpdateSubsidiary(ctx, sqlc.UpdateSubsidiaryParams{
-				ParentID:     next.ParentID,
-				Name:         next.Name,
-				BaseCurrency: next.BaseCurrency,
-				Active:       next.Active,
-				SortOrder:    next.SortOrder,
-				ID:           id,
+				ParentID:           next.ParentID,
+				Name:               next.Name,
+				BaseCurrency:       next.BaseCurrency,
+				Active:             next.Active,
+				SortOrder:          next.SortOrder,
+				DefaultApAccountID: next.DefaultApAccountID,
+				ID:                 id,
 			}); err != nil {
 				return fmt.Errorf("update subsidiary %d: %w", id, err)
 			}
@@ -200,12 +239,13 @@ func (s *Store) DeactivateSubsidiary(ctx context.Context, id ids.SubsidiaryID) e
 			}
 
 			if err := q.UpdateSubsidiary(ctx, sqlc.UpdateSubsidiaryParams{
-				ParentID:     cur.ParentID,
-				Name:         cur.Name,
-				BaseCurrency: cur.BaseCurrency,
-				Active:       0,
-				SortOrder:    cur.SortOrder,
-				ID:           id,
+				ParentID:           cur.ParentID,
+				Name:               cur.Name,
+				BaseCurrency:       cur.BaseCurrency,
+				Active:             0,
+				SortOrder:          cur.SortOrder,
+				DefaultApAccountID: cur.DefaultApAccountID,
+				ID:                 id,
 			}); err != nil {
 				return fmt.Errorf("deactivate subsidiary %d: %w", id, err)
 			}

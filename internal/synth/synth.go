@@ -21,6 +21,7 @@ package synth
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"cuento/internal/ids"
@@ -176,6 +177,12 @@ func Build(ctx context.Context, s *store.Store) (IDs, error) {
 	}
 	if err := buildAccounts(ctx, s, &ids); err != nil {
 		return ids, err
+	}
+	// Showcase the per-subsidiary default AP account: point the US subsidiary at its
+	// Credit Card liability (US-scoped, active). Runs AFTER buildAccounts so the
+	// account exists and the store's exist/active/scope validation passes.
+	if err := s.UpdateSubsidiary(ctx, ids.US, store.UpdateSubsidiaryInput{DefaultAPAccountID: &ids.CreditCard}); err != nil {
+		return ids, fmt.Errorf("set US default AP account: %w", err)
 	}
 	if err := buildFunds(ctx, s, &ids); err != nil {
 		return ids, err

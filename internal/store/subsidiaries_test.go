@@ -298,6 +298,128 @@ func TestDeactivateBlockedWithActiveChildren(t *testing.T) {
 	}
 }
 
+// apAccount creates a leaf liability account mapped to the given subsidiaries and
+// returns its id (a valid default-AP candidate: active, in-scope, payable).
+func apAccount(t *testing.T, s *Store, name string, subs ...ids.SubsidiaryID) ids.AccountID {
+	t.Helper()
+	id, err := s.CreateAccount(mutCtx(), CreateAccountInput{
+		Type:            "liability",
+		DefaultCurrency: "USD",
+		Names:           map[string]string{"en": name, "es": name},
+		Subsidiaries:    subs,
+	})
+	if err != nil {
+		t.Fatalf("create AP account %q: %v", name, err)
+	}
+	return id
+}
+
+// TestUpdateDefaultAPAccountVersioned: setting a valid (active, in-scope) default
+// AP account updates the live row and appends an update-op version whose snapshot
+// carries the same account id (snapshot-from-live).
+func TestUpdateDefaultAPAccountVersioned(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	sub, _ := s.CreateSubsidiary(mutCtx(), CreateSubsidiaryInput{ParentID: rootID, Name: "Branch", BaseCurrency: "USD"})
+	ap := apAccount(t, s, "Accounts Payable", sub)
+
+	if err := s.UpdateSubsidiary(mutCtx(), sub, UpdateSubsidiaryInput{DefaultAPAccountID: &ap}); err != nil {
+		t.Fatalf("UpdateSubsidiary(set AP): %v", err)
+	}
+
+	testutil.AssertVersioned(t, d, "subsidiaries", int64(sub), "update")
+
+	row, err := s.GetSubsidiary(context.Background(), sub)
+	if err != nil {
+		t.Fatalf("GetSubsidiary: %v", err)
+	}
+	if !row.DefaultApAccountID.Valid || row.DefaultApAccountID.Int64 != int64(ap) {
+		t.Fatalf("live default_ap_account_id = %+v, want %d", row.DefaultApAccountID, ap)
+	}
+
+	var vAP sql.NullInt64
+	if err := d.QueryRow(
+		`SELECT default_ap_account_id FROM subsidiaries_versions
+		  WHERE entity_id = ? ORDER BY valid_from DESC, id DESC LIMIT 1`, sub,
+	).Scan(&vAP); err != nil {
+		t.Fatalf("read version AP: %v", err)
+	}
+	if !vAP.Valid || vAP.Int64 != int64(ap) {
+		t.Fatalf("snapshot default_ap_account_id = %+v, want %d", vAP, ap)
+	}
+}
+
+// TestClearDefaultAPAccount: passing a nil DefaultAPAccountID clears the field
+// (this field is always-applied, unlike its diff-style siblings).
+func TestClearDefaultAPAccount(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	sub, _ := s.CreateSubsidiary(mutCtx(), CreateSubsidiaryInput{ParentID: rootID, Name: "Branch", BaseCurrency: "USD"})
+	ap := apAccount(t, s, "Accounts Payable", sub)
+
+	if err := s.UpdateSubsidiary(mutCtx(), sub, UpdateSubsidiaryInput{DefaultAPAccountID: &ap}); err != nil {
+		t.Fatalf("UpdateSubsidiary(set AP): %v", err)
+	}
+	// Now clear it (nil), changing only the name alongside.
+	name := "Renamed Branch"
+	if err := s.UpdateSubsidiary(mutCtx(), sub, UpdateSubsidiaryInput{Name: &name, DefaultAPAccountID: nil}); err != nil {
+		t.Fatalf("UpdateSubsidiary(clear AP): %v", err)
+	}
+
+	row, err := s.GetSubsidiary(context.Background(), sub)
+	if err != nil {
+		t.Fatalf("GetSubsidiary: %v", err)
+	}
+	if row.DefaultApAccountID.Valid {
+		t.Fatalf("default_ap_account_id = %+v, want NULL after clear", row.DefaultApAccountID)
+	}
+}
+
+// TestDefaultAPAccountOutOfScopeRejected: setting an account that is not mapped to
+// this subsidiary is rejected with the typed sentinel and leaves no trace.
+func TestDefaultAPAccountOutOfScopeRejected(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	subA, _ := s.CreateSubsidiary(mutCtx(), CreateSubsidiaryInput{ParentID: rootID, Name: "A", BaseCurrency: "USD"})
+	subB, _ := s.CreateSubsidiary(mutCtx(), CreateSubsidiaryInput{ParentID: rootID, Name: "B", BaseCurrency: "USD"})
+	// AP account mapped only to B.
+	ap := apAccount(t, s, "AP-B", subB)
+
+	before := countChanges(t, d)
+	err := s.UpdateSubsidiary(mutCtx(), subA, UpdateSubsidiaryInput{DefaultAPAccountID: &ap})
+	if !errors.Is(err, ErrDefaultAPAccountScope) {
+		t.Fatalf("set out-of-scope AP: err = %v, want ErrDefaultAPAccountScope", err)
+	}
+	if n := countChanges(t, d); n != before {
+		t.Errorf("changes count = %d, want %d (rejected update leaves no trace)", n, before)
+	}
+}
+
+// TestDefaultAPAccountInactiveRejected: an inactive account is rejected even when
+// it is in scope.
+func TestDefaultAPAccountInactiveRejected(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	sub, _ := s.CreateSubsidiary(mutCtx(), CreateSubsidiaryInput{ParentID: rootID, Name: "Branch", BaseCurrency: "USD"})
+	ap := apAccount(t, s, "AP", sub)
+	if err := s.DeactivateAccount(mutCtx(), ap); err != nil {
+		t.Fatalf("DeactivateAccount: %v", err)
+	}
+
+	before := countChanges(t, d)
+	err := s.UpdateSubsidiary(mutCtx(), sub, UpdateSubsidiaryInput{DefaultAPAccountID: &ap})
+	if !errors.Is(err, ErrDefaultAPAccountScope) {
+		t.Fatalf("set inactive AP: err = %v, want ErrDefaultAPAccountScope", err)
+	}
+	if n := countChanges(t, d); n != before {
+		t.Errorf("changes count = %d, want %d (rejected update leaves no trace)", n, before)
+	}
+}
+
 // TestSubTree: depth-first (pre-order) traversal, children ordered by sort_order
 // then id. sort_order is deliberately made to DISAGREE with id order so the test
 // distinguishes sort_order ordering from mere id ordering.

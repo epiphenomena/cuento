@@ -83,6 +83,10 @@ func TestDemoGeneratorAntiDrift(t *testing.T) {
 	// Multi-subsidiary org (parent + 2 children) in >1 currency.
 	atLeast("subsidiaries", count(`SELECT count(*) FROM subsidiaries`), 3)
 	atLeast("currencies used by subsidiaries", count(`SELECT count(DISTINCT base_currency) FROM subsidiaries`), 2)
+	// At least one subsidiary carries a default AP account so the feature ships with
+	// demo data (the picker + expense-report default posting are demonstrable).
+	atLeast("subsidiaries with a default AP account",
+		count(`SELECT count(*) FROM subsidiaries WHERE default_ap_account_id IS NOT NULL`), 1)
 
 	// p31 FX remeasurement: at least one transaction denominated in a currency that is
 	// NOT its subsidiary's functional (base) currency -- the ASC 830-20 remeasurement

@@ -19,7 +19,7 @@ VALUES (?, ?, ?, ?, ?)
 RETURNING id;
 
 -- name: GetSubsidiary :one
-SELECT id, parent_id, name, base_currency, active, sort_order
+SELECT id, parent_id, name, base_currency, active, sort_order, default_ap_account_id
 FROM subsidiaries
 WHERE id = ?;
 
@@ -28,7 +28,7 @@ WHERE id = ?;
 -- The store reads the current row (GetSubsidiary), overrides the caller's fields,
 -- and writes the full desired state here, keeping snapshot-from-live trivial.
 UPDATE subsidiaries
-SET parent_id = ?, name = ?, base_currency = ?, active = ?, sort_order = ?
+SET parent_id = ?, name = ?, base_currency = ?, active = ?, sort_order = ?, default_ap_account_id = ?
 WHERE id = ?;
 
 -- name: InsertSubsidiaryVersion :exec
@@ -50,8 +50,8 @@ WHERE id = ?;
 -- fund_subsidiaries, later) copy this shape and change ONLY the entity_id
 -- expression and the WHERE that selects the live row; the structure is identical.
 INSERT INTO subsidiaries_versions
-  (entity_id, change_id, valid_from, op, parent_id, name, base_currency, active, sort_order)
-SELECT s.id, c.id, c.at, ?, s.parent_id, s.name, s.base_currency, s.active, s.sort_order
+  (entity_id, change_id, valid_from, op, parent_id, name, base_currency, active, sort_order, default_ap_account_id)
+SELECT s.id, c.id, c.at, ?, s.parent_id, s.name, s.base_currency, s.active, s.sort_order, s.default_ap_account_id
 FROM subsidiaries s, changes c
 WHERE c.id = ? AND s.id = ?;
 

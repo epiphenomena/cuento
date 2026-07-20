@@ -748,6 +748,12 @@ other = "Parent subsidiary"
 other = "Base currency"
 [subsidiaries.form.root_note]
 other = "This is the root subsidiary; it has no parent and cannot be moved."
+[subsidiaries.form.default_ap_account]
+other = "Default AP account"
+[subsidiaries.form.default_ap_none]
+other = "— None —"
+[error.subsidiary.default_ap_scope]
+other = "The chosen account must be an active liability account in this subsidiary."
 [error.subsidiary.second_root]
 other = "A subsidiary must have a parent; there is already a root."
 [error.subsidiary.parent_missing]

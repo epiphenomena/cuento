@@ -398,12 +398,13 @@ type SubsidiariesVersion struct {
 }
 
 type Subsidiary struct {
-	ID           ids.SubsidiaryID
-	ParentID     sql.NullInt64
-	Name         string
-	BaseCurrency string
-	Active       int64
-	SortOrder    int64
+	ID                 ids.SubsidiaryID
+	ParentID           sql.NullInt64
+	Name               string
+	BaseCurrency       string
+	Active             int64
+	SortOrder          int64
+	DefaultApAccountID sql.NullInt64
 }
 
 type Transaction struct {

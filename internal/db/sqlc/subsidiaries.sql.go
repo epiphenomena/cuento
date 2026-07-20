@@ -84,7 +84,7 @@ func (q *Queries) Descendants(ctx context.Context, id ids.SubsidiaryID) ([]Desce
 }
 
 const getSubsidiary = `-- name: GetSubsidiary :one
-SELECT id, parent_id, name, base_currency, active, sort_order
+SELECT id, parent_id, name, base_currency, active, sort_order, default_ap_account_id
 FROM subsidiaries
 WHERE id = ?
 `
@@ -99,6 +99,7 @@ func (q *Queries) GetSubsidiary(ctx context.Context, id ids.SubsidiaryID) (Subsi
 		&i.BaseCurrency,
 		&i.Active,
 		&i.SortOrder,
+		&i.DefaultApAccountID,
 	)
 	return i, err
 }
@@ -148,8 +149,8 @@ func (q *Queries) InsertSubsidiary(ctx context.Context, arg InsertSubsidiaryPara
 
 const insertSubsidiaryVersion = `-- name: InsertSubsidiaryVersion :exec
 INSERT INTO subsidiaries_versions
-  (entity_id, change_id, valid_from, op, parent_id, name, base_currency, active, sort_order)
-SELECT s.id, c.id, c.at, ?, s.parent_id, s.name, s.base_currency, s.active, s.sort_order
+  (entity_id, change_id, valid_from, op, parent_id, name, base_currency, active, sort_order, default_ap_account_id)
+SELECT s.id, c.id, c.at, ?, s.parent_id, s.name, s.base_currency, s.active, s.sort_order, s.default_ap_account_id
 FROM subsidiaries s, changes c
 WHERE c.id = ? AND s.id = ?
 `
@@ -245,17 +246,18 @@ func (q *Queries) SubTree(ctx context.Context) ([]SubTreeRow, error) {
 
 const updateSubsidiary = `-- name: UpdateSubsidiary :exec
 UPDATE subsidiaries
-SET parent_id = ?, name = ?, base_currency = ?, active = ?, sort_order = ?
+SET parent_id = ?, name = ?, base_currency = ?, active = ?, sort_order = ?, default_ap_account_id = ?
 WHERE id = ?
 `
 
 type UpdateSubsidiaryParams struct {
-	ParentID     sql.NullInt64
-	Name         string
-	BaseCurrency string
-	Active       int64
-	SortOrder    int64
-	ID           ids.SubsidiaryID
+	ParentID           sql.NullInt64
+	Name               string
+	BaseCurrency       string
+	Active             int64
+	SortOrder          int64
+	DefaultApAccountID sql.NullInt64
+	ID                 ids.SubsidiaryID
 }
 
 // Live update: rename / move (parent) / change base_currency / active / sort.
@@ -269,6 +271,7 @@ func (q *Queries) UpdateSubsidiary(ctx context.Context, arg UpdateSubsidiaryPara
 		arg.BaseCurrency,
 		arg.Active,
 		arg.SortOrder,
+		arg.DefaultApAccountID,
 		arg.ID,
 	)
 	return err
