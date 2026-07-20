@@ -56,9 +56,9 @@ cuento check --strict cuento.db          # clean; 0 transactions
 # ALWAYS back up first — the importer is row-by-row with no rollback; recovery is
 # restore-from-backup, not transaction abort.
 cp cuento.db cuento.db.bak
-ledgerimport import-subsidiary -source ... -map ... -config ... -subsidiary UPLAM -o cuento.db
+ledgerimport import-subsidiary -source ... -map ... -config ... -subsidiary US -o cuento.db
 cuento check --strict cuento.db          # green -> keep; red -> cp cuento.db.bak cuento.db
-# ... run/prove UPLAM live ...
+# ... run/prove US live ...
 ledgerimport import-subsidiary -source ... -map ... -config ... -subsidiary UPH -o cuento.db
 
 # FINALIZE: after the LAST subsidiary, post the config's cross-subsidiary
@@ -86,7 +86,7 @@ correction; the recovery is restore-from-backup (there is no un-post). The monol
 `build` path runs the corrections automatically at its tail, so it needs no separate
 finalize; only the split path does.
 
-`make scaffold-db`, `make import-sub IMPORT_SUB=UPLAM`, and `make finalize-db` wrap
+`make scaffold-db`, `make import-sub IMPORT_SUB=US`, and `make finalize-db` wrap
 this with the backup/restore safety net (stop the server first — it holds the db file
 open).
 

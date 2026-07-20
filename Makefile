@@ -121,7 +121,7 @@ dev-db:
 ## server first (it holds the db file open). Re-importing a subsidiary is refused —
 ## re-import means a fresh scaffold-db + import-sub from scratch.
 IMPORT_DB  ?= $(BINDIR)/live.db
-IMPORT_SUB ?= UPLAM
+IMPORT_SUB ?= US
 scaffold-db:
 	@mkdir -p $(BINDIR)
 	$(GO) build -o $(LEDGERIMPORT) ./cmd/ledgerimport
@@ -130,7 +130,7 @@ scaffold-db:
 	$(LEDGERIMPORT) scaffold -map $(FIXTURE_MAP) -config $(FIXTURE_CONFIG) \
 		$(if $(wildcard $(FIXTURE_RATES)),-rates $(FIXTURE_RATES),) -o $(IMPORT_DB)
 	$(BINARY) check -db $(IMPORT_DB) --strict
-	@echo "scaffold-db: reference db ready at $(IMPORT_DB) — now: make import-sub IMPORT_SUB=UPLAM"
+	@echo "scaffold-db: reference db ready at $(IMPORT_DB) — now: make import-sub IMPORT_SUB=US"
 
 import-sub:
 	@mkdir -p $(BINDIR)
