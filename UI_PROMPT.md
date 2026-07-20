@@ -1,0 +1,1 @@
+We need to do a bunch of ui work on cuento. I'll give a lot of feedback, take what i give and compose a task list to handoff to subagents to keep their and your context clean, always use subagents. Test and commit (just to main, don't need feature branches) each step (don't stress test constantly, just occasionally when a relevant change is made).
