@@ -470,16 +470,21 @@ func isRegisterFragment(r *http.Request) bool {
 	return q.Get("cursor_date") != "" || q.Get("cursor_id") != ""
 }
 
-// attachRegisterFilterOptions fills the filter selects: funds (active AND closed --
-// a historical split may reference a closed fund; NOTE the store's fund filter
-// cannot select the unrestricted/NULL group, so no "unrestricted" option is
-// offered), subsidiaries, and programs. Names are stored proper nouns (verbatim).
+// attachRegisterFilterOptions fills the filter selects: funds (ACTIVE only -- the
+// filter is a fund CHOICE, so a closed fund is not offered as a new selection; a
+// historical split that references a closed fund still renders its NAME via
+// fundNameMap. NOTE the store's fund filter cannot select the unrestricted/NULL
+// group, so no "unrestricted" option is offered), subsidiaries, and programs. Names
+// are stored proper nouns (verbatim).
 func (s *server) attachRegisterFilterOptions(ctx context.Context, m *registerPageModel) error {
 	funds, err := s.store.ListFunds(ctx)
 	if err != nil {
 		return err
 	}
 	for _, f := range funds {
+		if f.Active == 0 {
+			continue // a closed fund is not an offered filter CHOICE (D20)
+		}
 		m.Funds = append(m.Funds, regFilterOption{ID: int64(f.ID), Name: f.Name})
 	}
 	subs, err := s.store.AllSubsidiaries(ctx)

@@ -963,6 +963,8 @@ other = "Choose an account"
 other = "(unavailable)"
 [txn.fund.unrestricted]
 other = "Unrestricted"
+[txn.fund.unavailable_suffix]
+other = "(closed)"
 [txn.amount.debit]
 other = "Debit"
 [txn.amount.credit]

@@ -219,8 +219,13 @@ func (s *server) txnDuplicate(w http.ResponseWriter, r *http.Request) {
 		model.Rows = append(model.Rows, row)
 	}
 	// A duplicate clones an OLD entry, so it may reference a now-inactive / out-of-sub
-	// account; keep it SELECTED (marked) rather than blanking the select (p26.10).
+	// account or a now-closed fund; keep each SELECTED (marked) rather than blanking the
+	// select (p26.10).
 	if err := s.injectRowAccounts(ctx, &model); err != nil {
+		s.serverError(w)
+		return
+	}
+	if err := s.injectRowFunds(ctx, &model); err != nil {
 		s.serverError(w)
 		return
 	}

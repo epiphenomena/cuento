@@ -198,20 +198,18 @@ func (s *Store) UpdateTransaction(ctx context.Context, id ids.TransactionID, in 
 
 			// Current live splits, keyed by id, for the diff -- loaded BEFORE
 			// validation so validateAndResolve can tell, per split, whether its
-			// account is UNCHANGED (p26.13: an unchanged now-inactive account stays
-			// editable).
+			// account/fund is UNCHANGED (p26.13: an unchanged now-inactive account or
+			// now-closed fund stays editable).
 			live, err := q.SplitsByTransaction(ctx, id)
 			if err != nil {
 				return fmt.Errorf("load splits of %d: %w", id, err)
 			}
 			liveByID := make(map[ids.SplitID]sqlc.Split, len(live))
-			liveAccountByID := make(map[ids.SplitID]ids.AccountID, len(live))
 			for _, sp := range live {
 				liveByID[sp.ID] = sp
-				liveAccountByID[sp.ID] = sp.AccountID
 			}
 
-			resolved, err := s.validateAndResolve(ctx, q, in, liveAccountByID)
+			resolved, err := s.validateAndResolve(ctx, q, in, liveByID)
 			if err != nil {
 				return err
 			}
@@ -564,13 +562,13 @@ func (s *Store) TransactionAsOf(ctx context.Context, id ids.TransactionID, at ti
 // functional class defaulted). It is shared by Post and Update so their validation
 // -- and their defaulting, which the update diff depends on -- is identical.
 //
-// liveAccountByID maps an EXISTING split id to its persisted account id; Update
-// passes it (Post passes nil). A split whose id is present AND whose incoming
-// account_id equals the persisted account_id keeps a now-inactive account (p26.13);
-// every other split still requires an active account. A map-miss (bogus/absent id)
-// -> false: the active-account check applies, and the missing id is caught later as
-// ErrSplitNotFound.
-func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in PostTransactionInput, liveAccountByID map[ids.SplitID]ids.AccountID) ([]resolvedSplit, error) {
+// liveByID maps an EXISTING split id to its persisted row; Update passes it (Post
+// passes nil). A split whose id is present AND whose incoming account_id equals the
+// persisted account_id keeps a now-inactive account (p26.13); the same "unchanged"
+// test on FUND keeps a now-closed fund. Every other split still requires an active
+// account / fund. A map-miss (bogus/absent id) -> false: the active checks apply, and
+// the missing id is caught later as ErrSplitNotFound.
+func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in PostTransactionInput, liveByID map[ids.SplitID]sqlc.Split) ([]resolvedSplit, error) {
 	if len(in.Splits) < 2 {
 		return nil, ErrTooFewSplits
 	}
@@ -616,7 +614,7 @@ func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in Post
 	// cannot catch. Rejecting here, before any write, rolls the change back with no
 	// audit trace.
 	var seenID map[ids.SplitID]bool
-	if liveAccountByID != nil {
+	if liveByID != nil {
 		seenID = make(map[ids.SplitID]bool, len(in.Splits))
 	}
 	for i := range in.Splits {
@@ -629,8 +627,16 @@ func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in Post
 		}
 		// A pre-existing split whose account is unchanged may keep a now-inactive
 		// account (p26.13); a new or account-changed split still requires active.
-		allowInactive := sp.ID != nil && liveAccountByID[*sp.ID] == sp.AccountID
-		r, err := s.resolveSplit(ctx, q, in.SubsidiaryID, root, sp, allowInactive)
+		// The same UNCHANGED test on FUND keeps a now-closed fund editable. Fund is
+		// nullable (unrestricted == NULL), so compare with nullInt64Eq, not ==.
+		var allowInactiveAcct, allowInactiveFund bool
+		if sp.ID != nil {
+			if live, ok := liveByID[*sp.ID]; ok {
+				allowInactiveAcct = live.AccountID == sp.AccountID
+				allowInactiveFund = nullInt64Eq(live.FundID, ids.Null(sp.FundID))
+			}
+		}
+		r, err := s.resolveSplit(ctx, q, in.SubsidiaryID, root, sp, allowInactiveAcct, allowInactiveFund)
 		if err != nil {
 			return nil, err
 		}
@@ -670,7 +676,12 @@ func (s *Store) validateAndResolve(ctx context.Context, q *sqlc.Queries, in Post
 // account stays editable without reactivating. It is false on create and on any new
 // or account-changed split, which still require an active account. No other check
 // (missing, placeholder, subsidiary-map, fund, program, functional class) is relaxed.
-func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID ids.SubsidiaryID, root sqlc.Program, in SplitInput, allowInactiveAccount bool) (resolvedSplit, error) {
+//
+// allowInactiveFund is the fund analogue: set for an UPDATE of a pre-existing split
+// whose FUND is UNCHANGED, so a historical split on a since-closed fund stays editable
+// without reopening it. It relaxes ONLY the inactive-fund rejection -- the fund's
+// subsidiary-scope gate still applies (closing a fund never touches its scope map).
+func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID ids.SubsidiaryID, root sqlc.Program, in SplitInput, allowInactiveAccount, allowInactiveFund bool) (resolvedSplit, error) {
 	acct, err := q.GetAccount(ctx, in.AccountID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -714,7 +725,7 @@ func (s *Store) resolveSplit(ctx context.Context, q *sqlc.Queries, subID ids.Sub
 			}
 			return resolvedSplit{}, fmt.Errorf("load fund %d: %w", *in.FundID, err)
 		}
-		if f.Active == 0 {
+		if f.Active == 0 && !allowInactiveFund {
 			return resolvedSplit{}, ErrInactiveFund
 		}
 		scoped, err := q.HasFundSubsidiaryMap(ctx, sqlc.HasFundSubsidiaryMapParams{FundID: *in.FundID, SubsidiaryID: subID})

@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"strconv"
@@ -90,6 +91,10 @@ type txnOption struct {
 	// hierarchy. Empty for the subsidiary/fund options that reuse this type (their selects
 	// fall back to Name), populated only where a program list is built.
 	Path string
+	// Unavailable marks a FUND option force-included by injectRowFunds because a loaded
+	// split references a now-inactive fund (the fund analogue of txnAccountOption.Unavailable,
+	// p26.10). The template appends a suffix so the picker shows it is not a fresh choice.
+	Unavailable bool
 }
 
 // txnEditorModel is the whole editor page/partial model.
@@ -458,6 +463,11 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
+	// Same for a split's now-closed fund (p26.10): keep it a SELECTED option.
+	if err := s.injectRowFunds(ctx, &model); err != nil {
+		s.serverError(w)
+		return
+	}
 	s.renderEditor(w, r, model)
 }
 
@@ -532,6 +542,7 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID ids.Tra
 	// SELECTED, not re-blank it (p26.10). Best-effort: on a lookup failure the row keeps
 	// its raw value and the store stays the authoritative validator.
 	_ = s.injectRowAccounts(ctx, &model)
+	_ = s.injectRowFunds(ctx, &model) // same for a now-closed fund (p26.10)
 
 	// p26.34: when the header-main mode is active, the position-0 split arrives via the
 	// header main_* fields and its amount is OMITTED -- the server computes the per-fund
@@ -1220,6 +1231,41 @@ func (s *server) injectRowAccounts(ctx context.Context, model *txnEditorModel) e
 		return err
 	}
 	model.Accounts = toTxnAccountOptions(accts)
+	return nil
+}
+
+// injectRowFunds appends to model.Funds any fund id referenced by a current row that
+// the normal ActiveFunds(sub) option set omits -- namely a now-CLOSED fund a loaded/
+// edited split still points at (the fund analogue of injectRowAccounts, p26.10).
+// Without it that row's fund select renders blank and a naive save would blank the
+// fund; the store's "unchanged fund stays editable" carve-out lets the round-trip save.
+// Fund 0 (unrestricted / NULL) is not an option, so it is skipped. A no-op when every
+// referenced fund is already offered (NEW transactions unchanged). Like injectRowAccounts
+// it MUST run at every render site that prefills rows -- the edit GET and the create/
+// update 422 re-render -- so the fund never re-blanks on a save that fails validation.
+func (s *server) injectRowFunds(ctx context.Context, model *txnEditorModel) error {
+	if len(model.Rows) == 0 {
+		return nil
+	}
+	offered := make(map[int64]bool, len(model.Funds))
+	for _, f := range model.Funds {
+		offered[f.ID] = true
+	}
+	seen := make(map[int64]bool)
+	for _, row := range model.Rows {
+		if row.Fund == 0 || offered[row.Fund] || seen[row.Fund] {
+			continue // fund 0 is unrestricted (no option); already-offered / dup -> skip
+		}
+		seen[row.Fund] = true
+		f, err := s.store.GetFund(ctx, ids.FundID(row.Fund))
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				continue // a bogus id is caught by the store on save
+			}
+			return err
+		}
+		model.Funds = append(model.Funds, txnOption{ID: int64(f.ID), Name: f.Name, Unavailable: true})
+	}
 	return nil
 }
 

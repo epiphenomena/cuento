@@ -174,6 +174,10 @@ func (s *server) importRowEditForm(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
+	if err := s.injectRowFunds(ctx, &model); err != nil { // p26.10: never blank a referenced (now-closed) fund
+		s.serverError(w)
+		return
+	}
 	s.renderEditor(w, r, model)
 }
 
@@ -248,6 +252,7 @@ func (s *server) importRowPost(w http.ResponseWriter, r *http.Request) {
 	rows, splits := s.parseSplitForms(r, s.currencyExponent(ctx, currency), model.acctTypeMap())
 	model.Rows = rows
 	_ = s.injectRowAccounts(ctx, &model) // p26.10: keep a referenced account SELECTED on 422
+	_ = s.injectRowFunds(ctx, &model)    // p26.10: keep a referenced (now-closed) fund SELECTED on 422
 
 	if !dateOK {
 		model.TotalsError = "error.txn.bad_date"

@@ -956,6 +956,8 @@ other = "Elija una cuenta"
 other = "(no disponible)"
 [txn.fund.unrestricted]
 other = "Sin restricción"
+[txn.fund.unavailable_suffix]
+other = "(cerrado)"
 [txn.amount.debit]
 other = "Debe"
 [txn.amount.credit]

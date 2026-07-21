@@ -118,7 +118,7 @@
     <td class="txn-cell txn-fund-cell" colspan="5">
       <select name="fund_{{.Index}}" id="txn-fund-{{.Index}}" class="txn-fund combo-input">
         <option value="0">{{t "txn.fund.unrestricted"}}</option>
-        {{range $.Page.Funds}}<option value="{{.ID}}"{{if eq .ID $.Row.Fund}} selected{{end}}>{{.Name}}</option>
+        {{range $.Page.Funds}}<option value="{{.ID}}"{{if eq .ID $.Row.Fund}} selected{{end}}>{{.Name}}{{if .Unavailable}} {{t "txn.fund.unavailable_suffix"}}{{end}}</option>
         {{end}}
       </select>
     </td>
