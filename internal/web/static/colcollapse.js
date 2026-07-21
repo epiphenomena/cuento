@@ -11,9 +11,10 @@
 //   - every program column's leaf header  <th data-program="ID">        (and every body
 //     <td data-program="ID"> in that column position, tagged in 10b)
 //   - a CHILD column's header carries       data-program-parent="PID"
-//   - a PARENT column (has children) carries data-program-group="1"   -> collapsible
-//   - the "Program services" super-header    <th data-group="program_services" colspan="N">
-//     over the leaf program columns; its colspan must shrink as columns hide.
+//   - a PARENT program's SPAN cell (has children) carries data-program-group="1" -> collapsible;
+//     it spans its subtree's columns (colspan=N) and its colspan must shrink as descendants hide.
+//     (A parent appears TWICE in the nested header: this subtree SPAN cell, and its own leaf
+//     data-column cell one row below -- both carry data-program so both hide with the subtree.)
 //
 // Model (mirrors treetable.js exactly). A single "collapsed" SET of program ids. A column
 // (program id X) is HIDDEN iff some STRICT ancestor of X -- walking data-program-parent up
@@ -76,8 +77,9 @@ export function toggle(collapsed, id) {
 }
 
 // visibleCount returns how many of the given program ids are currently VISIBLE (not hidden
-// under the collapsed set). The DOM layer uses it to shrink the "Program services" group
-// super-header <th>'s colspan so the two-row header stays aligned after columns hide.
+// under the collapsed set). The DOM layer uses it (per parent, over that parent's subtree) to
+// shrink each collapsible parent SPAN <th>'s colspan so the nested header stays aligned after
+// columns hide.
 export function visibleCount(parentMap, collapsed, ids) {
   let n = 0;
   for (const id of ids) {
@@ -109,25 +111,37 @@ function enhanceMatrix(table) {
   }));
   const parentMap = buildParentMap(cols);
   const allIDs = cols.map((c) => c.program);
-  // The "Program services" super-header cell whose colspan must track visible program cols.
-  const groupCell = table.querySelector('thead th[data-group="program_services"]');
-  const groupFull = groupCell ? Number(groupCell.getAttribute('colspan')) || allIDs.length : 0;
+  // Unique program ids (a PARENT appears twice in the nested header: its subtree SPAN cell and
+  // its own leaf column cell). Dedupe for the visible-count math so a parent isn't counted
+  // twice when shrinking a span.
+  const uniqueIDs = [...new Set(allIDs)];
+  // The collapsible parent SPAN cells (data-program-group="1"): each one's colspan must track
+  // the visible column count of its OWN subtree, so ancestors shrink as descendants hide.
+  const spanCells = heads.filter((th) => th.getAttribute('data-program-group') === '1');
+  const spanFull = new Map(); // th -> its full (all-expanded) colspan
+  for (const th of spanCells) spanFull.set(th, Number(th.getAttribute('colspan')) || 1);
+  // subtreeIDs(pid): pid plus every program whose ancestor chain includes pid (its subtree).
+  function subtreeIDs(pid) {
+    return uniqueIDs.filter((id) => id === pid || ancestors(parentMap, id).includes(pid));
+  }
 
   let collapsed = new Set();
 
   // render applies the collapsed set to the DOM: hide every cell (th + td) of a hidden
-  // program column by its data-program, shrink the group colspan to the visible count, and
-  // sync each parent header's ▸/▾ affordance + aria to whether ITS column is collapsed.
+  // program column by its data-program, shrink each parent span's colspan to its visible
+  // subtree count, and sync each parent header's ▸/▾ affordance + aria to whether ITS column
+  // is collapsed.
   function render() {
-    for (const id of allIDs) {
+    for (const id of uniqueIDs) {
       const hidden = columnHidden(parentMap, collapsed, id);
       table.querySelectorAll(`[data-program="${cssEscape(id)}"]`).forEach((cell) => {
         cell.classList.toggle('col-hidden', hidden);
       });
     }
-    if (groupCell) {
-      const vis = visibleCount(parentMap, collapsed, allIDs);
-      groupCell.setAttribute('colspan', String(Math.max(1, vis || groupFull)));
+    for (const th of spanCells) {
+      const pid = th.getAttribute('data-program');
+      const vis = visibleCount(parentMap, collapsed, subtreeIDs(pid));
+      th.setAttribute('colspan', String(Math.max(1, vis || spanFull.get(th))));
     }
     heads.forEach((th, i) => {
       const btn = th.querySelector('.col-toggle');

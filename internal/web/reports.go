@@ -793,26 +793,29 @@ type reportPageModel struct {
 type renderedTable struct {
 	Columns []renderedColumn
 	Rows    []renderedRow
-	// HeaderGroups, when non-empty, is the TOP row of a STACKED (two-row) header (p31
-	// program statement): one spanning cell per contiguous run of columns sharing a group,
-	// left to right. Empty for a flat single-row header (every other report), so those
-	// tables render byte-identically.
-	HeaderGroups []renderedHeaderGroup
+	// HeaderMatrix, when non-empty, is a NESTED multi-row header (p31 program statement):
+	// each inner slice is one <tr> of header cells (left to right), carrying colspan/rowspan
+	// so the program-tree depth stacks — root programs (plus Admin/Fundraising) on the top
+	// row, each program's children on the row below it, etc. Empty for a flat single-row
+	// header (every other report), so those tables render from .Columns unchanged. When it is
+	// present the template renders it INSTEAD of the flat .Columns row.
+	HeaderMatrix [][]renderedHeaderCell
 }
 
-// renderedHeaderGroup is one spanning cell of a stacked header's TOP row: a localized (or
-// blank) label over Colspan leaf columns. The leftmost row-label column(s) with no group are
-// covered by a blank leading cell so the group row aligns with the leaf row.
-type renderedHeaderGroup struct {
-	Label   string
-	Colspan int
-	Right   bool // right-align hint (a money-column group)
-	// GroupID identifies the group run (Column.Group.GroupID) so the template can stamp a
-	// fixed-name data-group attribute on this super-header <th>. colcollapse.js (p31 10b)
-	// finds the "program_services" group cell by that attribute to shrink its colspan when
-	// program columns are collapsed (an html-table group <th>'s span is not auto-reduced by
-	// hiding leaf cells). Empty for a blank leading (ungrouped) run — no attribute emitted.
-	GroupID string
+// renderedHeaderCell is one <th> of a nested header matrix: a localized-or-verbatim Label over
+// Colspan columns and down Rowspan rows. A leading fixed column (Account/Total/Admin/
+// Fundraising) is a single cell rowspanning the whole header; each program is a SPAN cell over
+// its subtree at its tree depth (parents only) plus its own leaf cell rowspanning to the
+// bottom. The program-tree data attributes (ProgramID/ProgramParent/ProgramGroup) ride the
+// cells so colcollapse.js (p31 10b) can still hide a column subtree and shrink the parent span.
+type renderedHeaderCell struct {
+	Label         string
+	Colspan       int
+	Rowspan       int
+	Right         bool // right-align hint (money columns)
+	ProgramID     string
+	ProgramParent string
+	ProgramGroup  bool // a collapsible parent (its span cell carries the ▸/▾ toggle)
 }
 
 type renderedColumn struct {
@@ -873,13 +876,22 @@ type renderedMeasures struct {
 	Bucket     string // "" | "over-slight" | "under-large" | ... (signed magnitude class)
 }
 
-// buildHeaderGroups builds the TOP row of a STACKED header (p31 program statement): one
-// spanning cell per contiguous run of columns sharing a group (Column.Group), left to right.
-// Leading columns with NO group (the row-label column) collapse into ONE blank leading cell
-// so the group row aligns with the leaf row. Returns nil when NO column declares a group, so
-// every flat-header report renders a single-row <thead> unchanged. Adjacent columns form one
-// span iff they share the same non-empty GroupID (a nil group breaks the run).
-func buildHeaderGroups(cols []reports.Column, lang string) []renderedHeaderGroup {
+// buildHeaderMatrix builds a NESTED multi-row header (p31 program statement) from the column
+// list. Returns nil when NO column declares a group, so every flat-header report renders its
+// single-row <thead> from .Columns unchanged.
+//
+// Layout. The leading fixed columns (Account, then Total/Admin/Fundraising — any column with
+// no program_services group) each become ONE cell at row 0 rowspanning the whole header. Each
+// program column is placed by its tree DEPTH (root = 0, computed from the program-parent data
+// attr): a PARENT program gets a SPAN cell at its depth row over its whole (contiguous, since
+// columns are emitted in tree pre-order) subtree, plus its OWN leaf cell one row below,
+// rowspanning to the bottom; a LEAF program gets a single cell at its depth row, rowspanning to
+// the bottom. Every program cell keeps the program-tree data attributes (a parent's SPAN cell
+// carries data-program-group so colcollapse.js wires the toggle onto it; the parent's own leaf
+// cell repeats data-program — no group — so it hides with the subtree when an ancestor
+// collapses). Cells are emitted per row in left-to-right column order; the browser's table
+// layout flows each row's cells past columns already covered by a rowspan from above.
+func buildHeaderMatrix(cols []reports.Column, lang string) [][]renderedHeaderCell {
 	anyGroup := false
 	for _, c := range cols {
 		if c.Group != nil {
@@ -890,38 +902,100 @@ func buildHeaderGroups(cols []reports.Column, lang string) []renderedHeaderGroup
 	if !anyGroup {
 		return nil
 	}
-	var groups []renderedHeaderGroup
-	i := 0
-	for i < len(cols) {
-		g := cols[i].Group
-		if g == nil {
-			// A run of ungrouped columns → one blank spanning cell.
-			span := 0
-			for i < len(cols) && cols[i].Group == nil {
-				span++
-				i++
+	n := len(cols)
+
+	// Per-column metadata: label, program identity, tree depth.
+	type meta struct {
+		label      string
+		right      bool
+		isProg     bool
+		progID     string
+		progParent string
+		hasKids    bool
+		depth      int // program depth, root = 0
+	}
+	metas := make([]meta, n)
+	depthByID := map[string]int{}
+	for i, c := range cols {
+		m := meta{right: c.Align == reports.AlignRight}
+		if c.HeaderText != "" {
+			m.label = c.HeaderText // verbatim proper noun (a program name, rule 9)
+		} else if c.HeaderKey != "" {
+			m.label = i18n.T(lang, c.HeaderKey)
+		}
+		if c.Group != nil && c.Group.GroupID == "program_services" {
+			m.isProg = true
+			m.progID = c.Group.Data["program"]
+			m.progParent = c.Group.Data["program-parent"]
+			m.hasKids = c.Group.Data["program-group"] == "1"
+			if m.progParent != "" {
+				if pd, ok := depthByID[m.progParent]; ok {
+					m.depth = pd + 1
+				}
 			}
-			groups = append(groups, renderedHeaderGroup{Colspan: span})
+			depthByID[m.progID] = m.depth
+		}
+		metas[i] = m
+	}
+
+	// Header row count: deep enough for every program's leaf row. A parent's own leaf sits one
+	// row BELOW its span (depth+1); a leaf program's leaf sits at its depth. At least one row.
+	maxLeafRow := 0
+	for _, m := range metas {
+		if !m.isProg {
 			continue
 		}
-		// A run of columns sharing this group's id.
-		id := g.GroupID
-		label := ""
-		if g.Key != "" {
-			label = i18n.T(lang, g.Key)
+		lr := m.depth
+		if m.hasKids {
+			lr++
 		}
-		span := 0
-		right := true
-		for i < len(cols) && cols[i].Group != nil && cols[i].Group.GroupID == id {
-			if cols[i].Align != reports.AlignRight {
-				right = false
-			}
-			span++
-			i++
+		if lr > maxLeafRow {
+			maxLeafRow = lr
 		}
-		groups = append(groups, renderedHeaderGroup{Label: label, Colspan: span, Right: right, GroupID: id})
 	}
-	return groups
+	rowsN := maxLeafRow + 1
+
+	// subtreeCount(i): the program at i plus its contiguous descendants (columns after i whose
+	// depth is greater — pre-order guarantees the subtree is a contiguous run).
+	subtreeCount := func(i int) int {
+		d := metas[i].depth
+		cnt := 1
+		for j := i + 1; j < n && metas[j].isProg && metas[j].depth > d; j++ {
+			cnt++
+		}
+		return cnt
+	}
+
+	matrix := make([][]renderedHeaderCell, rowsN)
+	add := func(row int, cell renderedHeaderCell) {
+		matrix[row] = append(matrix[row], cell)
+	}
+	for i, m := range metas {
+		if !m.isProg {
+			// A fixed leading column: one cell rowspanning the whole header.
+			add(0, renderedHeaderCell{Label: m.label, Right: m.right, Colspan: 1, Rowspan: rowsN})
+			continue
+		}
+		if m.hasKids {
+			// Parent: a SPAN over its subtree at its depth (the collapse toggle target), plus
+			// its own leaf column one row below, rowspanning to the bottom.
+			add(m.depth, renderedHeaderCell{
+				Label: m.label, Right: m.right, Colspan: subtreeCount(i), Rowspan: 1,
+				ProgramID: m.progID, ProgramParent: m.progParent, ProgramGroup: true,
+			})
+			add(m.depth+1, renderedHeaderCell{
+				Label: m.label, Right: m.right, Colspan: 1, Rowspan: rowsN - (m.depth + 1),
+				ProgramID: m.progID, ProgramParent: m.progParent,
+			})
+			continue
+		}
+		// Leaf program: one cell at its depth, rowspanning to the bottom.
+		add(m.depth, renderedHeaderCell{
+			Label: m.label, Right: m.right, Colspan: 1, Rowspan: rowsN - m.depth,
+			ProgramID: m.progID, ProgramParent: m.progParent,
+		})
+	}
+	return matrix
 }
 
 // renderTable turns a reports.Table into the display-ready renderedTable for lang,
@@ -952,7 +1026,7 @@ func renderTable(t reports.Table, reportID, lang string, opts money.FormatOpts, 
 		}
 		rt.Columns = append(rt.Columns, rc)
 	}
-	rt.HeaderGroups = buildHeaderGroups(t.Columns, lang)
+	rt.HeaderMatrix = buildHeaderMatrix(t.Columns, lang)
 	for _, row := range t.Rows {
 		rr := renderedRow{
 			Indent:       row.Indent,

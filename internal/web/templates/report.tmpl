@@ -279,25 +279,29 @@
   <div class="report-scroll">
   <table class="report-table{{if .Tree}} tree-table{{end}}{{if .MeasureToggle}} bv-table{{end}}"{{if .MeasureToggle}} data-measure="variance"{{end}}>
     <thead>
-      {{/* p31 program statement: a STACKED (two-row) header. The TOP row (.HeaderGroups,
-           present only when a column declares a group) spans the functional-class / program
-           super-columns; the leaf row below carries each column's own header. Every other
-           report leaves .HeaderGroups empty and renders the single leaf row unchanged. Each
-           program column's leaf <th> carries render-only data-* attributes (.Attrs) encoding
-           the program tree so a follow-up (10b) can wire click-to-collapse of a column group
-           — strict CSP: data attributes only, no inline script. */}}
-      {{- if .Table.HeaderGroups}}
-      <tr class="report-header-groups">
-        {{- range .Table.HeaderGroups}}
-        <th{{if gt .Colspan 1}} colspan="{{.Colspan}}"{{end}}{{if .Right}} class="amount"{{end}}{{if .Label}} scope="colgroup"{{end}}{{if .GroupID}} data-group="{{.GroupID}}"{{end}}>{{.Label}}</th>
+      {{/* p31 program statement: a NESTED multi-row header (.HeaderMatrix), rendered INSTEAD
+           of the flat leaf row below. Each matrix row is a <tr> of header cells with
+           colspan/rowspan so the program tree stacks by depth — root programs (plus Admin/
+           Fundraising) on top, each program's children on the row beneath it. Program cells
+           carry render-only data-* attributes encoding the tree so colcollapse.js (10b) can
+           click-collapse a column subtree — strict CSP: data attributes only, no inline
+           script. Every other report leaves .HeaderMatrix empty and renders the single flat
+           leaf row unchanged. The first row is marked .report-header-groups (sticky top). */}}
+      {{- if .Table.HeaderMatrix}}
+        {{- range $r, $row := .Table.HeaderMatrix}}
+      <tr{{if eq $r 0}} class="report-header-groups"{{end}}>
+        {{- range $row}}
+        <th{{if gt .Colspan 1}} colspan="{{.Colspan}}"{{end}}{{if gt .Rowspan 1}} rowspan="{{.Rowspan}}"{{end}}{{if .Right}} class="amount"{{end}}{{if .ProgramID}} data-program="{{.ProgramID}}"{{end}}{{if .ProgramParent}} data-program-parent="{{.ProgramParent}}"{{end}}{{if .ProgramGroup}} data-program-group="1"{{end}}>{{.Label}}</th>
         {{- end}}
       </tr>
-      {{- end}}
+        {{- end}}
+      {{- else}}
       <tr>
         {{- range .Table.Columns}}
         <th{{if .Right}} class="amount"{{end}}{{if .ProgramID}} data-program="{{.ProgramID}}"{{end}}{{if .ProgramParent}} data-program-parent="{{.ProgramParent}}"{{end}}{{if .ProgramGroup}} data-program-group="1"{{end}}>{{.Header}}</th>
         {{- end}}
       </tr>
+      {{- end}}
     </thead>
     <tbody>
       {{- range .Table.Rows}}
@@ -350,16 +354,16 @@
   <script type="module" src="{{asset "treetable.js"}}"></script>
   {{end}}
 
-  {{if .Table.HeaderGroups}}
+  {{if .Table.HeaderMatrix}}
   {{/* p31 10b: the program-statement COLUMN-collapse module. Loaded on the PAGE (a script
        injected via an htmx innerHTML swap would not execute); self-inits on
        DOMContentLoaded and re-wires on htmx:afterSwap when a filter change replaces
        #report-results. It finds the collapsible program-group headers ([data-program-group])
        and, on click, hides the DESCENDANT program columns (header <th> + every body <td> via
-       data-program) leaving the parent's rollup, and shrinks the "Program services" group
-       <th>'s colspan. Only the program statement emits a two-row (.HeaderGroups) header, so
-       no other report loads it; the module also self-guards (no-op when no [data-program-group]
-       exists). Strict CSP: external module, event delegation, no inline handler. */}}
+       data-program) leaving the parent's rollup, and shrinks that parent's span <th> colspan.
+       Only the program statement emits a nested (.HeaderMatrix) header, so no other report
+       loads it; the module also self-guards (no-op when no [data-program-group] exists).
+       Strict CSP: external module, event delegation, no inline handler. */}}
   <script type="module" src="{{asset "colcollapse.js"}}"></script>
   {{end}}
 

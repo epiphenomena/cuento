@@ -25,7 +25,6 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
-	"cuento/internal/i18n"
 	entids "cuento/internal/ids"
 	"cuento/internal/reports"
 	"cuento/internal/store"
@@ -535,7 +534,7 @@ func TestIncomeStatementDrillReconciles(t *testing.T) {
 }
 
 // TestProgramStatementStackedHeaderHTML renders the program-statement page over the fixture
-// and asserts the STACKED (two-row) header HTML (p31-10a) and the 10b program-column data
+// and asserts the NESTED multi-row header HTML (p31) and the 10b program-column data
 // attributes are emitted with their REAL fixed names — the render-layer concern the reports-
 // package Table test cannot see. A regression here (a computed attribute name) makes
 // html/template neutralize the name to "zgotmplz", silently breaking 10b's DOM contract, so
@@ -555,16 +554,17 @@ func TestProgramStatementStackedHeaderHTML(t *testing.T) {
 	if strings.Contains(body, "zgotmplz") {
 		t.Fatalf("program statement thead contains zgotmplz (a data-attr name was computed, not static)")
 	}
-	// The stacked-header top row spans the program tree under the Program-services group.
+	// The nested-header first row is marked report-header-groups (sticky top) and holds the root
+	// programs / Admin / Fundraising, with a leading fixed column rowspanning the whole header.
 	if !strings.Contains(body, `class="report-header-groups"`) {
-		t.Errorf("stacked-header top row (report-header-groups) missing")
+		t.Errorf("nested-header first row (report-header-groups) missing")
 	}
-	if !strings.Contains(body, i18n.T("en", "reports.program_statement.group.program_services")) {
-		t.Errorf("Program-services group super-header missing")
+	if !strings.Contains(body, `rowspan="`) {
+		t.Errorf("nested header missing rowspan (fixed leading columns should rowspan the header)")
 	}
 	// Program columns carry data-program; a CHILD carries data-program-parent; a program WITH
-	// children carries data-program-group="1". General (root, has children) → group marker, no
-	// parent; Educacion (child leaf) → a parent, no group marker.
+	// children carries data-program-group="1" on its subtree SPAN cell. General (root, has
+	// children) → group marker, no parent; Educacion (child leaf) → a parent, no group marker.
 	for _, want := range []string{
 		`data-program="`,
 		`data-program-parent="`,
@@ -574,10 +574,11 @@ func TestProgramStatementStackedHeaderHTML(t *testing.T) {
 			t.Errorf("program column header missing %q", want)
 		}
 	}
-	// 10b: the "Program services" group super-header carries data-group so colcollapse.js can
-	// find it to shrink its colspan when program columns collapse.
-	if !strings.Contains(body, `data-group="program_services"`) {
-		t.Errorf("program-services group super-header missing data-group attribute")
+	// A collapsible parent's SPAN cell spans its subtree columns, so colcollapse.js has a
+	// colspan to shrink as descendants hide. Assert a data-program-group cell also carries a
+	// colspan (the two attrs co-occur on the span <th>).
+	if !strings.Contains(body, `colspan=`) {
+		t.Errorf("nested header missing colspan (a parent program span should span its subtree)")
 	}
 	// 10b: BODY cells in a program column now carry data-program too, so colcollapse.js can
 	// hide the whole column (header + body) by [data-program="X"]. Assert at least one <td>

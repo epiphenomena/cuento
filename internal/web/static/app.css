@@ -1124,23 +1124,22 @@ input[aria-invalid="true"] {
     z-index: 2;
     background: var(--color-surface);
   }
-  /* p31 10b: the program statement has a TWO-ROW thead (a group super-header row +
-     the leaf-header row). Both would otherwise stick at top:0 and OVERLAP. Pin the
-     group row's height so the LEAF row can sit exactly below it: the group row keeps
-     top:0, and the leaf-header row (thead's second <tr>) sticks at that height. The
-     value is the header row's own box height (padding var(--space-2)*2 + a ~1.2rem
-     line) — a stable, small offset; if browser rendering nudges it, the rows still
-     scroll together, they just abut. Non-stacked reports have a single header row,
-     unaffected (no .report-header-groups). */
-  .report-scroll .report-table thead tr.report-header-groups th { top: 0; }
-  .report-scroll .report-table thead tr.report-header-groups + tr th {
-    /* Offset the leaf-header row by the group row's rendered box height (~line 1.4rem +
-       padding var(--space-2)*2 + its 2px bottom border) so the two sticky rows ABUT
-       without overlap. A hair generous over the measured height (~41px) rather than short,
-       so a scrolled body never peeks BETWEEN the rows. If a browser's line-box nudges this,
-       the rows still scroll together — worst case they abut with a hairline, never overlap. */
-    top: calc(1.4rem + var(--space-2) * 2 + 2px);
-  }
+  /* p31: the program statement has a NESTED multi-row thead (root programs on top, their
+     children below, etc). Every header <th> is sticky; without staggered offsets the rows
+     would all stick at top:0 and OVERLAP. Offset each header <tr> by its index times one
+     header row's box height (~line 1.4rem + padding var(--space-2)*2 + its 2px bottom
+     border), so the rows ABUT as the body scrolls under them. A cell rowspanning from an
+     upper row keeps that row's (smaller) offset and stays pinned, which is correct. A hair
+     generous over the measured height (~41px) rather than short, so a scrolled body never
+     peeks BETWEEN the rows. Covers up to six program-tree levels; a deeper tree simply lets
+     its lowest rows abut. A flat single-row header (every other report) is nth-child(1),
+     top:0, unaffected. */
+  .report-scroll .report-table thead tr:nth-child(1) th { top: 0; }
+  .report-scroll .report-table thead tr:nth-child(2) th { top: calc((1.4rem + var(--space-2) * 2 + 2px) * 1); }
+  .report-scroll .report-table thead tr:nth-child(3) th { top: calc((1.4rem + var(--space-2) * 2 + 2px) * 2); }
+  .report-scroll .report-table thead tr:nth-child(4) th { top: calc((1.4rem + var(--space-2) * 2 + 2px) * 3); }
+  .report-scroll .report-table thead tr:nth-child(5) th { top: calc((1.4rem + var(--space-2) * 2 + 2px) * 4); }
+  .report-scroll .report-table thead tr:nth-child(6) th { top: calc((1.4rem + var(--space-2) * 2 + 2px) * 5); }
   .report-scroll .report-table th:first-child,
   .report-scroll .report-table td:first-child {
     position: sticky;
