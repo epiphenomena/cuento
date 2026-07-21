@@ -1,9 +1,20 @@
 Account,Currency,2025-Q2,2025-Q3,2025-Q4,2026-Q1,2026-Q2,Total
+Assets,,,,,,,
 Checking US,USD,500.00,0.00,0.00,0.00,0.00,500.00
 Checking MX,MXN,97000.00,0.00,0.00,0.00,0.00,97000.00
+Total assets,MXN,97000.00,0.00,0.00,0.00,0.00,97000.00
+Total assets,USD,500.00,0.00,0.00,0.00,0.00,500.00
+Revenue,,,,,,,
 Revenue,,,,,,,
 Government Grants,MXN,-100000.00,0.00,0.00,0.00,0.00,-100000.00
 Government Grants,USD,-2000.00,0.00,0.00,0.00,0.00,-2000.00
+Total revenue,MXN,-100000.00,0.00,0.00,0.00,0.00,-100000.00
+Total revenue,USD,-2000.00,0.00,0.00,0.00,0.00,-2000.00
+Expenses,,,,,,,
 Expenses,,,,,,,
 Program Supplies,MXN,3000.00,0.00,0.00,0.00,0.00,3000.00
 Program Supplies,USD,1500.00,0.00,0.00,0.00,0.00,1500.00
+Total expenses,MXN,3000.00,0.00,0.00,0.00,0.00,3000.00
+Total expenses,USD,1500.00,0.00,0.00,0.00,0.00,1500.00
+Change in net assets,MXN,97000.00,0.00,0.00,0.00,0.00,97000.00
+Change in net assets,USD,500.00,0.00,0.00,0.00,0.00,500.00

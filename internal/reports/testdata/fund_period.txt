@@ -1,10 +1,21 @@
-   Account            Currency           2025-Q2    2025-Q3    2025-Q4    2026-Q1    2026-Q2             Total
--  -----------------  --------  ----------------  ---------  ---------  ---------  ---------  ----------------
-   Checking US        USD            USD $500.00  USD $0.00  USD $0.00  USD $0.00  USD $0.00       USD $500.00
-   Checking MX        MXN         MXN $97,000.00  MXN $0.00  MXN $0.00  MXN $0.00  MXN $0.00    MXN $97,000.00
+   Account               Currency           2025-Q2    2025-Q3    2025-Q4    2026-Q1    2026-Q2             Total
+-  --------------------  --------  ----------------  ---------  ---------  ---------  ---------  ----------------
+>  Assets
+   Checking US           USD            USD $500.00  USD $0.00  USD $0.00  USD $0.00  USD $0.00       USD $500.00
+   Checking MX           MXN         MXN $97,000.00  MXN $0.00  MXN $0.00  MXN $0.00  MXN $0.00    MXN $97,000.00
+#  Total assets          MXN         MXN $97,000.00  MXN $0.00  MXN $0.00  MXN $0.00  MXN $0.00    MXN $97,000.00
+#  Total assets          USD            USD $500.00  USD $0.00  USD $0.00  USD $0.00  USD $0.00       USD $500.00
 >  Revenue
-   Government Grants  MXN       MXN -$100,000.00  MXN $0.00  MXN $0.00  MXN $0.00  MXN $0.00  MXN -$100,000.00
-   Government Grants  USD         USD -$2,000.00  USD $0.00  USD $0.00  USD $0.00  USD $0.00    USD -$2,000.00
+>  Revenue
+   Government Grants     MXN       MXN -$100,000.00  MXN $0.00  MXN $0.00  MXN $0.00  MXN $0.00  MXN -$100,000.00
+   Government Grants     USD         USD -$2,000.00  USD $0.00  USD $0.00  USD $0.00  USD $0.00    USD -$2,000.00
+#  Total revenue         MXN       MXN -$100,000.00  MXN $0.00  MXN $0.00  MXN $0.00  MXN $0.00  MXN -$100,000.00
+#  Total revenue         USD         USD -$2,000.00  USD $0.00  USD $0.00  USD $0.00  USD $0.00    USD -$2,000.00
 >  Expenses
-   Program Supplies   MXN          MXN $3,000.00  MXN $0.00  MXN $0.00  MXN $0.00  MXN $0.00     MXN $3,000.00
-   Program Supplies   USD          USD $1,500.00  USD $0.00  USD $0.00  USD $0.00  USD $0.00     USD $1,500.00
+>  Expenses
+   Program Supplies      MXN          MXN $3,000.00  MXN $0.00  MXN $0.00  MXN $0.00  MXN $0.00     MXN $3,000.00
+   Program Supplies      USD          USD $1,500.00  USD $0.00  USD $0.00  USD $0.00  USD $0.00     USD $1,500.00
+#  Total expenses        MXN          MXN $3,000.00  MXN $0.00  MXN $0.00  MXN $0.00  MXN $0.00     MXN $3,000.00
+#  Total expenses        USD          USD $1,500.00  USD $0.00  USD $0.00  USD $0.00  USD $0.00     USD $1,500.00
+=  Change in net assets  MXN         MXN $97,000.00  MXN $0.00  MXN $0.00  MXN $0.00  MXN $0.00    MXN $97,000.00
+=  Change in net assets  USD            USD $500.00  USD $0.00  USD $0.00  USD $0.00  USD $0.00       USD $500.00

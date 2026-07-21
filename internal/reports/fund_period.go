@@ -98,7 +98,7 @@ func runFundPeriod(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 		return Table{}, err
 	}
 	tree := toTreeNodes(storeTree)
-	children, roots, isPlaceholder, name, depth, _ := indexTree(tree)
+	children, roots, isPlaceholder, name, depth, typeOf := indexTree(tree)
 
 	// cells[col][key] = the fund's activity in (account, currency) during period col;
 	// total[key] = the row's whole-window activity (sum of the period columns, int64).
@@ -289,16 +289,22 @@ func runFundPeriod(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 		t.Rows = append(t.Rows, Row{Cells: row, Indent: indent, Kind: RowSubtotal})
 	}
 
+	// ACCOUNT TYPE is the TOP tier (p26 fund #5): the account tree nests one level deeper so
+	// a localized TYPE header (Assets, Liabilities, Net assets, Revenue, Expenses -- reusing
+	// the balance-sheet/income-statement section keys) sits at Indent 0. typeShift = +1
+	// pushes every tree row down to make room for it. Per-cell figures are unchanged.
+	const typeShift = 1
+
 	// Walk the tree pre-order (the treetable data-depth contract). A placeholder parent
-	// with activity emits a rollup row at its depth; a leaf the fund touches emits a
-	// collapsible header at its depth, then one RowData per currency one level deeper.
+	// with activity emits a rollup row at its (shifted) depth; a leaf the fund touches emits
+	// one RowData per currency at its (shifted) depth.
 	var walk func(id AccountID)
 	walk = func(id AccountID) {
 		if !hasAct[id] {
 			return
 		}
 		if isPlaceholder[id] {
-			parentRow(id, depth[id])
+			parentRow(id, depth[id]+typeShift)
 			for _, c := range children[id] {
 				walk(c)
 			}
@@ -319,11 +325,169 @@ func runFundPeriod(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 				}
 			}
 			row = append(row, MoneyCell(total[k], ccy))
-			t.Rows = append(t.Rows, Row{Cells: row, Indent: depth[id], Kind: RowData})
+			t.Rows = append(t.Rows, Row{Cells: row, Indent: depth[id] + typeShift, Kind: RowData})
 		}
 	}
-	for _, r := range roots {
-		walk(r)
+
+	// typeTotalRow appends one native TYPE-TOTAL row per currency (RowSectionTotal): the
+	// label (Total assets / Total revenue / ...) and, per currency, the summed shown-period
+	// cells and Total over every (leaf, ccy) key in the type. Native (no conversion) so each
+	// currency has its OWN row (mirroring trial_balance's per-currency native totals -- a
+	// type spanning USD+MXN has no honest single native figure). A currency's period columns
+	// foot to its Total by int64 addition. Returns the per-currency Total, so the net-change
+	// line can combine revenue + expense totals.
+	typeTotalRow := func(labelKey string, keys []fundPeriodKey) map[string]int64 {
+		byCcy := map[string][]fundPeriodKey{}
+		for _, k := range keys {
+			byCcy[k.ccy] = append(byCcy[k.ccy], k)
+		}
+		ccys := make([]string, 0, len(byCcy))
+		for c := range byCcy {
+			ccys = append(ccys, c)
+		}
+		sort.Strings(ccys)
+		totals := map[string]int64{}
+		for _, ccy := range ccys {
+			row := make([]Cell, 0, len(cols))
+			row = append(row, LabelCell(labelKey), TextCell(ccy))
+			if !granNone {
+				for i := range shownPeriods {
+					var sum int64
+					for _, k := range byCcy[ccy] {
+						sum += shownCells[i][k]
+					}
+					row = append(row, MoneyCell(sum, ccy))
+				}
+			}
+			var tot int64
+			for _, k := range byCcy[ccy] {
+				tot += total[k]
+			}
+			totals[ccy] = tot
+			row = append(row, MoneyCell(tot, ccy))
+			t.Rows = append(t.Rows, Row{Cells: row, Kind: RowSectionTotal})
+		}
+		return totals
+	}
+
+	// Group the roots by account TYPE and emit each as the top tier: a TYPE header (Indent
+	// 0, native single-currency-or-blank rollup), the type's account subtree one level
+	// deeper, then per-currency TYPE-TOTAL rows. Skip a type with no activity in this fund.
+	// revTotals/expTotals capture the revenue and expense per-currency totals for the
+	// net-change line below.
+	order, byType := rootsByType(roots, typeOf)
+	revTotals := map[string]int64{}
+	expTotals := map[string]int64{}
+	for _, typ := range order {
+		var typeKeys []fundPeriodKey
+		anyAct := false
+		for _, r := range byType[typ] {
+			if !hasAct[r] {
+				continue
+			}
+			anyAct = true
+			typeKeys = append(typeKeys, subtreeKeys(r)...)
+		}
+		if !anyAct {
+			continue
+		}
+		// Type header (Indent 0): native single-currency rollup over the whole type, else
+		// blank cells (a mixed-currency type has no honest single native figure).
+		typeCcys := map[string]bool{}
+		for _, k := range typeKeys {
+			typeCcys[k.ccy] = true
+		}
+		single := ""
+		if len(typeCcys) == 1 {
+			for c := range typeCcys {
+				single = c
+			}
+		}
+		hdr := make([]Cell, 0, len(cols))
+		hdr = append(hdr, LabelCell(accountTypeHeaderKey[typ]), TextCell(single))
+		if single == "" {
+			if !granNone {
+				for range shownPeriods {
+					hdr = append(hdr, BlankMoneyCell())
+				}
+			}
+			hdr = append(hdr, BlankMoneyCell())
+		} else {
+			if !granNone {
+				for i := range shownPeriods {
+					var sum int64
+					for _, k := range typeKeys {
+						sum += shownCells[i][k]
+					}
+					hdr = append(hdr, MoneyCell(sum, single))
+				}
+			}
+			var tot int64
+			for _, k := range typeKeys {
+				tot += total[k]
+			}
+			hdr = append(hdr, MoneyCell(tot, single))
+		}
+		t.Rows = append(t.Rows, Row{Cells: hdr, Indent: 0, Kind: RowSubtotal})
+
+		for _, r := range byType[typ] {
+			walk(r)
+		}
+		totals := typeTotalRow(accountTypeTotalKey[typ], typeKeys)
+		switch typ {
+		case "revenue":
+			revTotals = totals
+		case "expense":
+			expTotals = totals
+		}
+	}
+
+	// Net Change in Net Assets = -(Revenue + Expense) per currency. In net-debit space
+	// revenue is negative (a credit) and expense positive (a debit), so the fund's surplus
+	// (change in net assets) is the NEGATED sum of the revenue and expense totals -- e.g. a
+	// fund with -50,000 revenue and 0 expense has a +50,000 change in net assets, matching
+	// its asset growth. Emitted only when the fund has revenue or expense activity, one row
+	// per currency (native; sums do not cross currencies). The period columns foot to Total.
+	netCcys := map[string]bool{}
+	for c := range revTotals {
+		netCcys[c] = true
+	}
+	for c := range expTotals {
+		netCcys[c] = true
+	}
+	if len(netCcys) > 0 {
+		ccys := make([]string, 0, len(netCcys))
+		for c := range netCcys {
+			ccys = append(ccys, c)
+		}
+		sort.Strings(ccys)
+		// Per-currency revenue+expense keys, to compute the net-change period columns.
+		reKeys := map[string][]fundPeriodKey{}
+		for _, typ := range []string{"revenue", "expense"} {
+			for _, r := range byType[typ] {
+				if !hasAct[r] {
+					continue
+				}
+				for _, k := range subtreeKeys(r) {
+					reKeys[k.ccy] = append(reKeys[k.ccy], k)
+				}
+			}
+		}
+		for _, ccy := range ccys {
+			row := make([]Cell, 0, len(cols))
+			row = append(row, LabelCell("reports.income_statement.net"), TextCell(ccy))
+			if !granNone {
+				for i := range shownPeriods {
+					var sum int64
+					for _, k := range reKeys[ccy] {
+						sum += shownCells[i][k]
+					}
+					row = append(row, MoneyCell(-sum, ccy)) // negate: net-debit -> surplus
+				}
+			}
+			row = append(row, MoneyCell(-(revTotals[ccy] + expTotals[ccy]), ccy))
+			t.Rows = append(t.Rows, Row{Cells: row, Kind: RowTotal})
+		}
 	}
 
 	return t, nil

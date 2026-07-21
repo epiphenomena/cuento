@@ -146,6 +146,78 @@ func TestFundPeriodMatrixFootsAndGolden(t *testing.T) {
 	assertRowTotal(t, table, "MXN", 9_700_000)
 	assertRowTotal(t, table, "USD", 50_000)
 
+	// TYPE tier (p26 fund #5): the matrix account rows are grouped under top-tier TYPE
+	// headers (Indent 0, a localized LABEL) reusing the balance-sheet/income-statement
+	// section keys; each type closes with per-currency TYPE-TOTAL rows (RowSectionTotal,
+	// label "Total assets"/"Total revenue"/...). Beca Agua touches Assets, Revenue, Expense.
+	typeHeaders := map[string]bool{}
+	typeTotals := map[string]bool{}
+	for _, row := range table.Rows {
+		if row.Kind == reports.RowSubtotal && row.Indent == 0 && row.Cells[0].Kind == reports.CellLabel {
+			typeHeaders[row.Cells[0].Text] = true
+		}
+		if row.Kind == reports.RowSectionTotal && row.Cells[0].Kind == reports.CellLabel {
+			typeTotals[row.Cells[0].Text] = true
+		}
+	}
+	for _, key := range []string{
+		"reports.balance_sheet.section.assets",
+		"reports.income_statement.section.revenue",
+		"reports.income_statement.section.expenses",
+	} {
+		if !typeHeaders[key] {
+			t.Errorf("missing type header %q; saw %v", key, typeHeaders)
+		}
+	}
+	for _, key := range []string{
+		"reports.balance_sheet.total.assets",
+		"reports.income_statement.total.revenue",
+		"reports.income_statement.total.expenses",
+	} {
+		if !typeTotals[key] {
+			t.Errorf("missing type-total row %q; saw %v", key, typeTotals)
+		}
+	}
+
+	// TYPE-TOTAL and NET-CHANGE rows FOOT too: their period columns sum to the Total column
+	// (int64, native). The net-change line is RowTotal labeled "Change in net assets"; it is
+	// defined as -(Revenue + Expense) per currency, so for this cash-only fund it equals the
+	// asset growth -- verify that reconciliation per currency.
+	assetTotal := map[string]int64{}
+	netChange := map[string]int64{}
+	for _, row := range table.Rows {
+		switch row.Kind {
+		case reports.RowSectionTotal, reports.RowTotal:
+			var sum int64
+			for i := 2; i < len(row.Cells)-1; i++ {
+				sum += row.Cells[i].Minor
+			}
+			if got := row.Cells[len(row.Cells)-1].Minor; sum != got {
+				t.Errorf("total row %q %s: period columns sum to %d, want Total %d (must foot)",
+					row.Cells[0].Text, row.Cells[1].Text, sum, got)
+			}
+		}
+		if row.Kind == reports.RowSectionTotal &&
+			row.Cells[0].Kind == reports.CellLabel &&
+			row.Cells[0].Text == "reports.balance_sheet.total.assets" {
+			assetTotal[row.Cells[1].Text] = row.Cells[len(row.Cells)-1].Minor
+		}
+		if row.Kind == reports.RowTotal &&
+			row.Cells[0].Kind == reports.CellLabel &&
+			row.Cells[0].Text == "reports.income_statement.net" {
+			netChange[row.Cells[1].Text] = row.Cells[len(row.Cells)-1].Minor
+		}
+	}
+	if len(netChange) == 0 {
+		t.Errorf("no Change-in-net-assets row emitted")
+	}
+	for ccy, na := range netChange {
+		if na != assetTotal[ccy] {
+			t.Errorf("net change %s = %d, want asset growth %d (cash-only fund reconciliation)",
+				ccy, na, assetTotal[ccy])
+		}
+	}
+
 	exps := goldenExps(t, f)
 	textDump := reports.DumpTable(table, goldenLocalize, exps)
 	var csvBuf bytes.Buffer
