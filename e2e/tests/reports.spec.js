@@ -29,6 +29,8 @@ const IS = '/reports/income_statement';
 const AL = '/reports/account_ledger';
 const FE = '/reports/functional_expenses';
 const FA = '/reports/fund_activity';
+const FS = '/reports/fund_statement';
+const FP = '/reports/fund_period';
 const ABR = '/reports/activities_by_restriction';
 const PS = '/reports/program_statement';
 const F990 = '/reports/form_990';
@@ -920,6 +922,76 @@ test('reports: open the fund report (list), pick a fund, see its period statemen
   expect(resp.headers()['content-type']).toContain('text/csv');
   const body = await resp.text();
   expect(body).toContain(',');
+});
+
+// FUND STATEMENT (Report A): a full-detail, all-time LINE statement for ONE fund,
+// grouped by account, with Date/Description/Memo/Amount per line + a per-account
+// subtotal. Fund selector, NO date range. This spec seeds a restricted fund, an asset +
+// a revenue account, and a receipt whose split carries a DESCRIPTION and a MEMO, then
+// opens the report, picks the fund, and confirms the by-account line detail (the
+// description and memo both render) + the account subtotal + the CSV export.
+test('reports: open the fund statement, pick a fund, see by-account line detail with description + memo, CSV returns', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  await createFund(page, 'FStmt Fund E2E', 'FStmt Donor E2E');
+  await createAsset(page, 'FStmt Cash E2E');
+  await createRevenueAccount(page, 'FStmt Gift E2E');
+
+  // Receipt INTO the fund: DR FStmt Cash 100.00 (fund), CR FStmt Gift 100.00 (fund). The
+  // body split carries a per-split DESCRIPTION and a MEMO -- the two per-line columns the
+  // report shows distinctly.
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await selectTxnAccount(page.locator('#txn-main-account'), 'FStmt Cash E2E');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'FStmt Gift E2E');
+  await page.locator('#txn-amount-0').fill('-100.00');
+  await page.locator('#txn-fund-0').selectOption({ label: 'FStmt Fund E2E' });
+  await page.locator('#txn-desc-0').fill('Annual gala pledge');
+  await page.locator('#txn-memo-0').fill('check 1042');
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+  // --- open the report; the report-specific FUND selector is present, and there is NO
+  // date-range input (this report spans all data) ---
+  await page.goto(`${FS}?scope=1`);
+  await expect(page.locator('form.report-params')).toBeVisible();
+  const fundSelect = page.locator('select.report-fund-select[name="fund"]');
+  await expect(fundSelect).toBeVisible();
+  await expect(page.locator('form.report-params [name="from"]')).toHaveCount(0);
+  await expect(page.locator('form.report-params [name="to"]')).toHaveCount(0);
+
+  // --- pick the fund -> the by-account line statement (navigate the auto-apply GET) ---
+  const fundVal = await fundSelect
+    .locator('option', { hasText: 'FStmt Fund E2E' })
+    .getAttribute('value');
+  await page.goto(`${FS}?scope=1&fund=${fundVal}`);
+
+  const table = page.locator('table.report-table');
+  await expect(table).toBeVisible();
+  // Grouped by account: the section headers are the two touched accounts.
+  await expect(table).toContainText('FStmt Cash E2E');
+  await expect(table).toContainText('FStmt Gift E2E');
+  // The per-line Description and Memo both render (the point of the report).
+  await expect(table).toContainText('Annual gala pledge');
+  await expect(table).toContainText('check 1042');
+  // The account subtotal label is present (each account section closes with one).
+  await expect(table).toContainText('Account subtotal');
+  // The line date links to the txn editor (Cell.TxnID -> /transactions/{id}/edit).
+  await expect(
+    table.locator('a[href*="/transactions/"][href*="/edit"]').first(),
+  ).toBeVisible();
+
+  // --- the CSV export link is present and the endpoint returns text/csv ---
+  await expect(page.locator('a.report-csv-link')).toBeVisible();
+  const csvHref = await page.locator('a.report-csv-link').getAttribute('href');
+  const resp = await page.request.get(csvHref);
+  expect(resp.status()).toBe(200);
+  expect(resp.headers()['content-type']).toContain('text/csv');
+  const body = await resp.text();
+  expect(body).toContain('Annual gala pledge');
 });
 
 test('reports: open the activities-by-restriction statement, see the two restriction columns + released line + change in net assets, CSV returns', async ({

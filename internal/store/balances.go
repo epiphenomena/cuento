@@ -615,7 +615,8 @@ type FundLedgerRow struct {
 	FunctionalClass *string
 	SplitMemo       string
 	TxnMemo         string
-	RunningBalance  int64 // cumulative asset-side amount to this row, per currency
+	Description     string // the split's own free-text description (p26.15/p26.17)
+	RunningBalance  int64  // cumulative asset-side amount to this row, per currency
 }
 
 // FundLedger returns fundID's statement to asof: every non-deleted split tagged the
@@ -649,6 +650,7 @@ func (s *Store) FundLedger(ctx context.Context, fundID ids.FundID, asof string) 
 			FunctionalClass: nullStringToPtr(r.FunctionalClass),
 			SplitMemo:       r.SplitMemo,
 			TxnMemo:         r.TxnMemo,
+			Description:     r.SplitDescription,
 			RunningBalance:  r.RunningBalance,
 		}
 	}

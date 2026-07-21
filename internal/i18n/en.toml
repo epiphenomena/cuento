@@ -1456,6 +1456,35 @@ other = "Total fund assets"
 [reports.fund_activity.all_funds]
 other = "— all funds —"
 
+# Fund Statement — a full-detail, all-time line statement for ONE fund: every split
+# tagged the fund, grouped by account, with date/description/memo/amount + a per-
+# (account, currency) running balance and subtotal. Fund selector, no date range.
+[reports.fund_statement.title]
+other = "Fund Statement"
+[reports.fund_statement.col.date]
+other = "Date"
+[reports.fund_statement.col.description]
+other = "Description"
+[reports.fund_statement.col.memo]
+other = "Memo"
+[reports.fund_statement.col.currency]
+other = "Currency"
+[reports.fund_statement.col.amount]
+other = "Amount"
+[reports.fund_statement.col.balance]
+other = "Balance"
+[reports.fund_statement.subtotal]
+other = "Account subtotal"
+
+# Fund Activity by Period — a matrix for ONE fund: account rows x period columns
+# (per granularity) + a Total column, native currency. Fund selector + granularity.
+[reports.fund_period.title]
+other = "Fund Activity by Period"
+[reports.fund_period.col.account]
+other = "Account"
+[reports.fund_period.col.total]
+other = "Total"
+
 # p15.9 activities by restriction — the FASB statement of activities with the two
 # donor-restriction columns (Without / With) + a Total column, per currency. The "net
 # assets released from restrictions" line is DERIVED (D20, no journaled transfer): it
@@ -2209,6 +2238,10 @@ other = "Every posting to a single account over a period, with a running balance
 other = "Expenses by natural line and functional class for Form 990 Part IX."
 [reports.fund_activity.desc]
 other = "Opening balance, activity, and closing balance for each fund."
+[reports.fund_statement.desc]
+other = "Every line tagged to one fund, grouped by account, with description and memo."
+[reports.fund_period.desc]
+other = "One fund's activity by account and period — a month, quarter, or year matrix."
 [reports.activities_by_restriction.desc]
 other = "Revenue and expense split by donor restriction, with net-asset releases."
 [reports.program_statement.desc]

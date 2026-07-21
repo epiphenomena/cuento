@@ -81,7 +81,7 @@ SELECT sp.id AS split_id, t.id AS txn_id, t.date, t.subsidiary_id, t.currency,
        sp.amount, sp.account_id,
        CASE WHEN a.type = 'asset' THEN 1 ELSE 0 END AS is_asset,
        sp.program_id, sp.functional_class,
-       sp.memo AS split_memo, t.memo AS txn_memo,
+       sp.memo AS split_memo, t.memo AS txn_memo, sp.description AS split_description,
        CAST(SUM(CASE WHEN a.type = 'asset' THEN sp.amount ELSE 0 END) OVER (
          PARTITION BY t.currency
          ORDER BY t.date, sp.id
@@ -102,19 +102,20 @@ type FundLedgerParams struct {
 }
 
 type FundLedgerRow struct {
-	SplitID         ids.SplitID
-	TxnID           ids.TransactionID
-	Date            string
-	SubsidiaryID    ids.SubsidiaryID
-	Currency        string
-	Amount          int64
-	AccountID       ids.AccountID
-	IsAsset         int64
-	ProgramID       sql.NullInt64
-	FunctionalClass sql.NullString
-	SplitMemo       string
-	TxnMemo         string
-	RunningBalance  int64
+	SplitID          ids.SplitID
+	TxnID            ids.TransactionID
+	Date             string
+	SubsidiaryID     ids.SubsidiaryID
+	Currency         string
+	Amount           int64
+	AccountID        ids.AccountID
+	IsAsset          int64
+	ProgramID        sql.NullInt64
+	FunctionalClass  sql.NullString
+	SplitMemo        string
+	TxnMemo          string
+	SplitDescription string
+	RunningBalance   int64
 }
 
 // The fund STATEMENT (p12.5): every non-deleted split tagged fund_id, across ALL
@@ -158,6 +159,7 @@ func (q *Queries) FundLedger(ctx context.Context, arg FundLedgerParams) ([]FundL
 			&i.FunctionalClass,
 			&i.SplitMemo,
 			&i.TxnMemo,
+			&i.SplitDescription,
 			&i.RunningBalance,
 		); err != nil {
 			return nil, err
