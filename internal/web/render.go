@@ -31,6 +31,7 @@ func mustParseTemplates() *template.Template {
 	stub := template.FuncMap{
 		"t":                        func(key string, _ ...any) string { return key },
 		"tn":                       func(key string, _ int, _ ...any) string { return key },
+		"acctLabel":                func(_, path string) string { return path }, // p12.12 type-rooted account label; real closure (over lang) bound in render
 		"asset":                    func(name string) string { return name },
 		"shellTitle":               shellTitle,
 		"datefield":                dateField, // p28.18 the ONE reusable date-input partial's model constructor
@@ -74,6 +75,8 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name
 	clone = clone.Funcs(template.FuncMap{
 		"t":          func(key string, args ...any) string { return i18n.T(lang, key, args...) },
 		"tn":         func(key string, count int, args ...any) string { return i18n.TN(lang, key, count, args...) },
+		"acctLabel":  func(typ, path string) string { return acctLabel(lang, typ, path) }, // p12.12 "LocalizedType.Path"
+
 		"asset":      s.assetURL, // hashed URL in prod, unhashed in -dev (p10.1)
 		"shellTitle": shellTitle, // pairs a shellPage with a localized head title
 		"datefield":  dateField,  // p28.18 the ONE reusable date-input partial's model constructor
@@ -93,6 +96,17 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, status int, name
 	h.Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_, _ = w.Write(buf.Bytes())
+}
+
+// acctLabel (p12.12) builds an account picker's option label as a single type-rooted
+// dotted path: the localized account type as the ROOT segment, then the account's
+// dotted ancestor chain (Path), joined by ".". E.g. type "asset" + path "Cash.Checking"
+// -> "Asset.Cash.Checking". The type root uses the existing account.type.<type> catalog
+// keys, so the flat account comboboxes read like the type-grouped selects (the type is
+// the visual root either way). A bound closure over the request lang is registered in
+// render (mirroring t); the parse-time stub just returns path so parsing type-checks.
+func acctLabel(lang, typ, path string) string {
+	return i18n.T(lang, "account.type."+typ) + "." + path
 }
 
 // strs is the `strs` template func: it returns its arguments as a []string so a

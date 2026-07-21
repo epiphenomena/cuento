@@ -333,7 +333,8 @@ test.describe('combobox select-on-focus + Description tooltip', () => {
     await input.type('selfocus check');
     const list = cell.locator('.combo-list');
     await list.locator('.combo-option', { hasText: 'SelFocus Checking' }).first().click();
-    await expect(input).toHaveValue('SelFocus Checking');
+    // p12.12: the account picker label is now the type-rooted dotted path.
+    await expect(input).toHaveValue('Asset.SelFocus Checking');
 
     // Blur then re-focus (click) so the focus handler runs with a populated box, then type a
     // SINGLE char via the keyboard. Select-on-focus must have highlighted the whole label so

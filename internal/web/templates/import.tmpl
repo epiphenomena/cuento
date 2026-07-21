@@ -48,8 +48,8 @@
              data-path so a query like "c.boa" ranks "Cash.BOA". */}}
         <select id="import-account" name="account_id" class="combo-input" required>
           <option value="">{{t "import.choose"}}</option>
-          {{- range .Accounts}}
-          <option value="{{.ID}}" data-path="{{.Path}}" data-subsidiaries="{{range .SubsidiaryIDs}}{{.}} {{end}}">{{.Path}}</option>
+          {{- range .Accounts}}{{$disp := acctLabel .Type .Path}}
+          <option value="{{.ID}}" data-path="{{$disp}}" data-subsidiaries="{{range .SubsidiaryIDs}}{{.}} {{end}}">{{$disp}}</option>
           {{- end}}
         </select>
       </div>

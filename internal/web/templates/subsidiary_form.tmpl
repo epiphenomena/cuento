@@ -61,7 +61,7 @@
     <select id="sf-ap-account" name="default_ap_account_id"
       {{- if eq .Errors.FirstInvalid "default_ap_account_id"}} autofocus{{end}}>
       <option value="0"{{if not .DefaultAPAccountID}} selected{{end}}>{{t "subsidiaries.form.default_ap_none"}}</option>
-      {{range .APAccounts}}<option value="{{.ID}}"{{if eq .ID $.DefaultAPAccountID}} selected{{end}}>{{.Path}}</option>
+      {{range .APAccounts}}<option value="{{.ID}}"{{if eq .ID $.DefaultAPAccountID}} selected{{end}}>{{acctLabel .Type .Path}}</option>
       {{end}}
     </select>
     {{with .Errors.ErrorKey "default_ap_account_id"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}

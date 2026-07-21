@@ -14,7 +14,7 @@
 //   - confirm button:   button "Confirm merge"
 
 const { test, expect } = require('../fixtures');
-const { saveAccount } = require('../helpers');
+const { saveAccount, selectTxnAccount } = require('../helpers');
 
 async function login(page, server) {
   await page.goto('/login');
@@ -62,8 +62,8 @@ test.describe('merge accounts', () => {
     await expect(page.locator('#mg-src')).toBeVisible();
 
     // Pick source + destination by their visible labels.
-    await page.locator('#mg-src').selectOption({ label: 'Supplies E2E' });
-    await page.locator('#mg-dst').selectOption({ label: 'Office E2E' });
+    await selectTxnAccount(page.locator('#mg-src'), 'Supplies E2E');
+    await selectTxnAccount(page.locator('#mg-dst'), 'Office E2E');
 
     // Step 1: review -> consequences preview with a Confirm control.
     await page.getByRole('button', { name: /review merge/i }).click();

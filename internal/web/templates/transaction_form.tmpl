@@ -68,7 +68,7 @@
              fuzzy filter (combofilter.js) is unaffected; the native no-JS select shows the
              group labels. */}}
         {{range (txnAccountsByType $.Page.Accounts)}}<optgroup label="{{t .LabelKey}}">
-        {{range .Options}}{{$disp := printf "%s · %s" (t (printf "account.type.%s" .Type)) .Path}}<option data-account-option value="{{.ID}}"
+        {{range .Options}}{{$disp := acctLabel .Type .Path}}<option data-account-option value="{{.ID}}"
           data-type="{{.Type}}" data-default-program="{{.DefaultProgram}}"
           data-default-class="{{.DefaultClass}}" data-subsidiaries="{{.SubsCSV}}"
           {{if .Unavailable}}data-unavailable="1" data-path="{{$disp}} {{t "txn.account.unavailable_suffix"}}"{{else}}data-path="{{$disp}}"{{end}}
@@ -299,7 +299,7 @@
         <option value="0">{{t "txn.account.choose"}}</option>
         {{/* p26.74: group by type (optgroup); see the body-row account select above. */}}
         {{range (txnAccountsByType .Accounts)}}<optgroup label="{{t .LabelKey}}">
-        {{range .Options}}{{$disp := printf "%s · %s" (t (printf "account.type.%s" .Type)) .Path}}<option data-account-option value="{{.ID}}"
+        {{range .Options}}{{$disp := acctLabel .Type .Path}}<option data-account-option value="{{.ID}}"
           data-type="{{.Type}}" data-default-program="{{.DefaultProgram}}"
           data-default-class="{{.DefaultClass}}" data-subsidiaries="{{.SubsCSV}}"
           {{if .Unavailable}}data-unavailable="1" data-path="{{$disp}} {{t "txn.account.unavailable_suffix"}}"{{else}}data-path="{{$disp}}"{{end}}

@@ -71,7 +71,10 @@ type importAccountOption struct {
 	Name string
 	// Path (p28.2) is the dotted ancestor chain; the target picker is a shared
 	// combobox that fuzzy-ranks on it, like every account picker.
-	Path          string
+	Path string
+	// Type is the account's type ("asset"/"expense"/etc.), used to render the type-rooted
+	// dotted label (p12.12) so the flat target combobox reads like every other picker.
+	Type          string
 	SubsidiaryIDs []ids.SubsidiaryID
 }
 
@@ -263,7 +266,7 @@ func (s *server) buildImportUpload(r *http.Request) (importUploadModel, error) {
 			}
 			seen[o.ID] = true
 			model.Accounts = append(model.Accounts, importAccountOption{
-				ID: int64(o.ID), Name: o.Name, Path: o.Path, SubsidiaryIDs: o.SubsidiaryIDs,
+				ID: int64(o.ID), Name: o.Name, Path: o.Path, Type: o.Type, SubsidiaryIDs: o.SubsidiaryIDs,
 			})
 		}
 	}

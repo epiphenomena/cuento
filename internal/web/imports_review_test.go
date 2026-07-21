@@ -98,7 +98,7 @@ func TestImportEditPostPrefillLocksSubsidiary(t *testing.T) {
 		t.Error("locked subsidiary hidden carrier missing")
 	}
 	// The batch account line is prefilled (the checking account is selected in row 0).
-	if !strings.Contains(body, `selected>Asset · Checking</option>`) {
+	if !strings.Contains(body, `selected>Asset.Checking</option>`) {
 		t.Error("batch account line not prefilled in row 0")
 	}
 }

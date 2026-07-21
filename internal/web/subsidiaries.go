@@ -113,11 +113,14 @@ type subsidiaryForm struct {
 	Errors formErrors
 }
 
-// apAccountOption is one selectable default-AP candidate: its id and the dotted
-// account path shown in the picker.
+// apAccountOption is one selectable default-AP candidate: its id, type, and the
+// dotted account path shown (type-rooted, p12.12) in the picker.
 type apAccountOption struct {
 	ID   int64
 	Path string
+	// Type is the account's type (always "liability" here, but carried so the option
+	// renders the same type-rooted dotted label as every other flat account picker).
+	Type string
 }
 
 // subsidiaryNewForm handles GET /admin/subsidiaries/new (Admin): the empty create
@@ -212,7 +215,7 @@ func (s *server) buildSubsidiaryForm(ctx context.Context, id ids.SubsidiaryID) (
 		}
 		for _, o := range opts {
 			if o.Type == "liability" {
-				form.APAccounts = append(form.APAccounts, apAccountOption{ID: int64(o.ID), Path: o.Path})
+				form.APAccounts = append(form.APAccounts, apAccountOption{ID: int64(o.ID), Path: o.Path, Type: o.Type})
 			}
 		}
 	}

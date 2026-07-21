@@ -31,7 +31,7 @@
     <select id="mg-src" name="src" class="combo-input"
       {{- if eq .Errors.FirstInvalid "src"}} autofocus{{end}}>
       <option value="0">{{t "merge.select_placeholder"}}</option>
-      {{range .Leaves}}<option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.Src}} selected{{end}}>{{.Path}}</option>
+      {{range .Leaves}}{{$disp := acctLabel .Type .Path}}<option value="{{.ID}}" data-path="{{$disp}}"{{if eq .ID $.Src}} selected{{end}}>{{$disp}}</option>
       {{end}}
     </select>
     {{with .Errors.ErrorKey "src"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
@@ -42,7 +42,7 @@
     <select id="mg-dst" name="dst" class="combo-input"
       {{- if eq .Errors.FirstInvalid "dst"}} autofocus{{end}}>
       <option value="0">{{t "merge.select_placeholder"}}</option>
-      {{range .Leaves}}<option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.Dst}} selected{{end}}>{{.Path}}</option>
+      {{range .Leaves}}{{$disp := acctLabel .Type .Path}}<option value="{{.ID}}" data-path="{{$disp}}"{{if eq .ID $.Dst}} selected{{end}}>{{$disp}}</option>
       {{end}}
     </select>
     {{with .Errors.ErrorKey "dst"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}

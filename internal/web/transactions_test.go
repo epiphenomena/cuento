@@ -501,10 +501,10 @@ func TestTxnStableInputIDsAcrossRerender(t *testing.T) {
 
 // TestTxnAccountOptionShowsTypePrefix: each account option in the transaction
 // editor's account selects shows the SINGULAR account-type label (account.type.*)
-// as the first segment of its displayed full name, separated from the dotted path
-// by " · ". The prefix rides both the visible option text AND data-path so the
-// shared combobox (combofilter.js, which fuzzy-ranks on data-path) can filter by
-// type too. Reuses the existing account.type.* i18n keys; no new keys.
+// as the ROOT segment of a single type-rooted dotted path (p12.12), joined to the
+// account's dotted Path by ".". The label rides both the visible option text AND
+// data-path so the shared combobox (combofilter.js, which fuzzy-ranks on data-path)
+// can filter by type too. Reuses the existing account.type.* i18n keys; no new keys.
 func TestTxnAccountOptionShowsTypePrefix(t *testing.T) {
 	e := newTxnWebEnv(t)
 
@@ -515,12 +515,12 @@ func TestTxnAccountOptionShowsTypePrefix(t *testing.T) {
 	}
 	body := rec.Body.String()
 
-	// Checking is an asset leaf in sub1; its option must read "Asset · Checking"
+	// Checking is an asset leaf in sub1; its option must read "Asset.Checking"
 	// in both the visible text and data-path (so it stays fuzzy-filterable).
 	for _, want := range []string{
-		`>Asset · Checking<`,
-		`data-path="Asset · Checking"`,
-		`>Expense · Salaries<`,
+		`>Asset.Checking<`,
+		`data-path="Asset.Checking"`,
+		`>Expense.Salaries<`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("account option missing type prefix %q; body:\n%s", want, body)

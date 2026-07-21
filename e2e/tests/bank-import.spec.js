@@ -90,7 +90,7 @@ async function uploadCSV(page, acctName, csv, filename) {
   await page.goto('/import');
   await expect(page.getByRole('heading', { name: /import bank csv/i })).toBeVisible();
   await page.locator('#import-subsidiary').selectOption('1');
-  await page.locator('#import-account').selectOption({ label: acctName });
+  await selectTxnAccount(page.locator('#import-account'), acctName);
   await page.locator('#import-file').setInputFiles({
     name: filename,
     mimeType: 'text/csv',
@@ -182,7 +182,7 @@ test('bank import: a mapped memo column previews and imports; omitting it still 
   // cleanly (memo empty, no validation error).
   await page.goto('/import');
   await page.locator('#import-subsidiary').selectOption('1');
-  await page.locator('#import-account').selectOption({ label: acctName });
+  await selectTxnAccount(page.locator('#import-account'), acctName);
   await page.locator('#import-file').setInputFiles({
     name: 'nomemo.csv',
     mimeType: 'text/csv',
@@ -214,7 +214,7 @@ test('bank import: a file-level error shows in place, no duplicate page frame', 
   await page.goto('/import');
   await expect(page.getByRole('heading', { name: /import bank csv/i })).toBeVisible();
   await page.locator('#import-subsidiary').selectOption('1');
-  await page.locator('#import-account').selectOption({ label: acctName });
+  await selectTxnAccount(page.locator('#import-account'), acctName);
 
   // An empty file -> no readable rows -> a file-level error (bare import-error 422).
   await page.locator('#import-file').setInputFiles({
@@ -310,7 +310,7 @@ test('bank import: save a mapping profile, then delete it', async ({ page, serve
 
   await page.goto('/import');
   await page.locator('#import-subsidiary').selectOption('1');
-  await page.locator('#import-account').selectOption({ label: acctName });
+  await selectTxnAccount(page.locator('#import-account'), acctName);
   // Save this mapping as a reusable profile (checkbox + name on the upload form; they
   // carry into the confirm form and persist on stage).
   await page.locator('#import-save-profile').check();
@@ -351,7 +351,7 @@ test('bank import: save a mapping profile, then delete it', async ({ page, serve
   await page.locator('#import-profile-id').selectOption({ label: profileName });
   await expect(page.locator('#import-profile-id')).toHaveValue(/\d+/);
   await page.locator('#import-subsidiary').selectOption('1');
-  await page.locator('#import-account').selectOption({ label: acctName });
+  await selectTxnAccount(page.locator('#import-account'), acctName);
   await page.locator('#import-file').setInputFiles({
     name: 'again.csv',
     mimeType: 'text/csv',

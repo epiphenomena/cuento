@@ -100,7 +100,7 @@ func TestReviewPrefillsAPCounterSide(t *testing.T) {
 	body := rec.Body.String()
 	// The AP account is an OPTION and is SELECTED (on the counter-side row); it stays a real
 	// editable <select> option (the reviewer can change it), NOT locked static text.
-	if !strings.Contains(body, `selected>Liability · Accounts Payable</option>`) {
+	if !strings.Contains(body, `selected>Liability.Accounts Payable</option>`) {
 		t.Errorf("AP account not prefilled/selected on the reviewer counter-side row; body:\n%s", body)
 	}
 }
@@ -130,7 +130,7 @@ func TestReviewPostCreatesBalancedTxnAndConverts(t *testing.T) {
 	if !strings.Contains(body, `name="subsidiary" value="1"`) {
 		t.Error("locked subsidiary hidden carrier missing")
 	}
-	if !strings.Contains(body, `selected>Expense · Travel</option>`) {
+	if !strings.Contains(body, `selected>Expense.Travel</option>`) {
 		t.Error("expense line not prefilled in the editor")
 	}
 

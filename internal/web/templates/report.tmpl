@@ -129,8 +129,8 @@
            data-path so "c.boa" ranks "Cash.BOA". */}}
       <select id="rp-account" name="account" class="report-account-select combo-input">
         <option value="0"{{if eq .Account 0}} selected{{end}}>{{t "reports.account.choose"}}</option>
-        {{- range .Accounts}}
-        <option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.Account}} selected{{end}}>{{.Path}}</option>
+        {{- range .Accounts}}{{$disp := acctLabel .Type .Path}}
+        <option value="{{.ID}}" data-path="{{$disp}}"{{if eq .ID $.Account}} selected{{end}}>{{$disp}}</option>
         {{- end}}
       </select>
     </div>
