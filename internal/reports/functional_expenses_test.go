@@ -42,6 +42,7 @@ import (
 	"context"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/reports"
 	"cuento/internal/store"
 	"cuento/internal/testutil/fixture"
@@ -565,6 +566,94 @@ func TestFunctionalExpensesTiesIncomeStatement(t *testing.T) {
 	}
 	if nineTotal != isExpenses {
 		t.Errorf("990 Part IX total (%d) != income-statement total expenses (%d)", nineTotal, isExpenses)
+	}
+}
+
+// TestFunctionalExpensesIntercompanyEliminatesAtConsolidation pins the D19 rule for the
+// EXPENSE side of the 990: an INTERCOMPANY-flagged expense transfer account is genuine
+// activity within a SINGLE subsidiary's books (it shows there), but on the CONSOLIDATED
+// (root) scope it is an intra-group transfer that must NOT inflate the group's functional
+// expenses (Part IX) -- so it is ELIMINATED. functional_expenses lists every contributing
+// account BY NAME at every scope, so the pin is: the account's row is present with its
+// posted amount at the single-sub scope and ABSENT at consolidation (the "already correct"
+// coverage -- FunctionalMatrix applies consolidatedICExclusions on the >1-sub scope).
+//
+// The base fixture's only IC accounts are the balance-sheet due-to/due-from pair, so this
+// builds a bespoke IC expense leaf on a FRESH fixture copy (DATA RULE 11: a store-level
+// structural probe, not a golden -- the shared golden fixture is never mutated) and posts
+// one USD expense to it in the US sub (a single, non-consolidated subsidiary; no FX).
+func TestFunctionalExpensesIntercompanyEliminatesAtConsolidation(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// A bespoke INTERCOMPANY expense leaf: functional class management (so it lands in
+	// FunctionalMatrix/Part IX at all), a program (D24: an R/E split carries one), NO 990
+	// code -> its own Unmapped bucket, and Intercompany=true (the D19 eliminated flag).
+	mgmt := "management"
+	icExpense, err := f.Store.CreateAccount(ctx, store.CreateAccountInput{
+		Type:             "expense",
+		DefaultCurrency:  "USD",
+		Names:            map[string]string{"en": "IC Expense Transfer", "es": "Transferencia de gasto intercompania"},
+		Subsidiaries:     []ids.SubsidiaryID{f.IDs.US},
+		FunctionalClass:  &mgmt,
+		DefaultProgramID: &f.IDs.General,
+		Intercompany:     true,
+	})
+	if err != nil {
+		t.Fatalf("create IC expense account: %v", err)
+	}
+
+	const icAmount int64 = 123_000
+	// Balanced USD txn in the US sub: DR the IC expense / CR Checking US.
+	if _, err := f.Store.PostTransaction(ctx, store.PostTransactionInput{
+		Date:         "2026-03-15",
+		SubsidiaryID: f.IDs.US,
+		Currency:     "USD",
+		Memo:         "test: intercompany expense transfer",
+		Splits: []store.SplitInput{
+			{AccountID: icExpense, Amount: icAmount},
+			{AccountID: f.IDs.CheckingUS, Amount: -icAmount},
+		},
+	}); err != nil {
+		t.Fatalf("post IC expense txn: %v", err)
+	}
+
+	rep := functionalExpensesReport(t)
+
+	// --- Positive control: at the SINGLE-SUB (US, non-consolidated) scope the IC expense
+	// account appears BY NAME with its full posted amount (management column, USD 1:1). A
+	// setup miss would make it absent here too, so the elimination assertion below would be
+	// vacuous -- this equality guards against that.
+	subP := feGoldenParams(f)
+	subP.Scope = reports.SubsidiaryID(f.IDs.US)
+	subT, err := rep.Run(ctx, reports.NewToolkit(f.Store, subP), subP)
+	if err != nil {
+		t.Fatalf("run single-sub (US): %v", err)
+	}
+	subCells, ok := feRowFor(subT, "IC Expense Transfer")
+	if !ok {
+		t.Fatalf("single-sub (US) functional expenses missing the IC expense account (setup miss)")
+	}
+	// cols: [line, program, management, fundraising, total]; management is index 2.
+	if subCells[2].Minor != icAmount || subCells[4].Minor != icAmount {
+		t.Errorf("single-sub IC expense = [mgmt %d, total %d], want [%d, %d]",
+			subCells[2].Minor, subCells[4].Minor, icAmount, icAmount)
+	}
+
+	// --- The pin: at the CONSOLIDATED (root) scope the IC expense account is ELIMINATED
+	// (D19) -- its by-name row is gone entirely.
+	rootP := feGoldenParams(f) // root scope
+	rootT, err := rep.Run(ctx, reports.NewToolkit(f.Store, rootP), rootP)
+	if err != nil {
+		t.Fatalf("run consolidated (root): %v", err)
+	}
+	if _, ok := feRowFor(rootT, "IC Expense Transfer"); ok {
+		t.Errorf("consolidated (root) functional expenses still shows the intercompany expense transfer; D19 elimination not applied")
+	}
+	// A NON-IC expense (Salaries) is untouched at consolidation (only IC eliminates).
+	if _, ok := feRowFor(rootT, "Salaries"); !ok {
+		t.Errorf("consolidated report dropped a non-intercompany expense (Salaries); only IC accounts must eliminate")
 	}
 }
 

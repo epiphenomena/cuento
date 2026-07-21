@@ -672,3 +672,131 @@ func TestForm990GrantProgramScope(t *testing.T) {
 		t.Errorf("scoped Part IX total %d; Educacion's Program Supplies should remain", scopedIX[2].Minor)
 	}
 }
+
+// TestForm990IntercompanyEliminatesAtConsolidation pins the D19 rule across the 990
+// package's REVENUE (Part VIII) and EXPENSE (Part IX) sections: an INTERCOMPANY-flagged
+// revenue/expense transfer account is genuine external-facing activity within a SINGLE
+// subsidiary's books (it shows there), but on the CONSOLIDATED (root) scope it is an
+// intra-group transfer that must NOT inflate the group's 990 revenue/expenses -- so it is
+// ELIMINATED (Part VIII's Activity and Part IX's FunctionalMatrix both apply
+// consolidatedICExclusions on the >1-sub scope, mirroring the income statement / balance
+// sheet). This is the "already correct" coverage; no output changes.
+//
+// Each IC account carries NO effective 990 code, so it surfaces as a BY-NAME detail row in
+// its section's explicit Unmapped bucket (the mechanism that lists specific unmapped
+// accounts) -- present at the single-sub scope, gone at consolidation. Both figures are
+// also checked against Part VIII total revenue / Part IX grand total (the IC amount is IN
+// the single-sub totals and OUT of the consolidated totals). Built on a FRESH fixture copy
+// with two bespoke IC leaves posted in the US (single, non-consolidated) sub in USD -- no
+// FX -- so the shared golden fixture is untouched (DATA RULE 11).
+func TestForm990IntercompanyEliminatesAtConsolidation(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// IC REVENUE leaf (no 990 code -> Part VIII Unmapped detail by name) and IC EXPENSE
+	// leaf (management class, no 990 code -> Part IX Unmapped detail by name); both flagged
+	// Intercompany, both program-tagged (D24), both mapped to and posted in the US sub.
+	mgmt := "management"
+	icRevenue, err := f.Store.CreateAccount(ctx, store.CreateAccountInput{
+		Type:             "revenue",
+		DefaultCurrency:  "USD",
+		Names:            map[string]string{"en": "IC Revenue Transfer", "es": "Transferencia de ingreso intercompania"},
+		Subsidiaries:     []ids.SubsidiaryID{f.IDs.US},
+		DefaultProgramID: &f.IDs.General,
+		Intercompany:     true,
+	})
+	if err != nil {
+		t.Fatalf("create IC revenue account: %v", err)
+	}
+	icExpense, err := f.Store.CreateAccount(ctx, store.CreateAccountInput{
+		Type:             "expense",
+		DefaultCurrency:  "USD",
+		Names:            map[string]string{"en": "IC Expense Transfer", "es": "Transferencia de gasto intercompania"},
+		Subsidiaries:     []ids.SubsidiaryID{f.IDs.US},
+		FunctionalClass:  &mgmt,
+		DefaultProgramID: &f.IDs.General,
+		Intercompany:     true,
+	})
+	if err != nil {
+		t.Fatalf("create IC expense account: %v", err)
+	}
+
+	const icRev int64 = 90_000  // revenue is net-CREDIT (stored negative); posted as -90,000
+	const icExp int64 = 123_000 // expense is net-DEBIT (stored positive)
+	if _, err := f.Store.PostTransaction(ctx, store.PostTransactionInput{
+		Date:         "2026-03-15",
+		SubsidiaryID: f.IDs.US,
+		Currency:     "USD",
+		Memo:         "test: intercompany revenue transfer",
+		Splits: []store.SplitInput{
+			{AccountID: icRevenue, Amount: -icRev},
+			{AccountID: f.IDs.CheckingUS, Amount: icRev},
+		},
+	}); err != nil {
+		t.Fatalf("post IC revenue txn: %v", err)
+	}
+	if _, err := f.Store.PostTransaction(ctx, store.PostTransactionInput{
+		Date:         "2026-03-15",
+		SubsidiaryID: f.IDs.US,
+		Currency:     "USD",
+		Memo:         "test: intercompany expense transfer",
+		Splits: []store.SplitInput{
+			{AccountID: icExpense, Amount: icExp},
+			{AccountID: f.IDs.CheckingUS, Amount: -icExp},
+		},
+	}); err != nil {
+		t.Fatalf("post IC expense txn: %v", err)
+	}
+
+	rep := form990Report(t)
+
+	// --- Positive control at the SINGLE-SUB (US) scope: both IC accounts appear BY NAME in
+	// their Unmapped detail rows with the posted amounts (Part VIII shows revenue as a
+	// positive inflow; Part IX shows the expense positive). A setup miss would make them
+	// absent here too, making the elimination assertion vacuous -- these equalities guard it.
+	subP := f990GoldenParams(f)
+	subP.Scope = reports.SubsidiaryID(f.IDs.US)
+	subT, err := rep.Run(ctx, reports.NewToolkit(f.Store, subP), subP)
+	if err != nil {
+		t.Fatalf("run single-sub (US): %v", err)
+	}
+	revCells, ok := f990RowFor(subT, "IC Revenue Transfer")
+	if !ok {
+		t.Fatalf("single-sub (US) 990 missing the IC revenue account row (setup miss)")
+	}
+	if revCells[2].Minor != icRev { // Part VIII negates the net-credit to a positive inflow
+		t.Errorf("single-sub IC revenue amount = %d, want %d", revCells[2].Minor, icRev)
+	}
+	expCells, ok := f990RowFor(subT, "IC Expense Transfer")
+	if !ok {
+		t.Fatalf("single-sub (US) 990 missing the IC expense account row (setup miss)")
+	}
+	if expCells[2].Minor != icExp {
+		t.Errorf("single-sub IC expense amount = %d, want %d", expCells[2].Minor, icExp)
+	}
+	// --- The pin at the CONSOLIDATED (root) scope: both IC accounts are ELIMINATED (D19) --
+	// their by-name rows are gone. (A total-delta check is not used: the root scope also
+	// folds in the MX sub's activity, so the two scopes' totals differ for reasons beyond
+	// the IC accounts; the by-name presence/absence + the single-sub amount equality above
+	// is the clean, exact pin.)
+	rootP := f990GoldenParams(f) // root scope
+	rootT, err := rep.Run(ctx, reports.NewToolkit(f.Store, rootP), rootP)
+	if err != nil {
+		t.Fatalf("run consolidated (root): %v", err)
+	}
+	if _, ok := f990RowFor(rootT, "IC Revenue Transfer"); ok {
+		t.Errorf("consolidated (root) 990 still shows the intercompany revenue transfer (Part VIII); D19 not applied")
+	}
+	if _, ok := f990RowFor(rootT, "IC Expense Transfer"); ok {
+		t.Errorf("consolidated (root) 990 still shows the intercompany expense transfer (Part IX); D19 not applied")
+	}
+	// A NON-IC line is untouched at consolidation (only IC eliminates): the Part VIII total
+	// row and the Part IX total row remain present and nonzero.
+	if row, ok := f990RowFor(rootT, "reports.form_990.viii.total"); !ok || row[2].Minor == 0 {
+		t.Errorf("consolidated Part VIII total missing or zero; only IC accounts must eliminate")
+	}
+	if row, ok := f990RowFor(rootT, "reports.form_990.ix.total"); !ok || row[2].Minor == 0 {
+		t.Errorf("consolidated Part IX total missing or zero; only IC accounts must eliminate")
+	}
+}
