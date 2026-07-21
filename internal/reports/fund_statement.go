@@ -34,6 +34,13 @@ func registerFundStatement(reg *Registry) {
 		// Line detail with a Date/Description/Memo/Amount register shape; not program-
 		// dimensioned (mirrors fund_activity — a fund's line detail is balance-centric, and
 		// the "funds" group carries no program-dimensioned report).
+		//
+		// Tree (p26 fund #21): the account dimension is a COLLAPSIBLE account hierarchy.
+		// Placeholder parents (Assets, Revenue, Expenses) roll up their descendants as
+		// nested subtotal rows; each leaf account is itself a collapsible parent over its
+		// own detail lines. The generic template + treetable.js wire click-to-collapse
+		// from the per-row Indent (data-depth).
+		Tree: true,
 	})
 }
 
@@ -68,47 +75,125 @@ func runFundStatement(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 		return Table{}, err
 	}
 
-	acctNames, err := accountNameMap(ctx, tk, p.LangOr())
+	// The chart-of-accounts tree (pre-order) gives the account hierarchy: placeholder
+	// parents (Assets, Revenue, Expenses), leaf accounts, resolved names, and each
+	// account's depth. The account dimension is presented as this collapsible tree
+	// (p26 fund #21) rather than a flat list of section headers.
+	storeTree, err := tk.Store().Tree(ctx, p.LangOr(), nil)
 	if err != nil {
 		return Table{}, err
 	}
-	// The chart-of-accounts pre-order (Tree order): accounts are sectioned in that
-	// order so the statement reads type-by-type (assets, then liabilities, revenue,
-	// expenses) exactly as the chart of accounts sorts.
-	order, err := accountTreeOrder(ctx, tk, p.LangOr())
-	if err != nil {
-		return Table{}, err
-	}
+	tree := toTreeNodes(storeTree)
+	children, roots, isPlaceholder, name, depth, _ := indexTree(tree)
 
 	t := Table{Columns: cols}
 
-	// Group the fund's lines by account (preserving each account's internal
-	// (date, split_id) order, which FundLedger already returns). One SECTION per
-	// account the fund touches, ordered by the chart-of-accounts order.
+	// Group the fund's lines by leaf account (preserving each account's internal
+	// (date, split_id) order, which FundLedger already returns). Only accounts the fund
+	// touches carry lines; the tree walk surfaces just those leaves and their ancestors.
 	byAcct := make(map[AccountID][]store.FundLedgerRow)
-	var acctIDs []AccountID
 	for _, r := range rows {
 		id := AccountID(r.AccountID)
-		if _, seen := byAcct[id]; !seen {
-			acctIDs = append(acctIDs, id)
-		}
 		byAcct[id] = append(byAcct[id], r)
 	}
-	sort.SliceStable(acctIDs, func(i, j int) bool {
-		return order[acctIDs[i]] < order[acctIDs[j]]
-	})
 
-	for _, id := range acctIDs {
+	// subtreeCcys collects the distinct currencies moved beneath a node (a leaf's own,
+	// a placeholder's descendants'), and subtreeSum their per-currency native sums, so a
+	// placeholder parent can show a native rollup WHEN single-currency (mixed-currency
+	// subtrees have no honest single native figure -- blank, mirroring balance_sheet's
+	// native convention). hasAct marks whether a node's subtree carries any fund line, so
+	// empty chart branches (no activity in this fund) drop out entirely.
+	subtreeSum := make(map[AccountID]map[string]int64)
+	hasAct := make(map[AccountID]bool)
+	var fold func(id AccountID) (map[string]int64, bool)
+	fold = func(id AccountID) (map[string]int64, bool) {
+		if !isPlaceholder[id] {
+			sum := map[string]int64{}
+			for _, ln := range byAcct[id] {
+				sum[ln.Currency] += ln.Amount
+			}
+			subtreeSum[id] = sum
+			hasAct[id] = len(byAcct[id]) > 0
+			return sum, hasAct[id]
+		}
+		sum := map[string]int64{}
+		any := false
+		for _, c := range children[id] {
+			cs, act := fold(c)
+			for ccy, v := range cs {
+				sum[ccy] += v
+			}
+			any = any || act
+		}
+		subtreeSum[id] = sum
+		hasAct[id] = any
+		return sum, any
+	}
+	for _, r := range roots {
+		fold(r)
+	}
+
+	// rollupCell returns the native rollup money cell for a placeholder parent: the
+	// single-currency subtree sum (rare across mixed funds), else blank (no honest single
+	// native figure). rollupCcy is the currency the cell carries (empty when blank).
+	rollup := func(id AccountID) (Cell, string) {
+		sum := subtreeSum[id]
+		if len(sum) == 1 {
+			for ccy, v := range sum {
+				return MoneyCell(v, ccy), ccy
+			}
+		}
+		return BlankMoneyCell(), ""
+	}
+
+	// Walk the tree pre-order (parent immediately precedes its subtree -- the treetable
+	// data-depth contract). A placeholder parent WITH activity emits one nested subtotal
+	// row at its depth; a leaf the fund touches emits a collapsible header at its depth,
+	// then its detail lines and per-currency subtotal one level deeper (so the header is a
+	// parent whose descendants -- the lines -- collapse as a unit).
+	var walk func(id AccountID)
+	walk = func(id AccountID) {
+		if !hasAct[id] {
+			return
+		}
+		if isPlaceholder[id] {
+			cell, ccy := rollup(id)
+			t.Rows = append(t.Rows, Row{
+				Indent: depth[id],
+				Cells: []Cell{
+					TextCell(name[id]),
+					TextCell(""), TextCell(""),
+					TextCell(ccy),
+					cell,
+					BlankMoneyCell(),
+				},
+				Kind: RowSubtotal,
+			})
+			for _, c := range children[id] {
+				walk(c)
+			}
+			return
+		}
+
 		lines := byAcct[id]
-		// Account section header (a proper-noun account name as TEXT, spanning the row).
+		lineDepth := depth[id] + 1
+
+		// Leaf account header: a collapsible parent (its detail lines follow one level
+		// deeper). Its amount cell rolls up the account's single-currency native sum (or
+		// blank if the account is multi-currency, mirroring the placeholder convention).
+		hdrCell, hdrCcy := rollup(id)
 		t.Rows = append(t.Rows, Row{
+			Indent: depth[id],
 			Cells: []Cell{
-				TextCell(acctNames[id]),
-				TextCell(""), TextCell(""), TextCell(""),
-				BlankMoneyCell(), BlankMoneyCell(),
+				TextCell(name[id]),
+				TextCell(""), TextCell(""),
+				TextCell(hdrCcy),
+				hdrCell,
+				BlankMoneyCell(),
 			},
 			Kind: RowSubtotal,
 		})
+
 		// Per-(account,currency) running total across this account's lines, so the
 		// subtotal foots to the sum of the account's amounts in each currency (int64,
 		// no rounding). The FundLedger running_balance is fund-WIDE and account-order-
@@ -117,6 +202,7 @@ func runFundStatement(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 		for _, ln := range lines {
 			running[ln.Currency] += ln.Amount
 			t.Rows = append(t.Rows, Row{
+				Indent: lineDepth,
 				Cells: []Cell{
 					DateCell(ln.Date).WithTxn(ln.TxnID),
 					TextCell(ln.Description),
@@ -129,8 +215,9 @@ func runFundStatement(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 			})
 		}
 		// Account subtotal, one row per currency the account moved (sorted for
-		// determinism). The subtotal Amount is the SUM of the account's line amounts in
-		// that currency (== the closing per-account running total).
+		// determinism), at the detail depth (a sibling of the lines). The subtotal Amount
+		// is the SUM of the account's line amounts in that currency (== the closing
+		// per-account running total).
 		ccys := make([]string, 0, len(running))
 		for c := range running {
 			ccys = append(ccys, c)
@@ -138,6 +225,7 @@ func runFundStatement(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 		sort.Strings(ccys)
 		for _, c := range ccys {
 			t.Rows = append(t.Rows, Row{
+				Indent: lineDepth,
 				Cells: []Cell{
 					LabelCell("reports.fund_statement.subtotal"),
 					TextCell(""), TextCell(""),
@@ -149,21 +237,9 @@ func runFundStatement(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 			})
 		}
 	}
+	for _, r := range roots {
+		walk(r)
+	}
 
 	return t, nil
-}
-
-// accountTreeOrder returns account id -> its 0-based position in the chart-of-accounts
-// pre-order (the store's Tree order), so a report can section accounts type-by-type in
-// the same order the chart of accounts sorts. Accounts absent from the map sort last.
-func accountTreeOrder(ctx context.Context, tk *Toolkit, lang string) (map[AccountID]int, error) {
-	tree, err := tk.Store().Tree(ctx, lang, nil)
-	if err != nil {
-		return nil, err
-	}
-	m := make(map[AccountID]int, len(tree))
-	for i, r := range tree {
-		m[AccountID(r.ID)] = i
-	}
-	return m, nil
 }

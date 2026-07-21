@@ -33,6 +33,12 @@ func registerFundPeriod(reg *Registry) {
 		WideMatrix: true,
 		// Not program-dimensioned (mirrors fund_activity; the "funds" group carries no
 		// program-dimensioned report).
+		//
+		// Tree (p26 fund #26b): the account dimension is a COLLAPSIBLE account hierarchy.
+		// Placeholder parents roll up their descendants' period cells; each leaf account is
+		// a collapsible parent over its per-currency rows. treetable.js wires it from the
+		// per-row Indent (data-depth).
+		Tree: true,
 	})
 }
 
@@ -84,14 +90,15 @@ func runFundPeriod(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 		return Table{}, err
 	}
 
-	acctNames, err := accountNameMap(ctx, tk, p.LangOr())
+	// The chart-of-accounts tree (pre-order) gives the account hierarchy: placeholder
+	// parents, leaf accounts, resolved names, and each account's depth. The account
+	// dimension is presented as this collapsible tree (p26 fund #26b).
+	storeTree, err := tk.Store().Tree(ctx, p.LangOr(), nil)
 	if err != nil {
 		return Table{}, err
 	}
-	order, err := accountTreeOrder(ctx, tk, p.LangOr())
-	if err != nil {
-		return Table{}, err
-	}
+	tree := toTreeNodes(storeTree)
+	children, roots, isPlaceholder, name, depth, _ := indexTree(tree)
 
 	// cells[col][key] = the fund's activity in (account, currency) during period col;
 	// total[key] = the row's whole-window activity (sum of the period columns, int64).
@@ -117,47 +124,206 @@ func runFundPeriod(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
 		}
 	}
 
-	// Deterministic row order: chart-of-accounts order, then currency within an account.
-	keys := make([]fundPeriodKey, 0, len(rowSet))
-	for k := range rowSet {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if order[keys[i].acct] != order[keys[j].acct] {
-			return order[keys[i].acct] < order[keys[j].acct]
-		}
-		return keys[i].ccy < keys[j].ccy
-	})
-
 	// GranNone ("total") collapses to a SINGLE Total column: buildPeriods yields one
 	// whole-window bucket with an empty label, so a per-period column would just duplicate
 	// the Total. Drop it and render only [Account, Currency, Total].
 	granNone := ncol == 1 && periods[0].label == ""
 
-	// Columns: Account, Currency, one per period (a period identifier header, verbatim),
-	// then Total. Under GranNone the period columns are omitted (Total only).
+	// Leading-zero trim (p26 fund #26a): a fund whose whole window starts before its
+	// first activity carries a run of ALL-ZERO leading period columns (e.g. a 2025-Q1
+	// with nothing in it). Drop that leading run -- the report should open on the first
+	// period with activity -- while keeping interior/trailing zero columns (a quiet middle
+	// quarter is meaningful) and the Total column. Under GranNone there are no period
+	// columns to trim. firstActive = the first period index with any nonzero cell across
+	// all (account, currency) keys; -1 means the whole matrix is zero (keep as-is).
+	firstActive := 0
+	if !granNone {
+		firstActive = ncol // default: everything trimmed away only if all zero
+		for i := 0; i < ncol; i++ {
+			any := false
+			for _, v := range cells[i] {
+				if v != 0 {
+					any = true
+					break
+				}
+			}
+			if any {
+				firstActive = i
+				break
+			}
+		}
+		if firstActive == ncol {
+			// All period columns are zero (all activity is a wash within Total): keep them
+			// all rather than emitting a period-column-less matrix.
+			firstActive = 0
+		}
+	}
+	shownPeriods := periods
+	shownCells := cells
+	if !granNone {
+		shownPeriods = periods[firstActive:]
+		shownCells = cells[firstActive:]
+	}
+
+	// Deterministic row order via the tree walk (chart-of-accounts pre-order); within a
+	// leaf account, per-currency rows sort by currency. Precompute each leaf's currencies.
+	leafCcys := make(map[AccountID][]string)
+	for k := range rowSet {
+		leafCcys[k.acct] = append(leafCcys[k.acct], k.ccy)
+	}
+	for id := range leafCcys {
+		sort.Strings(leafCcys[id])
+	}
+
+	// hasAct marks whether a node's subtree carries any fund activity, so empty chart
+	// branches drop out. subtreeCcys collects the distinct currencies beneath a node so a
+	// placeholder/leaf parent shows a native per-period rollup ONLY when single-currency
+	// (mixed subtrees have no honest single native figure -- blank, mirroring the native
+	// convention). subtreeCells[id][col] and subtreeTotal[id] roll the shown period cells
+	// and Total for a single-currency subtree.
+	hasAct := make(map[AccountID]bool)
+	subtreeCcys := make(map[AccountID]map[string]bool)
+	var fold func(id AccountID) (map[string]bool, bool)
+	fold = func(id AccountID) (map[string]bool, bool) {
+		if !isPlaceholder[id] {
+			ccys := map[string]bool{}
+			for _, c := range leafCcys[id] {
+				ccys[c] = true
+			}
+			subtreeCcys[id] = ccys
+			hasAct[id] = len(leafCcys[id]) > 0
+			return ccys, hasAct[id]
+		}
+		ccys := map[string]bool{}
+		any := false
+		for _, c := range children[id] {
+			cc, act := fold(c)
+			for x := range cc {
+				ccys[x] = true
+			}
+			any = any || act
+		}
+		subtreeCcys[id] = ccys
+		hasAct[id] = any
+		return ccys, any
+	}
+	for _, r := range roots {
+		fold(r)
+	}
+
+	// rollupRow builds a parent's rolled-up cells (period columns + Total) for the given
+	// subtree currency. Only called when the subtree is single-currency (the only case
+	// with an honest native rollup); it sums the shown period cells and the Total over
+	// every (leaf, ccy) key beneath id.
+	subtreeKeys := func(id AccountID) []fundPeriodKey {
+		var out []fundPeriodKey
+		var add func(n AccountID)
+		add = func(n AccountID) {
+			if !isPlaceholder[n] {
+				for _, c := range leafCcys[n] {
+					out = append(out, fundPeriodKey{acct: n, ccy: c})
+				}
+				return
+			}
+			for _, c := range children[n] {
+				add(c)
+			}
+		}
+		add(id)
+		return out
+	}
+
+	// Columns: Account, Currency, one per SHOWN period (a period identifier header,
+	// verbatim), then Total. Under GranNone the period columns are omitted (Total only).
 	cols := []Column{
 		{HeaderKey: "reports.fund_period.col.account", Align: AlignLeft},
 		{HeaderKey: "reports.fund_period.col.currency", Align: AlignLeft},
 	}
 	if !granNone {
-		for _, pr := range periods {
+		for _, pr := range shownPeriods {
 			cols = append(cols, Column{HeaderKey: pr.label, Align: AlignRight})
 		}
 	}
 	cols = append(cols, Column{HeaderKey: "reports.fund_period.col.total", Align: AlignRight})
 
 	t := Table{Columns: cols}
-	for _, k := range keys {
-		cellsRow := make([]Cell, 0, ncol+3)
-		cellsRow = append(cellsRow, TextCell(acctNames[k.acct]), TextCell(k.ccy))
-		if !granNone {
-			for i := range periods {
-				cellsRow = append(cellsRow, MoneyCell(cells[i][k], k.ccy))
+
+	// parentRow emits a placeholder-or-leaf-account rollup row at the given indent: name,
+	// a currency cell (the single subtree currency, or blank when mixed), one rollup cell
+	// per shown period, and a Total. Mixed-currency parents show blank amount cells.
+	parentRow := func(id AccountID, indent int) {
+		ccys := subtreeCcys[id]
+		single := ""
+		if len(ccys) == 1 {
+			for c := range ccys {
+				single = c
 			}
 		}
-		cellsRow = append(cellsRow, MoneyCell(total[k], k.ccy))
-		t.Rows = append(t.Rows, Row{Cells: cellsRow, Kind: RowData})
+		row := make([]Cell, 0, len(cols))
+		row = append(row, TextCell(name[id]), TextCell(single))
+		if single == "" {
+			// Mixed-currency subtree: no honest single native figure -- blank cells.
+			if !granNone {
+				for range shownPeriods {
+					row = append(row, BlankMoneyCell())
+				}
+			}
+			row = append(row, BlankMoneyCell())
+		} else {
+			keys := subtreeKeys(id)
+			if !granNone {
+				for i := range shownPeriods {
+					var sum int64
+					for _, k := range keys {
+						sum += shownCells[i][k]
+					}
+					row = append(row, MoneyCell(sum, single))
+				}
+			}
+			var tot int64
+			for _, k := range keys {
+				tot += total[k]
+			}
+			row = append(row, MoneyCell(tot, single))
+		}
+		t.Rows = append(t.Rows, Row{Cells: row, Indent: indent, Kind: RowSubtotal})
+	}
+
+	// Walk the tree pre-order (the treetable data-depth contract). A placeholder parent
+	// with activity emits a rollup row at its depth; a leaf the fund touches emits a
+	// collapsible header at its depth, then one RowData per currency one level deeper.
+	var walk func(id AccountID)
+	walk = func(id AccountID) {
+		if !hasAct[id] {
+			return
+		}
+		if isPlaceholder[id] {
+			parentRow(id, depth[id])
+			for _, c := range children[id] {
+				walk(c)
+			}
+			return
+		}
+		// Leaf account: emit its per-currency data rows directly AT the leaf's depth (no
+		// wrapper header -- a leaf here has no distinct detail lines, only its per-currency
+		// rows, so mirroring trial_balance/balance_sheet a leaf is NOT wrapped; only a
+		// placeholder parent gets a rollup subtotal). The placeholder ancestor collapses
+		// these rows as its subtree.
+		for _, ccy := range leafCcys[id] {
+			k := fundPeriodKey{acct: id, ccy: ccy}
+			row := make([]Cell, 0, len(cols))
+			row = append(row, TextCell(name[id]), TextCell(ccy))
+			if !granNone {
+				for i := range shownPeriods {
+					row = append(row, MoneyCell(shownCells[i][k], ccy))
+				}
+			}
+			row = append(row, MoneyCell(total[k], ccy))
+			t.Rows = append(t.Rows, Row{Cells: row, Indent: depth[id], Kind: RowData})
+		}
+	}
+	for _, r := range roots {
+		walk(r)
 	}
 
 	return t, nil

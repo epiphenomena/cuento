@@ -20,13 +20,17 @@ func fundStatementReport(t *testing.T) reports.Report {
 }
 
 // TestFundStatementLineDetailGolden runs the Building Fund's all-time line statement and
-// asserts its SHAPE by hand: it is grouped by ACCOUNT (a subtotal-kind header row per
-// account, then that account's lines, then a section-total subtotal per currency), it
-// carries the Description and Memo columns per line, and each account's subtotal FOOTS to
-// the sum of that account's line amounts (per currency). Golden: fund_statement.{txt,csv}.
+// asserts its SHAPE by hand: it is a COLLAPSIBLE ACCOUNT TREE (Report.Tree true) -- the
+// account dimension is the chart-of-accounts hierarchy, placeholder parents and leaf
+// account headers as nested RowSubtotal rows (a parent's Indent is shallower than its
+// subtree), each leaf's detail lines and per-currency subtotal one level DEEPER than the
+// leaf header. It carries the Description and Memo columns per line, and each leaf's
+// subtotal FOOTS to the sum of that account's line amounts (per currency). Golden:
+// fund_statement.{txt,csv}.
 //
-// The Building Fund is single-currency (USD); its three splits live on THREE accounts
-// (Contributions, Checking US, Building), so the statement has three account sections.
+// The Building Fund is single-currency (USD); its three splits live on THREE LEAF accounts
+// (Contributions, Checking US, Building), so the statement has three leaf account headers
+// (plus their placeholder ancestors in the tree).
 func TestFundStatementLineDetailGolden(t *testing.T) {
 	f := fixture.New(t)
 	ctx := context.Background()
@@ -62,30 +66,46 @@ func TestFundStatementLineDetailGolden(t *testing.T) {
 		}
 	}
 
-	// Walk the rows verifying the by-account grouping: a header (RowSubtotal) whose first
-	// cell is a TEXT account name opens each section; RowData lines follow (each with a
-	// Description cell at col 1 and a Memo cell at col 2); a RowSectionTotal subtotal per
-	// currency closes it and MUST equal the sum of that section's line amounts.
-	var sections int
-	var sawAccountHeader bool
+	// TREE shape: the report is flagged Tree so the generic template + treetable.js wire
+	// click-to-collapse from each row's Indent (data-depth). Report registration must say so.
+	if !rep.Tree {
+		t.Errorf("fund statement Report.Tree = false, want true (collapsible account tree)")
+	}
 
-	// Accumulate line sums per section, keyed by currency, and check each subtotal row.
+	// Walk the rows verifying the collapsible account TREE. Every RowSubtotal is a header
+	// (placeholder parent OR leaf account): first cell a non-empty TEXT account name. A
+	// LEAF header is one whose NEXT row is deeper (a detail line at header.Indent+1); its
+	// detail RowData lines follow (Description at col 1, Memo at col 2), then a
+	// RowSectionTotal per currency that MUST foot to the leaf's line sum. Pre-order tree
+	// invariant: a header's Indent is <= the following rows in its subtree, and a leaf's
+	// detail sits exactly one level deeper.
+	var leafHeaders int
 	lineSum := map[string]int64{}
-	inSection := false
-	for _, row := range table.Rows {
+	curLeafIndent := -1 // indent of the leaf header we are inside (-1 = not in a leaf)
+	for i, row := range table.Rows {
 		switch row.Kind {
 		case reports.RowSubtotal:
-			// Account section header: first cell is the account name (TEXT, non-empty).
+			// Any header row: non-empty TEXT account/placeholder name.
 			if len(row.Cells) == 0 || row.Cells[0].Kind != reports.CellText || row.Cells[0].Text == "" {
-				t.Errorf("account header row has no TEXT account name: %+v", row.Cells)
+				t.Errorf("header row has no TEXT account name: %+v", row.Cells)
 			}
-			sections++
-			sawAccountHeader = true
-			inSection = true
-			lineSum = map[string]int64{}
+			// A LEAF account header is a parent whose next row is DEEPER detail (a RowData
+			// line or RowSectionTotal), as opposed to a PLACEHOLDER parent whose next row is
+			// another (deeper) RowSubtotal header.
+			isLeafHeader := i+1 < len(table.Rows) &&
+				table.Rows[i+1].Indent > row.Indent &&
+				table.Rows[i+1].Kind != reports.RowSubtotal
+			if isLeafHeader {
+				leafHeaders++
+				curLeafIndent = row.Indent
+				lineSum = map[string]int64{}
+			}
 		case reports.RowData:
-			if !inSection {
-				t.Errorf("data row outside an account section")
+			if curLeafIndent < 0 {
+				t.Errorf("detail line outside a leaf account section")
+			}
+			if row.Indent != curLeafIndent+1 {
+				t.Errorf("detail line Indent = %d, want leaf header Indent+1 (%d)", row.Indent, curLeafIndent+1)
 			}
 			if len(row.Cells) < 6 {
 				t.Fatalf("data row has %d cells, want 6", len(row.Cells))
@@ -100,20 +120,23 @@ func TestFundStatementLineDetailGolden(t *testing.T) {
 			ccy := row.Cells[3].Text
 			lineSum[ccy] += row.Cells[4].Minor
 		case reports.RowSectionTotal:
-			// Account subtotal (one per currency): its Amount (col 4) must foot to the sum
-			// of the section's line amounts in that currency.
+			// Leaf subtotal (one per currency): its Amount (col 4) must foot to the sum of
+			// the leaf's line amounts in that currency, and sit at the detail depth.
+			if row.Indent != curLeafIndent+1 {
+				t.Errorf("leaf subtotal Indent = %d, want leaf header Indent+1 (%d)", row.Indent, curLeafIndent+1)
+			}
 			ccy := row.Cells[3].Text
 			if got, want := row.Cells[4].Minor, lineSum[ccy]; got != want {
 				t.Errorf("account subtotal %s = %d, want line sum %d (subtotal must foot)", ccy, got, want)
 			}
 		}
 	}
-	if !sawAccountHeader {
-		t.Fatalf("no account section headers found — report is not grouped by account")
+	if leafHeaders == 0 {
+		t.Fatalf("no leaf account headers found — report is not an account tree")
 	}
-	// The Building Fund touches exactly three accounts (Contributions, Checking, Building).
-	if sections != 3 {
-		t.Errorf("account sections = %d, want 3 (Contributions, Checking US, Building)", sections)
+	// The Building Fund touches exactly three LEAF accounts (Contributions, Checking, Building).
+	if leafHeaders != 3 {
+		t.Errorf("leaf account headers = %d, want 3 (Contributions, Checking US, Building)", leafHeaders)
 	}
 
 	exps := goldenExps(t, f)

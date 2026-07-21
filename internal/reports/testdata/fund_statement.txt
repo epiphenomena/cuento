@@ -1,12 +1,13 @@
    Date              Description               Memo  Currency           Amount          Balance
 -  ----------------  ------------------------  ----  --------  ---------------  ---------------
->  Checking US
+>  Checking US                                       USD        USD $10,000.00
    2025-06-01        Capital campaign gift           USD        USD $50,000.00   USD $50,000.00
    2025-06-15        Roof replacement payment        USD       USD -$40,000.00   USD $10,000.00
 #  Account subtotal                                  USD        USD $10,000.00
->  Building
+>  Building                                          USD        USD $40,000.00
    2025-06-15                                        USD        USD $40,000.00   USD $40,000.00
 #  Account subtotal                                  USD        USD $40,000.00
->  Contributions
+>  Revenue                                           USD       USD -$50,000.00
+>  Contributions                                     USD       USD -$50,000.00
    2025-06-01                                        USD       USD -$50,000.00  USD -$50,000.00
 #  Account subtotal                                  USD       USD -$50,000.00

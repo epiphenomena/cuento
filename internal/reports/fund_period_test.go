@@ -60,6 +60,54 @@ func TestFundPeriodMatrixFootsAndGolden(t *testing.T) {
 		t.Fatalf("period columns = %d, want >= 1", nperiods)
 	}
 
+	// LEADING-ZERO TRIM (p26 fund #26a): Beca Agua's whole window opens at 2025-Q1 but its
+	// first activity is 2025-Q2, so the all-zero leading 2025-Q1 column is dropped -- the
+	// first period column is 2025-Q2. Interior/trailing columns and the Total are kept.
+	if k := table.Columns[2].HeaderKey; k != "2025-Q2" {
+		t.Errorf("first period column = %q, want 2025-Q2 (leading all-zero 2025-Q1 trimmed)", k)
+	}
+
+	// TREE shape: the report is flagged Tree so treetable.js wires collapse from Indent
+	// (data-depth), and placeholder/leaf-account parent rows are RowSubtotal carrying an
+	// Indent, with per-currency data rows one level deeper.
+	if !rep.Tree {
+		t.Errorf("fund period Report.Tree = false, want true (collapsible account tree)")
+	}
+	var sawParent, sawDeepData bool
+	for i, row := range table.Rows {
+		if row.Kind == reports.RowSubtotal {
+			sawParent = true
+			// A parent whose next row is deeper is a real tree parent (its subtree follows).
+			if i+1 < len(table.Rows) && table.Rows[i+1].Indent > row.Indent {
+				sawDeepData = true
+			}
+		}
+	}
+	if !sawParent {
+		t.Errorf("no RowSubtotal parent rows — report is not an account tree")
+	}
+	if !sawDeepData {
+		t.Errorf("no parent row has a deeper subtree — tree Indent not emitted")
+	}
+
+	// No (account, currency) DATA pair appears more than once: a leaf must emit its
+	// per-currency rows exactly once (a placeholder-parent rollup is RowSubtotal, not
+	// RowData, so it is excluded) -- guards against the leaf being double-emitted under a
+	// wrapper header.
+	seenPair := map[string]int{}
+	for _, row := range table.Rows {
+		if row.Kind != reports.RowData {
+			continue
+		}
+		key := row.Cells[0].Text + "\x00" + row.Cells[1].Text
+		seenPair[key]++
+	}
+	for key, n := range seenPair {
+		if n > 1 {
+			t.Errorf("(account, currency) data row %q emitted %d times, want 1", key, n)
+		}
+	}
+
 	// FOOTING: for every data row, the sum of the period-column cells equals the Total
 	// cell (int64 addition, native currency -- exact). Also confirm each row carries a
 	// (account, currency) label and at least one row exists.

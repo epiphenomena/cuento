@@ -984,6 +984,25 @@ test('reports: open the fund statement, pick a fund, see by-account line detail 
     table.locator('a[href*="/transactions/"][href*="/edit"]').first(),
   ).toBeVisible();
 
+  // --- COLLAPSIBLE ACCOUNT TREE (fund #21): the report is a tree table, so treetable.js
+  // injects a disclosure toggle into each parent (leaf-account header) row and the whole
+  // subtree collapses on click. Collapse the leaf whose detail carries the description and
+  // confirm that detail line hides. ---
+  await expect(table).toHaveClass(/tree-table/);
+  // The leaf header row for the revenue account (its data-depth row bearing the account
+  // name and a tree toggle). Clicking its toggle collapses its detail lines.
+  const giftHeader = table
+    .locator('tr[data-depth]', { hasText: 'FStmt Gift E2E' })
+    .filter({ has: page.locator('button.tree-toggle') })
+    .first();
+  await expect(giftHeader).toBeVisible();
+  // Before collapse, the description detail line is visible.
+  const descLine = table.locator('tr[data-depth]', { hasText: 'Annual gala pledge' });
+  await expect(descLine).toBeVisible();
+  await giftHeader.locator('button.tree-toggle').click();
+  // After collapsing the account, its detail line is hidden (the subtree folds).
+  await expect(descLine).toBeHidden();
+
   // --- the CSV export link is present and the endpoint returns text/csv ---
   await expect(page.locator('a.report-csv-link')).toBeVisible();
   const csvHref = await page.locator('a.report-csv-link').getAttribute('href');
@@ -1045,6 +1064,30 @@ test('reports: open the fund-activity-by-period matrix, pick a fund + granularit
   const headerText = await table.locator('thead').innerText();
   expect(headerText).toMatch(/\d{4}-Q\d/);
   expect(headerText).toContain('Total');
+
+  // --- LEADING-ZERO-COLUMN TRIM (fund #26a): the report drops the leading run of all-zero
+  // period columns, so the FIRST period column is the first with activity. Header layout is
+  // [Account, Currency, <periods...>, Total]; assert the first period column (thead cell
+  // index 2) carries activity -- some data row's cell in that column is nonzero (not $0.00),
+  // which is exactly what the trim guarantees (an all-zero leading column would have been
+  // dropped). ---
+  const periodHeaders = await table.locator('thead th').allInnerTexts();
+  const firstPeriodIdx = 2; // 0=Account, 1=Currency, 2=first period column
+  expect(periodHeaders[firstPeriodIdx]).toMatch(/\d{4}-Q\d/);
+  const firstColCells = await table
+    .locator('tbody tr[data-depth] td:nth-child(3)')
+    .allInnerTexts();
+  const firstColHasActivity = firstColCells.some(
+    (txt) => /\d/.test(txt) && !/^[^\d]*0\.00[^\d]*$/.test(txt.trim()),
+  );
+  expect(firstColHasActivity).toBe(true);
+
+  // --- COLLAPSIBLE ACCOUNT TREE (fund #26b): the report is a tree table (data-depth rows,
+  // treetable.js-enhanced). Placeholder-parent rows roll up their descendants; the account
+  // collapse mechanic is exercised end-to-end in the fund STATEMENT test above (same
+  // treetable module), so here we assert the tree wiring is present. ---
+  await expect(table).toHaveClass(/tree-table/);
+  await expect(table.locator('tr[data-depth]').first()).toBeVisible();
 
   // --- CSV: the export returns text/csv with the account rows (the per-row footing --
   // period columns sum to Total -- is exhaustively asserted in the reports unit test) ---

@@ -1,11 +1,12 @@
 Date,Description,Memo,Currency,Amount,Balance
-Checking US,,,,,
+Checking US,,,USD,10000.00,
 2025-06-01,Capital campaign gift,,USD,50000.00,50000.00
 2025-06-15,Roof replacement payment,,USD,-40000.00,10000.00
 Account subtotal,,,USD,10000.00,
-Building,,,,,
+Building,,,USD,40000.00,
 2025-06-15,,,USD,40000.00,40000.00
 Account subtotal,,,USD,40000.00,
-Contributions,,,,,
+Revenue,,,USD,-50000.00,
+Contributions,,,USD,-50000.00,
 2025-06-01,,,USD,-50000.00,-50000.00
 Account subtotal,,,USD,-50000.00,
