@@ -221,6 +221,10 @@ other = "New password"
 other = "Saved."
 [admin.users.admin_note]
 other = "This user is an admin and has every permission."
+[admin.users.admin_full_access]
+other = "Administrator — full access"
+[admin.users.admin_full_access_detail]
+other = "Administrators bypass report-group grants, the transaction permission, and the expense-submit toggle — they already have every permission. Those settings do not apply here. To restrict this user, first remove their administrator role."
 [admin.users.col.name]
 other = "Name"
 [admin.users.col.username]

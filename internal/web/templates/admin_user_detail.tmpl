@@ -13,7 +13,12 @@
   <h1>{{.Username}}</h1>
   {{if .DisplayName}}<p class="hint">{{.DisplayName}}</p>{{end}}
   {{if .Disabled}}<p class="badge">{{t "admin.users.disabled"}}</p>{{end}}
-  {{if .IsAdmin}}<p class="hint">{{t "admin.users.admin_note"}}</p>{{end}}
+  {{if .IsAdmin}}
+  <div class="admin-full-access" role="status">
+    <p class="admin-full-access-title">{{t "admin.users.admin_full_access"}}</p>
+    <p class="admin-full-access-detail">{{t "admin.users.admin_full_access_detail"}}</p>
+  </div>
+  {{end}}
 
   {{if .Saved}}
   <p class="notice" role="status">{{t "admin.users.saved"}}</p>
@@ -38,6 +43,10 @@
     </form>
   </section>
 
+  {{/* For an admin these controls are moot (admins bypass txn_perm, expense-submit, and
+       report-group grants), so they are hidden entirely — the full-access banner above
+       explains why. Only display name + reset password (which DO apply to an admin) stay. */}}
+  {{if not .IsAdmin}}
   <section class="perm-section">
     <h2>{{t "admin.users.txn_perm_title"}}</h2>
     <form method="post" action="/admin/users/{{.ID}}/txn-perm" class="txn-perm-form">
@@ -55,6 +64,7 @@
       </div>
     </form>
   </section>
+  {{end}}
 
   <section class="reset-pw-section">
     <h2>{{t "admin.users.reset_password"}}</h2>
@@ -70,6 +80,7 @@
     </form>
   </section>
 
+  {{if not .IsAdmin}}
   <section class="submit-section">
     <h2>{{t "admin.users.submit_title"}}</h2>
     <p class="hint">{{t "admin.users.submit_intro"}}</p>
@@ -133,6 +144,7 @@
       </div>
     </form>
   </section>
+  {{end}}
   {{- end}}
 {{template "shell-close" .}}
 {{- end}}

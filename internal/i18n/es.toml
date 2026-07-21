@@ -215,6 +215,10 @@ other = "Nueva contrasena"
 other = "Guardado."
 [admin.users.admin_note]
 other = "Este usuario es administrador y tiene todos los permisos."
+[admin.users.admin_full_access]
+other = "Administrador — acceso total"
+[admin.users.admin_full_access_detail]
+other = "Los administradores omiten las concesiones de grupos de informes, el permiso de transacciones y la opción de envío de gastos: ya tienen todos los permisos. Esos ajustes no aplican aquí. Para restringir a este usuario, primero quítele el rol de administrador."
 [admin.users.col.name]
 other = "Nombre"
 [admin.users.col.username]
