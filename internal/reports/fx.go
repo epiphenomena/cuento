@@ -40,6 +40,7 @@ package reports
 import (
 	"context"
 	"math"
+	"sort"
 )
 
 // FXItem is one foreign-currency asset/liability balance and its ASC 830-20
@@ -194,6 +195,185 @@ func (tk *Toolkit) FXRemeasurementAsOf(ctx context.Context, s Scope, d string) (
 		tk.fxCache = make(map[fxSnapKey]FXRemeasurement)
 	}
 	tk.fxCache[key] = out
+	return out, nil
+}
+
+// fxSnapshotsByFunctional computes the FXRemeasurementAsOf ByFunctional totals for a set
+// of ascending boundary dates from a SINGLE dated scan (p-perf), replacing N independent
+// inception-to-date recomputations. It mirrors the balance-sheet single-scan pattern
+// (6d9a399): the LATEST requested date is the max as-of, so one SubDatedBalancesAsOf scan
+// to it covers every earlier boundary; each key's dated rows arrive contiguous and
+// date-ASCENDING (the query's ORDER BY sub, account, currency, date), so accumulating the
+// int64 native residual AND the float64 transaction-date basis in that exact row order,
+// then snapshotting the running values at each cutoff, reproduces FXRemeasurementAsOf(date)
+// byte-for-byte for every date -- the float basis is folded in the SAME order the per-date
+// method uses (float addition is not associative, so order is load-bearing). The remeasure
+// gate (foreign, asset/liability, non-intercompany) and its GetAccount lookups are hoisted
+// OUT of the per-date loop and evaluated once per key. Every snapshot is written into
+// tk.fxCache under its date, so a later FXRemeasurementAsOf(date) for a boundary date hits
+// the cache and returns the identical value (the Items detail is NOT batched here -- the
+// income statement reads only ByFunctional -- so a cached entry from this path carries an
+// empty Items; a caller that needs Items must not share a date with this batch. Only the
+// income statement uses this method, and it reads ByFunctional exclusively.)
+//
+// It returns date -> (functional currency -> Σ remeasure minor). A date with no exposure
+// maps to an empty inner map.
+func (tk *Toolkit) fxSnapshotsByFunctional(ctx context.Context, s Scope, dates []string) (map[string]map[string]int64, error) {
+	out := make(map[string]map[string]int64, len(dates))
+	if len(dates) == 0 {
+		return out, nil
+	}
+	// Sort the requested cutoffs ascending and dedupe; the max is the scan bound.
+	sorted := append([]string(nil), dates...)
+	sort.Strings(sorted)
+	uniq := sorted[:0]
+	for i, d := range sorted {
+		if i == 0 || d != sorted[i-1] {
+			uniq = append(uniq, d)
+		}
+	}
+	cutoffs := uniq
+	maxDate := cutoffs[len(cutoffs)-1]
+
+	// Serve any cutoff already cached (e.g. a boundary shared with a prior batch) from
+	// tk.fxCache; only the uncached cutoffs need a fresh snapshot.
+	need := cutoffs[:0:0]
+	for _, d := range cutoffs {
+		if tk.fxCache != nil {
+			if r, ok := tk.fxCache[fxSnapKey{sub: s.Sub, d: d}]; ok {
+				out[d] = r.ByFunctional
+				continue
+			}
+		}
+		need = append(need, d)
+	}
+	if len(need) == 0 {
+		return out, nil
+	}
+
+	rows, err := tk.store.SubDatedBalancesAsOf(ctx, maxDate, s.Sub)
+	if err != nil {
+		return nil, err
+	}
+
+	subTree, err := tk.store.SubTree(ctx)
+	if err != nil {
+		return nil, err
+	}
+	functional := make(map[SubsidiaryID]string, len(subTree))
+	for _, sub := range subTree {
+		functional[sub.ID] = sub.BaseCurrency
+	}
+
+	// Per key, forward-accumulate native (int64) and basis (float64) in row order, and
+	// snapshot the running values at each requested cutoff. Rows for a key are contiguous
+	// and date-ascending, so a single left-to-right walk yields every cutoff's snapshot.
+	type snap struct {
+		native  int64
+		basis   float64
+		present bool // the key has >=1 row on-or-before this cutoff (else absent, like FXRemeasurementAsOf's order)
+	}
+	// snaps[k] holds, per requested cutoff index, the running native/basis at that cutoff.
+	snaps := make(map[fxKey][]snap)
+	var order []fxKey
+	added := make(map[fxKey]bool)
+
+	// Walk rows grouped by key (contiguous). Maintain a running native/basis and a cursor
+	// into `need`; when the row date passes a cutoff, freeze the snapshot for that cutoff.
+	i := 0
+	for i < len(rows) {
+		k := fxKey{sub: rows[i].SubsidiaryID, acct: rows[i].AccountID, ccy: rows[i].Currency}
+		if !added[k] {
+			added[k] = true
+			order = append(order, k)
+		}
+		func0 := functional[k.sub]
+		var run snap
+		ks := make([]snap, len(need))
+		ci := 0 // cursor into `need`
+		for i < len(rows) {
+			r := rows[i]
+			rk := fxKey{sub: r.SubsidiaryID, acct: r.AccountID, ccy: r.Currency}
+			if rk != k {
+				break
+			}
+			// Before folding this row (date r.Date), freeze every cutoff strictly BEFORE it.
+			for ci < len(need) && need[ci] < r.Date {
+				ks[ci] = run
+				ci++
+			}
+			run.present = true
+			run.native += r.Amount
+			if r.Currency == func0 {
+				run.basis += float64(r.Amount)
+			} else {
+				rr, err := tk.rateOn(ctx, r.Currency, func0, r.Date)
+				if err != nil {
+					return nil, err
+				}
+				exFrom, exTo, err := tk.exponents(ctx, r.Currency, func0)
+				if err != nil {
+					return nil, err
+				}
+				run.basis += float64(r.Amount) * rr.Rate * pow10(exTo-exFrom)
+			}
+			i++
+		}
+		// Every remaining cutoff (>= this key's last row date) sees the full running total.
+		for ci < len(need) {
+			ks[ci] = run
+			ci++
+		}
+		snaps[k] = ks
+	}
+
+	// Per cutoff, run the same remeasure gate + computation FXRemeasurementAsOf does, over
+	// the keys in first-seen order, using that cutoff's snapshot. The gate (account type /
+	// intercompany) is date-independent, so GetAccount is read once per key and reused.
+	acctCache := make(map[AccountID]struct {
+		typ string
+		ic  int64
+	})
+	for ni, d := range need {
+		result := FXRemeasurement{AsOf: d, ByFunctional: map[string]int64{}}
+		for _, k := range order {
+			func0 := functional[k.sub]
+			if k.ccy == func0 {
+				continue
+			}
+			ai, ok := acctCache[k.acct]
+			if !ok {
+				acct, err := tk.store.GetAccount(ctx, k.acct)
+				if err != nil {
+					return nil, err
+				}
+				ai.typ = acct.Type
+				ai.ic = acct.Intercompany
+				acctCache[k.acct] = ai
+			}
+			if ai.typ != "asset" && ai.typ != "liability" {
+				continue
+			}
+			if ai.ic == 1 {
+				continue
+			}
+			sp := snaps[k][ni]
+			if !sp.present {
+				continue // no row on-or-before this cutoff -> not in FXRemeasurementAsOf(d)'s key order
+			}
+			closingMinor, err := tk.ConvertMinorAt(ctx, sp.native, k.ccy, func0, d)
+			if err != nil {
+				return nil, err
+			}
+			histMinor := RoundHalfEven(sp.basis)
+			result.ByFunctional[func0] += closingMinor - histMinor
+		}
+		out[d] = result.ByFunctional
+		if tk.fxCache == nil {
+			tk.fxCache = make(map[fxSnapKey]FXRemeasurement)
+		}
+		tk.fxCache[fxSnapKey{sub: s.Sub, d: d}] = result
+	}
 	return out, nil
 }
 

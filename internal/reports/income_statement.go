@@ -222,12 +222,45 @@ func runIncomeStatement(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 	// columns foot to the total exactly). The line is SUPPRESSED entirely when the whole
 	// statement has no FX exposure, so a functional-currency-only org's statement is
 	// byte-identical to before. The net line below includes it when shown.
+	// Each column's period figure is the CHANGE in the inception-to-date remeasurement
+	// between its opening boundary (dayBefore(from)) and its closing boundary (to), then
+	// translated to the target at the column's period-end (to) closing rate. Rather than
+	// two full inception-to-date scans PER column (O(columns) rescans, the old hot path),
+	// compute every boundary date's ByFunctional totals from a SINGLE dated scan to the
+	// latest boundary (fxSnapshotsByFunctional, the balance-sheet single-scan pattern), then
+	// difference and translate per column. The figures are byte-identical: each boundary
+	// snapshot equals FXRemeasurementAsOf(date) exactly, and the per-column translation date
+	// is preserved.
 	fxCol := make([]int64, len(periods)+1)
 	var fxAny bool
+	bounds := make([]string, 0, 2*len(periods))
+	for _, pr := range periods {
+		bounds = append(bounds, pr.to, dayBefore(pr.from))
+	}
+	snaps, err := tk.fxSnapshotsByFunctional(ctx, Scope{Sub: p.Scope}, bounds)
+	if err != nil {
+		return Table{}, err
+	}
 	for i, pr := range periods {
-		v, err := tk.FXRemeasurementPeriodTarget(ctx, Scope{Sub: p.Scope}, pr.from, pr.to, target)
-		if err != nil {
-			return Table{}, err
+		end := snaps[pr.to]
+		begin := snaps[dayBefore(pr.from)]
+		var v int64
+		byFunc := make(map[string]int64, len(end))
+		for ccy, x := range end {
+			byFunc[ccy] += x
+		}
+		for ccy, x := range begin {
+			byFunc[ccy] -= x
+		}
+		for ccy, x := range byFunc {
+			if x == 0 {
+				continue
+			}
+			conv, err := tk.ConvertMinorAt(ctx, x, ccy, target, pr.to)
+			if err != nil {
+				return Table{}, err
+			}
+			v += conv
 		}
 		fxCol[i] = v
 		fxCol[len(periods)] += v // Total column = sum of period columns (footing rule)
