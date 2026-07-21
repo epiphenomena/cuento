@@ -790,6 +790,28 @@ input[aria-invalid="true"] {
 /* p11.1: an "active" badge reads as affirmative (not muted) so the account
    settings status line reads at a glance; inherits the base .badge chrome. */
 .badge-active { color: var(--color-success, inherit); }
+
+/* Admin full-access banner (admin_user_detail.tmpl). An admin bypasses every grant/
+   permission, so the report-group / transaction-permission / expense-submit sections
+   are hidden and this prominent themed callout explains why (replacing the old small
+   hint). Accent left border + surface-alt fill so it reads as an unmistakable notice. */
+.admin-full-access {
+  margin: var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface-alt);
+  border: var(--border);
+  border-left: 4px solid var(--color-accent);
+  border-radius: var(--radius);
+}
+.admin-full-access-title {
+  margin: 0;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.admin-full-access-detail {
+  margin: var(--space-2) 0 0;
+  color: var(--color-muted, inherit);
+}
 /* p11.1: the account-settings active/inactive status line sits above the form,
    a single flex row: label, status badge, toggle button. */
 .account-status {
@@ -1631,11 +1653,19 @@ input[aria-invalid="true"] {
   inset: 0;
   width: 100%;
   z-index: 1;
-  border: 0;
-  border-radius: 0;
+  border: var(--border);
+  border-radius: var(--radius);
   background: var(--color-surface);
 }
-.txn-grid td.txn-cell .combo > .combo-text { padding: var(--space-2) var(--space-3); }
+/* Inside the spreadsheet grids (transaction + expense) the combo overlay is a
+   borderless, square cell edge-to-edge with its neighbours; the cell itself draws
+   the grid lines. Standalone combos (admin program-scope, report program filter)
+   keep the resting border from the base rule above so they are visible at rest. */
+.txn-grid td.txn-cell .combo > .combo-text {
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: 0;
+}
 .combo > .combo-text:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: -2px;
