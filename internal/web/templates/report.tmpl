@@ -281,7 +281,7 @@
       {{- if .Table.HeaderGroups}}
       <tr class="report-header-groups">
         {{- range .Table.HeaderGroups}}
-        <th{{if gt .Colspan 1}} colspan="{{.Colspan}}"{{end}}{{if .Right}} class="amount"{{end}}{{if .Label}} scope="colgroup"{{end}}>{{.Label}}</th>
+        <th{{if gt .Colspan 1}} colspan="{{.Colspan}}"{{end}}{{if .Right}} class="amount"{{end}}{{if .Label}} scope="colgroup"{{end}}{{if .GroupID}} data-group="{{.GroupID}}"{{end}}>{{.Label}}</th>
         {{- end}}
       </tr>
       {{- end}}
@@ -308,7 +308,7 @@
           <span class="bv-measure bv-variance{{if .Bucket}} bv-{{.Bucket}}{{end}}">{{.Variance}}</span>
         {{- end}}</td>
         {{- else}}
-        <td{{if .Right}} class="amount"{{end}}>{{if .Href}}<a class="report-drill-link" href="{{.Href}}">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>
+        <td{{if .Right}} class="amount"{{end}}{{if .ProgramID}} data-program="{{.ProgramID}}"{{end}}>{{if .Href}}<a class="report-drill-link" href="{{.Href}}">{{.Text}}</a>{{else}}{{.Text}}{{end}}</td>
         {{- end}}
         {{- end}}
       </tr>
@@ -340,6 +340,19 @@
        re-runs on htmx:afterSwap when a filter change replaces #report-results. It
        enhances every table.tree-table, looking up the sibling .tree-controls container. */}}
   <script type="module" src="{{asset "treetable.js"}}"></script>
+  {{end}}
+
+  {{if .Table.HeaderGroups}}
+  {{/* p31 10b: the program-statement COLUMN-collapse module. Loaded on the PAGE (a script
+       injected via an htmx innerHTML swap would not execute); self-inits on
+       DOMContentLoaded and re-wires on htmx:afterSwap when a filter change replaces
+       #report-results. It finds the collapsible program-group headers ([data-program-group])
+       and, on click, hides the DESCENDANT program columns (header <th> + every body <td> via
+       data-program) leaving the parent's rollup, and shrinks the "Program services" group
+       <th>'s colspan. Only the program statement emits a two-row (.HeaderGroups) header, so
+       no other report loads it; the module also self-guards (no-op when no [data-program-group]
+       exists). Strict CSP: external module, event delegation, no inline handler. */}}
+  <script type="module" src="{{asset "colcollapse.js"}}"></script>
   {{end}}
 
   {{if .MeasureToggle}}

@@ -574,4 +574,20 @@ func TestProgramStatementStackedHeaderHTML(t *testing.T) {
 			t.Errorf("program column header missing %q", want)
 		}
 	}
+	// 10b: the "Program services" group super-header carries data-group so colcollapse.js can
+	// find it to shrink its colspan when program columns collapse.
+	if !strings.Contains(body, `data-group="program_services"`) {
+		t.Errorf("program-services group super-header missing data-group attribute")
+	}
+	// 10b: BODY cells in a program column now carry data-program too, so colcollapse.js can
+	// hide the whole column (header + body) by [data-program="X"]. Assert at least one <td>
+	// (not just a <th>) carries it — a <td ... data-program=…> substring proves the body tag.
+	if !strings.Contains(body, `<td`) || !strings.Contains(body, ` data-program="`) {
+		t.Errorf("program column body <td> missing data-program attribute")
+	}
+	// The count of data-program occurrences must exceed the header count (headers + bodies),
+	// proving body cells are tagged, not only the header row.
+	if n := strings.Count(body, `data-program="`); n <= strings.Count(body, `<th`) {
+		t.Errorf("data-program appears %d times; expected more (header + body cells)", n)
+	}
 }

@@ -711,6 +711,32 @@ input[aria-invalid="true"] {
    keep their own cursor via the more-specific rule. */
 .tree-name-cell { cursor: pointer; }
 .tree-name-cell a { cursor: pointer; }
+
+/* p31 10b: program-statement COLUMN-group collapse. colcollapse.js hides a collapsed
+   program COLUMN (its header <th> + every body <td>, matched by data-program) with
+   .col-hidden, injects a ▸/▾ disclosure into each collapsible parent header, and marks the
+   header .col-group-header (clickable). The hide rule is NOT inside @media screen, so a
+   collapsed column stays collapsed in print/PDF too (a printed statement reflects exactly
+   what's on screen). No inline style (strict CSP, rule 12). */
+.col-hidden { display: none; }
+/* The disclosure toggle injected into a collapsible program header; ▾ expanded, ▸ collapsed
+   (mirrors .tree-toggle). It sits before the program name in the right-aligned header cell. */
+.col-toggle {
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  margin-right: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  line-height: 1;
+}
+.col-toggle::before { content: "\25BE"; } /* ▾ expanded */
+.col-toggle.is-collapsed::before { content: "\25B8"; } /* ▸ collapsed */
+/* A collapsible program header is clickable to fold its child columns. A genuine link
+   inside keeps its own cursor via the more-specific rule. */
+.col-group-header { cursor: pointer; }
+.col-group-header a { cursor: pointer; }
 /* Tree indentation. The selectors are qualified with `.tree-table td` so they
    OUTRANK `.tree-table td`'s own padding shorthand (equal-specificity padding-left
    would otherwise win and flatten the tree). A nesting guide line makes the
@@ -1065,6 +1091,23 @@ input[aria-invalid="true"] {
     top: 0;
     z-index: 2;
     background: var(--color-surface);
+  }
+  /* p31 10b: the program statement has a TWO-ROW thead (a group super-header row +
+     the leaf-header row). Both would otherwise stick at top:0 and OVERLAP. Pin the
+     group row's height so the LEAF row can sit exactly below it: the group row keeps
+     top:0, and the leaf-header row (thead's second <tr>) sticks at that height. The
+     value is the header row's own box height (padding var(--space-2)*2 + a ~1.2rem
+     line) — a stable, small offset; if browser rendering nudges it, the rows still
+     scroll together, they just abut. Non-stacked reports have a single header row,
+     unaffected (no .report-header-groups). */
+  .report-scroll .report-table thead tr.report-header-groups th { top: 0; }
+  .report-scroll .report-table thead tr.report-header-groups + tr th {
+    /* Offset the leaf-header row by the group row's rendered box height (~line 1.4rem +
+       padding var(--space-2)*2 + its 2px bottom border) so the two sticky rows ABUT
+       without overlap. A hair generous over the measured height (~41px) rather than short,
+       so a scrolled body never peeks BETWEEN the rows. If a browser's line-box nudges this,
+       the rows still scroll together — worst case they abut with a hairline, never overlap. */
+    top: calc(1.4rem + var(--space-2) * 2 + 2px);
   }
   .report-scroll .report-table th:first-child,
   .report-scroll .report-table td:first-child {

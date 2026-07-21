@@ -789,6 +789,12 @@ type renderedHeaderGroup struct {
 	Label   string
 	Colspan int
 	Right   bool // right-align hint (a money-column group)
+	// GroupID identifies the group run (Column.Group.GroupID) so the template can stamp a
+	// fixed-name data-group attribute on this super-header <th>. colcollapse.js (p31 10b)
+	// finds the "program_services" group cell by that attribute to shrink its colspan when
+	// program columns are collapsed (an html-table group <th>'s span is not auto-reduced by
+	// hiding leaf cells). Empty for a blank leading (ungrouped) run — no attribute emitted.
+	GroupID string
 }
 
 type renderedColumn struct {
@@ -818,6 +824,12 @@ type renderedRow struct {
 type renderedCell struct {
 	Text  string
 	Right bool // right-align (money)
+	// ProgramID mirrors the header column's data-program value (p31 10b): when this cell
+	// sits in a program column, the template stamps data-program="{ProgramID}" on the <td>
+	// so colcollapse.js can hide the whole column (header <th> + every body <td>) by
+	// selecting [data-program="X"]. Empty on non-program cells (no attribute emitted). Set
+	// from the positionally-aligned column's Group.Data["program"] in renderTable.
+	ProgramID string
 	// Href, when non-empty, makes the cell a DRILL link (p15.3d): the HTML template
 	// renders <a href="{Href}">{Text}</a> (a plain link, strict CSP -- no inline
 	// handler). It is set for a drillable cell (Cell.Drill != nil), pointing at the
@@ -889,7 +901,7 @@ func buildHeaderGroups(cols []reports.Column, lang string) []renderedHeaderGroup
 			span++
 			i++
 		}
-		groups = append(groups, renderedHeaderGroup{Label: label, Colspan: span, Right: right})
+		groups = append(groups, renderedHeaderGroup{Label: label, Colspan: span, Right: right, GroupID: id})
 	}
 	return groups
 }
@@ -931,8 +943,14 @@ func renderTable(t reports.Table, reportID, lang string, opts money.FormatOpts, 
 			Total:        row.Kind == reports.RowTotal,
 			Warning:      row.Kind == reports.RowWarning,
 		}
-		for _, cell := range row.Cells {
-			rr.Cells = append(rr.Cells, renderCell(cell, reportID, lang, opts, df, exps))
+		for i, cell := range row.Cells {
+			rc := renderCell(cell, reportID, lang, opts, df, exps)
+			// p31 10b: stamp the body <td>'s data-program from its positionally-aligned column
+			// so colcollapse.js can hide a whole program column (header + body) by attribute.
+			if i < len(t.Columns) && t.Columns[i].Group != nil {
+				rc.ProgramID = t.Columns[i].Group.Data["program"]
+			}
+			rr.Cells = append(rr.Cells, rc)
 		}
 		rt.Rows = append(rt.Rows, rr)
 	}

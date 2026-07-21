@@ -983,7 +983,7 @@ async function createProgram(page, name) {
   await expect(page.locator('tr.prog-row', { hasText: name })).toBeVisible();
 }
 
-test('reports: open the program statement (comparative), see the vertical program tree + accounts + net, pick a single program, CSV returns', async ({
+test('reports: open the program statement MATRIX, collapse a program COLUMN group by clicking its header, pick a single program, CSV returns', async ({
   page,
   server,
 }) => {
@@ -1013,8 +1013,9 @@ test('reports: open the program statement (comparative), see the vertical progra
   await page.getByRole('button', { name: /^save$/i }).click();
   await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
 
-  // --- COMPARATIVE view (no program chosen): the program selector + program columns ---
-  await page.goto(`${PS}?scope=1&from=2025-01-01&to=2030-12-31`);
+  // --- MATRIX view (p31-10a): account ROWS x (functional-class/program) COLUMNS. The
+  // matrix is single-currency (converted), so currency is mandatory (USD). ---
+  await page.goto(`${PS}?scope=1&from=2025-01-01&to=2030-12-31&currency=USD`);
   await expect(page.locator('form.report-params')).toBeVisible();
   await expect(page.locator('select.report-scope-select[name="scope"]')).toBeVisible();
   // The report-specific PROGRAM selector (comparative default is "— all programs —").
@@ -1026,79 +1027,65 @@ test('reports: open the program statement (comparative), see the vertical progra
 
   const table = page.locator('table.report-table');
   await expect(table).toBeVisible();
-  // p31: the statement is now a VERTICAL program tree — a SINGLE Amount column, not one
-  // column per program. Exactly three header cells: Program / Account | Currency | Amount.
-  const headers = page.locator('table.report-table thead th');
-  await expect(headers).toHaveCount(3);
-  // The child program is now a ROW header (a stored proper noun rendered verbatim), nested
-  // under the seeded root "General" — NOT a column header.
-  await expect(table).toContainText('PS Outreach E2E');
-  await expect(page.locator('table.report-table thead')).not.toContainText('PS Outreach E2E');
-  // The section labels (localized en) + the net-per-program line.
-  await expect(table).toContainText('Revenue');
+  // p31-10a: a STACKED (two-row) header — the top group row (.report-header-groups) spans the
+  // functional-class / Program-services super-columns; the leaf row carries each column head.
+  await expect(page.locator('table.report-table tr.report-header-groups')).toBeVisible();
+  // The programs are now COLUMN headers (proper nouns, verbatim): "General" (the seeded root)
+  // and its child "PS Outreach E2E" — NOT row headers.
+  const generalHead = page.locator('thead th[data-program-group="1"]', { hasText: 'General' }).first();
+  const childHead = page.locator('thead th[data-program]', { hasText: 'PS Outreach E2E' }).first();
+  await expect(generalHead).toBeVisible();
+  await expect(childHead).toBeVisible();
+  // The child column declares data-program-parent (its ancestor chain includes General); the
+  // parent (General) column declares data-program-group="1" (collapsible).
+  await expect(childHead).toHaveAttribute('data-program-parent', /\d+/);
+  // The section labels (localized en) + the net line. The seed posts only an EXPENSE (no
+  // revenue receipt), so the Expenses section + Net line are present.
   await expect(table).toContainText('Expenses');
   await expect(table).toContainText('Net');
   // The expense account row is present.
   await expect(table).toContainText('PS Cost E2E');
-  // A NET (report-total) row is present -- the net-per-program line, marked report-total.
+  // A NET (report-total) row is present.
   await expect(page.locator('table.report-table tr.report-total')).not.toHaveCount(0);
-  // The account cells are DRILL links (program×account drill).
-  await expect(page.locator('a.report-drill-link').first()).toBeVisible();
 
-  // --- p31: the statement is a COLLAPSIBLE PROGRAM + ACCOUNT TREE (reusing the p26.25
-  // treetable control). "General" (the seeded root) is a depth-0 program HEADER (subtotal
-  // tier) spanning its own account sections AND the nested child program "PS Outreach E2E"
-  // (depth 1). Under PS Outreach the "PS Expenses E2E" placeholder parent nests its "PS Cost
-  // E2E" leaf. The collapse/expand controls fold whole program subtrees.
-  const treeTable = page.locator('table.report-table.tree-table');
-  await expect(treeTable).toBeVisible();
-  // The root program "General" is a depth-0 subtotal header; the child program row nests at
-  // depth 1 (a program header, RowSubtotal), and the leaf expense sits deeper still.
-  const generalRow = treeTable.locator('tr.report-row.report-subtotal', { hasText: 'General' }).first();
-  const childProgRow = treeTable.locator('tr.report-row.report-subtotal', { hasText: 'PS Outreach E2E' }).first();
-  const costRow = treeTable.locator('tr.report-row', { hasText: 'PS Cost E2E' }).first();
-  await expect(generalRow).toHaveAttribute('data-depth', '0');
-  await expect(childProgRow).toHaveAttribute('data-depth', '1');
-  await expect(costRow).toBeVisible();
+  // --- p31-10b: CLICK-TO-COLLAPSE a program COLUMN group. Clicking the "General" parent
+  // header hides its DESCENDANT program columns (here: the child "PS Outreach E2E"), leaving
+  // General's rolled-up column visible; clicking again expands. colcollapse.js wires it (the
+  // ▸/▾ affordance + event delegation, no server round trip). ---
+  const childProgID = await childHead.getAttribute('data-program');
+  // The whole child column (header + body <td>s) shares data-program; capture the set.
+  const childCells = page.locator(`[data-program="${childProgID}"]`);
+  await expect(childCells.first()).toBeVisible(); // expanded: the child column shows
+  // A disclosure affordance is injected into the collapsible parent header.
+  await expect(generalHead.locator('.col-toggle')).toHaveCount(1);
 
-  // The tree controls are present + revealed by treetable.js (they ship `hidden`).
-  const psCollapseAll = page.locator('.report-controls .tree-collapse-all');
-  await expect(psCollapseAll).toBeVisible();
-  // Collapse all -> the leaf (PS Cost E2E) hides; the root "General" header stays.
-  await psCollapseAll.click();
-  await expect(costRow).toBeHidden();
-  await expect(generalRow).toBeVisible();
-  // Expand all -> the leaf reappears.
-  await page.locator('.report-controls .tree-expand-all').click();
-  await expect(costRow).toBeVisible();
+  // Click the General header -> its descendant (PS Outreach E2E) column hides.
+  await generalHead.click();
+  await expect(childHead).toHaveClass(/col-hidden/); // child column header hidden
+  await expect(generalHead).not.toHaveClass(/col-hidden/); // parent rollup column stays
+  // The parent's disclosure now reads collapsed (▸).
+  await expect(generalHead.locator('.col-toggle')).toHaveClass(/is-collapsed/);
 
-  // --- pick the SINGLE program -> the subtree statement (Account | Currency | Amount) ---
-  // p26.90: the report AUTO-APPLIES on change; navigate the equivalent GET (no-JS round
-  // trip) for a deterministic render test. The program option value is its id.
+  // Click again -> the child column re-appears (expanded).
+  await generalHead.click();
+  await expect(childHead).not.toHaveClass(/col-hidden/);
+  await expect(generalHead.locator('.col-toggle')).not.toHaveClass(/is-collapsed/);
+
+  // --- pick the SINGLE program -> the statement SCOPED to that program's subtree ---
+  // p26.90: the report AUTO-APPLIES on change; navigate the equivalent GET (no-JS round trip)
+  // for a deterministic render test. The program option value is its id.
   const progVal = await progSelect.locator('option', { hasText: 'PS Outreach E2E' }).getAttribute('value');
-  await page.goto(`${PS}?scope=1&program=${progVal}&from=2025-01-01&to=2030-12-31`);
+  await page.goto(`${PS}?scope=1&program=${progVal}&from=2025-01-01&to=2030-12-31&currency=USD`);
 
   const single = page.locator('table.report-table');
   await expect(single).toBeVisible();
-  // Exactly THREE columns in the single view (Account, Currency, Amount).
-  await expect(page.locator('table.report-table thead th')).toHaveCount(3);
   await expect(single).toContainText('PS Cost E2E');
   await expect(single).toContainText('Net');
 
-  // p26.54: the OPTIONAL currency selector is present, defaults to NATIVE (empty value),
-  // and its first option is the "— native —" choice (empty value). Native is the default,
-  // so the single view above kept its Currency column (3 columns).
+  // The currency selector is present and required (the matrix is single-currency converted).
   const ccy = page.locator('form.report-params select[name="currency"]');
   await expect(ccy).toBeVisible();
-  await expect(ccy).toHaveValue(''); // native is the default (empty target)
-  // The first option is the "— native —" choice (empty value).
-  await expect(ccy.locator('option').first()).toHaveAttribute('value', '');
-  // Pick a target currency (USD) -> the matrix CONVERTS: the Currency column DROPS, so the
-  // single-program view now has TWO columns (Account, <program>). p26.90: navigate the
-  // equivalent GET (no-JS round trip) for a deterministic render test.
-  await page.goto(`${PS}?scope=1&program=${progVal}&from=2025-01-01&to=2030-12-31&currency=USD`);
-  await expect(page.locator('table.report-table')).toBeVisible();
-  await expect(page.locator('table.report-table thead th')).toHaveCount(2);
+  await expect(ccy).toHaveValue('USD');
 
   // p26.54 sticky headers: the table scrolls inside .report-scroll (present on the page).
   await expect(page.locator('.report-scroll')).toBeVisible();
