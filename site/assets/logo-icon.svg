@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- cuento brand icon: the "Open Ledger & Star" mark on a transparent ground.
+     An open book / ledger (horizontal rows = ledger lines) whose left page forms
+     the letter C, with a small gold star at the top. Standalone file with explicit
+     brand colors (Primary Blue #0072CE book, Accent Gold #FFB81C star) so it reads
+     the same wherever it is dropped as an <img> — it never receives page CSS.
+     The themeable in-page copy is the inline "brand-icon" template partial, whose
+     colors come from app.css tokens. Hand-authored, valid, scales 24px–64px. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="cuento">
+  <g fill="none" stroke="#0072CE" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 22 C 25 17, 16 17, 10 19 L 10 50 C 16 48, 25 48, 32 52"/>
+    <path d="M32 22 C 39 17, 48 17, 54 19 L 54 50 C 48 48, 39 48, 32 52"/>
+    <line x1="32" y1="22" x2="32" y2="52"/>
+    <line x1="16" y1="27" x2="27" y2="27"/>
+    <line x1="16" y1="34" x2="27" y2="34"/>
+    <line x1="16" y1="41" x2="27" y2="41"/>
+  </g>
+  <path fill="#FFB81C" d="M32 3 l2.1 4.3 4.7 .7 -3.4 3.3 .8 4.7 -4.2 -2.2 -4.2 2.2 .8 -4.7 -3.4 -3.3 4.7 -.7z"/>
+</svg>

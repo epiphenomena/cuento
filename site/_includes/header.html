@@ -1,8 +1,8 @@
 <header class="site-header">
   <div class="wrap site-header__inner">
     <a class="site-header__brand" href="{{ '/' | relative_url }}">
-      <span class="site-header__mark" aria-hidden="true"></span>
-      <span class="site-header__name">cuento</span>
+      <img class="site-header__logo" src="{{ '/assets/logo-icon.svg' | relative_url }}" width="24" height="24" alt="cuento">
+      <span class="site-header__name" aria-hidden="true">cuento</span>
     </a>
     <nav class="site-header__nav" aria-label="Primary">
       {%- for doc in site.docs -%}
