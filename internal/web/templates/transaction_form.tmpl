@@ -260,7 +260,7 @@
          fill the freed horizontal space (the txn-field-grow modifier flex-grows this field). */}}
     <div class="txn-field txn-field-grow">
       <label for="txn-memo">{{t "txn.memo"}}</label>
-      <input type="text" name="memo" id="txn-memo" class="txn-memo-header" value="{{.Memo}}">
+      <input type="text" name="memo" id="txn-memo" class="txn-memo-header" value="{{.Memo}}" autocomplete="off">
     </div>
     <input type="hidden" name="currency" value="{{.Currency}}">
     {{/* p26.33: the Cancel origin (the register the user came from). Hidden so it posts
@@ -409,6 +409,7 @@
     <form class="expreview-reject-form" method="post" action="/expenses/review/reject/{{.ExpenseReportID}}">
       <label for="expreview-reject-reason" class="expreview-reject-reason-label">{{t "expreview.reject_reason_label"}}</label>
       <input type="text" name="reason" id="expreview-reject-reason" class="expreview-reject-reason"
+             autocomplete="off"
              placeholder="{{t "expreview.reject_reason_placeholder"}}"
              aria-label="{{t "expreview.reject_reason_label"}}">
       {{if .RejectError}}<span class="field-error expreview-reject-error" role="alert">{{t .RejectError}}</span>{{end}}
