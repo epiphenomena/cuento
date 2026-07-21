@@ -286,6 +286,17 @@ func TestAccountsEditHappyPath(t *testing.T) {
 	if got := accountIDByName(t, st, "Cash Renamed"); got != id {
 		t.Errorf("renamed account not found (want id %d); got %d", id, got)
 	}
+	// The es name set on this edit also round-trips: a Spanish tree resolves it.
+	esRows, _ := st.Tree(context.Background(), "es", nil)
+	var esName string
+	for _, r := range esRows {
+		if r.ID == id {
+			esName = r.Name
+		}
+	}
+	if esName != "Efectivo" {
+		t.Errorf("es name = %q, want %q", esName, "Efectivo")
+	}
 }
 
 // TestAccountsDeactivate: a Bookkeeper deactivates an account; its active flag

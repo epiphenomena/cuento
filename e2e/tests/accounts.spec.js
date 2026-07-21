@@ -98,6 +98,8 @@ test.describe('chart of accounts', () => {
     await page.getByRole('link', { name: /new account/i }).click();
     await page.waitForURL('**/accounts/new');
     await page.locator('#af-name-en').fill('Editable E2E');
+    // Set BOTH names on create so the es prefill + Spanish display can be checked below.
+    await page.locator('#af-name-es').fill('Editable ES E2E');
     await page.locator('#af-type').selectOption('asset');
     const rootSub = page.locator('input[name="sub_1"]');
     if (!(await rootSub.isChecked())) {
@@ -111,13 +113,37 @@ test.describe('chart of accounts', () => {
     const row = page.locator('tr.acct-row', { hasText: 'Editable E2E' });
     await row.getByRole('link', { name: /^edit$/i }).click();
     await page.waitForURL('**/accounts/*/edit');
+    // BOTH per-language names prefill from the stored account_names (en + es).
     await expect(page.locator('#af-name-en')).toHaveValue('Editable E2E');
+    await expect(page.locator('#af-name-es')).toHaveValue('Editable ES E2E');
 
     await page.locator('#af-name-en').fill('Renamed E2E');
+    // Also change the Spanish name so it too round-trips through the edit save.
+    await page.locator('#af-name-es').fill('Renombrado ES E2E');
     await page.getByRole('button', { name: /^save$/i }).click();
     await page.waitForURL('**/accounts');
     await expect(page.getByText('Renamed E2E')).toBeVisible();
     await expect(page.getByText('Editable E2E')).toHaveCount(0);
+
+    // Switch the UI language to Spanish (a logged-in user's stored locale drives the
+    // tree name resolution, D14) and confirm the tree now shows the SPANISH name,
+    // proving the app displays the es account name to a Spanish-locale user.
+    await page.goto('/settings');
+    await page.locator('#setting-locale').selectOption('es');
+    // The locale select lives in the main settings form; submit that form (not the
+    // separate display-name subform). The page is still English here, so the main
+    // save button reads exactly "Save".
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.goto('/accounts');
+    await expect(page.getByText('Renombrado ES E2E')).toBeVisible();
+    await expect(page.getByText('Renamed E2E')).toHaveCount(0);
+
+    // Restore the locale to English so later tests in this worker (which share the
+    // seeded admin's stored locale, D14) still see the English chrome they assert on.
+    await page.goto('/settings');
+    await page.locator('#setting-locale').selectOption('en');
+    await page.getByRole('button', { name: /^guardar$/i }).click();
+    await expect(page.getByRole('button', { name: /^save$/i })).toBeVisible();
   });
 
   // p26.14: the subsidiary + active-only filters are remembered in the session, so
