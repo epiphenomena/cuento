@@ -299,6 +299,52 @@ test.describe('Enter and Tab select-and-advance (p28.3)', () => {
   });
 });
 
+// Select-text-on-focus + Description-label tooltip refinements. The tooltip lives on the
+// txn form's Description label; select-on-focus is asserted on a NON-txn-form picker (the
+// account-ledger report filter) where it is net-new (the txn grid already select()s inputs
+// via txneditor.js's form-level focusin, so asserting there would pass pre-change).
+test.describe('combobox select-on-focus + Description tooltip', () => {
+  test('Description label carries an accessible help tooltip', async ({ page, server }) => {
+    await login(page, server);
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    const tip = page.locator('label[for="txn-main-desc"] .help-tip');
+    await expect(tip).toHaveCount(1);
+    // The explanatory text is on both the native title (hover) and aria-label (a11y).
+    const title = await tip.getAttribute('title');
+    const aria = await tip.getAttribute('aria-label');
+    expect(title && title.length).toBeGreaterThan(0);
+    expect(aria).toBe(title);
+    // The nudge mentions autocomplete/recall (the reason for a short, consistent name).
+    expect((title || '').toLowerCase()).toContain('autocomplete');
+  });
+
+  test('focusing a fuzzy combo selects its text so typing replaces it (report account filter)', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'SelFocus Checking');
+
+    await page.goto('/reports/account_ledger');
+    await expect(page.locator('#rp-account')).toBeVisible();
+    const cell = page.locator('#rp-account').locator('xpath=ancestor::div[contains(@class,"combo")][1]');
+    const input = cell.locator('.combo-text');
+    // Pick an option so the overlay holds a non-empty label.
+    await input.click();
+    await input.fill('');
+    await input.type('selfocus check');
+    const list = cell.locator('.combo-list');
+    await list.locator('.combo-option', { hasText: 'SelFocus Checking' }).first().click();
+    await expect(input).toHaveValue('SelFocus Checking');
+
+    // Blur then re-focus (click) so the focus handler runs with a populated box, then type a
+    // SINGLE char via the keyboard. Select-on-focus must have highlighted the whole label so
+    // the char REPLACES it (value == just the char), not appends (value == label + char).
+    await page.locator('body').click({ position: { x: 5, y: 5 } });
+    await input.click();
+    await page.keyboard.type('x');
+    await expect(input).toHaveValue('x');
+  });
+});
+
 test.describe('account combobox fuzzy matching (p26.44)', () => {
   test('account (header + body) and fund all filter/rank/pick a subsequence query', async ({ page, server }) => {
     await login(page, server);

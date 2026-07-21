@@ -943,6 +943,11 @@ other = "Account"
 other = "Amount"
 [txn.main.description]
 other = "Description"
+# Hover/focus tooltip on the Description label. Nudges toward a short, consistent name:
+# the description is what drives the per-split autocomplete/prefill (descfield.js), so a
+# stable name makes a transaction's splits recall instantly next time.
+[txn.main.description_help]
+other = "Use a short, consistent name so you can recall this transaction later. It autocompletes the split details from past transactions with the same description."
 [txn.main.account]
 other = "Main account"
 [txn.main.amount]

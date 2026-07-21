@@ -242,7 +242,7 @@
          header now). Rendered only in the normal editor (MainPresent). */}}
     {{if .MainPresent}}
     <div class="txn-field txn-field-grow txn-main-desc-field">
-      <label for="txn-main-desc">{{t "txn.main.description"}}</label>
+      <label for="txn-main-desc">{{t "txn.main.description"}}<span class="help-tip" tabindex="0" role="img" title="{{t "txn.main.description_help"}}" aria-label="{{t "txn.main.description_help"}}">?</span></label>
       <div class="desc-field">
         <input type="text" name="main_description" id="txn-main-desc" class="txn-desc js-descfield"
                value="{{.MainDescription}}" autocomplete="off"

@@ -208,6 +208,15 @@ function enhance(select, opts) {
     // "re-focus doesn't reopen the list". Clearing it here makes focus authoritative.
     if (blurTimer) { clearTimeout(blurTimer); blurTimer = null; }
     syncInputToSelection();
+    // Select-on-focus: highlight the current label so typing immediately REPLACES it and
+    // starts a fresh fuzzy search (rather than appending to / editing within the old text).
+    // Runs AFTER syncInputToSelection has written the box, so the selection covers the label
+    // that is actually shown. Harmless for the p26.44 keyboard bridge (it focuses THEN
+    // overwrites input.value and moves the caret to the end) and for the txn-grid combos
+    // (txneditor.js's form-level focusin already select()s them -- a second select() is a
+    // no-op). freeText combos also benefit: a typed-new value is selected so a re-type
+    // replaces it cleanly.
+    if (typeof input.select === 'function') input.select();
     open('');
   });
 

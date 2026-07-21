@@ -1412,6 +1412,27 @@ input[aria-invalid="true"] {
    the column width, matching the memo-header grow behaviour. */
 .txn-main-header .txn-main-desc-field .desc-field { width: 100%; position: relative; }
 .txn-main-header .txn-main-desc-field .txn-desc { width: 100%; }
+/* Description-label help glyph: a small circled "?" the user can hover/focus for the native
+   title tooltip (matches the datefield/badge title= affordance). No inline handlers -- the
+   browser draws the title on hover/focus; keyboard users reach it via tabindex=0. */
+.help-tip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1em;
+  height: 1.1em;
+  margin-inline-start: var(--space-1, 0.25rem);
+  border-radius: 50%;
+  border: 1px solid var(--color-muted, #888);
+  color: var(--color-muted, #888);
+  font-size: 0.75em;
+  line-height: 1;
+  cursor: help;
+  user-select: none;
+  vertical-align: middle;
+}
+.help-tip:hover,
+.help-tip:focus-visible { border-color: currentColor; color: var(--color-text, inherit); }
 /* The balancing amount is a read-only display figure: right-aligned, muted, non-editable
    look so it never reads as a fillable field (the server computes it). */
 .txn-main-header .txn-main-amount {

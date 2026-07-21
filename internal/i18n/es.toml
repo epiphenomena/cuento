@@ -936,6 +936,8 @@ other = "Cuenta"
 other = "Importe"
 [txn.main.description]
 other = "Descripcion"
+[txn.main.description_help]
+other = "Use un nombre corto y coherente para poder recuperar esta transaccion mas adelante. Autocompleta los detalles de las partidas a partir de transacciones anteriores con la misma descripcion."
 [txn.main.account]
 other = "Cuenta principal"
 [txn.main.amount]
