@@ -191,7 +191,9 @@ func seedSampleExpenseReport(ctx context.Context, st *store.Store) (bool, error)
 		return false, err
 	}
 
-	reportID, err := st.CreateExpenseReport(ctx, submitterID, subID)
+	reportID, err := st.CreateExpenseReport(ctx, submitterID, subID, store.CreateExpenseReportInput{
+		Description: "Dev Submitter", Memo: "Expense report",
+	})
 	if err != nil {
 		return false, fmt.Errorf("create expense report: %w", err)
 	}

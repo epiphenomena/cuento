@@ -1954,6 +1954,16 @@ other = "Memorándum"
 other = "Notas"
 [expense.header.save]
 other = "Guardar detalles"
+[expense.default_memo]
+other = "Informe de gastos"
+[expense.main.account]
+other = "Pagar desde la cuenta"
+[expense.main.account_locked_hint]
+other = "Definida por su subsidiaria; el revisor puede cambiarla."
+[expense.main.description_locked_hint]
+other = "Su nombre; el revisor puede cambiarlo."
+[expense.main.account_none]
+other = "Sin definir (el revisor la completará)"
 [expense.line.col.account]
 other = "Cuenta"
 [expense.line.col.amount]

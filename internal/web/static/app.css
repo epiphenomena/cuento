@@ -563,6 +563,16 @@ input[aria-invalid="true"] {
 .expense-header-view dt { font-weight: 600; }
 .expense-header-view dd { margin: 0; }
 
+/* 8a: a LOCKED main-header field (the AP account + the description) rendered as read-only
+   static text inside the reused .txn-main-header, so the submitter sees but cannot edit them
+   (only the reviewer can). Styled to sit where the equivalent input would, visually inert. */
+.er-locked {
+  display: inline-block;
+  padding: var(--space-1) 0;
+  font-weight: 500;
+  min-height: 1.5rem;
+}
+
 .flash:empty { display: none; }
 .flash {
   max-width: 60rem;

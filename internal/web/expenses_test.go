@@ -345,24 +345,26 @@ func TestExpenseHeaderRoundTripAndReviewPrefill(t *testing.T) {
 	repID := reportIDFromRedirect(t, rec)
 
 	// Distinctive marker text so substring assertions can't false-positive on boilerplate.
+	// 8a: the DESCRIPTION is set at CREATION to the creator's display name (LOCKED); the
+	// submitter cannot change it via the header form, so it is NOT sent here.
 	const (
 		wantDate  = "2026-07-15" // test users default to ISO DateFormat -> parse/format is identity
-		wantDesc  = "zap-desc-marker"
 		wantMemo  = "zap-memo-marker"
 		wantNotes = "zap-notes-marker"
+		wantDesc  = "sub_header" // the submitter's display name (mkSubmitter sets DisplayName=username)
 	)
 	form := url.Values{
-		"date":        {wantDate},
-		"description": {wantDesc},
-		"memo":        {wantMemo},
-		"notes":       {wantNotes},
+		"date":  {wantDate},
+		"memo":  {wantMemo},
+		"notes": {wantNotes},
 	}
 	rec = asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+itoa(repID)+"/header", form)
 	if rec.Code >= 400 {
 		t.Fatalf("set header: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
-	// The header persisted (store round-trip).
+	// The editable header fields persisted (store round-trip); the description stays the
+	// creation-time creator display name (8a).
 	rep, err := st.GetExpenseReport(context.Background(), ids.ExpenseReportID(repID))
 	if err != nil {
 		t.Fatalf("get report: %v", err)
@@ -372,18 +374,23 @@ func TestExpenseHeaderRoundTripAndReviewPrefill(t *testing.T) {
 			rep.Date, rep.Description, rep.Memo, rep.Notes, wantDate, wantDesc, wantMemo, wantNotes)
 	}
 
-	// The editable detail GET re-shows the values in the header inputs.
+	// The editable detail GET re-shows the editable values in inputs; the LOCKED description
+	// shows as static text (the creator's name), not an input.
 	body := asUser(t, h, sm, sub, http.MethodGet, "/expenses/"+itoa(repID), nil).Body.String()
 	for _, want := range []string{
 		`value="` + wantDate + `"`,
-		`value="` + wantDesc + `"`,
 		`value="` + wantMemo + `"`,
 		wantNotes, // notes is a <textarea>, so its value is element content, not an attribute
+		wantDesc,  // the description renders as locked static text
 		`action="/expenses/` + itoa(repID) + `/header"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("detail GET missing %q; body:\n%s", want, body)
 		}
+	}
+	// The description must NOT be an editable input (it is locked static text).
+	if strings.Contains(body, `value="`+wantDesc+`"`) {
+		t.Errorf("description rendered as an editable input (want locked static text); body:\n%s", body)
 	}
 
 	// Submit + add a line so the reviewer can open it. Add the line first (a zero-line
@@ -408,6 +415,86 @@ func TestExpenseHeaderRoundTripAndReviewPrefill(t *testing.T) {
 		if !strings.Contains(rbody, want) {
 			t.Errorf("review editor did not prefill %q from the report header; body:\n%s", want, rbody)
 		}
+	}
+}
+
+// TestExpenseCreatePrefillsAndLocks (8a): a new report is PREFILLED at creation -- the
+// main description = the creator's display name, the memo = the localized "Expense report"
+// default, and the main account = the subsidiary's default AP account -- and the submitter
+// CANNOT change the description or the AP account (both LOCKED). A crafted POST to the
+// header route carrying a different description AND a rogue ap_account_id leaves both stored
+// values unchanged, while the memo IS updated (proving the lock is not over-broad). Never
+// trust the client: enforcement is server-side.
+func TestExpenseCreatePrefillsAndLocks(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	sub := mkSubmitter(t, st, "Grace Hopper") // display name = username here (mkSubmitter)
+	sysCtx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// The root subsidiary (id 1) gets a default AP account (a liability leaf) so the create
+	// prefill populates ap_account_id.
+	apAcct, err := st.CreateAccount(sysCtx, store.CreateAccountInput{
+		Type: "liability", DefaultCurrency: "USD",
+		Names: map[string]string{"en": "Accrued Reimbursements"}, Subsidiaries: []ids.SubsidiaryID{1},
+	})
+	if err != nil {
+		t.Fatalf("create AP account: %v", err)
+	}
+	if err := st.UpdateSubsidiary(sysCtx, 1, store.UpdateSubsidiaryInput{DefaultAPAccountID: &apAcct}); err != nil {
+		t.Fatalf("set default AP: %v", err)
+	}
+
+	// Create a report -> the three prefills persist.
+	rec := asUser(t, h, sm, sub, http.MethodPost, "/expenses", url.Values{"subsidiary_id": {"1"}})
+	repID := reportIDFromRedirect(t, rec)
+
+	rep, err := st.GetExpenseReport(context.Background(), ids.ExpenseReportID(repID))
+	if err != nil {
+		t.Fatalf("get report: %v", err)
+	}
+	if rep.Description != "Grace Hopper" {
+		t.Errorf("prefill description = %q, want the creator display name %q", rep.Description, "Grace Hopper")
+	}
+	if rep.Memo != "Expense report" {
+		t.Errorf("prefill memo = %q, want %q", rep.Memo, "Expense report")
+	}
+	if !rep.APAccountID.Valid || rep.APAccountID.Int64 != int64(apAcct) {
+		t.Errorf("prefill ap_account_id = %v, want %d (the sub default AP)", rep.APAccountID, apAcct)
+	}
+
+	// The detail GET shows the AP account name + the creator name as LOCKED static text (not
+	// inputs), and the memo as an editable input.
+	body := asUser(t, h, sm, sub, http.MethodGet, "/expenses/"+itoa(repID), nil).Body.String()
+	for _, want := range []string{"Accrued Reimbursements", "Grace Hopper", `id="er-main-account"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("detail GET missing locked-header %q; body:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, `name="description"`) || strings.Contains(body, `name="ap_account_id"`) {
+		t.Errorf("detail GET exposed an editable description/ap_account_id input (want locked); body:\n%s", body)
+	}
+
+	// The ENFORCEMENT: a crafted POST tries to overwrite the description AND inject an
+	// ap_account_id, and does change the memo. Only the memo must change.
+	crafted := url.Values{
+		"description":   {"HACKED"},
+		"ap_account_id": {"999999"},
+		"memo":          {"legit new memo"},
+	}
+	if rec := asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+itoa(repID)+"/header", crafted); rec.Code >= 400 {
+		t.Fatalf("crafted header POST: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	after, err := st.GetExpenseReport(context.Background(), ids.ExpenseReportID(repID))
+	if err != nil {
+		t.Fatalf("get report after crafted POST: %v", err)
+	}
+	if after.Description != "Grace Hopper" {
+		t.Errorf("description changed to %q via crafted POST (LOCKED, must stay %q)", after.Description, "Grace Hopper")
+	}
+	if !after.APAccountID.Valid || after.APAccountID.Int64 != int64(apAcct) {
+		t.Errorf("ap_account_id changed to %v via crafted POST (LOCKED, must stay %d)", after.APAccountID, apAcct)
+	}
+	if after.Memo != "legit new memo" {
+		t.Errorf("memo = %q after crafted POST, want the submitted %q (memo IS editable)", after.Memo, "legit new memo")
 	}
 }
 

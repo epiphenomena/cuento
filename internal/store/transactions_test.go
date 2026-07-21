@@ -1246,7 +1246,7 @@ func TestAccountMissingRejectedEveryPath(t *testing.T) {
 
 	// PostAndConvertExpenseReport.
 	s, _, ctx, submitterID, expenseAcct := seedExpenseReportEnv(t)
-	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1, CreateExpenseReportInput{})
 	if err != nil {
 		t.Fatalf("CreateExpenseReport: %v", err)
 	}

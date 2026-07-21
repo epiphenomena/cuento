@@ -76,7 +76,7 @@ test('expenses: submitter drafts an unbalanced report, submits, sees a rejection
   // Grant can_submit_expenses on the user-detail page (the p20.1-deferred admin toggle).
   const row = page.locator(`tr.user-row[data-username="${subUser}"]`);
   await expect(row).toBeVisible();
-  await row.getByRole('link', { name: /permissions/i }).click();
+  await row.getByRole('link', { name: /edit/i }).click();
   await page.waitForURL('**/admin/users/*');
   const canSubmit = page.locator('form.can-submit-form input[name="can_submit_expenses"]');
   await expect(canSubmit).toBeVisible();
@@ -110,6 +110,17 @@ test('expenses: submitter drafts an unbalanced report, submits, sees a rejection
   const reportURL = page.url();
   const reportID = Number(new URL(reportURL).pathname.split('/').pop());
   expect(reportID).toBeGreaterThan(0);
+
+  // 8a: the report reuses the transaction form's main-header. The main ACCOUNT (AP payable)
+  // and the DESCRIPTION (the creator's display name) are LOCKED -- rendered as read-only
+  // static text (no editable input), only the MEMO is an editable input. This subsidiary has
+  // no default AP, so the account shows the "not set" hint; the description is the submitter's
+  // name (subUser). Prove the locks are static text, not inputs.
+  await expect(page.locator('#er-main-account')).toBeVisible();
+  await expect(page.locator('#er-description')).toHaveText(subUser);
+  await expect(page.locator('input[name="description"]')).toHaveCount(0);
+  await expect(page.locator('input[name="ap_account_id"]')).toHaveCount(0);
+  await expect(page.locator('#er-memo')).toBeVisible(); // memo IS editable
 
   // Add an UNBALANCED line via the auto-row grid: fill row 0 (a single revenue line,
   // nothing offsets it). The grid auto-appends a fresh trailing empty row.
@@ -222,7 +233,7 @@ test('expenses: subsidiary auto-set, account/fund/program combos, amount blur, d
   await usersReloaded;
   const row = page.locator(`tr.user-row[data-username="${subUser}"]`);
   await expect(row).toBeVisible();
-  await row.getByRole('link', { name: /permissions/i }).click();
+  await row.getByRole('link', { name: /edit/i }).click();
   await page.waitForURL('**/admin/users/*');
   const canSubmit = page.locator('form.can-submit-form input[name="can_submit_expenses"]');
   await expect(canSubmit).toBeVisible();

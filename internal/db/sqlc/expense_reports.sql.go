@@ -52,7 +52,7 @@ func (q *Queries) DeleteExpenseReportLine(ctx context.Context, id ids.ExpenseRep
 
 const getExpenseReport = `-- name: GetExpenseReport :one
 SELECT id, submitter_id, subsidiary_id, status, review_notes,
-       posted_transaction_id, created_at, date, description, memo, notes
+       posted_transaction_id, created_at, date, description, memo, notes, ap_account_id
 FROM expense_reports
 WHERE id = ?
 `
@@ -72,6 +72,7 @@ func (q *Queries) GetExpenseReport(ctx context.Context, id ids.ExpenseReportID) 
 		&i.Description,
 		&i.Memo,
 		&i.Notes,
+		&i.APAccountID,
 	)
 	return i, err
 }
@@ -101,8 +102,8 @@ func (q *Queries) GetExpenseReportLine(ctx context.Context, id ids.ExpenseReport
 const insertExpenseReport = `-- name: InsertExpenseReport :one
 
 
-INSERT INTO expense_reports (submitter_id, subsidiary_id, created_at)
-VALUES (?, ?, ?)
+INSERT INTO expense_reports (submitter_id, subsidiary_id, created_at, description, memo, ap_account_id)
+VALUES (?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
@@ -110,6 +111,9 @@ type InsertExpenseReportParams struct {
 	SubmitterID  ids.UserID
 	SubsidiaryID ids.SubsidiaryID
 	CreatedAt    string
+	Description  string
+	Memo         string
+	APAccountID  sql.NullInt64
 }
 
 // p20.1: expense-report operations (Phase 20). All SQL for the store's
@@ -130,10 +134,21 @@ type InsertExpenseReportParams struct {
 // expense_reports
 // ===========================================================================
 // Live insert of a report header (status defaults to 'draft'). created_at is the
-// store's clock. posted_transaction_id starts NULL (set only on convert). Returns
-// the new id for the store to snapshot + return.
+// store's clock. posted_transaction_id starts NULL (set only on convert). The header
+// fields (description/memo/ap_account_id) carry the creation-time PREFILLS: the
+// creator's display name (description), the localized "Expense report" default (memo),
+// and the subsidiary's default AP account (ap_account_id, NULL when the sub has none).
+// Returns the new id for the store to snapshot + return.
 func (q *Queries) InsertExpenseReport(ctx context.Context, arg InsertExpenseReportParams) (ids.ExpenseReportID, error) {
-	row := q.db.QueryRowContext(ctx, insertExpenseReport, arg.SubmitterID, arg.SubsidiaryID, arg.CreatedAt)
+	row := q.db.QueryRowContext(
+		ctx, insertExpenseReport,
+		arg.SubmitterID,
+		arg.SubsidiaryID,
+		arg.CreatedAt,
+		arg.Description,
+		arg.Memo,
+		arg.APAccountID,
+	)
 	var id ids.ExpenseReportID
 	err := row.Scan(&id)
 	return id, err
@@ -205,10 +220,11 @@ func (q *Queries) InsertExpenseReportLineVersion(ctx context.Context, arg Insert
 const insertExpenseReportVersion = `-- name: InsertExpenseReportVersion :exec
 INSERT INTO expense_reports_versions
   (entity_id, change_id, valid_from, op, submitter_id, subsidiary_id, status,
-   review_notes, posted_transaction_id, created_at, date, description, memo, notes)
+   review_notes, posted_transaction_id, created_at, date, description, memo, notes,
+   ap_account_id)
 SELECT er.id, c.id, c.at, ?, er.submitter_id, er.subsidiary_id, er.status,
        er.review_notes, er.posted_transaction_id, er.created_at,
-       er.date, er.description, er.memo, er.notes
+       er.date, er.description, er.memo, er.notes, er.ap_account_id
 FROM expense_reports er, changes c
 WHERE c.id = ? AND er.id = ?
 `
@@ -271,7 +287,7 @@ func (q *Queries) ListExpenseReportLines(ctx context.Context, reportID ids.Expen
 
 const listExpenseReportsByStatus = `-- name: ListExpenseReportsByStatus :many
 SELECT id, submitter_id, subsidiary_id, status, review_notes,
-       posted_transaction_id, created_at, date, description, memo, notes
+       posted_transaction_id, created_at, date, description, memo, notes, ap_account_id
 FROM expense_reports
 WHERE status = ?
 ORDER BY id
@@ -299,6 +315,7 @@ func (q *Queries) ListExpenseReportsByStatus(ctx context.Context, status string)
 			&i.Description,
 			&i.Memo,
 			&i.Notes,
+			&i.APAccountID,
 		); err != nil {
 			return nil, err
 		}
@@ -315,7 +332,7 @@ func (q *Queries) ListExpenseReportsByStatus(ctx context.Context, status string)
 
 const listExpenseReportsBySubmitter = `-- name: ListExpenseReportsBySubmitter :many
 SELECT id, submitter_id, subsidiary_id, status, review_notes,
-       posted_transaction_id, created_at, date, description, memo, notes
+       posted_transaction_id, created_at, date, description, memo, notes, ap_account_id
 FROM expense_reports
 WHERE submitter_id = ?
 ORDER BY id DESC
@@ -343,6 +360,7 @@ func (q *Queries) ListExpenseReportsBySubmitter(ctx context.Context, submitterID
 			&i.Description,
 			&i.Memo,
 			&i.Notes,
+			&i.APAccountID,
 		); err != nil {
 			return nil, err
 		}
@@ -422,20 +440,23 @@ func (q *Queries) SetExpenseReportHeader(ctx context.Context, arg SetExpenseRepo
 
 const setExpenseReportSubsidiary = `-- name: SetExpenseReportSubsidiary :exec
 UPDATE expense_reports
-SET subsidiary_id = ?
+SET subsidiary_id = ?, ap_account_id = ?
 WHERE id = ?
 `
 
 type SetExpenseReportSubsidiaryParams struct {
 	SubsidiaryID ids.SubsidiaryID
+	APAccountID  sql.NullInt64
 	ID           ids.ExpenseReportID
 }
 
 // Live update of a draft report's subsidiary (p25.3: the submitter picks the sub on
 // the report page, editable ONLY while the report has no lines -- the store guards the
-// line-count precondition so a change can't orphan sub-scoped line accounts).
+// line-count precondition so a change can't orphan sub-scoped line accounts). ap_account_id
+// is RE-SEEDED to the new subsidiary's default_ap_account_id in the SAME write (the AP is a
+// sub-scoped account; leaving the old sub's AP would be a cross-subsidiary main split).
 func (q *Queries) SetExpenseReportSubsidiary(ctx context.Context, arg SetExpenseReportSubsidiaryParams) error {
-	_, err := q.db.ExecContext(ctx, setExpenseReportSubsidiary, arg.SubsidiaryID, arg.ID)
+	_, err := q.db.ExecContext(ctx, setExpenseReportSubsidiary, arg.SubsidiaryID, arg.APAccountID, arg.ID)
 	return err
 }
 

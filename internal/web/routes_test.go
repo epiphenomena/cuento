@@ -234,7 +234,7 @@ func buildPersonas(t *testing.T, st *store.Store, db *sql.DB) []persona {
 	// parses 0 rows -> ReplaceExpenseReportLines DELETES the seeded line (but NOT the
 	// report), which is fine: no later route needs the line, and /expenses/1/submit still
 	// reaches the handler (then a clean 422 on the now-empty report -- non-404).
-	repID, err := st.CreateExpenseReport(ctx, admin.ID, 1)
+	repID, err := st.CreateExpenseReport(ctx, admin.ID, 1, store.CreateExpenseReportInput{})
 	if err != nil {
 		t.Fatalf("seed expense report: %v", err)
 	}

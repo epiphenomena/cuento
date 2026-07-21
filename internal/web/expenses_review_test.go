@@ -56,7 +56,7 @@ func seedSubmittedReport(t *testing.T, st *store.Store, amount int64) reviewRepo
 
 	submitter := mkSubmitter(t, st, "reviewsub")
 	subCtx := store.WithActor(context.Background(), store.Actor{ID: submitter})
-	reportID, err := st.CreateExpenseReport(subCtx, submitter, 1)
+	reportID, err := st.CreateExpenseReport(subCtx, submitter, 1, store.CreateExpenseReportInput{})
 	if err != nil {
 		t.Fatalf("create report: %v", err)
 	}
@@ -67,6 +67,42 @@ func seedSubmittedReport(t *testing.T, st *store.Store, amount int64) reviewRepo
 		t.Fatalf("submit report: %v", err)
 	}
 	return reviewReportEnv{reportID: int64(reportID), expense: expense, cash: cash, submitter: submitter}
+}
+
+// TestReviewPrefillsAPCounterSide (8a): a report whose subsidiary has a default AP account
+// carries that AP as its ap_account_id; the reviewer's editor prefills it on the COUNTER-SIDE
+// (payment) row AND keeps it editable -- expense accounting is DR expense lines / CR AP, so
+// the AP is exactly the counter-side. This is what makes ap_account_id reach the posted txn
+// (not just the submitter's locked display).
+func TestReviewPrefillsAPCounterSide(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	book := mkUser(t, st, "reviewer_ap", "write", false)
+	sysCtx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// A liability leaf as the AP account; wire it as the root subsidiary's default AP.
+	ap, err := st.CreateAccount(sysCtx, store.CreateAccountInput{
+		Type: "liability", DefaultCurrency: "USD",
+		Names: map[string]string{"en": "Accounts Payable", "es": "Cuentas por pagar"}, Subsidiaries: []ids.SubsidiaryID{1},
+	})
+	if err != nil {
+		t.Fatalf("create AP account: %v", err)
+	}
+	if err := st.UpdateSubsidiary(sysCtx, 1, store.UpdateSubsidiaryInput{DefaultAPAccountID: &ap}); err != nil {
+		t.Fatalf("set default AP: %v", err)
+	}
+
+	env := seedSubmittedReport(t, st, 2000) // this report was created AFTER the sub got its AP
+
+	rec := asUser(t, h, sm, book, http.MethodGet, "/expenses/review/"+itoa(env.reportID), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET review form = %d, want 200; body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	// The AP account is an OPTION and is SELECTED (on the counter-side row); it stays a real
+	// editable <select> option (the reviewer can change it), NOT locked static text.
+	if !strings.Contains(body, `selected>Liability · Accounts Payable</option>`) {
+		t.Errorf("AP account not prefilled/selected on the reviewer counter-side row; body:\n%s", body)
+	}
 }
 
 // TestReviewPostCreatesBalancedTxnAndConverts: a TxnWrite reviewer opens a submitted

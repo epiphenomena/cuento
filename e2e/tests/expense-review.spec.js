@@ -88,7 +88,9 @@ async function createSubmitter(page, username, password) {
 
   const row = page.locator(`tr.user-row[data-username="${username}"]`);
   await expect(row).toBeVisible();
-  await row.getByRole('link', { name: /permissions/i }).click();
+  // The users-list row link to the per-user detail page was renamed to "Edit" (users-list
+  // cleanup); it still lands on /admin/users/{id} where the can-submit toggle lives.
+  await row.getByRole('link', { name: /edit/i }).click();
   await page.waitForURL('**/admin/users/*');
   const canSubmit = page.locator('form.can-submit-form input[name="can_submit_expenses"]');
   await expect(canSubmit).toBeVisible();

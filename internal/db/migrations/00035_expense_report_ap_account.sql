@@ -1,0 +1,24 @@
+-- +goose Up
+-- Expense report AP (accounts payable) account -- the liability the reviewer's convert
+-- posts the report's MAIN split to. The submitter now enters a report on the new
+-- transaction form's main-header: the main account is this ap_account_id (defaulted from
+-- the report's subsidiary default_ap_account_id, 00034, and LOCKED to the submitter --
+-- only the reviewer may change it), the main description is the report's `description`
+-- (creator's display name, LOCKED), and the memo is the report's `memo` (editable).
+-- Forward-only; never edit an applied migration; no Down (AGENTS rule 4).
+--
+-- ap_account_id is a VERSIONED business column (rule 5), so -- exactly like the p-golive
+-- header fields (00033) and the subsidiary default AP (00034) -- it is ALTER-added to BOTH
+-- the live table AND its versions twin: a NULLABLE INTEGER WITH the FK REFERENCES on the
+-- live table (NULL = unset, when the subsidiary has no default AP -- the report is still
+-- creatable/submittable and the reviewer fills it), and a plain INTEGER (no FK, an audit
+-- snapshot is not a live reference) on the twin. Every existing live row and every existing
+-- version row takes NULL by construction, so NULL == NULL keeps the version-vs-live
+-- integrity check (Z3, internal/ledger/checks.go) clean with no backfill row. The
+-- InsertExpenseReportVersion snapshot SELECT and the Z3 current==snapshot comparison both
+-- gain the column so as-of reconstruction and `cuento check` stay clean.
+--
+-- Keep this file PURE ASCII (sqlc reads migrations as its schema; the byte-offset quirk in
+-- docs/DECISIONS.md p04.2 applies here too).
+ALTER TABLE expense_reports ADD COLUMN ap_account_id INTEGER REFERENCES accounts(id);  -- nullable, no default; the main-split payable
+ALTER TABLE expense_reports_versions ADD COLUMN ap_account_id INTEGER;                  -- audited (rule 5); plain INTEGER, no FK, no default -> NULL keeps existing snapshots Z3-clean

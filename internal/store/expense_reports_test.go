@@ -48,7 +48,7 @@ func TestExpenseReportLifecycleVersioned(t *testing.T) {
 	s, d, ctx, submitterID, acctID := seedExpenseReportEnv(t)
 
 	// create (draft) -> versioned op='create'
-	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1, CreateExpenseReportInput{})
 	if err != nil {
 		t.Fatalf("CreateExpenseReport: %v", err)
 	}
@@ -129,13 +129,107 @@ func TestExpenseReportLifecycleVersioned(t *testing.T) {
 	assertLedgerClean(t, d)
 }
 
+// TestExpenseReportAPAccountDefault (8a) proves ap_account_id is DEFAULTED from the
+// report's subsidiary default_ap_account_id at creation, that the create prefills
+// (description/memo) persist, that the column is versioned (the create snapshot carries
+// it), and that a subsidiary WITHOUT a default AP yields a NULL ap_account_id (the report
+// is still creatable). It also proves changing the subsidiary RE-SEEDS ap_account_id.
+func TestExpenseReportAPAccountDefault(t *testing.T) {
+	s, d, ctx, submitterID, acctID := seedExpenseReportEnv(t)
+	sysCtx := WithActor(context.Background(), Actor{ID: 1})
+
+	// A SECOND subsidiary (id 2) WITH a default AP account (the seeded expense leaf serves
+	// as the AP target for the test). Sub 1 (the seeded root) has NO default AP.
+	sub2, err := s.CreateSubsidiary(sysCtx, CreateSubsidiaryInput{ParentID: 1, Name: "Branch", BaseCurrency: "USD"})
+	if err != nil {
+		t.Fatalf("create subsidiary: %v", err)
+	}
+	// The AP account must be reachable in sub2: create an expense leaf scoped to sub2.
+	apAcct, err := s.CreateAccount(sysCtx, CreateAccountInput{
+		Type: "liability", DefaultCurrency: "USD",
+		Names: map[string]string{"en": "Accrued reimbursements"}, Subsidiaries: []ids.SubsidiaryID{sub2},
+	})
+	if err != nil {
+		t.Fatalf("create AP account: %v", err)
+	}
+	if err := s.UpdateSubsidiary(sysCtx, sub2, UpdateSubsidiaryInput{DefaultAPAccountID: &apAcct}); err != nil {
+		t.Fatalf("set sub2 default AP: %v", err)
+	}
+
+	// Create in sub2 -> ap_account_id defaults to sub2's default AP; prefills persist.
+	rep, err := s.CreateExpenseReport(ctx, submitterID, sub2, CreateExpenseReportInput{
+		Description: "Alice Submitter", Memo: "Expense report",
+	})
+	if err != nil {
+		t.Fatalf("CreateExpenseReport: %v", err)
+	}
+	got, err := s.GetExpenseReport(ctx, rep)
+	if err != nil {
+		t.Fatalf("GetExpenseReport: %v", err)
+	}
+	if !got.APAccountID.Valid || got.APAccountID.Int64 != int64(apAcct) {
+		t.Fatalf("ap_account_id = %v, want %d", got.APAccountID, apAcct)
+	}
+	if got.Description != "Alice Submitter" {
+		t.Fatalf("description = %q, want %q", got.Description, "Alice Submitter")
+	}
+	if got.Memo != "Expense report" {
+		t.Fatalf("memo = %q, want %q", got.Memo, "Expense report")
+	}
+	// The create snapshot must carry the ap_account_id (versioned; Z3 stays clean).
+	testutil.AssertVersioned(t, d, "expense_reports", int64(rep), "create")
+	if snap := versionAPAccount(t, d, rep); !snap.Valid || snap.Int64 != int64(apAcct) {
+		t.Fatalf("version ap_account_id = %v, want %d", snap, apAcct)
+	}
+
+	// Create in sub 1 (NO default AP) -> ap_account_id is NULL; still creatable.
+	repNoAP, err := s.CreateExpenseReport(ctx, submitterID, 1, CreateExpenseReportInput{})
+	if err != nil {
+		t.Fatalf("CreateExpenseReport (no AP sub): %v", err)
+	}
+	gotNoAP, err := s.GetExpenseReport(ctx, repNoAP)
+	if err != nil {
+		t.Fatalf("GetExpenseReport (no AP): %v", err)
+	}
+	if gotNoAP.APAccountID.Valid {
+		t.Fatalf("ap_account_id = %v, want NULL for a sub with no default AP", gotNoAP.APAccountID)
+	}
+
+	// Changing the subsidiary (lineless) RE-SEEDS ap_account_id: move repNoAP to sub2.
+	if err := s.UpdateExpenseReportSubsidiary(ctx, repNoAP, sub2); err != nil {
+		t.Fatalf("UpdateExpenseReportSubsidiary: %v", err)
+	}
+	reseeded, err := s.GetExpenseReport(ctx, repNoAP)
+	if err != nil {
+		t.Fatalf("GetExpenseReport (reseeded): %v", err)
+	}
+	if !reseeded.APAccountID.Valid || reseeded.APAccountID.Int64 != int64(apAcct) {
+		t.Fatalf("ap_account_id after sub change = %v, want %d (re-seeded)", reseeded.APAccountID, apAcct)
+	}
+	_ = acctID
+	assertLedgerClean(t, d)
+}
+
+// versionAPAccount reads the LATEST expense_reports_versions snapshot's ap_account_id for
+// a report (8a: proves the column is snapshotted).
+func versionAPAccount(t *testing.T, d *sql.DB, id ids.ExpenseReportID) sql.NullInt64 {
+	t.Helper()
+	var v sql.NullInt64
+	err := d.QueryRow(`SELECT ap_account_id FROM expense_reports_versions
+		WHERE entity_id = ? ORDER BY valid_from DESC, id DESC LIMIT 1`, int64(id)).Scan(&v)
+	if err != nil {
+		t.Fatalf("read version ap_account_id: %v", err)
+	}
+	return v
+}
+
 // TestRemoveExpenseReportLineVersioned proves a line HARD-deletes with an op='delete'
 // version captured BEFORE the live delete (rule 14), and that removal is refused once
 // the report is no longer editable.
 func TestRemoveExpenseReportLineVersioned(t *testing.T) {
 	s, d, ctx, submitterID, acctID := seedExpenseReportEnv(t)
 
-	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1, CreateExpenseReportInput{})
 	if err != nil {
 		t.Fatalf("CreateExpenseReport: %v", err)
 	}
@@ -189,7 +283,7 @@ func TestRemoveExpenseReportLineVersioned(t *testing.T) {
 func TestReplaceExpenseReportLines(t *testing.T) {
 	s, d, ctx, submitterID, acctID := seedExpenseReportEnv(t)
 
-	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1, CreateExpenseReportInput{})
 	if err != nil {
 		t.Fatalf("CreateExpenseReport: %v", err)
 	}
@@ -272,7 +366,7 @@ type sqlcExpenseLine struct {
 func TestExpenseReportLineDescriptionRoundTrip(t *testing.T) {
 	s, d, ctx, submitterID, acctID := seedExpenseReportEnv(t)
 
-	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1, CreateExpenseReportInput{})
 	if err != nil {
 		t.Fatalf("CreateExpenseReport: %v", err)
 	}
@@ -335,7 +429,7 @@ func TestUpdateExpenseReportSubsidiary(t *testing.T) {
 		t.Fatalf("CreateSubsidiary: %v", err)
 	}
 
-	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1, CreateExpenseReportInput{})
 	if err != nil {
 		t.Fatalf("CreateExpenseReport: %v", err)
 	}
@@ -379,7 +473,7 @@ func TestUpdateExpenseReportSubsidiary(t *testing.T) {
 func TestSetExpenseReportHeader(t *testing.T) {
 	s, d, ctx, submitterID, acctID := seedExpenseReportEnv(t)
 
-	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1, CreateExpenseReportInput{})
 	if err != nil {
 		t.Fatalf("CreateExpenseReport: %v", err)
 	}
@@ -417,7 +511,7 @@ func TestSetExpenseReportHeader(t *testing.T) {
 func TestDiscardExpenseReport(t *testing.T) {
 	s, d, ctx, submitterID, acctID := seedExpenseReportEnv(t)
 
-	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1, CreateExpenseReportInput{})
 	if err != nil {
 		t.Fatalf("CreateExpenseReport: %v", err)
 	}
@@ -440,7 +534,7 @@ func TestDiscardExpenseReport(t *testing.T) {
 	}
 
 	// A SUBMITTED report is not discardable (draft-only).
-	rep2, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	rep2, err := s.CreateExpenseReport(ctx, submitterID, 1, CreateExpenseReportInput{})
 	if err != nil {
 		t.Fatalf("create 2: %v", err)
 	}
@@ -462,7 +556,7 @@ func TestExpenseReportStateMachine(t *testing.T) {
 	s, d, ctx, submitterID, acctID := seedExpenseReportEnv(t)
 	txnID := seedPostedTxn(t, s, acctID)
 
-	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1, CreateExpenseReportInput{})
 	if err != nil {
 		t.Fatalf("CreateExpenseReport: %v", err)
 	}
@@ -540,7 +634,7 @@ func TestPostAndConvertExpenseReport(t *testing.T) {
 	fc := "program"
 
 	// A submitted report (one expense line).
-	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1)
+	reportID, err := s.CreateExpenseReport(ctx, submitterID, 1, CreateExpenseReportInput{})
 	if err != nil {
 		t.Fatalf("CreateExpenseReport: %v", err)
 	}

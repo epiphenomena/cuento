@@ -261,6 +261,7 @@ WHERE v.id IS NULL OR v.op = 'delete'
    OR v.created_at IS NOT c.created_at
    OR v.date IS NOT c.date OR v.description IS NOT c.description
    OR v.memo IS NOT c.memo OR v.notes IS NOT c.notes
+   OR v.ap_account_id IS NOT c.ap_account_id
 UNION ALL
 -- expense_report_lines (p20.1 single-id twin; a line can be hard-deleted, so a
 -- missing live row for a 'delete' version is legitimate -- the standard single-id

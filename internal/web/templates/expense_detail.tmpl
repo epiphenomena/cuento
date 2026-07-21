@@ -55,30 +55,53 @@
   </div>
   {{end}}
 
-  {{/* p-golive: the report HEADER (date / description / memo / notes). When editable it is
-       ONE form carrying all four fields (SetExpenseReportHeader writes all four at once, so
-       they must save together -- a per-field post would blank the others). It AUTO-SAVES on
-       change like the subsidiary picker (hx-post + hx-trigger="change" bubbling from any
-       field); the handler PRG-redirects, and redirectAfterForm sets HX-Redirect so htmx
-       re-navigates. It stays a real <form> so a no-JS client works (the <noscript> submit
-       button is the fallback). A SIBLING of the grid/submit forms (never nested). */}}
+  {{/* 8a: the report HEADER reuses the transaction form's main-header layout (.txn-main-header
+       + .txn-field, the SAME chrome as transaction_form.tmpl) so the submitter genuinely uses
+       "the new transaction form" for framing the report. Three prefilled fields, mirroring the
+       txn main-split header:
+         - Main ACCOUNT = the report's ap_account_id (the payable), LOCKED for the submitter:
+           rendered as read-only static text (the resolved account name), NOT a select. Only
+           the reviewer (via convert) may change it. "" = unset -> a hint (the sub had no
+           default AP; the reviewer fills it).
+         - Main DESCRIPTION = the report's description (creator's display name), LOCKED for the
+           submitter: read-only text, NOT an input. The server ALSO refuses any change (it
+           passes the stored value through, never the POST field) -- never trust the client.
+         - MEMO = editable.
+       Date + notes stay editable too. The lock mechanism is static-text rendering (no input +
+       a .er-locked class), CSP-safe (no inline styles). When editable it is ONE auto-saving
+       form (SetExpenseReportHeader writes date/memo/notes together; description is the stored
+       value); it AUTO-SAVES on change (hx-post + hx-trigger="change"). A SIBLING of the grid/
+       submit forms (never nested). */}}
   <h2>{{t "expense.header.title"}}</h2>
   {{if .Editable}}
   <form method="post" action="/expenses/{{.ID}}/header" class="expense-header-form"
         hx-post="/expenses/{{.ID}}/header" hx-trigger="change" hx-target="#main" hx-swap="outerHTML">
-    <div class="field">
-      <label for="er-date">{{t "expense.header.date"}}</label>
-      <input type="text" name="date" id="er-date" value="{{.Date}}" autocomplete="off" placeholder="{{t "expense.header.date_hint"}}">
+    <div class="txn-main-header">
+      {{/* Main account (AP payable): LOCKED read-only text for the submitter (reviewer edits). */}}
+      <div class="txn-field txn-main-account-field">
+        <label id="er-main-account-label">{{t "expense.main.account"}}</label>
+        {{if .APAccountName}}<span class="er-locked" id="er-main-account" aria-labelledby="er-main-account-label">{{.APAccountName}}</span>{{else}}<span class="er-locked muted" id="er-main-account" aria-labelledby="er-main-account-label">{{t "expense.main.account_none"}}</span>{{end}}
+        <span class="hint">{{t "expense.main.account_locked_hint"}}</span>
+      </div>
+      {{/* Main description (creator's name): LOCKED read-only text for the submitter. */}}
+      <div class="txn-field txn-field-grow txn-main-desc-field">
+        <label id="er-description-label">{{t "expense.header.description"}}</label>
+        {{if .Description}}<span class="er-locked" id="er-description" aria-labelledby="er-description-label">{{.Description}}</span>{{else}}<span class="er-locked muted" id="er-description" aria-labelledby="er-description-label">&mdash;</span>{{end}}
+        <span class="hint">{{t "expense.main.description_locked_hint"}}</span>
+      </div>
+      {{/* Memo: EDITABLE. */}}
+      <div class="txn-field txn-field-grow">
+        <label for="er-memo">{{t "expense.header.memo"}}</label>
+        <input type="text" name="memo" id="er-memo" value="{{.Memo}}" autocomplete="off">
+      </div>
+      {{/* Date: editable. */}}
+      <div class="txn-field">
+        <label for="er-date">{{t "expense.header.date"}}</label>
+        <input type="text" name="date" id="er-date" value="{{.Date}}" autocomplete="off" placeholder="{{t "expense.header.date_hint"}}">
+      </div>
     </div>
-    <div class="field">
-      <label for="er-description">{{t "expense.header.description"}}</label>
-      <input type="text" name="description" id="er-description" value="{{.Description}}" autocomplete="off" placeholder="{{t "expense.header.description_hint"}}">
-    </div>
-    <div class="field">
-      <label for="er-memo">{{t "expense.header.memo"}}</label>
-      <input type="text" name="memo" id="er-memo" value="{{.Memo}}" autocomplete="off">
-    </div>
-    <div class="field">
+    {{/* Notes: editable, full-width below the header (mirrors the txn notes field). */}}
+    <div class="txn-notes-field">
       <label for="er-notes">{{t "expense.header.notes"}}</label>
       <textarea name="notes" id="er-notes" rows="4">{{.Notes}}</textarea>
     </div>
@@ -87,6 +110,8 @@
   {{else}}
   {{/* Read-only header (submitted/converted): the stored values, an em-dash when empty. */}}
   <dl class="expense-header-view">
+    <dt>{{t "expense.main.account"}}</dt>
+    <dd id="er-main-account-view">{{if .APAccountName}}{{.APAccountName}}{{else}}<span class="muted">{{t "expense.main.account_none"}}</span>{{end}}</dd>
     <dt>{{t "expense.header.date"}}</dt>
     <dd id="er-date-view">{{if .Date}}{{.Date}}{{else}}<span class="muted">&mdash;</span>{{end}}</dd>
     <dt>{{t "expense.header.description"}}</dt>

@@ -164,10 +164,11 @@ type ExpenseReport struct {
 	ReviewNotes         string
 	PostedTransactionID sql.NullInt64
 	CreatedAt           string
-	Date                string // p-golive header: report/txn date ('' = unset -> today at convert)
-	Description         string // p-golive header: prefills the posted txn's main split description
-	Memo                string // p-golive header: prefills the posted txn memo
-	Notes               string // p-golive header: prefills the posted txn notes
+	Date                string        // p-golive header: report/txn date ('' = unset -> today at convert)
+	Description         string        // p-golive header: prefills the posted txn's main split description
+	Memo                string        // p-golive header: prefills the posted txn memo
+	Notes               string        // p-golive header: prefills the posted txn notes
+	APAccountID         sql.NullInt64 // the main-split payable (defaulted from the sub's default_ap_account_id); NULL = unset
 }
 
 type ExpenseReportLine struct {

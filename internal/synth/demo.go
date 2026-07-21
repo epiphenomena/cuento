@@ -244,8 +244,18 @@ func createDemoUser(ctx context.Context, s *store.Store, username, display strin
 // subsidiary, submitted by the demo submitter, so the expense-report screens and the
 // reviewer queue all show something.
 func buildDemoExpenseReports(ctx context.Context, s *store.Store, d *DemoIDs) error {
+	// 8a: give the US subsidiary a default AP account (the Credit Card liability leaf) so a
+	// new report's ap_account_id (the main-split payable) populates from it -- the demo shows
+	// the transaction-form main-header prefill, not a blank AP.
+	apAcct := d.CreditCard
+	if err := s.UpdateSubsidiary(ctx, d.US, store.UpdateSubsidiaryInput{DefaultAPAccountID: &apAcct}); err != nil {
+		return fmt.Errorf("set US default AP account: %w", err)
+	}
+
 	// --- Draft: created with lines, left in draft.
-	draft, err := s.CreateExpenseReport(ctx, d.SubmitterUser, d.US)
+	draft, err := s.CreateExpenseReport(ctx, d.SubmitterUser, d.US, store.CreateExpenseReportInput{
+		Description: "Demo Submitter", Memo: "Expense report",
+	})
 	if err != nil {
 		return fmt.Errorf("create draft expense report: %w", err)
 	}
@@ -257,7 +267,9 @@ func buildDemoExpenseReports(ctx context.Context, s *store.Store, d *DemoIDs) er
 	d.DraftReport = draft
 
 	// --- Submitted: created, a line added, then submitted (awaiting review).
-	submitted, err := s.CreateExpenseReport(ctx, d.SubmitterUser, d.US)
+	submitted, err := s.CreateExpenseReport(ctx, d.SubmitterUser, d.US, store.CreateExpenseReportInput{
+		Description: "Demo Submitter", Memo: "Expense report",
+	})
 	if err != nil {
 		return fmt.Errorf("create submitted expense report: %w", err)
 	}
@@ -273,7 +285,9 @@ func buildDemoExpenseReports(ctx context.Context, s *store.Store, d *DemoIDs) er
 
 	// --- Posted: created, a line added, submitted, then posted+converted to a real
 	// balanced ledger transaction (Occupancy expense funded from Checking US).
-	posted, err := s.CreateExpenseReport(ctx, d.SubmitterUser, d.US)
+	posted, err := s.CreateExpenseReport(ctx, d.SubmitterUser, d.US, store.CreateExpenseReportInput{
+		Description: "Demo Submitter", Memo: "Expense report",
+	})
 	if err != nil {
 		return fmt.Errorf("create posted expense report: %w", err)
 	}

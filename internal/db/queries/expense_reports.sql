@@ -19,22 +19,25 @@
 
 -- name: InsertExpenseReport :one
 -- Live insert of a report header (status defaults to 'draft'). created_at is the
--- store's clock. posted_transaction_id starts NULL (set only on convert). Returns
--- the new id for the store to snapshot + return.
-INSERT INTO expense_reports (submitter_id, subsidiary_id, created_at)
-VALUES (?, ?, ?)
+-- store's clock. posted_transaction_id starts NULL (set only on convert). The header
+-- fields (description/memo/ap_account_id) carry the creation-time PREFILLS: the
+-- creator's display name (description), the localized "Expense report" default (memo),
+-- and the subsidiary's default AP account (ap_account_id, NULL when the sub has none).
+-- Returns the new id for the store to snapshot + return.
+INSERT INTO expense_reports (submitter_id, subsidiary_id, created_at, description, memo, ap_account_id)
+VALUES (?, ?, ?, ?, ?, ?)
 RETURNING id;
 
 -- name: GetExpenseReport :one
 SELECT id, submitter_id, subsidiary_id, status, review_notes,
-       posted_transaction_id, created_at, date, description, memo, notes
+       posted_transaction_id, created_at, date, description, memo, notes, ap_account_id
 FROM expense_reports
 WHERE id = ?;
 
 -- name: ListExpenseReportsBySubmitter :many
 -- A submitter's own reports, newest first (the p20.2 my-reports list).
 SELECT id, submitter_id, subsidiary_id, status, review_notes,
-       posted_transaction_id, created_at, date, description, memo, notes
+       posted_transaction_id, created_at, date, description, memo, notes, ap_account_id
 FROM expense_reports
 WHERE submitter_id = ?
 ORDER BY id DESC;
@@ -42,7 +45,7 @@ ORDER BY id DESC;
 -- name: ListExpenseReportsByStatus :many
 -- Reports in a given status, id-ordered (the p20.3 reviewer queue reads 'submitted').
 SELECT id, submitter_id, subsidiary_id, status, review_notes,
-       posted_transaction_id, created_at, date, description, memo, notes
+       posted_transaction_id, created_at, date, description, memo, notes, ap_account_id
 FROM expense_reports
 WHERE status = ?
 ORDER BY id;
@@ -68,9 +71,12 @@ WHERE id = ?;
 -- name: SetExpenseReportSubsidiary :exec
 -- Live update of a draft report's subsidiary (p25.3: the submitter picks the sub on
 -- the report page, editable ONLY while the report has no lines -- the store guards the
--- line-count precondition so a change can't orphan sub-scoped line accounts).
+-- line-count precondition so a change can't orphan sub-scoped line accounts). ap_account_id
+-- is RE-SEEDED to the NEW subsidiary's default_ap_account_id in the SAME write (the AP is a
+-- sub-scoped account; leaving the old sub's AP would be a cross-subsidiary main split that
+-- trips a ledger invariant at convert). NULL when the new sub has no default.
 UPDATE expense_reports
-SET subsidiary_id = ?
+SET subsidiary_id = ?, ap_account_id = ?
 WHERE id = ?;
 
 -- name: DeleteExpenseReport :exec
@@ -96,10 +102,11 @@ WHERE id = ?;
 -- Params (positional): op, change_id, entity_id -> Op, ID (change_id), ID_2.
 INSERT INTO expense_reports_versions
   (entity_id, change_id, valid_from, op, submitter_id, subsidiary_id, status,
-   review_notes, posted_transaction_id, created_at, date, description, memo, notes)
+   review_notes, posted_transaction_id, created_at, date, description, memo, notes,
+   ap_account_id)
 SELECT er.id, c.id, c.at, ?, er.submitter_id, er.subsidiary_id, er.status,
        er.review_notes, er.posted_transaction_id, er.created_at,
-       er.date, er.description, er.memo, er.notes
+       er.date, er.description, er.memo, er.notes, er.ap_account_id
 FROM expense_reports er, changes c
 WHERE c.id = ? AND er.id = ?;
 

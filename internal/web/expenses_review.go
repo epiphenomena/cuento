@@ -320,13 +320,21 @@ func (s *server) prefillExpenseRows(r *http.Request, model txnEditorModel, rep s
 		}
 		rows = append(rows, row)
 	}
-	// A trailing empty row for the reviewer's counter-side (cash/bank). p-golive: seed its
-	// DESCRIPTION with the report's header description so the payment line carries the
+	// A trailing counter-side row for the reviewer (the accounts-payable leg). p-golive: seed
+	// its DESCRIPTION with the report's header description so the payment line carries the
 	// report's overall description (the flat review grid has no header main-description
-	// field). The reviewer fills the account/amount; the description is pre-populated and
-	// editable. On POST the p26.x copy-down still propagates a description into any blank
+	// field). 8a: seed its ACCOUNT with the report's ap_account_id (the payable) -- expense
+	// report accounting is DR expense lines / CR accounts-payable, so the AP is exactly this
+	// counter-side. The reviewer keeps it EDITABLE (per the requirement); injectRowAccounts
+	// (called right after) makes it selectable even if inactive/out-of-scope (p26.10). The AP
+	// is always in the report's LOCKED subsidiary (seeded + re-seeded from it), so it can't be
+	// cross-sub. On POST the p26.x copy-down still propagates a description into any blank
 	// split, so an untouched description flows through to the posted splits.
-	rows = append(rows, txnRowModel{Index: len(lines), Description: rep.Description})
+	counter := txnRowModel{Index: len(lines), Description: rep.Description}
+	if rep.APAccountID.Valid {
+		counter.Account = rep.APAccountID.Int64
+	}
+	rows = append(rows, counter)
 	return rows
 }
 

@@ -114,7 +114,16 @@ func (s *server) expenseCreate(w http.ResponseWriter, r *http.Request) {
 	if sub == 0 {
 		sub = s.defaultSubsidiary(ctx, u)
 	}
-	id, err := s.store.CreateExpenseReport(s.actorCtx(ctx), u.ID, ids.SubsidiaryID(sub))
+	// 8a prefills (persisted so the reviewer sees + can edit them): the main-split
+	// description defaults to the creator's display name; the memo to a localized
+	// "Expense report" resolved in the CREATOR's locale (rule 9: the store is i18n-free,
+	// so the web layer resolves the catalog value and passes the literal). The AP account
+	// is derived inside the store from the subsidiary's default (not passed here).
+	in := store.CreateExpenseReportInput{
+		Description: u.DisplayName,
+		Memo:        i18n.T(langOf(ctx), "expense.default_memo"),
+	}
+	id, err := s.store.CreateExpenseReport(s.actorCtx(ctx), u.ID, ids.SubsidiaryID(sub), in)
 	if err != nil {
 		// A bad subsidiary id is the only expected failure (ErrExpenseReportRefMissing);
 		// send the submitter back to the list rather than a dead 500.
@@ -174,14 +183,21 @@ func (s *server) expenseSetHeader(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	u := currentUser(ctx)
 	id := parseID(r.PathValue("id"))
-	if _, ok := s.loadEditableReport(w, r, id); !ok {
+	rep, ok := s.loadEditableReport(w, r, id)
+	if !ok {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	desc := strings.TrimSpace(r.PostFormValue("description"))
+	// 8a field lock: the main-split DESCRIPTION (creator's display name) is NOT editable by
+	// the submitter -- pass the STORED value through, never r.PostFormValue("description").
+	// The main ACCOUNT (ap_account_id) is not a parameter of SetExpenseReportHeader and no
+	// submitter route accepts it, so its lock is structural (no write path). Only memo/date/
+	// notes come from the POST. This is enforced SERVER-SIDE: a crafted POST that carries a
+	// different description (or an ap_account_id field) cannot change either stored value.
+	desc := rep.Description
 	memo := strings.TrimSpace(r.PostFormValue("memo"))
 	notes := strings.TrimSpace(r.PostFormValue("notes"))
 	// Parse the date per the user's format; a blank OR unparseable value stores "" (unset).
@@ -291,6 +307,15 @@ type expenseDetailModel struct {
 	Memo        string
 	Notes       string
 
+	// 8a: the report reuses the transaction form's main-header. The main ACCOUNT is the
+	// report's ap_account_id (the payable), rendered as LOCKED read-only text (resolved
+	// name; "" = unset -> the reviewer fills it). The main DESCRIPTION is the report's
+	// Description above, also rendered LOCKED for the creator (editable only by the
+	// reviewer). MEMO stays editable. The lock "mechanism" is static-text rendering (no
+	// input), NOT a model flag, because the submitter editor grafts the main-header into
+	// this template rather than routing through transaction_form.tmpl.
+	APAccountName string // resolved name of ap_account_id; "" = unset
+
 	Lines []expenseLineRow
 
 	// Sub-scoped option lists for the editable grid (p25.4), loaded only when
@@ -399,6 +424,12 @@ func (s *server) buildExpenseDetailModel(w http.ResponseWriter, r *http.Request,
 	model.Notes = rep.Notes
 	if rep.Date != "" {
 		model.Date = money.FormatDate(parseISOForDisplay(rep.Date), dateFormatFor(u))
+	}
+	// 8a: resolve the main-split payable (ap_account_id) name for the locked header display.
+	// Unset (NULL) -> "" so the template shows the "not set" hint. acctNames already covers
+	// every existing account; an out-of-scope/inactive AP still resolves to its stored name.
+	if rep.APAccountID.Valid {
+		model.APAccountName = acctNames[ids.AccountID(rep.APAccountID.Int64)]
 	}
 	// p25.3: the subsidiary is editable in-page ONLY while the report is editable AND
 	// has no lines (a line's account/fund options are sub-scoped; the store enforces

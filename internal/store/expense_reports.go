@@ -63,12 +63,28 @@ var (
 	ErrExpenseReportHasLines = errors.New("store: expense report subsidiary is locked (has lines)")
 )
 
+// CreateExpenseReportInput carries the creation-time PREFILLS for a new report (8a):
+// the main-split description (the creator's display name) and the memo (a localized
+// "Expense report" default). Both are resolved in the WEB layer (rule 9: the store is
+// i18n-free) and persisted so the reviewer sees + can edit them. The main-split AP
+// account is NOT passed here -- it is derived INSIDE the store from the report's
+// subsidiary (default_ap_account_id, the authoritative source), so a crafted caller
+// cannot inject an arbitrary AP.
+type CreateExpenseReportInput struct {
+	Description string // prefills the main-split description (creator's display name)
+	Memo        string // prefills the memo (localized "Expense report")
+}
+
 // CreateExpenseReport creates a draft report for submitterID in subsidiaryID under
 // ONE change and returns the new id (status=draft). Validates the submitter +
 // subsidiary exist inside fn so a rejection rolls back cleanly. The subsidiary is the
 // submitter's default at creation but is EDITABLE in-page until the first line is added
-// (UpdateExpenseReportSubsidiary, p25.3) -- it is no longer fixed at creation.
-func (s *Store) CreateExpenseReport(ctx context.Context, submitterID ids.UserID, subsidiaryID ids.SubsidiaryID) (ids.ExpenseReportID, error) {
+// (UpdateExpenseReportSubsidiary, p25.3) -- it is no longer fixed at creation. 8a: the
+// report's ap_account_id (the main-split payable) is DEFAULTED from the subsidiary's
+// default_ap_account_id (00034) -- NULL when the sub has none (the report is still
+// creatable/submittable; the reviewer fills it). description/memo carry the creation
+// prefills (in.Description/in.Memo).
+func (s *Store) CreateExpenseReport(ctx context.Context, submitterID ids.UserID, subsidiaryID ids.SubsidiaryID, in CreateExpenseReportInput) (ids.ExpenseReportID, error) {
 	var newID ids.ExpenseReportID
 	_, err := s.write(ctx, "expense_report.create", "",
 		func(ctx context.Context, q *sqlc.Queries, changeID ids.ChangeID) error {
@@ -78,7 +94,8 @@ func (s *Store) CreateExpenseReport(ctx context.Context, submitterID ids.UserID,
 				}
 				return fmt.Errorf("load submitter %d: %w", submitterID, err)
 			}
-			if _, err := q.GetSubsidiary(ctx, subsidiaryID); err != nil {
+			sub, err := q.GetSubsidiary(ctx, subsidiaryID)
+			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrExpenseReportRefMissing
 				}
@@ -88,6 +105,10 @@ func (s *Store) CreateExpenseReport(ctx context.Context, submitterID ids.UserID,
 				SubmitterID:  submitterID,
 				SubsidiaryID: subsidiaryID,
 				CreatedAt:    s.now().Format(time.RFC3339Nano),
+				Description:  in.Description,
+				Memo:         in.Memo,
+				// The AP is the subsidiary's default (authoritative); NULL when unset.
+				APAccountID: sub.DefaultApAccountID,
 			})
 			if err != nil {
 				return fmt.Errorf("insert expense report: %w", err)
@@ -126,14 +147,18 @@ func (s *Store) UpdateExpenseReportSubsidiary(ctx context.Context, reportID ids.
 			if n > 0 {
 				return ErrExpenseReportHasLines
 			}
-			if _, err := q.GetSubsidiary(ctx, subsidiaryID); err != nil {
+			sub, err := q.GetSubsidiary(ctx, subsidiaryID)
+			if err != nil {
 				if errors.Is(err, sql.ErrNoRows) {
 					return ErrExpenseReportRefMissing
 				}
 				return fmt.Errorf("load subsidiary %d: %w", subsidiaryID, err)
 			}
+			// 8a: RE-SEED ap_account_id to the NEW subsidiary's default (the AP is a
+			// sub-scoped account; keeping the old sub's AP would be a cross-subsidiary main
+			// split at convert). NULL when the new sub has no default.
 			if err := q.SetExpenseReportSubsidiary(ctx, sqlc.SetExpenseReportSubsidiaryParams{
-				SubsidiaryID: subsidiaryID, ID: reportID,
+				SubsidiaryID: subsidiaryID, APAccountID: sub.DefaultApAccountID, ID: reportID,
 			}); err != nil {
 				return fmt.Errorf("set subsidiary: %w", err)
 			}

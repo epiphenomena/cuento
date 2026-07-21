@@ -1958,6 +1958,16 @@ other = "Memo"
 other = "Notes"
 [expense.header.save]
 other = "Save details"
+[expense.default_memo]
+other = "Expense report"
+[expense.main.account]
+other = "Pay from account"
+[expense.main.account_locked_hint]
+other = "Set by your subsidiary; the reviewer can change it."
+[expense.main.description_locked_hint]
+other = "Your name; the reviewer can change it."
+[expense.main.account_none]
+other = "Not set (the reviewer will fill it)"
 [expense.line.col.account]
 other = "Account"
 [expense.line.col.amount]
