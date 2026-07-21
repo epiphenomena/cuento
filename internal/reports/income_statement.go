@@ -168,6 +168,39 @@ func runIncomeStatement(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 		nativeCcy: nativeCcy,
 		total:     total,
 	}
+
+	// FUNCTIONAL layout (GranNone): drop the single "Period" column and split each row
+	// into Admin (functional_class == management) | Fundraising (== fundraising) |
+	// Program (the residual, Total − Admin − Fundraising) | Total. Only expense splits
+	// carry a functional class (D21), so Admin/Fundraising come from FunctionalMatrix
+	// (fund-aware, txn-date) and REVENUE rows -- classless (D24) -- fall wholly into
+	// Program (Admin/Fundraising blank, Program == Total), mirroring the program
+	// statement. The Total backbone (perAcct/total, converted per-account) is untouched,
+	// so the section totals, the net, and the granular goldens are unchanged; making
+	// Program the residual keeps Admin + Fundraising + Program == Total EXACT per row.
+	if p.Granularity == GranNone {
+		mat, mErr := tk.FunctionalMatrix(ctx, Scope{Sub: p.Scope}, p.From, p.To, ConvertOpts{To: target, Mode: RateTxnDate})
+		if mErr != nil {
+			return Table{}, mErr
+		}
+		admin := make(map[AccountID]int64)
+		fr := make(map[AccountID]int64)
+		for acct, byClass := range mat {
+			for _, a := range byClass["management"] {
+				if a.Currency == target {
+					admin[acct] += a.Minor
+				}
+			}
+			for _, a := range byClass["fundraising"] {
+				if a.Currency == target {
+					fr[acct] += a.Minor
+				}
+			}
+		}
+		b.functional = true
+		b.adminRaw = admin
+		b.frRaw = fr
+	}
 	b.columns()
 
 	// --- Revenue section (revenue accounts, tree order preserved). Revenue activity is
@@ -273,13 +306,41 @@ type isBuilder struct {
 	nativeCcy []map[AccountID]map[string]int64 // [col]acct -> ccy -> native minor
 	total     map[AccountID]int64              // acct -> converted total (sum of cols)
 
+	// FUNCTIONAL layout (GranNone only): the Admin/Fundraising per-leaf RAW net-debit
+	// sums (target currency), from FunctionalMatrix. Program is the residual at render.
+	functional bool
+	adminRaw   map[AccountID]int64 // leaf acct -> management converted minor (raw)
+	frRaw      map[AccountID]int64 // leaf acct -> fundraising converted minor (raw)
+	// Per-node subtree-folded Admin/Fundraising (populated during section's fold, so a
+	// placeholder parent's functional cells are the sum of its leaves', matching colSum).
+	// funcHas marks a node whose subtree carries ANY functional (Admin/Fundraising)
+	// amount, so a classless REVENUE row renders BLANK Admin/Fundraising (not a zero).
+	// Shared across BOTH section() passes: only EXPENSE splits carry a class, so the
+	// revenue pass writes 0 to every entry it touches (never a stale non-zero), leaving
+	// every placeholder parent at 0 before the expense pass accumulates -- no double-count.
+	foldedAdmin map[AccountID]int64
+	foldedFr    map[AccountID]int64
+	funcHas     map[AccountID]bool
+
 	cols []Column
 	rows []Row
 }
 
-// columns builds the column set: Line, one per comparative period, then Total.
+// columns builds the column set. In the FUNCTIONAL layout (GranNone) it is Line, Admin,
+// Fundraising, Program, Total -- the single Period column is dropped in favor of the three
+// functional columns (mirroring the functional-expenses statement). Otherwise it is Line,
+// one per comparative period, then Total.
 func (b *isBuilder) columns() {
 	b.cols = append(b.cols, Column{HeaderKey: "reports.income_statement.col.line", Align: AlignLeft})
+	if b.functional {
+		b.cols = append(b.cols,
+			Column{HeaderKey: "reports.income_statement.col.admin", Align: AlignRight},
+			Column{HeaderKey: "reports.income_statement.col.fundraising", Align: AlignRight},
+			Column{HeaderKey: "reports.income_statement.col.program", Align: AlignRight},
+			Column{HeaderKey: "reports.income_statement.col.total", Align: AlignRight},
+		)
+		return
+	}
 	for _, pr := range b.periods {
 		key := "reports.income_statement.col.period" // GranNone: a single "Period" column
 		if pr.label != "" {
@@ -308,6 +369,11 @@ func (b *isBuilder) section(tree []treeNode, typ, sectionKey, totalKey string, s
 	inSection := make(map[AccountID]bool)
 	colSum := make(map[AccountID][]int64) // [col] converted sum; col len(periods) = Total
 	ncols := len(b.periods) + 1
+	if b.functional && b.foldedAdmin == nil {
+		b.foldedAdmin = make(map[AccountID]int64)
+		b.foldedFr = make(map[AccountID]int64)
+		b.funcHas = make(map[AccountID]bool)
+	}
 
 	var fold func(id AccountID) []int64
 	fold = func(id AccountID) []int64 {
@@ -320,6 +386,16 @@ func (b *isBuilder) section(tree []treeNode, typ, sectionKey, totalKey string, s
 					sums[i] = b.perAcct[i][AccountID(id)]
 				}
 				sums[len(b.periods)] = b.total[AccountID(id)]
+				if b.functional {
+					// A leaf's Admin/Fundraising come straight from FunctionalMatrix; a
+					// classless (revenue) leaf simply has no entry, so funcHas stays false
+					// and its Admin/Fundraising render BLANK (Program == Total).
+					ad, adOK := b.adminRaw[AccountID(id)]
+					fr, frOK := b.frRaw[AccountID(id)]
+					b.foldedAdmin[id] = ad
+					b.foldedFr[id] = fr
+					b.funcHas[id] = adOK || frOK
+				}
 			}
 			colSum[id] = sums
 			return sums
@@ -328,6 +404,13 @@ func (b *isBuilder) section(tree []treeNode, typ, sectionKey, totalKey string, s
 			cs := fold(c)
 			for i := range sums {
 				sums[i] += cs[i]
+			}
+			if b.functional {
+				b.foldedAdmin[id] += b.foldedAdmin[c]
+				b.foldedFr[id] += b.foldedFr[c]
+				if b.funcHas[c] {
+					b.funcHas[id] = true
+				}
 			}
 		}
 		for _, c := range children[id] {
@@ -346,13 +429,15 @@ func (b *isBuilder) section(tree []treeNode, typ, sectionKey, totalKey string, s
 	b.sectionHeader(sectionKey)
 
 	sectionSum := make([]int64, ncols)
+	var secAdmin, secFr int64
+	var secFuncHas bool
 	var walk func(id AccountID)
 	walk = func(id AccountID) {
 		if !inSection[id] {
 			return
 		}
 		if isPlaceholder[id] {
-			b.amountRow(LabelableName(name[id]), applySign(colSum[id], sign), depth[id], RowSubtotal)
+			b.amountRow(LabelableName(name[id]), AccountID(id), colSum[id], depth[id], sign, RowSubtotal)
 			for _, c := range children[id] {
 				walk(c)
 			}
@@ -362,12 +447,25 @@ func (b *isBuilder) section(tree []treeNode, typ, sectionKey, totalKey string, s
 		for i := range sectionSum {
 			sectionSum[i] += colSum[id][i]
 		}
+		if b.functional {
+			secAdmin += b.foldedAdmin[id]
+			secFr += b.foldedFr[id]
+			if b.funcHas[id] {
+				secFuncHas = true
+			}
+		}
 	}
 	for _, r := range roots {
 		walk(r)
 	}
 
-	b.totalRow(totalKey, applySign(sectionSum, sign))
+	if b.functional {
+		// Section total: Admin/Fundraising = Σ leaves, Program = Total − Admin − Fundraising
+		// (residual), so Admin + Fundraising + Program == Total holds for the section total.
+		b.funcTotalRow(totalKey, secAdmin, secFr, sectionSum[len(b.periods)], sign, secFuncHas, RowSectionTotal)
+	} else {
+		b.totalRow(totalKey, applySign(sectionSum, sign))
+	}
 	return sectionSum // RAW net-debit sums (caller flips once for the net line)
 }
 
@@ -377,6 +475,19 @@ func (b *isBuilder) section(tree []treeNode, typ, sectionKey, totalKey string, s
 // currency leaf is left non-drillable (one link cannot reconcile a summed-across-
 // currencies converted cell -- the balance-sheet rule).
 func (b *isBuilder) leafRow(name string, id AccountID, depth int, sign int64) {
+	if b.functional {
+		// FUNCTIONAL layout: Admin | Fundraising | Program (residual) | Total. Only the
+		// Total cell drills (the functional cells are class aggregates / a residual, which
+		// no single currency-filtered drill reconciles). A classless revenue leaf has no
+		// Admin/Fundraising entry, so those render BLANK and Program == Total.
+		tot := MoneyCell(sign*b.total[id], b.target)
+		if d := b.leafDrill(id, period{from: b.p.From, to: b.p.To}); d != nil {
+			tot = tot.WithDrill(d)
+		}
+		cells := b.funcCells(TextCell(name), b.foldedAdmin[id], b.foldedFr[id], b.total[id], sign, b.funcHas[id], tot)
+		b.rows = append(b.rows, Row{Cells: cells, Indent: depth, Kind: RowData})
+		return
+	}
 	cells := make([]Cell, 0, len(b.periods)+2)
 	cells = append(cells, TextCell(name))
 	for i, pr := range b.periods {
@@ -393,6 +504,24 @@ func (b *isBuilder) leafRow(name string, id AccountID, depth int, sign int64) {
 	}
 	cells = append(cells, tot)
 	b.rows = append(b.rows, Row{Cells: cells, Indent: depth, Kind: RowData})
+}
+
+// funcCells builds the FUNCTIONAL-layout money cells [Admin, Fundraising, Program, Total]
+// for a row. admin/fr/tot are RAW net-debit sums (target currency); sign is the section
+// display sign. Program is the RESIDUAL Total − Admin − Fundraising, so the four foot
+// exactly. funcHas false (a classless revenue row) renders Admin/Fundraising BLANK and
+// Program == Total. totCell is the caller's pre-built Total cell (it may carry a drill).
+func (b *isBuilder) funcCells(nameCell Cell, admin, fr, tot, sign int64, funcHas bool, totCell Cell) []Cell {
+	prog := tot - admin - fr // residual; revenue (admin=fr=0) => Program == Total
+	cells := make([]Cell, 0, 5)
+	cells = append(cells, nameCell)
+	if funcHas {
+		cells = append(cells, MoneyCell(sign*admin, b.target), MoneyCell(sign*fr, b.target))
+	} else {
+		cells = append(cells, BlankMoneyCell(), BlankMoneyCell())
+	}
+	cells = append(cells, MoneyCell(sign*prog, b.target), totCell)
+	return cells
 }
 
 // leafDrill builds the DrillPeriod filter for a leaf's cell over the range pr (a
@@ -432,15 +561,32 @@ func (b *isBuilder) sectionHeader(key string) {
 }
 
 // amountRow appends a subtotal row for a placeholder parent: its name (a stored account
-// name / proper noun rendered as TEXT), one money cell per period, and the total. Not
-// drillable (a rollup spans many leaves).
-func (b *isBuilder) amountRow(nameCell Cell, cols []int64, indent int, kind RowKind) {
-	cells := make([]Cell, 0, len(cols)+1)
+// name / proper noun rendered as TEXT), then either the per-period cells + total, or (in
+// the FUNCTIONAL layout) the Admin/Fundraising/Program/Total functional cells folded over
+// its subtree. Not drillable (a rollup spans many leaves). `cols` carries the parent's
+// per-column colSum (col len(periods) is the Total); `id` keys its folded functional sums.
+func (b *isBuilder) amountRow(nameCell Cell, id AccountID, cols []int64, indent int, sign int64, kind RowKind) {
+	if b.functional {
+		tot := cols[len(b.periods)]
+		cells := b.funcCells(nameCell, b.foldedAdmin[id], b.foldedFr[id], tot, sign, b.funcHas[id], MoneyCell(sign*tot, b.target))
+		b.rows = append(b.rows, Row{Cells: cells, Indent: indent, Kind: kind})
+		return
+	}
+	signed := applySign(cols, sign)
+	cells := make([]Cell, 0, len(signed)+1)
 	cells = append(cells, nameCell)
-	for _, v := range cols {
+	for _, v := range signed {
 		cells = append(cells, MoneyCell(v, b.target))
 	}
 	b.rows = append(b.rows, Row{Cells: cells, Indent: indent, Kind: kind})
+}
+
+// funcTotalRow appends a FUNCTIONAL-layout section total (Total revenue / Total expenses):
+// the label, then Admin | Fundraising | Program (residual) | Total. admin/fr/tot are RAW
+// net-debit section sums; Program = Total − Admin − Fundraising, so the row foots.
+func (b *isBuilder) funcTotalRow(key string, admin, fr, tot, sign int64, funcHas bool, kind RowKind) {
+	cells := b.funcCells(LabelCell(key), admin, fr, tot, sign, funcHas, MoneyCell(sign*tot, b.target))
+	b.rows = append(b.rows, Row{Cells: cells, Indent: 0, Kind: kind})
 }
 
 // totalRow appends a section total row from a per-column value slice (already sign-
@@ -463,6 +609,12 @@ func (b *isBuilder) totalRow(key string, cols []int64) {
 // negative (the money formatter renders the sign); it is only ever emitted when nonzero
 // somewhere, so a functional-currency-only statement never shows it.
 func (b *isBuilder) fxLine(key string, cols []int64) {
+	if b.functional {
+		// FX remeasurement has no functional class (it is a whole-org monetary-balance
+		// effect), so it populates only the Total column; Admin/Fundraising/Program blank.
+		b.funcReconcileRow(key, cols[len(b.periods)], RowSectionTotal)
+		return
+	}
 	cells := make([]Cell, 0, len(cols)+1)
 	cells = append(cells, LabelCell(key))
 	for _, v := range cols {
@@ -473,6 +625,13 @@ func (b *isBuilder) fxLine(key string, cols []int64) {
 
 // netLine appends the grand net surplus/deficit row (Revenue - Expense) per column.
 func (b *isBuilder) netLine(key string, cols []int64) {
+	if b.functional {
+		// The change in net assets is a bottom-line reconciling figure (it folds in the FX
+		// line, which has no functional class), so it populates only the Total column;
+		// Admin/Fundraising/Program are left blank rather than shown not-footing.
+		b.funcReconcileRow(key, cols[len(b.periods)], RowTotal)
+		return
+	}
 	cells := make([]Cell, 0, len(cols)+1)
 	cells = append(cells, LabelCell(key))
 	for _, v := range cols {
@@ -481,9 +640,25 @@ func (b *isBuilder) netLine(key string, cols []int64) {
 	b.rows = append(b.rows, Row{Cells: cells, Indent: 0, Kind: RowTotal})
 }
 
-// labelRow builds a heading row's cells: the label + one blank money cell per period +
-// the blank total cell.
+// funcReconcileRow appends a FUNCTIONAL-layout reconciling row (FX / change in net assets):
+// the label, blank Admin/Fundraising/Program cells, and the figure in the Total column.
+// These lines carry no functional class, so only the Total column is populated.
+func (b *isBuilder) funcReconcileRow(key string, total int64, kind RowKind) {
+	cells := []Cell{
+		LabelCell(key),
+		BlankMoneyCell(), BlankMoneyCell(), BlankMoneyCell(),
+		MoneyCell(total, b.target),
+	}
+	b.rows = append(b.rows, Row{Cells: cells, Indent: 0, Kind: kind})
+}
+
+// labelRow builds a heading row's cells: the label + one blank money cell per data column.
+// In the FUNCTIONAL layout the data columns are Admin/Fundraising/Program/Total (4); else
+// one blank per period + the blank total cell.
 func (b *isBuilder) labelRow(label Cell) []Cell {
+	if b.functional {
+		return []Cell{label, BlankMoneyCell(), BlankMoneyCell(), BlankMoneyCell(), BlankMoneyCell()}
+	}
 	cells := make([]Cell, 0, len(b.periods)+2)
 	cells = append(cells, label)
 	for range b.periods {

@@ -558,10 +558,21 @@ func (tk *Toolkit) FundPeriodStatement(ctx context.Context, s Scope, f FundID, f
 // Like periodActivityRows, it preserves AccountID, so the CALLER (FunctionalMatrix)'s D19
 // IC-exclusion loop drops IC accounts over this output; the helper does not (re)apply excl.
 func (tk *Toolkit) functionalActivityRows(ctx context.Context, from, to string, sub ids.SubsidiaryID) ([]store.FunctionalCell, error) {
-	if len(tk.Params.ProgramScope) == 0 {
+	// Fast path: no fund, no program scope -> the org-wide FunctionalActivity, byte-for-
+	// byte as before (so functional_expenses / the unscoped income statement do not move).
+	if tk.Params.Fund == 0 && len(tk.Params.ProgramScope) == 0 {
 		return tk.store.FunctionalActivity(ctx, from, to, sub)
 	}
-	rows, err := tk.store.FunctionalActivityByProgram(ctx, from, to, sub)
+	// A FUND filter (Statement of Activities' fund selector at total granularity) reads the
+	// fund-scoped functional activity; otherwise the program-keyed variant. Both carry a
+	// program column, so a Fund+program-subtree selection composes (InProgramScope below).
+	var rows []store.FunctionalCellProgram
+	var err error
+	if tk.Params.Fund != 0 {
+		rows, err = tk.store.FundFunctionalActivity(ctx, tk.Params.Fund, from, to, sub)
+	} else {
+		rows, err = tk.store.FunctionalActivityByProgram(ctx, from, to, sub)
+	}
 	if err != nil {
 		return nil, err
 	}

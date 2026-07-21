@@ -1,20 +1,20 @@
-Line,Period,Total
-Revenue,,
-Revenue,75096.52,75096.52
-Contributions,63080.58,63080.58
-Government Grants,7815.94,7815.94
-Program Service Fees,1200.00,1200.00
-Event Income,3000.00,3000.00
-Total revenue,75096.52,75096.52
-Expenses,,
-Expenses,27803.14,27803.14
-Salaries,16500.00,16500.00
-Program Supplies,2389.71,2389.71
-Food Purchases,4238.43,4238.43
-Occupancy,3050.00,3050.00
-Insurance,600.00,600.00
-Bank Fees,25.00,25.00
-Event Costs,1000.00,1000.00
-Total expenses,27803.14,27803.14
-FX remeasurement gain/(loss),-461.74,-461.74
-Change in net assets,46831.64,46831.64
+Line,Admin,Fundraising,Program,Total
+Revenue,,,,
+Revenue,,,75096.52,75096.52
+Contributions,,,63080.58,63080.58
+Government Grants,,,7815.94,7815.94
+Program Service Fees,,,1200.00,1200.00
+Event Income,,,3000.00,3000.00
+Total revenue,,,75096.52,75096.52
+Expenses,,,,
+Expenses,3675.00,1000.00,23128.14,27803.14
+Salaries,,,16500.00,16500.00
+Program Supplies,,,2389.71,2389.71
+Food Purchases,,,4238.43,4238.43
+Occupancy,3050.00,0.00,0.00,3050.00
+Insurance,600.00,0.00,0.00,600.00
+Bank Fees,25.00,0.00,0.00,25.00
+Event Costs,0.00,1000.00,0.00,1000.00
+Total expenses,3675.00,1000.00,23128.14,27803.14
+FX remeasurement gain/(loss),,,,-461.74
+Change in net assets,,,,46831.64

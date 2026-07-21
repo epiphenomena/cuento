@@ -334,6 +334,38 @@ func (s *Store) FunctionalActivityByProgram(ctx context.Context, from, to string
 	return out, nil
 }
 
+// FundFunctionalActivity is the fund-FILTERED variant of FunctionalActivityByProgram:
+// per (expense account, functional_class, program, currency) it returns the signed
+// activity over from <= date <= to in scopeSub's descendant closure, restricted to ONE
+// fund (sp.fund_id = fundID). The Statement of Activities' FUND selector at TOTAL
+// granularity uses it to split a fund-scoped statement into the Admin/Fundraising/
+// Program functional columns; the program column keeps a Fund+program-subtree selection
+// composable (the report keeps InProgramScope programs). Only a real fund (>0) is ever
+// selected.
+func (s *Store) FundFunctionalActivity(ctx context.Context, fundID ids.FundID, from, to string, scopeSub ids.SubsidiaryID) ([]FunctionalCellProgram, error) {
+	rows, err := s.q.FundFunctionalActivity(ctx, sqlc.FundFunctionalActivityParams{
+		ID:     int64(scopeSub),
+		FundID: sql.NullInt64{Int64: int64(fundID), Valid: true},
+		Date:   from,
+		Date_2: to,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store: fund functional activity (fund %d) %s..%s (scope %d): %w", fundID, from, to, scopeSub, err)
+	}
+	out := make([]FunctionalCellProgram, len(rows))
+	for i, r := range rows {
+		// functional_class and program_id are NOT NULL-filtered in SQL, so Valid holds.
+		out[i] = FunctionalCellProgram{
+			AccountID:       r.AccountID,
+			FunctionalClass: r.FunctionalClass.String,
+			ProgramID:       ids.ProgramID(r.ProgramID.Int64),
+			Currency:        r.Currency,
+			Amount:          r.Activity,
+		}
+	}
+	return out, nil
+}
+
 // ProgramActivity returns, per (program, account, currency), the signed activity
 // over from <= date <= to in scopeSub's descendant closure. Only revenue/expense
 // splits carry a program (D24). Rows are raw per (program, account) -- the tree

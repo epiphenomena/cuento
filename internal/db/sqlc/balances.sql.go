@@ -422,6 +422,75 @@ func (q *Queries) FunctionalActivityByProgram(ctx context.Context, arg Functiona
 	return items, nil
 }
 
+const fundFunctionalActivity = `-- name: FundFunctionalActivity :many
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT sp.account_id, sp.functional_class, sp.program_id, t.currency,
+       CAST(SUM(sp.amount) AS INTEGER) AS activity
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+WHERE t.deleted = 0
+  AND sp.functional_class IS NOT NULL
+  AND sp.program_id IS NOT NULL
+  AND sp.fund_id = ?
+  AND t.date >= ?
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY sp.account_id, sp.functional_class, sp.program_id, t.currency
+ORDER BY sp.account_id, sp.functional_class, sp.program_id, t.currency
+`
+
+type FundFunctionalActivityParams struct {
+	ID     int64
+	FundID sql.NullInt64
+	Date   string
+	Date_2 string
+}
+
+type FundFunctionalActivityRow struct {
+	AccountID       ids.AccountID
+	FunctionalClass sql.NullString
+	ProgramID       sql.NullInt64
+	Currency        string
+	Activity        int64
+}
+
+// Per (expense account, functional_class, program, currency): signed activity over
+// the period in scope, restricted to ONE fund (sp.fund_id = ?). The fund-FILTERED
+// variant of FunctionalActivity for the Statement of Activities' FUND selector at
+// TOTAL granularity. Params: scopeSub, fund_id, from, to.
+func (q *Queries) FundFunctionalActivity(ctx context.Context, arg FundFunctionalActivityParams) ([]FundFunctionalActivityRow, error) {
+	rows, err := q.db.QueryContext(ctx, fundFunctionalActivity, arg.ID, arg.FundID, arg.Date, arg.Date_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FundFunctionalActivityRow
+	for rows.Next() {
+		var i FundFunctionalActivityRow
+		if err := rows.Scan(
+			&i.AccountID,
+			&i.FunctionalClass,
+			&i.ProgramID,
+			&i.Currency,
+			&i.Activity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const fundBalancesAsOf = `-- name: FundBalancesAsOf :many
 WITH RECURSIVE scope(id) AS (
   SELECT s.id FROM subsidiaries s WHERE s.id = ?

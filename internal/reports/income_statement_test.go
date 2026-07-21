@@ -265,11 +265,22 @@ func TestIncomeStatementFXGolden(t *testing.T) {
 	checkGolden(t, "income_statement_fx.csv", csvBuf.Bytes())
 }
 
-// TestIncomeStatementGranNone exercises the DEFAULT (no-granularity) path: an absent
-// granularity param resolves to GranNone (web resolveParams), which the report renders as
-// a single "Period" column + the Total column (3 columns: Line, Period, Total). The
-// single period column equals the total column (one bucket), and the net + section labels
-// are present -- the whole-range statement reads correctly without comparative columns.
+// isFuncCols returns, for the FUNCTIONAL (GranNone) layout, the row's Admin, Fundraising,
+// Program, Total cells (columns 1..4) and whether the row has that shape.
+func isFuncCols(row reports.Row) (admin, fr, prog, tot reports.Cell, ok bool) {
+	if len(row.Cells) != 5 {
+		return reports.Cell{}, reports.Cell{}, reports.Cell{}, reports.Cell{}, false
+	}
+	return row.Cells[1], row.Cells[2], row.Cells[3], row.Cells[4], true
+}
+
+// TestIncomeStatementGranNone exercises the DEFAULT (no-granularity) path. At TOTAL
+// granularity the single "Period" column is DROPPED and replaced by three FUNCTIONAL
+// columns -- Admin (management), Fundraising, Program (the residual Total − Admin −
+// Fundraising) -- plus the Total column (5 columns: Line, Admin, Fundraising, Program,
+// Total), mirroring the functional-expenses statement. Per data / section-total row the
+// three functional columns FOOT to Total exactly; revenue rows (classless, D24) carry
+// BLANK Admin/Fundraising and Program == Total.
 func TestIncomeStatementGranNone(t *testing.T) {
 	f := fixture.New(t)
 	f.ExtendRates(t)
@@ -283,24 +294,75 @@ func TestIncomeStatementGranNone(t *testing.T) {
 		t.Fatalf("run GranNone: %v", err)
 	}
 
-	// Line + one Period column + Total = 3 columns.
-	if len(table.Columns) != 3 {
-		t.Fatalf("GranNone columns = %d, want 3 (Line, Period, Total)", len(table.Columns))
+	// Line + Admin + Fundraising + Program + Total = 5 columns, no Period column.
+	if len(table.Columns) != 5 {
+		t.Fatalf("GranNone columns = %d, want 5 (Line, Admin, Fundraising, Program, Total)", len(table.Columns))
 	}
-	if table.Columns[1].HeaderKey != "reports.income_statement.col.period" {
-		t.Errorf("GranNone period column header = %q, want the col.period key", table.Columns[1].HeaderKey)
+	wantHeaders := []string{
+		"reports.income_statement.col.line",
+		"reports.income_statement.col.admin",
+		"reports.income_statement.col.fundraising",
+		"reports.income_statement.col.program",
+		"reports.income_statement.col.total",
+	}
+	for i, want := range wantHeaders {
+		if table.Columns[i].HeaderKey != want {
+			t.Errorf("GranNone column %d header = %q, want %q", i, table.Columns[i].HeaderKey, want)
+		}
+	}
+	for _, c := range table.Columns {
+		if c.HeaderKey == "reports.income_statement.col.period" {
+			t.Errorf("GranNone still carries a Period column; it must be dropped")
+		}
 	}
 
-	// The single period column equals the total column, per money row (one bucket).
+	// Per DATA / SECTION-TOTAL row: Admin + Fundraising + Program == Total (exact, since
+	// Program is the residual). Skip the FX / net reconciling rows (no functional class).
+	reconciling := map[string]bool{
+		"reports.income_statement.fx_gain_loss": true,
+		"reports.income_statement.net":          true,
+	}
 	for _, row := range table.Rows {
-		if len(row.Cells) != 3 {
+		admin, fr, prog, tot, ok := isFuncCols(row)
+		if !ok || tot.Kind != reports.CellMoney || tot.Blank {
+			continue // heading row (blank Total)
+		}
+		if reconciling[row.Cells[0].Text] {
 			continue
 		}
-		per, tot := row.Cells[1], row.Cells[2]
-		if per.Kind == reports.CellMoney && !per.Blank && tot.Kind == reports.CellMoney && !tot.Blank {
-			if per.Minor != tot.Minor {
-				t.Errorf("GranNone row %q: period %d != total %d", row.Cells[0].Text, per.Minor, tot.Minor)
-			}
+		// Blank functional cells count as zero for the footing check.
+		sum := prog.Minor
+		if !admin.Blank {
+			sum += admin.Minor
+		}
+		if !fr.Blank {
+			sum += fr.Minor
+		}
+		if sum != tot.Minor {
+			t.Errorf("row %q: Admin+Fundraising+Program (%d) != Total (%d)", row.Cells[0].Text, sum, tot.Minor)
+		}
+	}
+
+	// A revenue row (Contributions): classless, so Admin/Fundraising BLANK, Program == Total.
+	if cells, ok := isRowFor(table, "Contributions"); ok && len(cells) == 5 {
+		if !cells[1].Blank || !cells[2].Blank {
+			t.Errorf("revenue row Contributions: Admin/Fundraising should be blank, got %+v / %+v", cells[1], cells[2])
+		}
+		if cells[3].Minor != cells[4].Minor {
+			t.Errorf("revenue row Contributions: Program (%d) != Total (%d)", cells[3].Minor, cells[4].Minor)
+		}
+	} else {
+		t.Errorf("no 5-column Contributions row")
+	}
+
+	// A pure-management expense (Occupancy): Admin == Total, Fundraising 0, Program 0 EXACTLY
+	// (no residual rounding noise on a single-class account).
+	if cells, ok := isRowFor(table, "Occupancy"); ok && len(cells) == 5 {
+		if cells[3].Blank || cells[3].Minor != 0 {
+			t.Errorf("pure-management Occupancy: Program should be 0 exactly, got %+v", cells[3])
+		}
+		if cells[1].Minor != cells[4].Minor {
+			t.Errorf("pure-management Occupancy: Admin (%d) != Total (%d)", cells[1].Minor, cells[4].Minor)
 		}
 	}
 
@@ -310,6 +372,154 @@ func TestIncomeStatementGranNone(t *testing.T) {
 		// the whole-range NetIncome-txn-date 4,099,506 (vs the quarterly sum-of-periods
 		// 4,099,507 -- the one-minor-unit rounding-grain difference, expected).
 		t.Errorf("GranNone net = %d/%v, want 4099506 (whole-range single-bucket rounding)", net, ok)
+	}
+}
+
+// TestIncomeStatementFunctionalTiesFunctionalExpenses cross-checks the new functional
+// columns against an INDEPENDENT report: the Statement of Activities' Admin, Fundraising
+// AND (residual) Program expense-section totals must equal the functional-expenses (990
+// Part IX) grand-total's management, fundraising and program columns EXACTLY -- both derive
+// from FunctionalMatrix at the transaction-date rate over the same scope/period/target.
+//
+// It runs BOTH without and WITH the Lempira FX exposure (ExtendFX). The FX case is the
+// load-bearing one: because Program is the residual (Total − Admin − Fundraising), the
+// horizontal foot holds unconditionally even if FunctionalMatrix silently under-counted
+// Admin/Fundraising in the FX currency -- only this direct fe<->is tie proves the
+// FX-currency expense is genuinely class-tagged and NOT quietly dumped into the residual.
+func TestIncomeStatementFunctionalTiesFunctionalExpenses(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		fx   bool
+	}{
+		{"no FX", false},
+		{"with FX exposure", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := fixture.New(t)
+			f.ExtendRates(t)
+			if tc.fx {
+				f.ExtendFX(t)
+			}
+			ctx := context.Background()
+
+			feP := feGoldenParams(f)
+			feT, err := functionalExpensesReport(t).Run(ctx, reports.NewToolkit(f.Store, feP), feP)
+			if err != nil {
+				t.Fatalf("run functional expenses: %v", err)
+			}
+			feGrand, ok := feRowFor(feT, "reports.functional_expenses.total")
+			if !ok {
+				t.Fatal("no functional-expenses grand-total row")
+			}
+			// FE grand cols: Line, Program, Management, Fundraising, Total.
+			feProg, feMgmt, feFund := feGrand[1].Minor, feGrand[2].Minor, feGrand[3].Minor
+
+			isP := isGoldenParams(f)
+			isP.Granularity = reports.GranNone
+			isT, err := incomeStatementReport(t).Run(ctx, reports.NewToolkit(f.Store, isP), isP)
+			if err != nil {
+				t.Fatalf("run income statement: %v", err)
+			}
+			var isAdmin, isFund, isProg int64
+			found := false
+			for _, row := range isT.Rows {
+				if row.Cells[0].Text == "reports.income_statement.total.expenses" && len(row.Cells) == 5 {
+					isAdmin, isFund, isProg = row.Cells[1].Minor, row.Cells[2].Minor, row.Cells[3].Minor
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("no 5-column total-expenses row in the income statement")
+			}
+			if isAdmin != feMgmt {
+				t.Errorf("income-statement Admin (%d) != functional-expenses management (%d)", isAdmin, feMgmt)
+			}
+			if isFund != feFund {
+				t.Errorf("income-statement Fundraising (%d) != functional-expenses fundraising (%d)", isFund, feFund)
+			}
+			if isProg != feProg {
+				t.Errorf("income-statement Program (%d) != functional-expenses program (%d) -- residual off by rounding grain / dropped FX-currency class?", isProg, feProg)
+			}
+		})
+	}
+}
+
+// TestIncomeStatementFundFunctionalColumns is the fund + total-granularity blind spot:
+// with a fund selected the new functional columns must be FUND-AWARE (org-wide Admin/
+// Fundraising against a fund-scoped Total would make the residual Program garbage). Scoped
+// to Beca Agua at GranNone: every data / section-total row foots (Admin+Fundraising+Program
+// == Total) AND the leaf Admin/Fundraising sum to the section Admin/Fundraising totals.
+func TestIncomeStatementFundFunctionalColumns(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := context.Background()
+	rep := incomeStatementReport(t)
+
+	p := isGoldenParams(f)
+	p.Granularity = reports.GranNone
+	p.Fund = reports.FundID(f.IDs.BecaAgua)
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run fund-scoped GranNone: %v", err)
+	}
+	if len(table.Columns) != 5 {
+		t.Fatalf("fund GranNone columns = %d, want 5", len(table.Columns))
+	}
+
+	reconciling := map[string]bool{
+		"reports.income_statement.fx_gain_loss": true,
+		"reports.income_statement.net":          true,
+	}
+	// Horizontal footing on data + section-total rows.
+	for _, row := range table.Rows {
+		admin, fr, prog, tot, ok := isFuncCols(row)
+		if !ok || tot.Kind != reports.CellMoney || tot.Blank || reconciling[row.Cells[0].Text] {
+			continue
+		}
+		sum := prog.Minor
+		if !admin.Blank {
+			sum += admin.Minor
+		}
+		if !fr.Blank {
+			sum += fr.Minor
+		}
+		if sum != tot.Minor {
+			t.Errorf("fund row %q: Admin+Fundraising+Program (%d) != Total (%d)", row.Cells[0].Text, sum, tot.Minor)
+		}
+	}
+
+	// Vertical footing: Σ expense-leaf Admin == the expense section's Admin total (proves
+	// the fund-aware functional split feeds the same fund-scoped rows as the Total backbone).
+	var leafAdmin, leafFund int64
+	inExpense := false
+	for _, row := range table.Rows {
+		name := row.Cells[0].Text
+		switch name {
+		case "reports.income_statement.section.expenses":
+			inExpense = true
+			continue
+		case "reports.income_statement.total.expenses":
+			admin, fr, _, _, _ := isFuncCols(row)
+			if !admin.Blank && admin.Minor != leafAdmin {
+				t.Errorf("expense-section Admin total (%d) != Σ leaf Admin (%d)", admin.Minor, leafAdmin)
+			}
+			if !fr.Blank && fr.Minor != leafFund {
+				t.Errorf("expense-section Fundraising total (%d) != Σ leaf Fundraising (%d)", fr.Minor, leafFund)
+			}
+			inExpense = false
+			continue
+		}
+		if !inExpense || row.Kind != reports.RowData {
+			continue
+		}
+		if admin, fr, _, _, ok := isFuncCols(row); ok {
+			if !admin.Blank {
+				leafAdmin += admin.Minor
+			}
+			if !fr.Blank {
+				leafFund += fr.Minor
+			}
+		}
 	}
 }
 

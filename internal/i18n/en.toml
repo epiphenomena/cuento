@@ -1332,6 +1332,12 @@ other = "Statement of Activities"
 other = "Line"
 [reports.income_statement.col.period]
 other = "Period"
+[reports.income_statement.col.admin]
+other = "Admin"
+[reports.income_statement.col.fundraising]
+other = "Fundraising"
+[reports.income_statement.col.program]
+other = "Program"
 [reports.income_statement.col.total]
 other = "Total"
 [reports.income_statement.section.revenue]

@@ -354,6 +354,46 @@ test('reports: open the income statement, set period + granularity, see the R/E 
   expect(body).toContain(',');
 });
 
+// The income statement at TOTAL granularity (granularity=total / none) drops the single
+// "Period" column and instead shows three FUNCTIONAL columns -- Admin | Fundraising |
+// Program -- plus Total, mirroring the functional-expenses statement. Assert the CSV
+// header carries those four column labels and no "Period" column, and that a data row
+// foots (Admin + Fundraising + Program == Total) on the CSV.
+test('reports: income statement at total granularity shows Admin/Fundraising/Program functional columns', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  await page.goto(`${IS}?scope=1&from=2025-01-01&to=2026-06-30&granularity=total&currency=USD`);
+
+  const table = page.locator('table.report-table');
+  await expect(table).toBeVisible();
+
+  // The functional column headers are present; the Period header is gone.
+  const headerText = await page.locator('table.report-table thead').innerText();
+  expect(headerText).toContain('Admin');
+  expect(headerText).toContain('Fundraising');
+  expect(headerText).toContain('Program');
+  expect(headerText).toContain('Total');
+  expect(headerText).not.toContain('Period');
+
+  // CSV: header shape + a foot check on the "Total expenses" section-total row.
+  const resp = await page.request.get(
+    `${IS}.csv?scope=1&from=2025-01-01&to=2026-06-30&granularity=total&currency=USD`,
+  );
+  expect(resp.status()).toBe(200);
+  const rows = (await resp.text()).trim().split('\n');
+  const header = rows.find((r) => r.startsWith('Line,'));
+  expect(header).toBe('Line,Admin,Fundraising,Program,Total');
+  const expTotal = rows.find((r) => r.startsWith('Total expenses,'));
+  expect(expTotal).toBeTruthy();
+  const [, admin, fundraising, program, total] = expTotal
+    .split(',')
+    .map((c) => Math.round(parseFloat(c || '0') * 100));
+  expect(admin + fundraising + program).toBe(total);
+});
+
 // p15.3d DRILL-DOWN: seed a balanced transfer (so the trial balance has a non-zero
 // balance to drill), open the trial balance, click a balance's DRILL link, land on
 // the transaction list, and see rows -- each linking to the txn editor + history

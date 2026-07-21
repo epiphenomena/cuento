@@ -1327,6 +1327,12 @@ other = "Estado de Actividades"
 other = "Linea"
 [reports.income_statement.col.period]
 other = "Periodo"
+[reports.income_statement.col.admin]
+other = "Admin"
+[reports.income_statement.col.fundraising]
+other = "Recaudacion de fondos"
+[reports.income_statement.col.program]
+other = "Programa"
 [reports.income_statement.col.total]
 other = "Total"
 [reports.income_statement.section.revenue]

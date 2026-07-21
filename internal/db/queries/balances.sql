@@ -218,6 +218,36 @@ WHERE t.deleted = 0
 GROUP BY sp.account_id, sp.functional_class, sp.program_id, t.currency
 ORDER BY sp.account_id, sp.functional_class, sp.program_id, t.currency;
 
+-- name: FundFunctionalActivity :many
+-- Per (expense account, functional_class, program, currency): signed activity over
+-- the period in scope, restricted to ONE fund (sp.fund_id = ?). It is the fund-
+-- FILTERED variant of FunctionalActivity, used by the Statement of Activities' FUND
+-- selector at TOTAL granularity, where the report splits each fund-scoped row into the
+-- Admin (management) / Fundraising / Program functional columns. Like
+-- FunctionalActivityByProgram it also groups by program_id so a Fund+program-subtree
+-- selection composes (the report keeps InProgramScope programs and sums the rest out).
+-- Only expense splits carry BOTH a class (D21) and a program (D24), so the NOT NULL
+-- filters restrict to exactly the class-tagged expense activity. Only a real fund (>0)
+-- is ever selected. Params: scopeSub, fund_id, from, to.
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT sp.account_id, sp.functional_class, sp.program_id, t.currency,
+       CAST(SUM(sp.amount) AS INTEGER) AS activity
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+WHERE t.deleted = 0
+  AND sp.functional_class IS NOT NULL
+  AND sp.program_id IS NOT NULL
+  AND sp.fund_id = ?
+  AND t.date >= ?
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY sp.account_id, sp.functional_class, sp.program_id, t.currency
+ORDER BY sp.account_id, sp.functional_class, sp.program_id, t.currency;
+
 -- name: ProgramActivity :many
 -- Per (program, account, currency): signed activity over the period in scope. Only
 -- revenue/expense splits carry a program (D24), so the NOT NULL filter restricts to
