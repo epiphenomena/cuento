@@ -80,12 +80,26 @@ func TestFundStatementLineDetailGolden(t *testing.T) {
 	// invariant: a header's Indent is <= the following rows in its subtree, and a leaf's
 	// detail sits exactly one level deeper.
 	var leafHeaders int
+	var typeHeaders int
+	seenTypeHeader := map[string]bool{}
 	lineSum := map[string]int64{}
 	curLeafIndent := -1 // indent of the leaf header we are inside (-1 = not in a leaf)
 	for i, row := range table.Rows {
 		switch row.Kind {
 		case reports.RowSubtotal:
-			// Any header row: non-empty TEXT account/placeholder name.
+			// The TYPE tier is the TOP level (p26 fund #7): a RowSubtotal at Indent 0 whose
+			// first cell is a localized LABEL (an account-type section header: Assets, Revenue,
+			// ...). Every account/placeholder header sits BELOW it (Indent > 0) with a verbatim
+			// TEXT account name.
+			if row.Indent == 0 {
+				if row.Cells[0].Kind != reports.CellLabel || row.Cells[0].Text == "" {
+					t.Errorf("type header row has no LABEL key: %+v", row.Cells)
+				}
+				typeHeaders++
+				seenTypeHeader[row.Cells[0].Text] = true
+				continue
+			}
+			// Any account header row: non-empty TEXT account/placeholder name.
 			if len(row.Cells) == 0 || row.Cells[0].Kind != reports.CellText || row.Cells[0].Text == "" {
 				t.Errorf("header row has no TEXT account name: %+v", row.Cells)
 			}
@@ -137,6 +151,18 @@ func TestFundStatementLineDetailGolden(t *testing.T) {
 	// The Building Fund touches exactly three LEAF accounts (Contributions, Checking, Building).
 	if leafHeaders != 3 {
 		t.Errorf("leaf account headers = %d, want 3 (Contributions, Checking US, Building)", leafHeaders)
+	}
+	// TYPE tier: the Building Fund's accounts span exactly two types -- Assets (Checking US,
+	// Building) and Revenue (Contributions) -- so there are two top-tier type headers, each
+	// a reused balance-sheet/income-statement section key.
+	if typeHeaders != 2 {
+		t.Errorf("type headers = %d, want 2 (Assets, Revenue)", typeHeaders)
+	}
+	if !seenTypeHeader["reports.balance_sheet.section.assets"] {
+		t.Errorf("missing Assets type header; saw %v", seenTypeHeader)
+	}
+	if !seenTypeHeader["reports.income_statement.section.revenue"] {
+		t.Errorf("missing Revenue type header; saw %v", seenTypeHeader)
 	}
 
 	exps := goldenExps(t, f)

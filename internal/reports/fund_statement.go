@@ -84,7 +84,7 @@ func runFundStatement(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 		return Table{}, err
 	}
 	tree := toTreeNodes(storeTree)
-	children, roots, isPlaceholder, name, depth, _ := indexTree(tree)
+	children, roots, isPlaceholder, name, depth, typeOf := indexTree(tree)
 
 	t := Table{Columns: cols}
 
@@ -146,11 +146,18 @@ func runFundStatement(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 		return BlankMoneyCell(), ""
 	}
 
+	// ACCOUNT TYPE is the TOP tier of the hierarchy (p26 fund #7): the account tree nests
+	// one level deeper so a localized TYPE header (Assets, Liabilities, Net assets, Revenue,
+	// Expenses -- reusing the balance-sheet/income-statement section keys) sits at Indent 0
+	// and SUBTOTALS its accounts' native activity (a rollup; the per-leaf figures are
+	// unchanged). typeShift = +1 pushes every tree row down to make room for the type tier.
+	const typeShift = 1
+
 	// Walk the tree pre-order (parent immediately precedes its subtree -- the treetable
 	// data-depth contract). A placeholder parent WITH activity emits one nested subtotal
-	// row at its depth; a leaf the fund touches emits a collapsible header at its depth,
-	// then its detail lines and per-currency subtotal one level deeper (so the header is a
-	// parent whose descendants -- the lines -- collapse as a unit).
+	// row at its (shifted) depth; a leaf the fund touches emits a collapsible header at its
+	// depth, then its detail lines and per-currency subtotal one level deeper (so the header
+	// is a parent whose descendants -- the lines -- collapse as a unit).
 	var walk func(id AccountID)
 	walk = func(id AccountID) {
 		if !hasAct[id] {
@@ -159,7 +166,7 @@ func runFundStatement(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 		if isPlaceholder[id] {
 			cell, ccy := rollup(id)
 			t.Rows = append(t.Rows, Row{
-				Indent: depth[id],
+				Indent: depth[id] + typeShift,
 				Cells: []Cell{
 					TextCell(name[id]),
 					TextCell(""), TextCell(""),
@@ -176,14 +183,14 @@ func runFundStatement(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 		}
 
 		lines := byAcct[id]
-		lineDepth := depth[id] + 1
+		lineDepth := depth[id] + typeShift + 1
 
 		// Leaf account header: a collapsible parent (its detail lines follow one level
 		// deeper). Its amount cell rolls up the account's single-currency native sum (or
 		// blank if the account is multi-currency, mirroring the placeholder convention).
 		hdrCell, hdrCcy := rollup(id)
 		t.Rows = append(t.Rows, Row{
-			Indent: depth[id],
+			Indent: depth[id] + typeShift,
 			Cells: []Cell{
 				TextCell(name[id]),
 				TextCell(""), TextCell(""),
@@ -237,8 +244,50 @@ func runFundStatement(ctx context.Context, tk *Toolkit, p Params) (Table, error)
 			})
 		}
 	}
-	for _, r := range roots {
-		walk(r)
+	// Group the roots by account TYPE (asset/liability/equity/revenue/expense) and emit
+	// each type as the top tier: a TYPE header row (Indent 0) that SUBTOTALS the type's
+	// native activity, then the type's account subtree one level deeper. A type with no
+	// active account in this fund is skipped entirely. The type subtotal is a rollup of the
+	// same per-leaf figures (exact int64), single-currency-or-blank per the native
+	// convention (a type spanning currencies has no honest single native figure).
+	order, byType := rootsByType(roots, typeOf)
+	for _, typ := range order {
+		// Does this type carry any activity in this fund? Skip the whole tier if not.
+		typeSum := map[string]int64{}
+		anyAct := false
+		for _, r := range byType[typ] {
+			if !hasAct[r] {
+				continue
+			}
+			anyAct = true
+			for ccy, v := range subtreeSum[r] {
+				typeSum[ccy] += v
+			}
+		}
+		if !anyAct {
+			continue
+		}
+		// Type header (Indent 0): a single-currency native rollup, else blank.
+		typeCell, typeCcy := BlankMoneyCell(), ""
+		if len(typeSum) == 1 {
+			for ccy, v := range typeSum {
+				typeCell, typeCcy = MoneyCell(v, ccy), ccy
+			}
+		}
+		t.Rows = append(t.Rows, Row{
+			Indent: 0,
+			Cells: []Cell{
+				LabelCell(accountTypeHeaderKey[typ]),
+				TextCell(""), TextCell(""),
+				TextCell(typeCcy),
+				typeCell,
+				BlankMoneyCell(),
+			},
+			Kind: RowSubtotal,
+		})
+		for _, r := range byType[typ] {
+			walk(r)
+		}
 	}
 
 	return t, nil

@@ -769,6 +769,72 @@ func indexTree(tree []treeNode) (
 	return children, roots, isPlaceholder, name, depth, typeOf
 }
 
+// accountTypeOrder is the fixed top-tier order for account-type grouping (asset ->
+// liability -> equity -> revenue -> expense), the balance-sheet-then-income-statement
+// reading order. The fund reports (fund_statement, fund_period) group their account
+// tree under these TYPE headers.
+var accountTypeOrder = []string{"asset", "liability", "equity", "revenue", "expense"}
+
+// accountTypeHeaderKey maps an account type to the LOCALIZED section-header catalog key,
+// REUSING the existing balance-sheet and income-statement section keys (no new keys). The
+// nonprofit "equity" type is the balance sheet's Net-Assets section (FX Clearing/Opening
+// Balances are typed equity; the balance sheet groups them under Net assets), so equity
+// maps to the net_assets key. An unknown type yields "" (skipped by the caller).
+var accountTypeHeaderKey = map[string]string{
+	"asset":     "reports.balance_sheet.section.assets",
+	"liability": "reports.balance_sheet.section.liabilities",
+	"equity":    "reports.balance_sheet.section.net_assets",
+	"revenue":   "reports.income_statement.section.revenue",
+	"expense":   "reports.income_statement.section.expenses",
+}
+
+// accountTypeTotalKey maps an account type to the LOCALIZED "Total X" catalog key
+// (Total assets / Total liabilities / Total net assets / Total revenue / Total expenses),
+// reusing the same existing keys as the headers. Used for the fund_period per-type total
+// rows. equity -> Total net assets (see accountTypeHeaderKey).
+var accountTypeTotalKey = map[string]string{
+	"asset":     "reports.balance_sheet.total.assets",
+	"liability": "reports.balance_sheet.total.liabilities",
+	"equity":    "reports.balance_sheet.total.net_assets",
+	"revenue":   "reports.income_statement.total.revenue",
+	"expense":   "reports.income_statement.total.expenses",
+}
+
+// rootsByType buckets the account-tree ROOTS by their own account type, returned in the
+// fixed accountTypeOrder (skipping types with no roots). Each root's whole subtree shares
+// its type in this chart (the Revenue/Expenses placeholder parents and their children are
+// uniform; asset/liability/equity accounts are natural roots), so bucketing at the root
+// level is sound. Roots of an unknown/empty type are dropped into a trailing "" bucket so
+// nothing is silently lost; the caller decides how to render it.
+func rootsByType(roots []AccountID, typeOf map[AccountID]string) (order []string, byType map[string][]AccountID) {
+	byType = make(map[string][]AccountID)
+	for _, r := range roots {
+		byType[typeOf[r]] = append(byType[typeOf[r]], r)
+	}
+	for _, typ := range accountTypeOrder {
+		if len(byType[typ]) > 0 {
+			order = append(order, typ)
+		}
+	}
+	// Any root of an unrecognized type still renders (under a blank header) so the report
+	// never drops accounts; in the standard chart there are none.
+	if len(byType[""]) > 0 {
+		order = append(order, "")
+	}
+	for typ := range byType {
+		known := typ == ""
+		for _, k := range accountTypeOrder {
+			if k == typ {
+				known = true
+			}
+		}
+		if !known {
+			order = append(order, typ)
+		}
+	}
+	return order, byType
+}
+
 // toTreeNodes reduces the store's account tree rows to the local treeNode shape (so the
 // rest of this file never names the generated sqlc type). The store returns pre-order,
 // which toTreeNodes preserves (children order = the chart-of-accounts sort order).
