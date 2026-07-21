@@ -1892,10 +1892,12 @@ other = "Expense review"
 other = "My expense reports"
 [expense.list.intro]
 other = "Draft a report of proposed revenue and expense lines, then submit it for review."
-[expense.list.col.id]
-other = "Report"
-[expense.list.col.subsidiary]
-other = "Subsidiary"
+[expense.list.col.date]
+other = "Date"
+[expense.list.col.description]
+other = "Description"
+[expense.list.col.memo]
+other = "Memo"
 [expense.list.col.status]
 other = "Status"
 [expense.list.col.actions]

@@ -318,6 +318,62 @@ func TestExpenseZeroLineSubmit422(t *testing.T) {
 	}
 }
 
+// TestExpenseListTableColumns (8b): the "my reports" list is a clear table keyed on the
+// report's stored main-split header values (date/description/memo) + status + actions.
+// It proves the list surfaces the DATE (via the money formatter -- the user's DateFormat,
+// not a raw ISO string), the DESCRIPTION (the creator's display name, 8a default), and the
+// MEMO ("Expense report", 8a default) for a report, with the localized column headers and
+// the Open action preserved.
+func TestExpenseListTableColumns(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	sub := mkSubmitter(t, st, "sub_list")
+
+	// Create a report (description + memo auto-populate on create: 8a defaults), then set a
+	// DATE via the header form so the date column has a value to assert (a fresh report has
+	// no date -- the submitter side never defaults to today). The header form writes ALL of
+	// date/memo/notes on every save (a partial post blanks the untouched ones), so the memo
+	// is carried through so the 8a default survives -- exactly how the single header form posts.
+	rec := asUser(t, h, sm, sub, http.MethodPost, "/expenses", url.Values{"subsidiary_id": {"1"}})
+	repID := reportIDFromRedirect(t, rec)
+	// Test users default to ISO DateFormat, so the stored ISO renders identically here; this
+	// asserts the value flows THROUGH the money formatter (a bare string would be a lint/rule
+	// violation), while a non-identity format is exercised by the money package's own tests.
+	const wantDate = "2026-07-15"
+	if rec := asUser(t, h, sm, sub, http.MethodPost, "/expenses/"+itoa(repID)+"/header",
+		url.Values{"date": {wantDate}, "memo": {"Expense report"}}); rec.Code >= 400 {
+		t.Fatalf("set header date: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	body := asUser(t, h, sm, sub, http.MethodGet, "/expenses", nil).Body.String()
+
+	// Localized column headers (Date/Description/Memo/Status/Actions) -- no raw i18n keys.
+	for _, want := range []string{"Date", "Description", "Memo", "Status", "Actions"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("list missing column header %q; body:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "expense.list.col.") {
+		t.Errorf("raw i18n column key leaked (not localized):\n%s", body)
+	}
+
+	// The row surfaces the date (formatted), the description (creator display name, 8a) and
+	// the memo (localized "Expense report" default, 8a), in their own cells.
+	for _, want := range []string{
+		`<td class="er-date">` + wantDate + `</td>`,
+		`<td class="er-description">sub_list</td>`, // mkSubmitter sets DisplayName=username
+		`<td class="er-memo">Expense report</td>`,  // expense.default_memo (en)
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("list missing cell %q; body:\n%s", want, body)
+		}
+	}
+
+	// The Open action is preserved (links to the report editor).
+	if !strings.Contains(body, `href="/expenses/`+itoa(repID)+`"`) {
+		t.Errorf("list missing Open action for report %d; body:\n%s", repID, body)
+	}
+}
+
 // TestExpenseHeaderRoundTripAndReviewPrefill (p-golive): a submitter fills the report's
 // date/description/memo/notes header via POST /expenses/{id}/header; the values round-trip
 // on the detail GET (the editable inputs re-show them). After submitting, the reviewer's

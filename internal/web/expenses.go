@@ -49,12 +49,15 @@ import (
 // MY REPORTS LIST + create
 // ===========================================================================
 
-// expenseReportRow is one rendered report on the "my reports" list: id, the report's
-// subsidiary name, a localized status key, and -- when rejected -- the reviewer's
+// expenseReportRow is one rendered report on the "my reports" list. The list is a clear
+// table keyed on the report's stored main-split header values (date/description/memo, 8b)
+// plus a localized status and the row's actions, and -- when rejected -- the reviewer's
 // reason (review_notes) so the submitter sees WHY before resubmitting.
 type expenseReportRow struct {
 	ID          int64
-	SubName     string
+	Date        string // formatted per the user's DateFormat; "" = unset (rendered blank)
+	Description string // main-split description (defaults to the creator's display name, 8a)
+	Memo        string // main-split memo (defaults to "Expense report", 8a)
 	StatusKey   string // i18n key: expense.status.<status>
 	ReviewNotes string // the reviewer's rejection reason ("" unless rejected)
 	Rejected    bool
@@ -78,18 +81,20 @@ func (s *server) expensesPage(w http.ResponseWriter, r *http.Request) {
 		s.serverError(w)
 		return
 	}
-	subNames, err := subNameMap(ctx, s.store)
-	if err != nil {
-		s.serverError(w)
-		return
-	}
 	model := expensesPageModel{}
 	for _, rep := range reports {
 		row := expenseReportRow{
-			ID:        int64(rep.ID),
-			SubName:   subNames[int64(rep.SubsidiaryID)],
-			StatusKey: "expense.status." + rep.Status,
-			Draft:     rep.Status == "draft",
+			ID:          int64(rep.ID),
+			Description: rep.Description,
+			Memo:        rep.Memo,
+			StatusKey:   "expense.status." + rep.Status,
+			Draft:       rep.Status == "draft",
+		}
+		// Date is stored ISO ("YYYY-MM-DD" or ""); format per the user's DateFormat and
+		// leave it blank when unset (the submitter side never defaults to today -- today is
+		// only the reviewer's fallback), mirroring the detail render.
+		if rep.Date != "" {
+			row.Date = money.FormatDate(parseISOForDisplay(rep.Date), dateFormatFor(u))
 		}
 		if rep.Status == "rejected" {
 			row.Rejected = true

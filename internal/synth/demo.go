@@ -252,12 +252,17 @@ func buildDemoExpenseReports(ctx context.Context, s *store.Store, d *DemoIDs) er
 		return fmt.Errorf("set US default AP account: %w", err)
 	}
 
-	// --- Draft: created with lines, left in draft.
+	// --- Draft: created with lines, left in draft. A report DATE is set on the header so
+	// the 8b "my reports" list shows its Date column populated (the submitter side leaves
+	// date blank by default -- the demo fills one so the hosted demo showcases the column).
 	draft, err := s.CreateExpenseReport(ctx, d.SubmitterUser, d.US, store.CreateExpenseReportInput{
 		Description: "Demo Submitter", Memo: "Expense report",
 	})
 	if err != nil {
 		return fmt.Errorf("create draft expense report: %w", err)
+	}
+	if err := s.SetExpenseReportHeader(ctx, draft, "2026-06-18", "Demo Submitter", "Office supplies reimbursement", ""); err != nil {
+		return fmt.Errorf("set draft expense report header: %w", err)
 	}
 	if _, err := s.AddExpenseReportLine(ctx, draft, store.ExpenseReportLineInput{
 		AccountID: d.Occupancy, Amount: 45_000, ProgramID: &d.General, Description: "Office supplies (draft)",

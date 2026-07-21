@@ -1888,10 +1888,12 @@ other = "Revisión de gastos"
 other = "Mis informes de gastos"
 [expense.list.intro]
 other = "Redacte un informe de líneas de ingresos y gastos propuestas y envíelo para revisión."
-[expense.list.col.id]
-other = "Informe"
-[expense.list.col.subsidiary]
-other = "Filial"
+[expense.list.col.date]
+other = "Fecha"
+[expense.list.col.description]
+other = "Descripción"
+[expense.list.col.memo]
+other = "Memorándum"
 [expense.list.col.status]
 other = "Estado"
 [expense.list.col.actions]

@@ -573,6 +573,51 @@ input[aria-invalid="true"] {
   min-height: 1.5rem;
 }
 
+/* 8b: the submitter's "my reports" list -- a clear, scannable table keyed on the report's
+   stored header (date/description/memo) + status + actions. Mirrors .register-table: a
+   header rule, per-cell padding, compact (content-width) date/status/action columns, and
+   flexible description/memo columns that truncate rather than wrap. */
+.expense-reports-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-4);
+}
+.expense-reports-table th,
+.expense-reports-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+/* Compact columns pin to their content width (width:1% + nowrap under auto layout). */
+.expense-reports-table .er-date,
+.expense-reports-table .er-status,
+.expense-reports-table .er-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+/* Flexible text columns take the remaining width and truncate with an ellipsis. */
+.expense-reports-table .er-description,
+.expense-reports-table .er-memo {
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Keep the per-row actions on one line (Open + Discard side by side). */
+.expense-reports-table .er-actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+/* The rejection reason wraps under the status badge, so that cell must not nowrap. */
+.expense-reports-table .er-status { white-space: normal; }
+.expense-reports-table .er-reason {
+  margin: var(--space-1) 0 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted, inherit);
+}
+
 .flash:empty { display: none; }
 .flash {
   max-width: 60rem;
