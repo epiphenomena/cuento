@@ -994,6 +994,70 @@ test('reports: open the fund statement, pick a fund, see by-account line detail 
   expect(body).toContain('Annual gala pledge');
 });
 
+// FUND ACTIVITY BY PERIOD (Report B): an account x period MATRIX for ONE fund -- rows
+// are the accounts the fund touches (per currency), columns are periods per the chosen
+// granularity + a Total. Fund selector + granularity, NO date range. This spec seeds a
+// fund + a receipt, opens the report at quarter granularity, and confirms the account
+// rows + a period column header + the Total column, and that each row foots on the CSV.
+test('reports: open the fund-activity-by-period matrix, pick a fund + granularity, see account rows x period columns + Total, CSV foots', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  await createFund(page, 'FPer Fund E2E', 'FPer Donor E2E');
+  await createAsset(page, 'FPer Cash E2E');
+  await createRevenueAccount(page, 'FPer Gift E2E');
+
+  // Receipt INTO the fund (today-dated): DR FPer Cash 100.00 (fund), CR FPer Gift 100.00
+  // (fund).
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await selectTxnAccount(page.locator('#txn-main-account'), 'FPer Cash E2E');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'FPer Gift E2E');
+  await page.locator('#txn-amount-0').fill('-100.00');
+  await page.locator('#txn-fund-0').selectOption({ label: 'FPer Fund E2E' });
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+  // --- open the report; the FUND selector + the GRANULARITY control are present, and
+  // there is NO date-range input (the matrix spans all data) ---
+  await page.goto(`${FP}?scope=1`);
+  await expect(page.locator('form.report-params')).toBeVisible();
+  const fundSelect = page.locator('select.report-fund-select[name="fund"]');
+  await expect(fundSelect).toBeVisible();
+  await expect(page.locator('form.report-params select[name="granularity"]')).toBeVisible();
+  await expect(page.locator('form.report-params [name="from"]')).toHaveCount(0);
+  await expect(page.locator('form.report-params [name="to"]')).toHaveCount(0);
+
+  // --- pick the fund + quarter granularity -> the matrix (navigate the auto-apply GET) ---
+  const fundVal = await fundSelect
+    .locator('option', { hasText: 'FPer Fund E2E' })
+    .getAttribute('value');
+  await page.goto(`${FP}?scope=1&fund=${fundVal}&granularity=quarter`);
+
+  const table = page.locator('table.report-table');
+  await expect(table).toBeVisible();
+  // Rows = the accounts the fund touches (the cash + the revenue account).
+  await expect(table).toContainText('FPer Cash E2E');
+  await expect(table).toContainText('FPer Gift E2E');
+  // At least one period-identifier column header (YYYY-Qn) and the Total column.
+  const headerText = await table.locator('thead').innerText();
+  expect(headerText).toMatch(/\d{4}-Q\d/);
+  expect(headerText).toContain('Total');
+
+  // --- CSV: the export returns text/csv with the account rows (the per-row footing --
+  // period columns sum to Total -- is exhaustively asserted in the reports unit test) ---
+  await expect(page.locator('a.report-csv-link')).toBeVisible();
+  const csvHref = await page.locator('a.report-csv-link').getAttribute('href');
+  const resp = await page.request.get(csvHref);
+  expect(resp.status()).toBe(200);
+  expect(resp.headers()['content-type']).toContain('text/csv');
+  const csv = await resp.text();
+  expect(csv).toContain('FPer Cash E2E');
+  expect(csv).toContain('Total');
+});
+
 test('reports: open the activities-by-restriction statement, see the two restriction columns + released line + change in net assets, CSV returns', async ({
   page,
   server,

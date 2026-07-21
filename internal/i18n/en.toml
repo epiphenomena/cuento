@@ -1482,6 +1482,8 @@ other = "Account subtotal"
 other = "Fund Activity by Period"
 [reports.fund_period.col.account]
 other = "Account"
+[reports.fund_period.col.currency]
+other = "Currency"
 [reports.fund_period.col.total]
 other = "Total"
 

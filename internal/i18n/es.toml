@@ -1479,6 +1479,8 @@ other = "Subtotal de cuenta"
 other = "Actividad de fondo por periodo"
 [reports.fund_period.col.account]
 other = "Cuenta"
+[reports.fund_period.col.currency]
+other = "Moneda"
 [reports.fund_period.col.total]
 other = "Total"
 
