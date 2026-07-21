@@ -265,6 +265,80 @@ func TestIncomeStatementFXGolden(t *testing.T) {
 	checkGolden(t, "income_statement_fx.csv", csvBuf.Bytes())
 }
 
+// TestIncomeStatementFXMultiColumnFoots pins the single-scan FX-column behavior
+// (fxSnapshotsByFunctional): with COMPARATIVE (monthly / quarterly) columns the FX
+// gain/loss line is computed from ONE dated scan whose per-boundary snapshots are
+// differenced per column. The invariant that batching must satisfy — and that the old
+// two-snapshots-per-column path guaranteed by construction — is TELESCOPING:
+//
+//   - each period column's FX cell sums to the Total column (footing), AND
+//   - the sum of the period columns equals the whole-range (GranNone) FX figure.
+//
+// The ExtendFX fixture recognizes the Lempira remeasurement across the monthly HNL rate
+// schedule (2025-01 .. 2026-06), so the loss is spread over MULTIPLE columns — a genuine
+// multi-boundary telescoping, not the degenerate single-column case. A reorder or a
+// dropped/duplicated boundary in the single-scan accumulation would break footing here.
+func TestIncomeStatementFXMultiColumnFoots(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	f.ExtendFX(t)
+	ctx := context.Background()
+	rep := incomeStatementReport(t)
+
+	// The whole-range (GranNone) FX figure is the telescoping target.
+	whole := isGoldenParams(f)
+	whole.Granularity = reports.GranNone
+	wt, err := rep.Run(ctx, reports.NewToolkit(f.Store, whole), whole)
+	if err != nil {
+		t.Fatalf("run GranNone: %v", err)
+	}
+	wholeFX, ok := isTotalFor(wt, "reports.income_statement.fx_gain_loss")
+	if !ok {
+		t.Fatal("GranNone FX line missing (fixture should have FX exposure)")
+	}
+	if wholeFX == 0 {
+		t.Fatal("GranNone FX figure is 0; the multi-column footing check would be vacuous")
+	}
+
+	// For BOTH monthly and quarterly fan-outs, the FX period columns must foot to the Total
+	// column AND sum to the whole-range figure.
+	for _, gran := range []reports.Granularity{reports.GranMonth, reports.GranQuarter} {
+		p := isGoldenParams(f)
+		p.Granularity = gran
+		table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+		if err != nil {
+			t.Fatalf("run gran %v: %v", gran, err)
+		}
+		fxRow, ok := isRowFor(table, "reports.income_statement.fx_gain_loss")
+		if !ok {
+			t.Fatalf("gran %v: FX line missing", gran)
+		}
+		// Cells: [label, period_0 .. period_{n-1}, total]. Sum the period columns.
+		if len(fxRow) < 3 {
+			t.Fatalf("gran %v: FX row has %d cells, want label + >=1 period + total", gran, len(fxRow))
+		}
+		var periodSum int64
+		var columns int
+		for _, c := range fxRow[1 : len(fxRow)-1] {
+			if c.Blank {
+				continue
+			}
+			periodSum += c.Minor
+			columns++
+		}
+		total := fxRow[len(fxRow)-1].Minor
+		if periodSum != total {
+			t.Errorf("gran %v: FX period columns sum %d != Total column %d (must foot)", gran, periodSum, total)
+		}
+		if total != wholeFX {
+			t.Errorf("gran %v: FX Total %d != whole-range figure %d (telescoping)", gran, total, wholeFX)
+		}
+		if gran == reports.GranMonth && columns < 2 {
+			t.Errorf("gran %v: FX recognized in only %d columns; the fixture should spread it across >=2 (else this test is vacuous)", gran, columns)
+		}
+	}
+}
+
 // isFuncCols returns, for the FUNCTIONAL (GranNone) layout, the row's Admin, Fundraising,
 // Program, Total cells (columns 1..4) and whether the row has that shape.
 func isFuncCols(row reports.Row) (admin, fr, prog, tot reports.Cell, ok bool) {
