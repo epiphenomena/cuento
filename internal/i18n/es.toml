@@ -978,7 +978,7 @@ other = "Importe"
 [txn.main.description]
 other = "Descripcion"
 [txn.main.description_help]
-other = "Use un nombre corto y coherente para poder recuperar esta transaccion mas adelante. Autocompleta los detalles de las partidas a partir de transacciones anteriores con la misma descripcion."
+other = "Use un nombre corto y coherente para poder recuperar esta transaccion mas adelante. Autocompleta los detalles de las partidas a partir de transacciones anteriores con la misma descripcion. Ponga los detalles propios de esta transaccion en el memo, para que la descripcion se mantenga corta y coherente."
 [txn.main.account]
 other = "Cuenta principal"
 [txn.main.amount]
@@ -2353,3 +2353,14 @@ other = "No se pudo leer el CSV."
 other = "Una fila necesita al menos: descripción, fecha, cuenta, fondo, monto."
 [error.budget_plan.csv_row]
 other = "Fila %d: %s"
+
+# Tooltip al pasar el cursor o enfocar la etiqueta de Fecha de la transaccion. Cubre lo
+# que no dice el title del propio input (datefield.shortcuts): el autoformato al escribir
+# y el selector de calendario, y luego nombra los atajos estilo GnuCash.
+[txn.date_help]
+other = "Escriba una fecha en cualquier forma corta (como 6-1 o 6/1) y se completa al salir del campo, o haga clic en el boton de calendario para elegirla. Atajos: t = hoy, [ / ] = mes ant./sig., - / + (o =) = dia ant./sig., h = fin de mes."
+# Tooltip al pasar el cursor o enfocar el boton x de una fila de partida (rejillas de
+# transaccion y de gastos). Explica que elimina esa partida; la unica/ultima fila se
+# vacia en su lugar en vez de eliminarse.
+[common.delete_row_help]
+other = "Elimina esta fila de partida. Las filas restantes se renumeran; la unica fila se vacia en vez de eliminarse."

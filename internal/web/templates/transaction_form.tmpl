@@ -106,7 +106,7 @@
          txneditor.js re-indexes the surviving rows on click, and deleting the only/last row
          resets it in place -- the grid never drops to zero). */}}
     <td class="txn-delete-cell" colspan="1">
-      <button type="button" class="btn btn-ghost txn-delete" aria-label="{{t "common.delete_row"}}" title="{{t "common.delete_row"}}">&times;</button>
+      <button type="button" class="btn btn-ghost txn-delete" aria-label="{{t "common.delete_row_help"}}" title="{{t "common.delete_row_help"}}">&times;</button>
     </td>
   </tr>
 
@@ -232,7 +232,7 @@
       {{end}}
     </div>
     <div class="txn-field">
-      <label for="txn-date">{{t "txn.date"}}</label>
+      <label for="txn-date">{{t "txn.date"}}<span class="help-tip" tabindex="0" role="img" title="{{t "txn.date_help"}}" aria-label="{{t "txn.date_help"}}">?</span></label>
       {{template "datefield" (datefield "txn-date" "date" .Date (t "txn.date_hint") "txn-date" "" (eq $.Page.FirstErrorRow -2))}}
     </div>
     {{/* p26.36: the main-split DESCRIPTION field sits immediately after the date (date ->

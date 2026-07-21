@@ -988,7 +988,7 @@ other = "Description"
 # the description is what drives the per-split autocomplete/prefill (descfield.js), so a
 # stable name makes a transaction's splits recall instantly next time.
 [txn.main.description_help]
-other = "Use a short, consistent name so you can recall this transaction later. It autocompletes the split details from past transactions with the same description."
+other = "Use a short, consistent name so you can recall this transaction later. It autocompletes the split details from past transactions with the same description. Put details specific to this one transaction in the memo, so the description stays short and consistent."
 [txn.main.account]
 other = "Main account"
 [txn.main.amount]
@@ -2364,3 +2364,13 @@ other = "The CSV could not be read."
 other = "A row needs at least: description, date, account, fund, amount."
 [error.budget_plan.csv_row]
 other = "Row %d: %s"
+
+# Hover/focus tooltip on the transaction Date label. Covers what the input's own
+# title (datefield.shortcuts) leaves out: type-to-autoformat and the calendar picker,
+# then names the GnuCash-style keys.
+[txn.date_help]
+other = "Type a date in any short form (like 6-1 or 6/1) and it fills in when you tab away, or click the calendar button to pick one. Keys: t = today, [ / ] = prev/next month, - / + (or =) = prev/next day, h = end of month."
+# Hover/focus tooltip on a split row's x button (transaction + expense grids). Explains
+# it removes that split; the only/last row is cleared in place rather than removed.
+[common.delete_row_help]
+other = "Remove this split row. The remaining rows renumber; the only row is cleared instead of removed."

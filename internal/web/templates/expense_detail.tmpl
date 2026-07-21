@@ -85,20 +85,16 @@
     <div class="txn-main-header">
       {{/* Main account (AP payable): LOCKED read-only text for the submitter (reviewer edits). */}}
       <div class="txn-field txn-main-account-field">
-        <label id="er-main-account-label">{{t "expense.main.account"}}</label>
+        <label id="er-main-account-label">{{t "expense.main.account"}}<span class="help-tip" tabindex="0" role="img" title="{{t "expense.main.account_locked_hint"}}" aria-label="{{t "expense.main.account_locked_hint"}}">?</span></label>
         {{if .APAccountName}}<span class="er-locked" id="er-main-account" aria-labelledby="er-main-account-label">{{.APAccountName}}</span>{{else}}<span class="er-locked muted" id="er-main-account" aria-labelledby="er-main-account-label">{{t "expense.main.account_none"}}</span>{{end}}
-        <span class="hint">{{t "expense.main.account_locked_hint"}}</span>
       </div>
-      {{/* Main description (creator's name): LOCKED read-only text for the submitter. */}}
+      {{/* Main description (creator's name): LOCKED read-only text for the submitter.
+           8b: the field-guidance "your name; reviewer can change it" hint moved from an
+           inline <p class="hint"> to a .help-tip on the label (the same affordance the txn
+           form uses), so the header row stays tight and the guidance is on-demand. */}}
       <div class="txn-field txn-field-grow txn-main-desc-field">
-        <label id="er-description-label">{{t "expense.header.description"}}</label>
+        <label id="er-description-label">{{t "expense.header.description"}}<span class="help-tip" tabindex="0" role="img" title="{{t "expense.main.description_locked_hint"}}" aria-label="{{t "expense.main.description_locked_hint"}}">?</span></label>
         {{if .Description}}<span class="er-locked" id="er-description" aria-labelledby="er-description-label">{{.Description}}</span>{{else}}<span class="er-locked muted" id="er-description" aria-labelledby="er-description-label">&mdash;</span>{{end}}
-        <span class="hint">{{t "expense.main.description_locked_hint"}}</span>
-      </div>
-      {{/* Memo: EDITABLE. */}}
-      <div class="txn-field txn-field-grow">
-        <label for="er-memo">{{t "expense.header.memo"}}</label>
-        <input type="text" name="memo" id="er-memo" value="{{.Memo}}" autocomplete="off">
       </div>
       {{/* Date: editable. FIX 1a: the SAME reusable date widget every other date field uses
            (datefield partial + datefield.js -> autoformat-as-you-type + calendar picker
@@ -108,6 +104,14 @@
       <div class="txn-field">
         <label for="er-date">{{t "expense.header.date"}}</label>
         {{template "datefield" (datefield "er-date" "date" .Date (t "expense.header.date_hint") "" "" false)}}
+      </div>
+      {{/* Memo: EDITABLE. 8b: mirrors the txn-form layout -- the memo now sits DOWN next to
+           the date (account -> description -> date -> memo) and grows wider (txn-field-grow +
+           the txn-memo-header width class). Keeps id "er-memo" + name "memo" so the change-
+           triggered auto-save and the notes form's hx-include="#er-date,#er-memo" still bind. */}}
+      <div class="txn-field txn-field-grow">
+        <label for="er-memo">{{t "expense.header.memo"}}</label>
+        <input type="text" name="memo" id="er-memo" class="txn-memo-header" value="{{.Memo}}" autocomplete="off">
       </div>
     </div>
     <noscript><button type="submit" class="btn btn-ghost">{{t "expense.header.save"}}</button></noscript>
@@ -158,7 +162,7 @@
         <tr>
           {{/* p26.23: description is the FIRST column (before Account). p28: each header is a
                stacked two-line label -- line 1 the row-1 field, line 2 the row-2 field beneath. */}}
-          <th colspan="5"><span class="txn-hdr-main">{{t "expense.line.col.description"}}</span><span class="txn-hdr-sub">{{t "expense.line.col.fund"}}</span></th>
+          <th colspan="5"><span class="txn-hdr-main">{{t "expense.line.col.description"}}<span class="help-tip" tabindex="0" role="img" title="{{t "txn.main.description_help"}}" aria-label="{{t "txn.main.description_help"}}">?</span></span><span class="txn-hdr-sub">{{t "expense.line.col.fund"}}</span></th>
           <th colspan="4"><span class="txn-hdr-main">{{t "expense.line.col.account"}}</span><span class="txn-hdr-sub">{{t "expense.line.col.program"}}</span></th>
           <th colspan="5"><span class="txn-hdr-main">{{t "expense.line.col.amount"}}</span><span class="txn-hdr-sub">{{t "expense.line.col.memo"}}</span></th>
         </tr>
@@ -199,7 +203,7 @@
                columns are pinned narrow by the <colgroup> so delete is a tight utility cell. */}}
           <td class="el-row-error" colspan="1">{{if $l.ErrorKey}}<span class="field-error" role="alert">{{t $l.ErrorKey}}</span>{{end}}</td>
           <td class="el-delete-cell" colspan="1">
-            <button type="button" class="btn btn-ghost el-delete" aria-label="{{t "common.delete_row"}}" title="{{t "common.delete_row"}}">&times;</button>
+            <button type="button" class="btn btn-ghost el-delete" aria-label="{{t "common.delete_row_help"}}" title="{{t "common.delete_row_help"}}">&times;</button>
           </td>
         </tr>
         <tr class="el-row-more">
