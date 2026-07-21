@@ -452,6 +452,73 @@ test.describe('transaction editor', () => {
     await expect(overlay).toHaveValue(/Gone Checking.*unavailable/);
   });
 
+  // p26.10 (fund analogue of the account test above): editing a transaction whose split
+  // references a now-CLOSED fund must still DISPLAY that fund (its name, marked "(closed)")
+  // SELECTED in the row's fund combo -- NOT a blank select. The txn editor sources its fund
+  // options from ActiveFunds, so without injectRowFunds the closed fund would vanish and the
+  // cell would blank; the store's "unchanged fund stays editable" carve-out then lets the
+  // memo-only re-save succeed. Flow: post a fund-tagged txn, close the fund, reopen the editor.
+  test('edit shows a split whose fund was closed (not a blank cell), and re-saves', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'FundRT Checking');
+    await createAsset(page, 'FundRT Savings');
+    await createFund(page, 'Closing Grant');
+
+    // Post a transfer with BOTH legs tagged to the fund (nets to zero within the fund, D20).
+    // Header = FundRT Checking (fund derived from the single-fund body); body = FundRT Savings
+    // 30.00 tagged Closing Grant.
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await selectTxnAccount(page.locator('#txn-main-account'), 'FundRT Checking');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'FundRT Savings');
+    await page.locator('#txn-amount-0').fill('30.00');
+    const fundCell0 = page.locator('.txn-row[data-row="0"] .txn-fund-cell');
+    const fundInput0 = fundCell0.locator('.combo-text');
+    await fundInput0.click();
+    await fundInput0.fill('closing');
+    await fundCell0.locator('.combo-option', { hasText: 'Closing Grant' }).click();
+    await expect(page.locator('#txn-fund-0')).toHaveValue(/\d+/);
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+    // Close the fund from the funds workspace.
+    await page.goto('/funds');
+    const reloaded = page.waitForResponse(
+      (r) => r.url().includes('/funds') && r.request().method() === 'GET',
+    );
+    await page
+      .locator('tr.fund-row', { hasText: 'Closing Grant' })
+      .getByRole('button', { name: /^close$/i })
+      .click();
+    await reloaded;
+
+    // Reopen the editor on that transaction (from FundRT Checking's register).
+    await page.goto('/accounts');
+    await page
+      .locator('tr.acct-row', { hasText: 'FundRT Checking' })
+      .getByRole('link', { name: 'FundRT Checking' })
+      .click();
+    await page.waitForURL('**/register');
+    await page.getByRole('link', { name: /edit/i }).first().click();
+    await page.waitForURL((u) => /\/transactions\/\d+\/edit/.test(u.pathname));
+    await expect(page.locator('form#txn-form')).toBeVisible();
+
+    // The closed fund is force-included as an option marked (closed), and it is SELECTED in
+    // the body row that references it -- not left blank.
+    const closedOpt = page.locator('#txn-form .txn-fund option', { hasText: 'Closing Grant' });
+    await expect(closedOpt.first()).toContainText('(closed)');
+    const fundCellRT = page.locator('.txn-fund-cell', { has: page.locator('.txn-fund option:checked', { hasText: 'Closing Grant' }) });
+    await expect(fundCellRT).toHaveCount(1);
+    // The combobox overlay shows the real fund label (with the marker), not a blank cell.
+    await expect(fundCellRT.locator('.combo-text')).toHaveValue(/Closing Grant.*closed/);
+
+    // A memo-only re-save succeeds (the store's unchanged-fund carve-out; not ErrInactiveFund).
+    await page.locator('#txn-memo').fill('edited with closed fund');
+    await page.getByRole('button', { name: /^save$/i }).click();
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+    await expect(page.locator('table.register-table')).toBeVisible();
+  });
+
   // p26.10 (client guard): a row that carries content (an amount) but NO account must
   // not silently post -- the save is blocked and a per-row error is shown. The htmx POST
   // must NOT fire (the transaction is not created).
