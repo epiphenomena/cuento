@@ -1258,7 +1258,7 @@ other = "Total (converted)"
 
 # p15.4 balance sheet: statement of financial position (A/L/E, net-asset split).
 [reports.balance_sheet.title]
-other = "Statement of Financial Position"
+other = "Statement of Position"
 [reports.balance_sheet.col.line]
 other = "Line"
 [reports.balance_sheet.col.amount]

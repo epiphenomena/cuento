@@ -1252,7 +1252,7 @@ other = "Total (convertido)"
 
 # p15.4 balance general: estado de situacion financiera (A/P/PN, division de activos netos).
 [reports.balance_sheet.title]
-other = "Estado de Situacion Financiera"
+other = "Estado de Situacion"
 [reports.balance_sheet.col.line]
 other = "Linea"
 [reports.balance_sheet.col.amount]

@@ -168,9 +168,28 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 		return Table{}, err
 	}
 
+	// Hoist all the DATE-INDEPENDENT context out of the per-column loop (p29.6 perf): the
+	// consolidation flag, the intercompany account set, the restricted-fund set, and the
+	// R/E account ids come from the chart / subsidiary tree, not the as-of date, so
+	// recomputing them once per column (as the old N-pass loop did) was pure waste.
+	sc, err := newSnapshotContext(ctx, tk, p, tree)
+	if err != nil {
+		return Table{}, err
+	}
+
+	// Pre-fetch every column's per-account balances and restricted figure. On the org-wide
+	// (non-fund, non-detail) path this is a SINGLE ordered scan of dated postings for each
+	// of the two grains -- accumulated per cutoff date in Go -- instead of N independent
+	// as-of recomputations (the p18 perf fix). The fund / detail paths keep their per-date
+	// as-of queries (narrower, single-column for detail; no dated fund-scan variant).
+	balancesByDate, restrictedByDate, err := sc.fetchColumns(ctx, tk, p, dates)
+	if err != nil {
+		return Table{}, err
+	}
+
 	snaps := make([]bsSnapshot, len(dates))
 	for i, d := range dates {
-		snap, err := computeSnapshot(ctx, tk, p, d, tree)
+		snap, err := computeSnapshot(sc, d, balancesByDate[i], restrictedByDate[i])
 		if err != nil {
 			return Table{}, err
 		}
@@ -325,55 +344,57 @@ func isoYear(iso string) (int, bool) {
 	return y, true
 }
 
-// computeSnapshot computes the position AS OF `d` (p15.4): per-account per-currency
-// as-of balances (native), classified into Assets/Liabilities, the by-restriction
-// net-asset split, and the intercompany residual/CTA state -- the single-column
-// computation, captured as a bsSnapshot so runBalanceSheet iterates it over the date
-// series. `tree` is the shared (date-independent) account tree.
-func computeSnapshot(ctx context.Context, tk *Toolkit, p Params, d string, tree []store.TreeRow) (bsSnapshot, error) {
-	// "Net assets with donor restrictions" needs a per-FUND scan (FundBalancesAsOf),
-	// independent of the per-account BalancesAsOf below. Run it CONCURRENTLY so its
-	// full-ledger scan overlaps BalancesAsOf's rather than running after it (p29.6 perf).
-	// Safe: the store is WAL with a pooled connection set and the toolkit holds no mutable
-	// state, so two toolkit reads run on two connections without contention. The channel
-	// is buffered (cap 1) so an early error return below never leaks the goroutine.
-	type rnaResult struct {
-		m   map[string]int64
-		err error
-	}
-	// FUND selector (p15.4): a fund-scoped Statement of Position presents that single
-	// fund's OWN assets, liabilities, and net assets. Its per-account balances come from
-	// the fund-filtered ledger (FundBalancesAsOfByAccount), NOT the whole-scope
-	// SubtreeBalancesAsOf. A single fund is NOT a consolidation, so there is no
-	// intercompany elimination or CTA reclassification (icAccts stays empty, consolidated
-	// false below). "With donor restrictions" for a single fund is the fund's OWN
-	// asset-side balance when the fund is restricted, else zero -- computed from the same
-	// fund balances rather than the org-wide restricted-fund scan. When no fund is chosen
-	// this whole branch is skipped, so the org-wide statement is byte-identical (goldens
-	// do not move).
+// snapshotContext holds the DATE-INDEPENDENT context shared by every as-of column of a
+// single balance-sheet run (p29.6 perf): the account tree, the consolidation flag, the
+// intercompany-eliminated account set, the R/E account ids (for the net-surplus derivation),
+// and the restricted-fund set (for the org-wide restricted accumulation). The old code
+// recomputed all of these once PER COLUMN (N passes); hoisting them here computes each once.
+// `ctx`/`tk`/`p` are retained so the ONE remaining per-column IO -- the rare CTA residual
+// split (converted view, nonzero intercompany residual) -- can still query per date.
+type snapshotContext struct {
+	ctx        context.Context
+	tk         *Toolkit
+	p          Params
+	tree       []store.TreeRow
+	fundFilter bool
+
+	consolidated bool
+	icAccts      map[AccountID]bool
+	reReport     map[AccountID]bool // revenue/expense account ids (net-surplus source)
+	restricted   map[FundID]bool    // restricted funds (org-wide "with restrictions" source)
+}
+
+// newSnapshotContext builds the date-independent snapshot context ONCE for a run: it
+// resolves the consolidation flag + intercompany account set (skipped for a single fund,
+// which is never a consolidation), the R/E account ids from the already-fetched tree, and
+// the restricted-fund set (org-wide path only).
+func newSnapshotContext(ctx context.Context, tk *Toolkit, p Params, tree []store.TreeRow) (*snapshotContext, error) {
 	fundFilter := p.Fund != 0
 
-	rnaCh := make(chan rnaResult, 1)
+	// --- Intercompany COLLAPSE (D19) applies only across a CONSOLIDATED (multi-sub) scope.
+	// A single-fund view is never a consolidation: the fund's intercompany legs (if any) are
+	// its genuine due-to/due-from balances, shown as ordinary rows, never eliminated.
+	consolidated := false
 	if !fundFilter {
-		go func() {
-			m, err := tk.restrictedNetAssets(ctx, p.Scope, d)
-			rnaCh <- rnaResult{m, err}
-		}()
+		c, err := tk.isConsolidated(ctx, p.Scope)
+		if err != nil {
+			return nil, err
+		}
+		consolidated = c
+	}
+	icAccts := map[AccountID]bool{}
+	if consolidated {
+		ids, err := tk.store.IntercompanyAccountIDs(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range ids {
+			icAccts[id] = true
+		}
 	}
 
-	var balances map[AccountID][]CurAmt
-	var err error
-	if fundFilter {
-		balances, err = tk.FundBalancesAsOfByAccount(ctx, p.Fund, Scope{Sub: p.Scope}, d)
-	} else {
-		balances, err = tk.BalancesAsOf(ctx, Scope{Sub: p.Scope}, d, ConvertOpts{Mode: RateNone})
-	}
-	if err != nil {
-		return bsSnapshot{}, err
-	}
-
-	// R/E account ids, straight from the tree we already fetched (no extra query) — used
-	// to derive the net surplus from `balances` below instead of re-scanning the ledger.
+	// R/E account ids, straight from the tree (no extra query) -- used to derive the net
+	// surplus from the per-column balances instead of re-scanning the ledger.
 	reReport := map[AccountID]bool{}
 	for _, node := range tree {
 		if node.Type == "revenue" || node.Type == "expense" {
@@ -381,36 +402,190 @@ func computeSnapshot(ctx context.Context, tk *Toolkit, p Params, d string, tree 
 		}
 	}
 
-	target := p.TargetCurrency
-
-	// --- Intercompany COLLAPSE (D19) applies only across a CONSOLIDATED (multi-sub)
-	// scope: there the intercompany due-to/due-from balances are INTERNAL and are
-	// eliminated (dropped from the Assets/Liabilities listings and their totals), and
-	// the residual (which is zero when the scope covers both sides) is surfaced as a
-	// warning row when nonzero. At a LEAF/single-sub scope the intercompany accounts
-	// are that subsidiary's genuine due-to-parent / due-from-child balances -- shown as
-	// ordinary account rows, NOT collapsed and NOT warned (a leaf legitimately holds
-	// only its own side).
-	consolidated, err := tk.isConsolidated(ctx, p.Scope)
-	if err != nil {
-		return bsSnapshot{}, err
-	}
-	// A single-fund view is never a consolidation: the fund's intercompany legs (if any)
-	// are its genuine due-to/due-from balances, shown as ordinary rows, never eliminated
-	// or reclassified into a CTA line (p15.4 fund filter).
-	if fundFilter {
-		consolidated = false
-	}
-	icAccts := map[AccountID]bool{}
-	if consolidated {
-		ids, err := tk.store.IntercompanyAccountIDs(ctx)
+	// The RESTRICTED-fund set (org-wide path): the funds whose monetary balance feeds "net
+	// assets with donor restrictions". Fetched once, then applied per column over the dated
+	// monetary scan. The fund-filtered path resolves restriction per its single fund instead.
+	restricted := map[FundID]bool{}
+	if !fundFilter {
+		funds, err := tk.store.ListFunds(ctx)
 		if err != nil {
-			return bsSnapshot{}, err
+			return nil, err
 		}
-		for _, id := range ids {
-			icAccts[id] = true
+		for _, f := range funds {
+			if f.Restriction != "" {
+				restricted[FundID(f.ID)] = true
+			}
 		}
 	}
+
+	return &snapshotContext{
+		ctx: ctx, tk: tk, p: p, tree: tree, fundFilter: fundFilter,
+		consolidated: consolidated, icAccts: icAccts, reReport: reReport, restricted: restricted,
+	}, nil
+}
+
+// fetchColumns returns, for each as-of date in `dates`, the per-account native balances and
+// the "with donor restrictions" per-currency figure. On the ORG-WIDE (non-fund, non-detail)
+// path it does this from a SINGLE ordered scan of dated postings per grain (accounts +
+// monetary funds), accumulating running balances and snapshotting at each cutoff date -- the
+// p18 perf fix that replaces N independent as-of recomputations. Because column 1 is the max
+// (selected) as-of, one scan to that date covers every earlier year-end column, and summing
+// the dated cells for date <= cutoff reproduces each cutoff's as-of balance byte-for-byte
+// (integer sums are associative). The FUND / DETAIL paths keep their per-date as-of queries
+// (detail is single-column; there is no dated fund-scoped scan variant), still benefiting
+// from the hoisted date-independent context.
+func (sc *snapshotContext) fetchColumns(ctx context.Context, tk *Toolkit, p Params, dates []string) ([]map[AccountID][]CurAmt, []map[string]int64, error) {
+	balancesByDate := make([]map[AccountID][]CurAmt, len(dates))
+	restrictedByDate := make([]map[string]int64, len(dates))
+
+	if sc.fundFilter || p.DetailCurrency() {
+		// Narrow paths: per-date as-of queries (unchanged figures, hoisted context reused).
+		for i, d := range dates {
+			var bals map[AccountID][]CurAmt
+			var err error
+			if sc.fundFilter {
+				bals, err = tk.FundBalancesAsOfByAccount(ctx, p.Fund, Scope{Sub: p.Scope}, d)
+			} else {
+				bals, err = tk.BalancesAsOf(ctx, Scope{Sub: p.Scope}, d, ConvertOpts{Mode: RateNone})
+			}
+			if err != nil {
+				return nil, nil, err
+			}
+			balancesByDate[i] = bals
+
+			var wr map[string]int64
+			if sc.fundFilter {
+				wr, err = tk.fundRestrictedNetAssets(ctx, p.Scope, d, p.Fund)
+			} else {
+				wr, err = tk.restrictedNetAssets(ctx, p.Scope, d)
+			}
+			if err != nil {
+				return nil, nil, err
+			}
+			restrictedByDate[i] = wr
+		}
+		return balancesByDate, restrictedByDate, nil
+	}
+
+	// Org-wide single-scan path. dates[0] is the selected (max) as-of, so one dated scan to
+	// it covers every column. Accumulate a running balance and snapshot at each cutoff.
+	maxDate := dates[0]
+
+	// (a) per-account balances, from the dated account scan.
+	acctRows, err := tk.store.SubDatedBalancesAsOf(ctx, maxDate, p.Scope)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Collapse the holding-subsidiary dimension (the balance sheet consolidates the whole
+	// subtree into one balance per account/currency): sum activity to (account, currency, date).
+	type acctKey struct {
+		acct AccountID
+		ccy  string
+	}
+	acctDated := map[acctKey]map[string]int64{} // key -> date -> summed activity that date
+	for _, r := range acctRows {
+		k := acctKey{acct: AccountID(r.AccountID), ccy: r.Currency}
+		m := acctDated[k]
+		if m == nil {
+			m = map[string]int64{}
+			acctDated[k] = m
+		}
+		m[r.Date] += r.Amount
+	}
+	for i, cutoff := range dates {
+		bals := map[AccountID][]CurAmt{}
+		byAcct := map[AccountID]map[string]int64{}
+		for k, dm := range acctDated {
+			var sum int64
+			for date, amt := range dm {
+				if date <= cutoff {
+					sum += amt
+				}
+			}
+			if sum == 0 {
+				// A SubtreeBalancesAsOf GROUP BY would still emit a zero row if any split
+				// existed for the (account, currency) on-or-before the cutoff. Preserve that:
+				// emit the cell iff any dated activity falls on-or-before the cutoff.
+				anyBefore := false
+				for date := range dm {
+					if date <= cutoff {
+						anyBefore = true
+						break
+					}
+				}
+				if !anyBefore {
+					continue
+				}
+			}
+			cm := byAcct[k.acct]
+			if cm == nil {
+				cm = map[string]int64{}
+				byAcct[k.acct] = cm
+			}
+			cm[k.ccy] = sum
+		}
+		// Emit per account in currency-sorted order (matches the store query's ORDER BY
+		// account, currency -> the downstream bsLine.byCcy map is order-independent anyway).
+		for acct, cm := range byAcct {
+			for _, ccy := range sortedKeys(cm) {
+				bals[acct] = append(bals[acct], CurAmt{Currency: ccy, Minor: cm[ccy]})
+			}
+		}
+		balancesByDate[i] = bals
+	}
+
+	// (b) "with donor restrictions", from the dated monetary fund scan (restricted funds only).
+	monRows, err := tk.store.MonetaryFundDatedBalancesAsOf(ctx, maxDate, p.Scope)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Sum restricted-fund monetary activity to (currency, date); a fund's restriction is
+	// date-independent, so filter here once.
+	monDated := map[string]map[string]int64{} // ccy -> date -> activity (restricted funds)
+	for _, r := range monRows {
+		if r.FundID == 0 || !sc.restricted[FundID(r.FundID)] {
+			continue
+		}
+		m := monDated[r.Currency]
+		if m == nil {
+			m = map[string]int64{}
+			monDated[r.Currency] = m
+		}
+		m[r.Date] += r.Amount
+	}
+	for i, cutoff := range dates {
+		wr := map[string]int64{}
+		for ccy, dm := range monDated {
+			var sum int64
+			for date, amt := range dm {
+				if date <= cutoff {
+					sum += amt
+				}
+			}
+			if sum != 0 {
+				wr[ccy] = sum
+			}
+		}
+		restrictedByDate[i] = wr
+	}
+
+	return balancesByDate, restrictedByDate, nil
+}
+
+// computeSnapshot computes the position AS OF `d` (p15.4) from the pre-fetched per-account
+// native `balances` and "with donor restrictions" `withRestriction` for that column: it
+// classifies the balances into Assets/Liabilities, derives the by-restriction net-asset
+// split and the net surplus, and (converted view, nonzero intercompany residual only) runs
+// the CTA reclassification. All the whole-run/date-independent work lives in `sc`; the only
+// IO here is the rare per-column CTA residual split. This is the SAME computation the old
+// per-date function did, split so the balances/restricted scans are done once up front.
+func computeSnapshot(sc *snapshotContext, d string, balances map[AccountID][]CurAmt, withRestriction map[string]int64) (bsSnapshot, error) {
+	tk, p, tree := sc.tk, sc.p, sc.tree
+	ctx := sc.ctx
+	target := p.TargetCurrency
+	consolidated := sc.consolidated
+	icAccts := sc.icAccts
+	reReport := sc.reReport
 
 	// --- classify LEAF accounts into the Assets and Liabilities sections. Walk the
 	// tree pre-order (stable order + resolved names). Net-debit signs (D2): assets are
@@ -460,20 +635,8 @@ func computeSnapshot(ctx context.Context, tk *Toolkit, p Params, d string, tree 
 		netAssetsTotal[ccy] -= v
 	}
 
-	var withRestriction map[string]int64
-	if fundFilter {
-		wr, err := tk.fundRestrictedNetAssets(ctx, p.Scope, d, p.Fund)
-		if err != nil {
-			return bsSnapshot{}, err
-		}
-		withRestriction = wr
-	} else {
-		rna := <-rnaCh
-		if rna.err != nil {
-			return bsSnapshot{}, rna.err
-		}
-		withRestriction = rna.m
-	}
+	// "With donor restrictions" is pre-fetched for this column (fundRestrictedNetAssets for a
+	// single fund, or the org-wide dated monetary scan accumulation) -- see fetchColumns.
 	withoutRestriction := map[string]int64{}
 	for ccy, v := range netAssetsTotal {
 		withoutRestriction[ccy] = v - withRestriction[ccy]
@@ -515,10 +678,11 @@ func computeSnapshot(ctx context.Context, tk *Toolkit, p Params, d string, tree 
 		}
 		icNet = sortedCurAmts(icByCcy)
 		if hasNonzero(icNet) && target != "" {
-			icSplit, err = tk.IntercompanyResidualSplit(ctx, Scope{Sub: p.Scope}, d, target)
+			split, err := tk.IntercompanyResidualSplit(ctx, Scope{Sub: p.Scope}, d, target)
 			if err != nil {
 				return bsSnapshot{}, err
 			}
+			icSplit = split
 		}
 	}
 

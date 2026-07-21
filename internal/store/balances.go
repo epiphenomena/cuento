@@ -268,6 +268,37 @@ func (s *Store) MonetaryFundBalancesAsOf(ctx context.Context, asof string, scope
 	return out, nil
 }
 
+// FundDatedCurrencyAmount is one (fund, currency, date) monetary activity cell -- the
+// dated grain of the "still restricted" residual, so a multi-period Statement of
+// Position accumulates each year-end column from a single scan.
+type FundDatedCurrencyAmount struct {
+	FundID   ids.FundID // 0 = unrestricted
+	Currency string
+	Date     string
+	Amount   int64
+}
+
+// MonetaryFundDatedBalancesAsOf returns, per (fund, currency, DATE), the signed
+// MONETARY net-debit activity on that date to asof in scope -- the dated variant of
+// MonetaryFundBalancesAsOf (same monetary predicate). Summing the cells for date <=
+// cutoff reproduces the cutoff's MonetaryFundBalancesAsOf exactly (integer sums are
+// associative), so the multi-period balance sheet snapshots every column's restricted
+// figure from one scan instead of N as-of recomputations.
+func (s *Store) MonetaryFundDatedBalancesAsOf(ctx context.Context, asof string, scopeSub ids.SubsidiaryID) ([]FundDatedCurrencyAmount, error) {
+	rows, err := s.q.MonetaryFundDatedBalancesAsOf(ctx, sqlc.MonetaryFundDatedBalancesAsOfParams{
+		ID:   int64(scopeSub),
+		Date: asof,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("store: monetary fund dated balances as of %s (scope %d): %w", asof, scopeSub, err)
+	}
+	out := make([]FundDatedCurrencyAmount, len(rows))
+	for i, r := range rows {
+		out[i] = FundDatedCurrencyAmount{FundID: r.FundID, Currency: r.Currency, Date: r.Date, Amount: r.Balance}
+	}
+	return out, nil
+}
+
 // FunctionalActivity returns, per (expense account, functional class, currency),
 // the signed activity over from <= date <= to in scopeSub's descendant closure.
 // Only expense splits carry a class (D21), so the result contains exactly the

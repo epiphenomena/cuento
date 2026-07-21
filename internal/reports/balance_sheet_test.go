@@ -311,6 +311,137 @@ func TestBalanceSheetMultiPeriod(t *testing.T) {
 	}
 }
 
+// TestBalanceSheetMultiPeriodManyColumns (p18 perf guard, p29.6) exercises the
+// SINGLE-SCAN accumulation across FOUR as-of columns with an EXACT per-column oracle --
+// the coverage the two-column golden/fixture cannot provide (the single-scan path
+// accumulates running balances and snapshots at each cutoff; an off-by-one at a cutoff
+// boundary would pass the N=2 golden but corrupt columns 3+). It posts a controlled USD
+// revenue->Savings transaction dated the end of 2023, 2024, and 2025 (extending the ledger
+// back to 2023 so the as-of 2026-06-30 series fans out to
+// [2026-06-30, 2025-12-31, 2024-12-31, 2023-12-31]), then asserts that the Savings asset
+// row and the net-surplus line INCREMENT by exactly the posted amount at each year-end
+// boundary -- robust to the fixture baseline, and precisely the boundary the accumulation
+// must get right. Native mode (no target) so each cell is the exact integer balance.
+func TestBalanceSheetMultiPeriodManyColumns(t *testing.T) {
+	f := fixture.New(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+	rep := balanceSheetReport(t)
+
+	// Post +N USD to Savings (asset) against Contributions (revenue) at each year-end. Each
+	// txn is zero-sum (asset debit + revenue credit). The amounts differ per year so a
+	// boundary mix-up (attributing a year's activity to the wrong cutoff) is detectable.
+	type post struct {
+		date   string
+		amount int64
+	}
+	posts := []post{
+		{"2023-12-31", 111_100},
+		{"2024-12-31", 222_200},
+		{"2025-12-31", 333_300},
+	}
+	for _, p := range posts {
+		_, err := f.Store.PostTransaction(ctx, store.PostTransactionInput{
+			Date:         p.date,
+			SubsidiaryID: f.IDs.Root,
+			Currency:     "USD",
+			Memo:         "test: year-end contribution to Savings",
+			Splits: []store.SplitInput{
+				{AccountID: f.IDs.Savings, Amount: p.amount},        // asset debit (positive)
+				{AccountID: f.IDs.Contributions, Amount: -p.amount}, // revenue credit (negative)
+			},
+		})
+		if err != nil {
+			t.Fatalf("post %s: %v", p.date, err)
+		}
+	}
+
+	// Native (no target) so every cell is the exact fixture minor unit, no FX rounding.
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), AsOf: f.Expected.AsOf, Lang: "en"}
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	// The series is [2026-06-30, 2025-12-31, 2024-12-31, 2023-12-31] -> columns 1..4.
+	wantHeaders := []string{"2026-06-30", "2025-12-31", "2024-12-31", "2023-12-31"}
+	if len(table.Columns) != 1+len(wantHeaders) {
+		t.Fatalf("columns = %d, want %d (Line + 4 year-ends); headers %v",
+			len(table.Columns), 1+len(wantHeaders), columnHeaderKeys(table))
+	}
+	for i, want := range wantHeaders {
+		if table.Columns[i+1].HeaderKey != want {
+			t.Errorf("value column %d header = %q, want %q", i+1, table.Columns[i+1].HeaderKey, want)
+		}
+	}
+
+	// nameColumn reads the value in value-column `col` (1-based) for the TEXT-named account
+	// row `name`.
+	nameColumn := func(name string, col int) (int64, bool) {
+		for _, row := range table.Rows {
+			if len(row.Cells) <= col || row.Cells[0].Kind != reports.CellText || row.Cells[0].Text != name {
+				continue
+			}
+			return row.Cells[col].Minor, true
+		}
+		return 0, false
+	}
+
+	// Savings asset row across the four columns. Column order is descending date. The
+	// fixture posts NOTHING in calendar 2024, so the 2023->2024 boundary (col4 -> col3) is
+	// a CLEAN isolate of exactly my +222,200 posting -- and it exercises the accumulation
+	// between two INTERIOR (non-selected, non-first) year-end columns, precisely where an
+	// off-by-one at a cutoff boundary would corrupt columns 3+ while passing the N=2 golden.
+	// (The 2025 boundary is NOT asserted as an isolate: the base fixture posts its own H2
+	// activity in 2025, so col2-col3 mixes my 333,300 with baseline flows.)
+	sav := map[int]int64{}
+	for col := 1; col <= 4; col++ {
+		v, ok := nameColumn("Savings", col)
+		if !ok {
+			t.Fatalf("no Savings row value in column %d", col)
+		}
+		sav[col] = v
+	}
+	if got := sav[3] - sav[4]; got != 222_200 {
+		t.Errorf("Savings 2023->2024 increment (col3-col4) = %d, want 222,200 (clean interior boundary)", got)
+	}
+	// The 2025 column must strictly EXCEED the 2024 column by AT LEAST my posting (baseline
+	// 2025 activity only adds), confirming the later cutoff accumulates the earlier one.
+	if sav[2] < sav[3]+333_300 {
+		t.Errorf("Savings col2 (2025) = %d, want >= col3 (2024) %d + 333,300 (later cutoff includes earlier)", sav[2], sav[3])
+	}
+
+	// The net-surplus line increments identically at the clean 2024 boundary (Contributions
+	// is revenue, presented positive), proving the R/E accumulation snapshots at the same
+	// cutoffs as the asset accumulation.
+	surp := map[int]int64{}
+	for col := 1; col <= 4; col++ {
+		v, ok := labelColumn(table, "reports.balance_sheet.na.surplus_of_which", col)
+		if !ok {
+			t.Fatalf("no surplus row value in column %d", col)
+		}
+		surp[col] = v
+	}
+	if got := surp[3] - surp[4]; got != 222_200 {
+		t.Errorf("surplus 2023->2024 increment = %d, want 222,200 (clean interior boundary)", got)
+	}
+
+	// EVERY column still foots the identity and the net-asset split (the accumulation must
+	// not break footing at any cutoff).
+	for col := 1; col <= 4; col++ {
+		assets, _ := labelColumn(table, "reports.balance_sheet.total.assets", col)
+		lPlusNA, _ := labelColumn(table, "reports.balance_sheet.total.liabilities_net_assets", col)
+		if assets != lPlusNA {
+			t.Errorf("column %d identity broken: A %d != L+NA %d", col, assets, lPlusNA)
+		}
+		without, _ := labelColumn(table, "reports.balance_sheet.na.without", col)
+		with, _ := labelColumn(table, "reports.balance_sheet.na.with", col)
+		na, _ := labelColumn(table, "reports.balance_sheet.total.net_assets", col)
+		if without+with != na {
+			t.Errorf("column %d split does not foot: without %d + with %d != NA %d", col, without, with, na)
+		}
+	}
+}
+
 // TestBalanceSheetMultiPeriodBeforeInception (p18 guard): an as-of date BEFORE the
 // earliest posting (the fixture ledger starts 2025-01-01) must NOT walk year-ends back
 // forever -- the first candidate prior year-end already precedes the earliest posting, so

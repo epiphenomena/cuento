@@ -677,6 +677,66 @@ func (q *Queries) MonetaryFundBalancesAsOf(ctx context.Context, arg MonetaryFund
 	return items, nil
 }
 
+const monetaryFundDatedBalancesAsOf = `-- name: MonetaryFundDatedBalancesAsOf :many
+WITH RECURSIVE scope(id) AS (
+  SELECT s.id FROM subsidiaries s WHERE s.id = ?
+  UNION ALL
+  SELECT s.id FROM subsidiaries s JOIN scope ON s.parent_id = scope.id
+)
+SELECT COALESCE(sp.fund_id, 0) AS fund_id, t.currency, t.date,
+       CAST(SUM(sp.amount) AS INTEGER) AS balance
+FROM splits sp
+JOIN transactions t ON t.id = sp.transaction_id
+JOIN accounts a ON a.id = sp.account_id
+WHERE t.deleted = 0
+  AND ((a.type = 'asset' AND (a.current_cash = 1 OR a.receivable_payable = 1))
+       OR a.type = 'liability')
+  AND t.date <= ?
+  AND t.subsidiary_id IN (SELECT id FROM scope)
+GROUP BY COALESCE(sp.fund_id, 0), t.currency, t.date
+ORDER BY fund_id, t.currency, t.date
+`
+
+type MonetaryFundDatedBalancesAsOfParams struct {
+	ID   int64
+	Date string
+}
+
+type MonetaryFundDatedBalancesAsOfRow struct {
+	FundID   ids.FundID
+	Currency string
+	Date     string
+	Balance  int64
+}
+
+// Per (fund, currency, date): signed net-debit MONETARY activity on that date -- the
+// dated variant of MonetaryFundBalancesAsOf, preserving the transaction date so a
+// multi-period Statement of Position accumulates every year-end's restricted figure
+// from a single scan (Σ activity for date <= cutoff == the cutoff's balance). Params:
+// scopeSub, asof.
+func (q *Queries) MonetaryFundDatedBalancesAsOf(ctx context.Context, arg MonetaryFundDatedBalancesAsOfParams) ([]MonetaryFundDatedBalancesAsOfRow, error) {
+	rows, err := q.db.QueryContext(ctx, monetaryFundDatedBalancesAsOf, arg.ID, arg.Date)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []MonetaryFundDatedBalancesAsOfRow
+	for rows.Next() {
+		var i MonetaryFundDatedBalancesAsOfRow
+		if err := rows.Scan(&i.FundID, &i.Currency, &i.Date, &i.Balance); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const periodActivity = `-- name: PeriodActivity :many
 WITH RECURSIVE scope(id) AS (
   SELECT s.id FROM subsidiaries s WHERE s.id = ?
