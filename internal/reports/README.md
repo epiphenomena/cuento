@@ -11,6 +11,10 @@ So a NEW report is a **code-only addition**: no new route, no new handler, no te
 no index or nav change. Follow this checklist. The trial-balance report
 (`trial_balance.go`) is the exemplar — copy it.
 
+Building a multi-period or FX-heavy report? Read `docs/report-performance.md`
+first (single ordered scan vs N as-of passes, hoisting, composite indexes) so it
+is fast from the start.
+
 ## Checklist
 
 1. **`internal/reports/<id>.go`** — declare the `Report` and its `Run`.
