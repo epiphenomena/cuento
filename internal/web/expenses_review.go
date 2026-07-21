@@ -236,11 +236,13 @@ func (s *server) buildReviewEditorModel(w http.ResponseWriter, r *http.Request, 
 	// p-golive: prefill the txn from the report's header fields -- the reviewer's form is
 	// the phase-12 editor, now seeded with the submitter's date/memo/notes. The report's
 	// date drives the txn date (falling back to today when unset); memo/notes are txn-level
-	// and carry straight through. The report's DESCRIPTION lands on the counter-side
-	// (payment) row inside prefillExpenseRows -- this review path renders the FLAT grid
-	// (no header main-description field; MainPresent is false for import/expense review),
-	// so there is no single "main split" input here; the payment line is the natural home
-	// for the report's overall description. The reviewer can still edit any of it.
+	// and carry straight through. The report's DESCRIPTION + MEMO land on the MAIN (first)
+	// split -- the counter-side/pay-from row that prefillExpenseRows now emits at row 0 (main
+	// split = first split, p26.34) -- so review reads + works like editing a transaction: the
+	// pay-from leg leads the grid carrying the report's overall description/memo. This review
+	// path renders the FLAT grid (MainPresent false, like import), so there is no separate
+	// header main-description field; the row-0 split IS the main split. The reviewer can still
+	// edit any of it.
 	if rep.Date != "" {
 		model.Date = money.FormatDate(parseISOForDisplay(rep.Date), dateFormatFor(u))
 	} else {
@@ -263,10 +265,20 @@ func (s *server) buildReviewEditorModel(w http.ResponseWriter, r *http.Request, 
 // prefillExpenseRows builds the editor rows from the report's lines: one row per line
 // (account, signed amount, fund, program, memo), with program + functional class
 // DEFAULTED from the account so the store's Z15/Z16 gates (R/E rows need a program; an
-// expense row needs a functional class) don't reject an untouched prefill. A trailing
-// EMPTY row is appended for the reviewer's counter-side (cash/bank) so the txn can be
-// balanced without adding a row by hand (mirrors prefillImportRows). The store
-// re-validates authoritatively on POST.
+// expense row needs a functional class) don't reject an untouched prefill.
+//
+// CONSISTENCY with the normal txn editor (this task): in this app the MAIN split is the
+// FIRST split (p26.34) -- the balancing/pay-from leg presented at the top. The reviewer's
+// flat grid is the SAME transaction-form partial the normal editor uses, so to make review
+// LOOK + WORK like editing a transaction the counter-side (pay-from / accounts-payable) row
+// is emitted FIRST, at index 0, carrying the report's HEADER description + memo (so the main
+// split reads with the report's overall description/memo, exactly as split0 does elsewhere).
+// The report's expense lines follow as body rows (re-indexed 1..n). We stay on the FLAT grid
+// (MainPresent false) rather than the main-split header block because expense reports span
+// funds -- the normal editor itself falls back to the flat grid for a multi-fund txn -- and
+// the review POST parses splits straight from parseSplitForms (no main_* reconstruction); a
+// first-row counter split gives the same "main split first" semantics without that machinery.
+// The store re-validates authoritatively on POST.
 func (s *server) prefillExpenseRows(r *http.Request, model txnEditorModel, rep sqlc.ExpenseReport, lines []sqlc.ExpenseReportLine) []txnRowModel {
 	ctx := r.Context()
 	u := currentUser(ctx)
@@ -285,10 +297,28 @@ func (s *server) prefillExpenseRows(r *http.Request, model txnEditorModel, rep s
 	}
 
 	rows := make([]txnRowModel, 0, len(lines)+1)
+
+	// The MAIN split (row 0): the counter-side (accounts-payable / pay-from) leg -- expense
+	// report accounting is DR expense lines / CR accounts-payable, so the AP is exactly this
+	// counter-side. It leads the grid (main split = first split, p26.34) and carries the
+	// report's HEADER description + memo so the main split reads with the report's overall
+	// description/memo, the same way split0 does in the normal editor. 8a: seed its ACCOUNT
+	// with the report's ap_account_id (the payable); the reviewer keeps it EDITABLE (per the
+	// requirement) and injectRowAccounts (called right after) makes it selectable even if
+	// inactive/out-of-scope (p26.10). The AP is always in the report's LOCKED subsidiary
+	// (seeded + re-seeded from it), so it can't be cross-sub. Its amount stays blank for the
+	// reviewer to balance. On POST the p26.x copy-down still propagates a description into any
+	// blank split, so an untouched description flows through to the posted splits.
+	main := txnRowModel{Index: 0, Description: rep.Description, Memo: rep.Memo}
+	if rep.APAccountID.Valid {
+		main.Account = rep.APAccountID.Int64
+	}
+	rows = append(rows, main)
+
 	for i, l := range lines {
 		m := meta[l.AccountID]
 		row := txnRowModel{
-			Index:   i,
+			Index:   i + 1, // row 0 is the main (pay-from) split above
 			Account: int64(l.AccountID),
 			Amount:  money.Format(l.Amount, exp, fmtOpts),
 			// p26.19: carry the line's free-text description into the review editor row so
@@ -324,21 +354,6 @@ func (s *server) prefillExpenseRows(r *http.Request, model txnEditorModel, rep s
 		}
 		rows = append(rows, row)
 	}
-	// A trailing counter-side row for the reviewer (the accounts-payable leg). p-golive: seed
-	// its DESCRIPTION with the report's header description so the payment line carries the
-	// report's overall description (the flat review grid has no header main-description
-	// field). 8a: seed its ACCOUNT with the report's ap_account_id (the payable) -- expense
-	// report accounting is DR expense lines / CR accounts-payable, so the AP is exactly this
-	// counter-side. The reviewer keeps it EDITABLE (per the requirement); injectRowAccounts
-	// (called right after) makes it selectable even if inactive/out-of-scope (p26.10). The AP
-	// is always in the report's LOCKED subsidiary (seeded + re-seeded from it), so it can't be
-	// cross-sub. On POST the p26.x copy-down still propagates a description into any blank
-	// split, so an untouched description flows through to the posted splits.
-	counter := txnRowModel{Index: len(lines), Description: rep.Description}
-	if rep.APAccountID.Valid {
-		counter.Account = rep.APAccountID.Int64
-	}
-	rows = append(rows, counter)
 	return rows
 }
 
