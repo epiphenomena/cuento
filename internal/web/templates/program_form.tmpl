@@ -31,6 +31,16 @@
     {{with .Errors.ErrorKey "name"}}<p id="pf-name-err" class="field-error" role="alert">{{t .}}</p>{{end}}
   </div>
 
+  <div class="field">
+    <label for="pf-name-es">{{t "programs.form.name_es"}}</label>
+    <input id="pf-name-es" name="name_es" type="text" value="{{.NameES}}">
+  </div>
+
+  <div class="field">
+    <label for="pf-description">{{t "programs.form.description"}}</label>
+    <textarea id="pf-description" name="description" rows="3">{{.Desc}}</textarea>
+  </div>
+
   {{if not .IsRoot}}
   <div class="field">
     <label for="pf-parent">{{t "programs.form.parent"}}</label>

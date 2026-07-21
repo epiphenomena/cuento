@@ -28,7 +28,7 @@ func (q *Queries) CountActiveProgramChildren(ctx context.Context, parentID sql.N
 }
 
 const getProgram = `-- name: GetProgram :one
-SELECT id, parent_id, name, active, sort_order
+SELECT id, parent_id, name, name_es, description, active, sort_order
 FROM programs
 WHERE id = ?
 `
@@ -40,6 +40,8 @@ func (q *Queries) GetProgram(ctx context.Context, id ids.ProgramID) (Program, er
 		&i.ID,
 		&i.ParentID,
 		&i.Name,
+		&i.NameEs,
+		&i.Description,
 		&i.Active,
 		&i.SortOrder,
 	)
@@ -48,16 +50,18 @@ func (q *Queries) GetProgram(ctx context.Context, id ids.ProgramID) (Program, er
 
 const insertProgram = `-- name: InsertProgram :one
 
-INSERT INTO programs (parent_id, name, active, sort_order)
-VALUES (?, ?, ?, ?)
+INSERT INTO programs (parent_id, name, name_es, description, active, sort_order)
+VALUES (?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
 type InsertProgramParams struct {
-	ParentID  sql.NullInt64
-	Name      string
-	Active    int64
-	SortOrder int64
+	ParentID    sql.NullInt64
+	Name        string
+	NameEs      string
+	Description string
+	Active      int64
+	SortOrder   int64
 }
 
 // p07.1: program operations. All SQL for the store's program methods lives here
@@ -82,6 +86,8 @@ func (q *Queries) InsertProgram(ctx context.Context, arg InsertProgramParams) (i
 	row := q.db.QueryRowContext(ctx, insertProgram,
 		arg.ParentID,
 		arg.Name,
+		arg.NameEs,
+		arg.Description,
 		arg.Active,
 		arg.SortOrder,
 	)
@@ -92,8 +98,8 @@ func (q *Queries) InsertProgram(ctx context.Context, arg InsertProgramParams) (i
 
 const insertProgramVersion = `-- name: InsertProgramVersion :exec
 INSERT INTO programs_versions
-  (entity_id, change_id, valid_from, op, parent_id, name, active, sort_order)
-SELECT p.id, c.id, c.at, ?, p.parent_id, p.name, p.active, p.sort_order
+  (entity_id, change_id, valid_from, op, parent_id, name, name_es, description, active, sort_order)
+SELECT p.id, c.id, c.at, ?, p.parent_id, p.name, p.name_es, p.description, p.active, p.sort_order
 FROM programs p, changes c
 WHERE c.id = ? AND p.id = ?
 `
@@ -175,28 +181,30 @@ func (q *Queries) ProgramDescendants(ctx context.Context, id ids.ProgramID) ([]P
 }
 
 const programTree = `-- name: ProgramTree :many
-WITH RECURSIVE tree(id, parent_id, name, active, sort_order, path) AS (
-  SELECT p.id, p.parent_id, p.name, p.active, p.sort_order,
+WITH RECURSIVE tree(id, parent_id, name, name_es, description, active, sort_order, path) AS (
+  SELECT p.id, p.parent_id, p.name, p.name_es, p.description, p.active, p.sort_order,
          printf('%020d.%020d', p.sort_order, p.id)
   FROM programs p
   WHERE p.parent_id IS NULL
   UNION ALL
-  SELECT p.id, p.parent_id, p.name, p.active, p.sort_order,
+  SELECT p.id, p.parent_id, p.name, p.name_es, p.description, p.active, p.sort_order,
          t.path || '/' || printf('%020d.%020d', p.sort_order, p.id)
   FROM programs p
   JOIN tree t ON p.parent_id = t.id
 )
-SELECT tree.id, tree.parent_id, tree.name, tree.active, tree.sort_order
+SELECT tree.id, tree.parent_id, tree.name, tree.name_es, tree.description, tree.active, tree.sort_order
 FROM tree
 ORDER BY tree.path
 `
 
 type ProgramTreeRow struct {
-	ID        ids.ProgramID
-	ParentID  sql.NullInt64
-	Name      string
-	Active    int64
-	SortOrder int64
+	ID          ids.ProgramID
+	ParentID    sql.NullInt64
+	Name        string
+	NameEs      string
+	Description string
+	Active      int64
+	SortOrder   int64
 }
 
 // All programs in DEPTH-FIRST (pre-order) order. A materialized path of
@@ -215,6 +223,8 @@ func (q *Queries) ProgramTree(ctx context.Context) ([]ProgramTreeRow, error) {
 			&i.ID,
 			&i.ParentID,
 			&i.Name,
+			&i.NameEs,
+			&i.Description,
 			&i.Active,
 			&i.SortOrder,
 		); err != nil {
@@ -233,16 +243,18 @@ func (q *Queries) ProgramTree(ctx context.Context) ([]ProgramTreeRow, error) {
 
 const updateProgram = `-- name: UpdateProgram :exec
 UPDATE programs
-SET parent_id = ?, name = ?, active = ?, sort_order = ?
+SET parent_id = ?, name = ?, name_es = ?, description = ?, active = ?, sort_order = ?
 WHERE id = ?
 `
 
 type UpdateProgramParams struct {
-	ParentID  sql.NullInt64
-	Name      string
-	Active    int64
-	SortOrder int64
-	ID        ids.ProgramID
+	ParentID    sql.NullInt64
+	Name        string
+	NameEs      string
+	Description string
+	Active      int64
+	SortOrder   int64
+	ID          ids.ProgramID
 }
 
 // Live update: rename / move (parent) / active / sort. The store reads the
@@ -252,6 +264,8 @@ func (q *Queries) UpdateProgram(ctx context.Context, arg UpdateProgramParams) er
 	_, err := q.db.ExecContext(ctx, updateProgram,
 		arg.ParentID,
 		arg.Name,
+		arg.NameEs,
+		arg.Description,
 		arg.Active,
 		arg.SortOrder,
 		arg.ID,

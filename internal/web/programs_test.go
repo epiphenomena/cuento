@@ -382,3 +382,63 @@ func TestProgramActivityTotalsMatchQuery(t *testing.T) {
 		}
 	}
 }
+
+// TestProgramsCreateWithSpanishAndDescription: creating via POST with name_es +
+// description persists both; the edit OWN PAGE renders them back and the list shows
+// the description (p29). Also verifies the edit route is now a full shell page.
+func TestProgramsCreateWithSpanishAndDescription(t *testing.T) {
+	h, st, sm := accountsApp(t)
+	book := mkUser(t, st, "book", "write", false)
+
+	form := url.Values{}
+	form.Set("name", "Outreach")
+	form.Set("name_es", "Alcance")
+	form.Set("description", "Community outreach programming")
+	form.Set("parent_id", "1")
+	rec := asUser(t, h, sm, book, http.MethodPost, "/programs", form)
+	if rec.Code >= 400 {
+		t.Fatalf("create returned %d, body: %s", rec.Code, rec.Body.String())
+	}
+
+	id := progByName(t, st, "Outreach")
+	if id == 0 {
+		t.Fatalf("created program not found")
+	}
+	prog, _ := st.GetProgram(context.Background(), id)
+	if prog.NameEs != "Alcance" || prog.Description != "Community outreach programming" {
+		t.Fatalf("persisted name_es=%q desc=%q", prog.NameEs, prog.Description)
+	}
+
+	// The edit OWN PAGE renders (full shell page, 200) with the values prefilled.
+	rec = asUser(t, h, sm, book, http.MethodGet, "/programs/"+itoa(int64(id))+"/edit", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET edit page: status=%d, body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "<html") {
+		t.Errorf("edit is not a full page (no <html>); body: %s", body)
+	}
+	if !strings.Contains(body, "Alcance") || !strings.Contains(body, "Community outreach programming") {
+		t.Errorf("edit page missing name_es/description; body: %s", body)
+	}
+
+	// The LIST page shows the description.
+	rec = asUser(t, h, sm, book, http.MethodGet, "/programs", nil)
+	if !strings.Contains(rec.Body.String(), "Community outreach programming") {
+		t.Errorf("list page missing program description; body: %s", rec.Body.String())
+	}
+}
+
+// TestProgramSpanishNameDisplaysForESViewer: an es-locale viewer sees name_es on the
+// programs list; an en viewer sees the English name (localName central resolution).
+func TestProgramSpanishNameDisplaysForESViewer(t *testing.T) {
+	if got := localName("es", "Outreach", "Alcance"); got != "Alcance" {
+		t.Errorf("es viewer name = %q, want Alcance", got)
+	}
+	if got := localName("es", "Outreach", ""); got != "Outreach" {
+		t.Errorf("es viewer with blank name_es = %q, want en fallback Outreach", got)
+	}
+	if got := localName("en", "Outreach", "Alcance"); got != "Outreach" {
+		t.Errorf("en viewer name = %q, want Outreach", got)
+	}
+}

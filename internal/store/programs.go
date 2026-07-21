@@ -77,6 +77,8 @@ var (
 type CreateProgramInput struct {
 	ParentID  ids.ProgramID
 	Name      string
+	NameES    string // optional Spanish name ("" = none; en-fallback at display)
+	Desc      string // optional free-text description
 	SortOrder int64
 }
 
@@ -86,6 +88,8 @@ type CreateProgramInput struct {
 type UpdateProgramInput struct {
 	ParentID  *ids.ProgramID
 	Name      *string
+	NameES    *string // nil = leave as-is
+	Desc      *string // nil = leave as-is
 	SortOrder *int64
 }
 
@@ -109,10 +113,12 @@ func (s *Store) CreateProgram(ctx context.Context, in CreateProgramInput) (ids.P
 			}
 
 			id, err := q.InsertProgram(ctx, sqlc.InsertProgramParams{
-				ParentID:  sql.NullInt64{Int64: int64(in.ParentID), Valid: true},
-				Name:      in.Name,
-				Active:    1,
-				SortOrder: in.SortOrder,
+				ParentID:    sql.NullInt64{Int64: int64(in.ParentID), Valid: true},
+				Name:        in.Name,
+				NameEs:      in.NameES,
+				Description: in.Desc,
+				Active:      1,
+				SortOrder:   in.SortOrder,
 			})
 			if err != nil {
 				return fmt.Errorf("insert program: %w", err)
@@ -148,6 +154,12 @@ func (s *Store) UpdateProgram(ctx context.Context, id ids.ProgramID, in UpdatePr
 			if in.Name != nil {
 				next.Name = *in.Name
 			}
+			if in.NameES != nil {
+				next.NameEs = *in.NameES
+			}
+			if in.Desc != nil {
+				next.Description = *in.Desc
+			}
 			if in.SortOrder != nil {
 				next.SortOrder = *in.SortOrder
 			}
@@ -172,11 +184,13 @@ func (s *Store) UpdateProgram(ctx context.Context, id ids.ProgramID, in UpdatePr
 			}
 
 			if err := q.UpdateProgram(ctx, sqlc.UpdateProgramParams{
-				ParentID:  next.ParentID,
-				Name:      next.Name,
-				Active:    next.Active,
-				SortOrder: next.SortOrder,
-				ID:        id,
+				ParentID:    next.ParentID,
+				Name:        next.Name,
+				NameEs:      next.NameEs,
+				Description: next.Description,
+				Active:      next.Active,
+				SortOrder:   next.SortOrder,
+				ID:          id,
 			}); err != nil {
 				return fmt.Errorf("update program %d: %w", id, err)
 			}
@@ -213,11 +227,13 @@ func (s *Store) DeactivateProgram(ctx context.Context, id ids.ProgramID) error {
 			}
 
 			if err := q.UpdateProgram(ctx, sqlc.UpdateProgramParams{
-				ParentID:  cur.ParentID,
-				Name:      cur.Name,
-				Active:    0,
-				SortOrder: cur.SortOrder,
-				ID:        id,
+				ParentID:    cur.ParentID,
+				Name:        cur.Name,
+				NameEs:      cur.NameEs,
+				Description: cur.Description,
+				Active:      0,
+				SortOrder:   cur.SortOrder,
+				ID:          id,
 			}); err != nil {
 				return fmt.Errorf("deactivate program %d: %w", id, err)
 			}
@@ -382,11 +398,13 @@ func (s *Store) MergeProgram(ctx context.Context, src, dst ids.ProgramID) error 
 			// bypasses the active-children guard -- src's children have already moved).
 			// Every other column is carried through from srcProg.
 			if err := q.UpdateProgram(ctx, sqlc.UpdateProgramParams{
-				ParentID:  srcProg.ParentID,
-				Name:      srcProg.Name,
-				Active:    0,
-				SortOrder: srcProg.SortOrder,
-				ID:        src,
+				ParentID:    srcProg.ParentID,
+				Name:        srcProg.Name,
+				NameEs:      srcProg.NameEs,
+				Description: srcProg.Description,
+				Active:      0,
+				SortOrder:   srcProg.SortOrder,
+				ID:          src,
 			}); err != nil {
 				return fmt.Errorf("deactivate source %d: %w", src, err)
 			}

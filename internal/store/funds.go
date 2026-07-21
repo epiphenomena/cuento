@@ -56,6 +56,7 @@ var (
 // not propagated.
 type CreateFundInput struct {
 	Name         string
+	NameES       string // optional Spanish name ("" = none; en-fallback at display)
 	Funder       string
 	Purpose      string
 	Restriction  string
@@ -75,6 +76,7 @@ type CreateFundInput struct {
 // StartDate/EndDate follow the same nil/""-clears convention as strings.
 type UpdateFundInput struct {
 	Name         *string
+	NameES       *string // nil = leave as-is
 	Funder       *string
 	Purpose      *string
 	Restriction  *string
@@ -108,6 +110,7 @@ func (s *Store) CreateFund(ctx context.Context, in CreateFundInput) (ids.FundID,
 
 			id, err := q.InsertFund(ctx, sqlc.InsertFundParams{
 				Name:        in.Name,
+				NameEs:      in.NameES,
 				Funder:      in.Funder,
 				Purpose:     in.Purpose,
 				Restriction: in.Restriction,
@@ -166,6 +169,9 @@ func (s *Store) UpdateFund(ctx context.Context, id ids.FundID, in UpdateFundInpu
 			next := cur
 			if in.Name != nil {
 				next.Name = *in.Name
+			}
+			if in.NameES != nil {
+				next.NameEs = *in.NameES
 			}
 			if in.Funder != nil {
 				next.Funder = *in.Funder
@@ -244,6 +250,7 @@ func (s *Store) UpdateFund(ctx context.Context, id ids.FundID, in UpdateFundInpu
 
 			if err := q.UpdateFund(ctx, sqlc.UpdateFundParams{
 				Name:        next.Name,
+				NameEs:      next.NameEs,
 				Funder:      next.Funder,
 				Purpose:     next.Purpose,
 				Restriction: next.Restriction,
@@ -291,6 +298,7 @@ func (s *Store) setFundActive(ctx context.Context, id ids.FundID, active int64, 
 			}
 			if err := q.UpdateFund(ctx, sqlc.UpdateFundParams{
 				Name:        cur.Name,
+				NameEs:      cur.NameEs,
 				Funder:      cur.Funder,
 				Purpose:     cur.Purpose,
 				Restriction: cur.Restriction,

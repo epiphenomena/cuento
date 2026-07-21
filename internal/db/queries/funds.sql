@@ -24,12 +24,12 @@
 -- end_date are optional (validated in the store where required). Returns the new
 -- id for the store to snapshot + return.
 INSERT INTO funds
-  (name, funder, purpose, restriction, program_id, start_date, end_date, notes, active)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  (name, name_es, funder, purpose, restriction, program_id, start_date, end_date, notes, active)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id;
 
 -- name: GetFund :one
-SELECT id, name, funder, purpose, restriction, program_id,
+SELECT id, name, name_es, funder, purpose, restriction, program_id,
        start_date, end_date, notes, active
 FROM funds
 WHERE id = ?;
@@ -39,7 +39,7 @@ WHERE id = ?;
 -- fund-name lookup (a chip may name a now-closed fund) and the fund-filter option
 -- list. Unlike ActiveFunds this is NOT scoped to a subsidiary and includes closed
 -- funds, because a historical split may reference either.
-SELECT id, name, funder, purpose, restriction, program_id,
+SELECT id, name, name_es, funder, purpose, restriction, program_id,
        start_date, end_date, notes, active
 FROM funds
 ORDER BY id;
@@ -50,7 +50,7 @@ ORDER BY id;
 -- caller's fields, and writes the full desired state here, keeping
 -- snapshot-from-live trivial.
 UPDATE funds
-SET name = ?, funder = ?, purpose = ?, restriction = ?, program_id = ?,
+SET name = ?, name_es = ?, funder = ?, purpose = ?, restriction = ?, program_id = ?,
     start_date = ?, end_date = ?, notes = ?, active = ?
 WHERE id = ?;
 
@@ -62,9 +62,9 @@ WHERE id = ?;
 -- set matches 00009_funds.sql exactly. Params (plain positional, each used once):
 -- op, change_id, entity_id -> generated fields Op, ID (change_id), ID_2 (entity_id).
 INSERT INTO funds_versions
-  (entity_id, change_id, valid_from, op, name, funder, purpose, restriction,
+  (entity_id, change_id, valid_from, op, name, name_es, funder, purpose, restriction,
    program_id, start_date, end_date, notes, active)
-SELECT f.id, c.id, c.at, ?, f.name, f.funder, f.purpose, f.restriction,
+SELECT f.id, c.id, c.at, ?, f.name, f.name_es, f.funder, f.purpose, f.restriction,
        f.program_id, f.start_date, f.end_date, f.notes, f.active
 FROM funds f, changes c
 WHERE c.id = ? AND f.id = ?;
@@ -150,7 +150,7 @@ ORDER BY t.date, sp.id;
 -- Active funds whose subsidiary scope contains a given subsidiary (D20/Q1 -- the
 -- transaction editor's option source). The JOIN + WHERE on subsidiary_id keeps
 -- one row per fund (no dups). Ordered by id for a deterministic option list.
-SELECT f.id, f.name, f.funder, f.purpose, f.restriction, f.program_id,
+SELECT f.id, f.name, f.name_es, f.funder, f.purpose, f.restriction, f.program_id,
        f.start_date, f.end_date, f.notes, f.active
 FROM funds f
 JOIN fund_subsidiaries fs ON fs.fund_id = f.id

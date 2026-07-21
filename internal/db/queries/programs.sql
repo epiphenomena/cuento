@@ -17,22 +17,24 @@
 -- name: InsertProgram :one
 -- Live insert of a CHILD. parent_id is validated present/valid in the store
 -- (ErrProgramSecondRoot / ErrProgramParentMissing) BEFORE this runs, so a second
--- root never reaches the trigger. Returns the new id for the store to snapshot.
-INSERT INTO programs (parent_id, name, active, sort_order)
-VALUES (?, ?, ?, ?)
+-- root never reaches the trigger. name is the ENGLISH/primary name; name_es is the
+-- optional Spanish rendering; description is the free-text note. Returns the new id
+-- for the store to snapshot.
+INSERT INTO programs (parent_id, name, name_es, description, active, sort_order)
+VALUES (?, ?, ?, ?, ?, ?)
 RETURNING id;
 
 -- name: GetProgram :one
-SELECT id, parent_id, name, active, sort_order
+SELECT id, parent_id, name, name_es, description, active, sort_order
 FROM programs
 WHERE id = ?;
 
 -- name: UpdateProgram :exec
--- Live update: rename / move (parent) / active / sort. The store reads the
--- current row (GetProgram), overrides the caller's fields, and writes the full
--- desired state here, keeping snapshot-from-live trivial.
+-- Live update: rename / move (parent) / active / sort / Spanish name / description.
+-- The store reads the current row (GetProgram), overrides the caller's fields, and
+-- writes the full desired state here, keeping snapshot-from-live trivial.
 UPDATE programs
-SET parent_id = ?, name = ?, active = ?, sort_order = ?
+SET parent_id = ?, name = ?, name_es = ?, description = ?, active = ?, sort_order = ?
 WHERE id = ?;
 
 -- name: InsertProgramVersion :exec
@@ -47,8 +49,8 @@ WHERE id = ?;
 -- struct fields are Op, ID (change_id = c.id), ID_2 (entity_id = p.id); the store
 -- wraps that behind one insertProgramVersion helper.
 INSERT INTO programs_versions
-  (entity_id, change_id, valid_from, op, parent_id, name, active, sort_order)
-SELECT p.id, c.id, c.at, ?, p.parent_id, p.name, p.active, p.sort_order
+  (entity_id, change_id, valid_from, op, parent_id, name, name_es, description, active, sort_order)
+SELECT p.id, c.id, c.at, ?, p.parent_id, p.name, p.name_es, p.description, p.active, p.sort_order
 FROM programs p, changes c
 WHERE c.id = ? AND p.id = ?;
 
@@ -63,18 +65,18 @@ WHERE parent_id = ? AND active = 1;
 -- All programs in DEPTH-FIRST (pre-order) order. A materialized path of
 -- zero-padded (sort_order, id) pairs per level makes ORDER BY path a true
 -- pre-order traversal; children are ordered by sort_order then id.
-WITH RECURSIVE tree(id, parent_id, name, active, sort_order, path) AS (
-  SELECT p.id, p.parent_id, p.name, p.active, p.sort_order,
+WITH RECURSIVE tree(id, parent_id, name, name_es, description, active, sort_order, path) AS (
+  SELECT p.id, p.parent_id, p.name, p.name_es, p.description, p.active, p.sort_order,
          printf('%020d.%020d', p.sort_order, p.id)
   FROM programs p
   WHERE p.parent_id IS NULL
   UNION ALL
-  SELECT p.id, p.parent_id, p.name, p.active, p.sort_order,
+  SELECT p.id, p.parent_id, p.name, p.name_es, p.description, p.active, p.sort_order,
          t.path || '/' || printf('%020d.%020d', p.sort_order, p.id)
   FROM programs p
   JOIN tree t ON p.parent_id = t.id
 )
-SELECT tree.id, tree.parent_id, tree.name, tree.active, tree.sort_order
+SELECT tree.id, tree.parent_id, tree.name, tree.name_es, tree.description, tree.active, tree.sort_order
 FROM tree
 ORDER BY tree.path;
 

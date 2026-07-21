@@ -10,9 +10,15 @@
 // toggle) -> reopen. Keeping it to a single login matters: the worker-scoped fixture
 // shares one server (and its login rate limiter) across every spec on the worker.
 //
+// p29: the create/edit form moved to its OWN PAGE (GET /funds/new and
+// /funds/{id}/edit are full shell pages, no longer an inline htmx swap atop the
+// list). The list's New/Edit triggers are now plain <a> LINKS. The form still uses
+// hx-post, so a successful Save returns an HX-Redirect back to /funds.
+//
 // Selectors come straight from fund_form.tmpl / funds.tmpl / fund_statement.tmpl:
-//   - New-fund trigger:  button "New fund" (hx-get /funds/new)
-//   - form fields:       #ff-name, #ff-funder, #ff-program, input[name="sub_1"]
+//   - New-fund trigger:  link "New fund" -> /funds/new
+//   - form fields:       #ff-name, #ff-name-es, #ff-funder, #ff-program, input[name="sub_1"]
+//   - purpose/notes:     textareas (#ff-purpose, #ff-notes) as of p29
 //   - list row:          tr.fund-row (fund name links to the statement)
 //   - toggle:            link "Show closed funds" / "Show active funds"
 //   - statement:         table.fund-openclose (opening/closing per currency)
@@ -27,6 +33,21 @@ async function login(page, server) {
   await page.waitForURL('**/');
 }
 
+// openNewFund navigates to the create-fund OWN PAGE (p29) and waits for the form.
+async function openNewFund(page) {
+  await page.goto('/funds');
+  await page.getByRole('link', { name: /new fund/i }).click();
+  await page.waitForURL('**/funds/new');
+  await expect(page.locator('#ff-name')).toBeVisible();
+}
+
+// saveFund submits the own-page form (hx-post -> HX-Redirect) and waits for the
+// navigation back to the funds list.
+async function saveFund(page) {
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL(/\/funds(\?|$)/);
+}
+
 test('funds: create with checklist + program, view statement, close and reopen', async ({
   page,
   server,
@@ -37,13 +58,13 @@ test('funds: create with checklist + program, view statement, close and reopen',
   await page.goto('/funds');
   await expect(page.getByRole('heading', { name: /funds/i })).toBeVisible();
 
-  // --- create a fund through the inline form (subsidiary checklist + program) ---
-  await page.getByRole('button', { name: /new fund/i }).click();
-  // Wait for the New-fund form swap to SETTLE so htmx has wired the Save button's
-  // hx-post before we click it (see the settle-marker note in fixtures.js).
-  await expect(page.locator('form#fund-form.e2e-settled')).toBeVisible();
+  // --- create a fund on its OWN PAGE (subsidiary checklist + program + Spanish name) ---
+  await openNewFund(page);
   await page.locator('#ff-name').fill('Water Grant E2E');
+  await page.locator('#ff-name-es').fill('Beca Agua E2E');
   await page.locator('#ff-funder').fill('Clean Water Fund E2E');
+  // Purpose is a TEXTAREA as of p29 (more space).
+  await page.locator('#ff-purpose').fill('Clean water access');
   // Program scope: the seeded root program "General".
   await page.locator('#ff-program').selectOption({ label: 'General' });
   // Subsidiary checklist: check the seeded root subsidiary (id 1).
@@ -51,14 +72,7 @@ test('funds: create with checklist + program, view statement, close and reopen',
   if (!(await rootSub.isChecked())) {
     await rootSub.check();
   }
-  // Save posts via hx-post; success returns an HX-Redirect back to GET /funds. We're
-  // ALREADY on /funds, so waitForURL is a no-op that does NOT wait for the reload --
-  // wait for the reload RESPONSE instead, which lands only after the write commits.
-  let reloaded = page.waitForResponse(
-    (r) => r.url().endsWith('/funds') && r.request().method() === 'GET',
-  );
-  await page.getByRole('button', { name: /^save$/i }).click();
-  await reloaded;
+  await saveFund(page);
 
   // The fund appears with its name, funder, and scope (subsidiary + program).
   const row = page.locator('tr.fund-row', { hasText: 'Water Grant E2E' });
@@ -66,6 +80,16 @@ test('funds: create with checklist + program, view statement, close and reopen',
   await expect(row).toContainText('Clean Water Fund E2E');
   await expect(row).toContainText('Organization'); // subsidiary scope chip
   await expect(row).toContainText('General'); // program scope chip
+
+  // --- edit via the OWN PAGE: the Spanish name + textarea purpose round-trip ---
+  await row.getByRole('link', { name: /^edit$/i }).click();
+  await page.waitForURL(/\/funds\/\d+\/edit$/);
+  await expect(page.locator('#ff-name')).toHaveValue('Water Grant E2E');
+  await expect(page.locator('#ff-name-es')).toHaveValue('Beca Agua E2E');
+  await expect(page.locator('#ff-purpose')).toHaveValue('Clean water access');
+  await page.goto('/funds'); // leave the edit page without changes
+
+  let reloaded;
 
   // --- open the fund's statement (opening/closing balances render) ---
   await row.getByRole('link', { name: 'Water Grant E2E' }).click();
@@ -115,10 +139,8 @@ test('funds: closed fund is hidden from the report picker until "show inactive"'
 }) => {
   await login(page, server);
 
-  // --- create a fund ---
-  await page.goto('/funds');
-  await page.getByRole('button', { name: /new fund/i }).click();
-  await expect(page.locator('form#fund-form.e2e-settled')).toBeVisible();
+  // --- create a fund on its OWN PAGE ---
+  await openNewFund(page);
   await page.locator('#ff-name').fill('Picker Grant E2E');
   await page.locator('#ff-funder').fill('Picker Fund E2E');
   await page.locator('#ff-program').selectOption({ label: 'General' });
@@ -126,12 +148,10 @@ test('funds: closed fund is hidden from the report picker until "show inactive"'
   if (!(await rootSub.isChecked())) {
     await rootSub.check();
   }
-  let reloaded = page.waitForResponse(
-    (r) => r.url().endsWith('/funds') && r.request().method() === 'GET',
-  );
-  await page.getByRole('button', { name: /^save$/i }).click();
-  await reloaded;
+  await saveFund(page);
   await expect(page.locator('tr.fund-row', { hasText: 'Picker Grant E2E' })).toBeVisible();
+
+  let reloaded;
 
   const FA = '/reports/fund_activity';
   const fundSelect = page.locator('select.report-fund-select[name="fund"]');

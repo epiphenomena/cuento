@@ -17,12 +17,11 @@
 {{/* programs-controls: the section-bar New trigger (p23.11). */ -}}
 {{define "programs-controls" -}}
 <div class="subnav-actions">
-  <button type="button" class="btn btn-primary"
-          hx-get="/programs/new" hx-target="#program-form" hx-swap="outerHTML">
-    {{t "programs.new"}}
-  </button>
+  {{/* p29: New navigates to the create OWN PAGE (no longer injected atop the list). */}}
+  <a class="btn btn-primary" href="/programs/new">{{t "programs.new"}}</a>
   {{/* p11.5b: Merge folds a source program into a destination (its two-step preview
-       swaps into #program-form below), mirroring the chart-of-accounts Merge trigger. */}}
+       swaps into #program-form below), mirroring the chart-of-accounts Merge trigger.
+       Merge stays an in-list htmx swap; only create/edit moved to their own page. */}}
   <button type="button" class="btn btn-ghost"
           hx-get="/programs/merge" hx-target="#program-form" hx-swap="outerHTML">
     {{t "programs.merge"}}
@@ -41,8 +40,8 @@
   <p class="field-error" role="alert">{{t .ErrorKey}}</p>
   {{end}}
 
-  {{/* The inline create/edit form (New trigger lives in the section bar, p23.11)
-       swaps in here; empty until opened. */}}
+  {{/* The MERGE preview swaps in here (create/edit moved to their own page, p29);
+       empty until Merge is opened. */}}
   <div id="program-form" class="program-form-region"></div>
 
   <table class="tree-table">
@@ -56,15 +55,13 @@
     <tbody>
       {{range .Rows}}
       <tr class="prog-row{{if not .Active}} prog-inactive{{end}}" data-depth="{{.Depth}}">
-        <td class="prog-name acct-depth-{{.Depth}}">{{.Name}}{{if not .Active}} <span class="badge">{{t "programs.inactive"}}</span>{{end}}</td>
+        <td class="prog-name acct-depth-{{.Depth}}">{{.Name}}{{if not .Active}} <span class="badge">{{t "programs.inactive"}}</span>{{end}}
+          {{if .Desc}}<span class="prog-desc muted">{{.Desc}}</span>{{end}}</td>
         <td class="prog-activity">
           {{range .Activity}}<span class="amount">{{.}}</span>{{else}}<span class="muted">—</span>{{end}}
         </td>
         <td class="prog-actions">
-          <button type="button" class="btn btn-ghost"
-                  hx-get="/programs/{{.ID}}/edit" hx-target="#program-form" hx-swap="outerHTML">
-            {{t "common.edit"}}
-          </button>
+          <a class="btn btn-ghost" href="/programs/{{.ID}}/edit">{{t "common.edit"}}</a>
           {{if .Active}}
           <form method="post" action="/programs/{{.ID}}/deactivate" class="inline">
             <button type="submit" class="btn btn-ghost">{{t "programs.deactivate"}}</button>

@@ -362,3 +362,47 @@ func TestFundsPermReadCannotManage(t *testing.T) {
 		t.Errorf("reader GET /funds/new = %d, want 403", rec.Code)
 	}
 }
+
+// TestFundCreateWithSpanishNameOwnPage: a writer POSTs a create with name_es; it
+// persists, and the edit OWN PAGE (a full shell page as of p29) renders the Spanish
+// name back in #ff-name-es.
+func TestFundCreateWithSpanishNameOwnPage(t *testing.T) {
+	h, st, sm, ids, writer := fundsFixtureApp(t)
+
+	form := url.Values{}
+	form.Set("name", "Bilingual Fund")
+	form.Set("name_es", "Fondo Bilingue")
+	form.Set("restriction", "purpose")
+	form.Set("sub_"+itoa(int64(ids.US)), itoa(int64(ids.US)))
+	rec := asUser(t, h, sm, writer, http.MethodPost, "/funds", form)
+	if rec.Code != http.StatusSeeOther && rec.Code != http.StatusOK {
+		t.Fatalf("POST /funds = %d; body:\n%s", rec.Code, rec.Body.String())
+	}
+
+	funds, _ := st.ListFunds(context.Background())
+	var id int64
+	for _, f := range funds {
+		if f.Name == "Bilingual Fund" {
+			id = int64(f.ID)
+			if f.NameEs != "Fondo Bilingue" {
+				t.Fatalf("persisted name_es = %q, want Fondo Bilingue", f.NameEs)
+			}
+		}
+	}
+	if id == 0 {
+		t.Fatalf("created fund not found")
+	}
+
+	// The edit OWN PAGE renders as a full shell page with name_es prefilled.
+	rec = asUser(t, h, sm, writer, http.MethodGet, "/funds/"+itoa(id)+"/edit", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET edit page = %d; body:\n%s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "<html") {
+		t.Errorf("edit is not a full page (no <html>)")
+	}
+	if !strings.Contains(body, "Fondo Bilingue") {
+		t.Errorf("edit page missing name_es; body:\n%s", body)
+	}
+}

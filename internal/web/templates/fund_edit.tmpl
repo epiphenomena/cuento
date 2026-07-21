@@ -1,0 +1,20 @@
+{{/*
+  p29 fund create/edit OWN PAGE. The create/edit form used to be injected atop the
+  funds list (an htmx swap into #fund-form); it now lives on its OWN full shell page
+  (GET /funds/new and /funds/{id}/edit render this). .Page is a fundForm.
+
+  The body just embeds the shared "fund-form" partial (fund_form.tmpl) -- the SINGLE
+  SOURCE of the form -- so a failed POST still self-swaps that partial at 422 (the
+  form element IS #fund-form, hx-target #fund-form / outerHTML). Every string via
+  {{t}} (rule 9); no inline script (rule 12).
+*/ -}}
+{{define "fund_edit.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "funds.title"))}}
+  {{- with .Page}}
+  <h1>{{if .ID}}{{t "funds.form.edit_title"}}{{else}}{{t "funds.form.new_title"}}{{end}}</h1>
+  <div class="fund-form-region">
+    {{template "fund-form" .}}
+  </div>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

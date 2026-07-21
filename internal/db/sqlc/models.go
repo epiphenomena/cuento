@@ -223,6 +223,7 @@ type Form990Line struct {
 type Fund struct {
 	ID          ids.FundID
 	Name        string
+	NameEs      string
 	Funder      string
 	Purpose     string
 	Restriction string
@@ -254,6 +255,7 @@ type FundsVersion struct {
 	ValidFrom   string
 	Op          string
 	Name        string
+	NameEs      string
 	Funder      string
 	Purpose     string
 	Restriction string
@@ -300,23 +302,27 @@ type OrgSetting struct {
 }
 
 type Program struct {
-	ID        ids.ProgramID
-	ParentID  sql.NullInt64
-	Name      string
-	Active    int64
-	SortOrder int64
+	ID          ids.ProgramID
+	ParentID    sql.NullInt64
+	Name        string
+	NameEs      string
+	Description string
+	Active      int64
+	SortOrder   int64
 }
 
 type ProgramsVersion struct {
-	ID        int64
-	EntityID  ids.ProgramID
-	ChangeID  ids.ChangeID
-	ValidFrom string
-	Op        string
-	ParentID  sql.NullInt64
-	Name      string
-	Active    int64
-	SortOrder int64
+	ID          int64
+	EntityID    ids.ProgramID
+	ChangeID    ids.ChangeID
+	ValidFrom   string
+	Op          string
+	ParentID    sql.NullInt64
+	Name        string
+	NameEs      string
+	Description string
+	Active      int64
+	SortOrder   int64
 }
 
 type Reconciliation struct {

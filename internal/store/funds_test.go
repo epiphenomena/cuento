@@ -393,3 +393,64 @@ func TestNarrowSubsBlockedBySplits(t *testing.T) {
 		t.Fatalf("narrow away MX (unused): %v", err)
 	}
 }
+
+// TestFundSpanishNameSurvivesClose: name_es round-trips through create/update and
+// SURVIVES CloseFund (setFundActive does a full read-modify-write; dropping the new
+// column would silently blank the Spanish name -- the advisor's wipe risk).
+func TestFundSpanishNameSurvivesClose(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+	sub := newFundSub(t, s, "US")
+
+	id, err := s.CreateFund(mutCtx(), CreateFundInput{
+		Name:         "Ford Grant",
+		NameES:       "Beca Ford",
+		Restriction:  "purpose",
+		Subsidiaries: []ids.SubsidiaryID{sub},
+	})
+	if err != nil {
+		t.Fatalf("CreateFund: %v", err)
+	}
+
+	row, err := s.GetFund(context.Background(), id)
+	if err != nil {
+		t.Fatalf("GetFund: %v", err)
+	}
+	if row.NameEs != "Beca Ford" {
+		t.Fatalf("after create: name_es=%q", row.NameEs)
+	}
+
+	// Update only the funder; name_es must be preserved.
+	funder := "Ford Foundation"
+	if err := s.UpdateFund(mutCtx(), id, UpdateFundInput{Funder: &funder}); err != nil {
+		t.Fatalf("UpdateFund: %v", err)
+	}
+	row, _ = s.GetFund(context.Background(), id)
+	if row.NameEs != "Beca Ford" {
+		t.Fatalf("after update: name_es=%q", row.NameEs)
+	}
+
+	// Close must NOT blank name_es.
+	if err := s.CloseFund(mutCtx(), id); err != nil {
+		t.Fatalf("CloseFund: %v", err)
+	}
+	row, _ = s.GetFund(context.Background(), id)
+	if row.NameEs != "Beca Ford" {
+		t.Fatalf("after close (wipe bug): name_es=%q", row.NameEs)
+	}
+	if row.Active != 0 {
+		t.Fatalf("expected closed (active=0)")
+	}
+
+	// Latest version snapshot carries name_es (Z3).
+	var vNameEs string
+	if err := d.QueryRow(
+		`SELECT name_es FROM funds_versions
+		  WHERE entity_id = ? ORDER BY valid_from DESC, id DESC LIMIT 1`, id,
+	).Scan(&vNameEs); err != nil {
+		t.Fatalf("latest fund version: %v", err)
+	}
+	if vNameEs != "Beca Ford" {
+		t.Fatalf("latest version snapshot: name_es=%q", vNameEs)
+	}
+}

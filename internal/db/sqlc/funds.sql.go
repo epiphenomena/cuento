@@ -13,7 +13,7 @@ import (
 )
 
 const activeFunds = `-- name: ActiveFunds :many
-SELECT f.id, f.name, f.funder, f.purpose, f.restriction, f.program_id,
+SELECT f.id, f.name, f.name_es, f.funder, f.purpose, f.restriction, f.program_id,
        f.start_date, f.end_date, f.notes, f.active
 FROM funds f
 JOIN fund_subsidiaries fs ON fs.fund_id = f.id
@@ -36,6 +36,7 @@ func (q *Queries) ActiveFunds(ctx context.Context, subsidiaryID int64) ([]Fund, 
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
+			&i.NameEs,
 			&i.Funder,
 			&i.Purpose,
 			&i.Restriction,
@@ -207,7 +208,7 @@ func (q *Queries) FundSubsidiaries(ctx context.Context, fundID ids.FundID) ([]id
 }
 
 const getFund = `-- name: GetFund :one
-SELECT id, name, funder, purpose, restriction, program_id,
+SELECT id, name, name_es, funder, purpose, restriction, program_id,
        start_date, end_date, notes, active
 FROM funds
 WHERE id = ?
@@ -219,6 +220,7 @@ func (q *Queries) GetFund(ctx context.Context, id ids.FundID) (Fund, error) {
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
+		&i.NameEs,
 		&i.Funder,
 		&i.Purpose,
 		&i.Restriction,
@@ -253,13 +255,14 @@ func (q *Queries) HasFundSubsidiary(ctx context.Context, arg HasFundSubsidiaryPa
 const insertFund = `-- name: InsertFund :one
 
 INSERT INTO funds
-  (name, funder, purpose, restriction, program_id, start_date, end_date, notes, active)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  (name, name_es, funder, purpose, restriction, program_id, start_date, end_date, notes, active)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id
 `
 
 type InsertFundParams struct {
 	Name        string
+	NameEs      string
 	Funder      string
 	Purpose     string
 	Restriction string
@@ -297,6 +300,7 @@ func (q *Queries) InsertFund(ctx context.Context, arg InsertFundParams) (ids.Fun
 	row := q.db.QueryRowContext(
 		ctx, insertFund,
 		arg.Name,
+		arg.NameEs,
 		arg.Funder,
 		arg.Purpose,
 		arg.Restriction,
@@ -362,9 +366,9 @@ func (q *Queries) InsertFundSubsidiaryVersion(ctx context.Context, arg InsertFun
 
 const insertFundVersion = `-- name: InsertFundVersion :exec
 INSERT INTO funds_versions
-  (entity_id, change_id, valid_from, op, name, funder, purpose, restriction,
+  (entity_id, change_id, valid_from, op, name, name_es, funder, purpose, restriction,
    program_id, start_date, end_date, notes, active)
-SELECT f.id, c.id, c.at, ?, f.name, f.funder, f.purpose, f.restriction,
+SELECT f.id, c.id, c.at, ?, f.name, f.name_es, f.funder, f.purpose, f.restriction,
        f.program_id, f.start_date, f.end_date, f.notes, f.active
 FROM funds f, changes c
 WHERE c.id = ? AND f.id = ?
@@ -388,7 +392,7 @@ func (q *Queries) InsertFundVersion(ctx context.Context, arg InsertFundVersionPa
 }
 
 const listFunds = `-- name: ListFunds :many
-SELECT id, name, funder, purpose, restriction, program_id,
+SELECT id, name, name_es, funder, purpose, restriction, program_id,
        start_date, end_date, notes, active
 FROM funds
 ORDER BY id
@@ -410,6 +414,7 @@ func (q *Queries) ListFunds(ctx context.Context) ([]Fund, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
+			&i.NameEs,
 			&i.Funder,
 			&i.Purpose,
 			&i.Restriction,
@@ -434,13 +439,14 @@ func (q *Queries) ListFunds(ctx context.Context) ([]Fund, error) {
 
 const updateFund = `-- name: UpdateFund :exec
 UPDATE funds
-SET name = ?, funder = ?, purpose = ?, restriction = ?, program_id = ?,
+SET name = ?, name_es = ?, funder = ?, purpose = ?, restriction = ?, program_id = ?,
     start_date = ?, end_date = ?, notes = ?, active = ?
 WHERE id = ?
 `
 
 type UpdateFundParams struct {
 	Name        string
+	NameEs      string
 	Funder      string
 	Purpose     string
 	Restriction string
@@ -460,6 +466,7 @@ func (q *Queries) UpdateFund(ctx context.Context, arg UpdateFundParams) error {
 	_, err := q.db.ExecContext(
 		ctx, updateFund,
 		arg.Name,
+		arg.NameEs,
 		arg.Funder,
 		arg.Purpose,
 		arg.Restriction,

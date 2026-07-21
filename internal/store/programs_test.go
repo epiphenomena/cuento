@@ -451,3 +451,64 @@ func latestAccountVersionDefaultProgram(t *testing.T, d *sql.DB, accountID ids.A
 	}
 	return v
 }
+
+// TestProgramSpanishNameAndDescription: name_es + description round-trip through
+// create/update and, critically, SURVIVE a deactivate (the deactivate path does a
+// read-modify-write on the full param struct; if it dropped the new columns it would
+// silently blank the Spanish name -- the advisor's #1 wipe risk).
+func TestProgramSpanishNameAndDescription(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := New(d)
+
+	id, err := s.CreateProgram(mutCtx(), CreateProgramInput{
+		ParentID: rootProgramID,
+		Name:     "Youth Services",
+		NameES:   "Servicios Juveniles",
+		Desc:     "After-school programming",
+	})
+	if err != nil {
+		t.Fatalf("CreateProgram: %v", err)
+	}
+
+	row, err := s.GetProgram(context.Background(), id)
+	if err != nil {
+		t.Fatalf("GetProgram: %v", err)
+	}
+	if row.NameEs != "Servicios Juveniles" || row.Description != "After-school programming" {
+		t.Fatalf("after create: name_es=%q desc=%q", row.NameEs, row.Description)
+	}
+
+	// Update just the description; name_es must be preserved (only-changed-fields).
+	newDesc := "Youth mentoring and tutoring"
+	if err := s.UpdateProgram(mutCtx(), id, UpdateProgramInput{Desc: &newDesc}); err != nil {
+		t.Fatalf("UpdateProgram desc: %v", err)
+	}
+	row, _ = s.GetProgram(context.Background(), id)
+	if row.NameEs != "Servicios Juveniles" || row.Description != newDesc {
+		t.Fatalf("after update: name_es=%q desc=%q", row.NameEs, row.Description)
+	}
+
+	// Deactivate must NOT blank name_es/description (full read-modify-write).
+	if err := s.DeactivateProgram(mutCtx(), id); err != nil {
+		t.Fatalf("DeactivateProgram: %v", err)
+	}
+	row, _ = s.GetProgram(context.Background(), id)
+	if row.NameEs != "Servicios Juveniles" || row.Description != newDesc {
+		t.Fatalf("after deactivate (wipe bug): name_es=%q desc=%q", row.NameEs, row.Description)
+	}
+	if row.Active != 0 {
+		t.Fatalf("expected inactive after deactivate")
+	}
+
+	// The latest version snapshot must carry the new columns too (Z3).
+	var vNameEs, vDesc string
+	if err := d.QueryRow(
+		`SELECT name_es, description FROM programs_versions
+		  WHERE entity_id = ? ORDER BY valid_from DESC, id DESC LIMIT 1`, id,
+	).Scan(&vNameEs, &vDesc); err != nil {
+		t.Fatalf("latest program version: %v", err)
+	}
+	if vNameEs != "Servicios Juveniles" || vDesc != newDesc {
+		t.Fatalf("latest version snapshot: name_es=%q desc=%q", vNameEs, vDesc)
+	}
+}

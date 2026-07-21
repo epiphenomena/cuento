@@ -796,6 +796,10 @@ other = "New program"
 other = "Edit program"
 [programs.form.name]
 other = "Name"
+[programs.form.name_es]
+other = "Name (Spanish)"
+[programs.form.description]
+other = "Description"
 [programs.form.parent]
 other = "Parent program"
 [programs.form.root_note]
@@ -911,6 +915,8 @@ other = "New fund"
 other = "Edit fund"
 [funds.form.name]
 other = "Name"
+[funds.form.name_es]
+other = "Name (Spanish)"
 [funds.form.funder]
 other = "Funder"
 [funds.form.purpose]

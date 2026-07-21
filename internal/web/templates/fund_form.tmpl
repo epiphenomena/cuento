@@ -31,13 +31,18 @@
   </div>
 
   <div class="field">
+    <label for="ff-name-es">{{t "funds.form.name_es"}}</label>
+    <input id="ff-name-es" name="name_es" type="text" value="{{.NameES}}">
+  </div>
+
+  <div class="field">
     <label for="ff-funder">{{t "funds.form.funder"}}</label>
     <input id="ff-funder" name="funder" type="text" value="{{.Funder}}">
   </div>
 
   <div class="field">
     <label for="ff-purpose">{{t "funds.form.purpose"}}</label>
-    <input id="ff-purpose" name="purpose" type="text" value="{{.Purpose}}">
+    <textarea id="ff-purpose" name="purpose" rows="3">{{.Purpose}}</textarea>
   </div>
 
   <div class="field">
@@ -63,7 +68,7 @@
 
   <div class="field">
     <label for="ff-notes">{{t "funds.form.notes"}}</label>
-    <input id="ff-notes" name="notes" type="text" value="{{.Notes}}">
+    <textarea id="ff-notes" name="notes" rows="3">{{.Notes}}</textarea>
   </div>
 
   <fieldset class="subs-checklist"

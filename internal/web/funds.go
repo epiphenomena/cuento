@@ -78,6 +78,7 @@ func (s *server) fundsPage(w http.ResponseWriter, r *http.Request) {
 // the fund's program. Exposed with the toggle explicit so it is testable directly.
 func (s *server) buildFundsPage(ctx context.Context, showClosed bool) (fundsPageModel, error) {
 	u := currentUser(ctx)
+	lang := langOf(ctx)
 
 	funds, err := s.store.ListFunds(ctx)
 	if err != nil {
@@ -119,7 +120,7 @@ func (s *server) buildFundsPage(ctx context.Context, showClosed bool) (fundsPage
 		if active == showClosed {
 			continue // the toggle selects exactly one of active / closed
 		}
-		row := fundListRow{ID: f.ID, Name: f.Name, Funder: f.Funder}
+		row := fundListRow{ID: f.ID, Name: localName(lang, f.Name, f.NameEs), Funder: f.Funder}
 
 		cells := byFund[f.ID]
 		// Deterministic currency order for a stable render.
@@ -146,16 +147,18 @@ func (s *server) buildFundsPage(ctx context.Context, showClosed bool) (fundsPage
 	return model, nil
 }
 
-// programNameMap returns id->name for every program (for the fund scope column and
-// the form's program select).
+// programNameMap returns id->locale-resolved-name for every program (for the fund
+// scope column). A Spanish-locale viewer gets name_es when non-blank, else the
+// English name (localName's en-fallback).
 func (s *server) programNameMap(ctx context.Context) (map[int64]string, error) {
+	lang := langOf(ctx)
 	progs, err := s.store.ProgramTree(ctx)
 	if err != nil {
 		return nil, err
 	}
 	m := make(map[int64]string, len(progs))
 	for _, p := range progs {
-		m[int64(p.ID)] = p.Name
+		m[int64(p.ID)] = localName(lang, p.Name, p.NameEs)
 	}
 	return m, nil
 }
@@ -240,7 +243,7 @@ func (s *server) fundStatement(w http.ResponseWriter, r *http.Request) {
 
 	model := fundStatementModel{
 		FundID:   id,
-		FundName: fund.Name,
+		FundName: localName(lang, fund.Name, fund.NameEs),
 		Funder:   fund.Funder,
 		Active:   fund.Active != 0,
 	}
@@ -292,6 +295,7 @@ func (s *server) fundStatement(w http.ResponseWriter, r *http.Request) {
 type fundForm struct {
 	ID          ids.FundID
 	Name        string
+	NameES      string // optional Spanish name
 	Funder      string
 	Purpose     string
 	Restriction string
@@ -305,8 +309,8 @@ type fundForm struct {
 	Errors formErrors
 }
 
-// fundNewForm handles GET /funds/new (TxnWrite): the empty create form, rendered as
-// the "fund-form" partial for htmx to swap in.
+// fundNewForm handles GET /funds/new (TxnWrite): the empty create form, rendered on
+// its OWN full page (the form is no longer injected atop the list).
 func (s *server) fundNewForm(w http.ResponseWriter, r *http.Request) {
 	form, err := s.buildFundForm(r.Context(), 0)
 	if err != nil {
@@ -314,12 +318,12 @@ func (s *server) fundNewForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form.Restriction = "purpose" // sensible default
-	s.render(w, r, http.StatusOK, "fund-form", form)
+	s.render(w, r, http.StatusOK, "fund_edit.tmpl", s.newShellPage(r, form))
 }
 
 // fundEditForm handles GET /funds/{id}/edit (TxnWrite): the form prefilled from the
-// fund's current state (fields + subsidiary set + program scope), for an inline
-// htmx swap.
+// fund's current state (fields + subsidiary set + program scope), on its OWN full
+// page.
 func (s *server) fundEditForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := ids.FundID(parseID(r.PathValue("id")))
@@ -334,6 +338,7 @@ func (s *server) fundEditForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form.Name = fund.Name
+	form.NameES = fund.NameEs
 	form.Funder = fund.Funder
 	form.Purpose = fund.Purpose
 	form.Restriction = fund.Restriction
@@ -349,7 +354,7 @@ func (s *server) fundEditForm(w http.ResponseWriter, r *http.Request) {
 	for _, sid := range sids {
 		form.CheckedSubs[int64(sid)] = true
 	}
-	s.render(w, r, http.StatusOK, "fund-form", form)
+	s.render(w, r, http.StatusOK, "fund_edit.tmpl", s.newShellPage(r, form))
 }
 
 // buildFundForm assembles the option lists a fund form needs: the subsidiary
@@ -386,6 +391,7 @@ func (s *server) buildFundForm(ctx context.Context, id ids.FundID) (fundForm, er
 // into typed fields); the store does the real validation.
 type parsedFundForm struct {
 	name        string
+	nameES      string
 	funder      string
 	purpose     string
 	restriction string
@@ -404,6 +410,7 @@ func (s *server) parseFundForm(r *http.Request, id ids.FundID) (fundForm, parsed
 	}
 	in := parsedFundForm{
 		name:        r.PostFormValue("name"),
+		nameES:      r.PostFormValue("name_es"),
 		funder:      r.PostFormValue("funder"),
 		purpose:     r.PostFormValue("purpose"),
 		restriction: r.PostFormValue("restriction"),
@@ -427,6 +434,7 @@ func (s *server) parseFundForm(r *http.Request, id ids.FundID) (fundForm, parsed
 	}
 	// Echo submitted values back so a 422 re-render keeps what the user entered.
 	form.Name = in.name
+	form.NameES = in.nameES
 	form.Funder = in.funder
 	form.Purpose = in.purpose
 	form.Restriction = in.restriction
@@ -449,6 +457,7 @@ func (s *server) fundCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	create := store.CreateFundInput{
 		Name:         in.name,
+		NameES:       in.nameES,
 		Funder:       in.funder,
 		Purpose:      in.purpose,
 		Restriction:  in.restriction,
@@ -481,6 +490,7 @@ func (s *server) fundUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	upd := store.UpdateFundInput{
 		Name:        &in.name,
+		NameES:      &in.nameES,
 		Funder:      &in.funder,
 		Purpose:     &in.purpose,
 		Restriction: &in.restriction,

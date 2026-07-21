@@ -1,0 +1,20 @@
+{{/*
+  p29 program create/edit OWN PAGE. The create/edit form used to be injected atop the
+  programs list (an htmx swap into #program-form); it now lives on its OWN full shell
+  page (GET /programs/new and /programs/{id}/edit render this). .Page is a programForm.
+
+  The body just embeds the shared "program-form" partial (program_form.tmpl) -- the
+  SINGLE SOURCE of the form -- so a failed POST still self-swaps that partial at 422
+  (the form element IS #program-form, hx-target #program-form / outerHTML). Every
+  string via {{t}} (rule 9); no inline script (rule 12).
+*/ -}}
+{{define "program_edit.tmpl" -}}
+{{template "shell-open" (shellTitle . (t "programs.title"))}}
+  {{- with .Page}}
+  <h1>{{if .ID}}{{t "programs.form.edit_title"}}{{else}}{{t "programs.form.new_title"}}{{end}}</h1>
+  <div class="program-form-region">
+    {{template "program-form" .}}
+  </div>
+  {{- end}}
+{{template "shell-close" .}}
+{{- end}}

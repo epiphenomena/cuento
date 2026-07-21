@@ -24,6 +24,18 @@ import (
 // p10.3 form-error convention). Every string via {{t}} (rule 9); program names are
 // stored data (proper nouns), rendered verbatim; no inline script (rule 12).
 
+// localName resolves a program/fund display name for the viewer's locale: a
+// Spanish-locale viewer gets es when it is non-blank, ELSE the English/primary name
+// (en-fallback-safe). Any other locale always gets en. Programs and funds keep name
+// as the English/primary column and name_es as the optional Spanish rendering, so
+// this is the single central resolution point the pickers/reports/list read through.
+func localName(lang, en, es string) string {
+	if lang == "es" && es != "" {
+		return es
+	}
+	return en
+}
+
 // ---- activity assembly ----------------------------------------------------
 
 // programActivityTotals returns the per-program R/E activity for from..to in the
@@ -72,6 +84,7 @@ func programActivityTotals(ctx context.Context, st *store.Store, from, to string
 type progRow struct {
 	ID       int64
 	Name     string
+	Desc     string // free-text description shown on the list (p29 Spanish/desc pass)
 	Active   bool
 	Depth    int
 	Activity []string // pre-formatted "CCY 1,234.56" strings (rule 10)
@@ -121,6 +134,7 @@ func (s *server) programPeriod(r *http.Request) (from, to string) {
 // the parent chain, always present earlier in the pre-ordered ProgramTree rows.
 func (s *server) buildProgramsPage(ctx context.Context, from, to string) (programsPageModel, error) {
 	u := currentUser(ctx)
+	lang := langOf(ctx)
 
 	rows, err := s.store.ProgramTree(ctx)
 	if err != nil {
@@ -150,7 +164,8 @@ func (s *server) buildProgramsPage(ctx context.Context, from, to string) (progra
 		depth[row.ID] = d
 		pr := progRow{
 			ID:     int64(row.ID),
-			Name:   row.Name,
+			Name:   localName(lang, row.Name, row.NameEs),
+			Desc:   row.Description,
 			Active: row.Active != 0,
 			Depth:  d,
 		}
@@ -184,6 +199,8 @@ func parseISOForDisplay(s string) time.Time {
 type programForm struct {
 	ID       int64 // 0 = create
 	Name     string
+	NameES   string // optional Spanish name
+	Desc     string // free-text description
 	ParentID int64
 	IsRoot   bool
 
@@ -193,8 +210,8 @@ type programForm struct {
 }
 
 // programNewForm handles GET /programs/new (TxnWrite): the empty create form,
-// rendered as the "program-form" partial for htmx to swap in. A new program
-// defaults to a child of the root (id 1).
+// rendered on its OWN full page (the form is no longer injected atop the list). A
+// new program defaults to a child of the root (id 1).
 func (s *server) programNewForm(w http.ResponseWriter, r *http.Request) {
 	form, err := s.buildProgramForm(r.Context(), 0)
 	if err != nil {
@@ -202,11 +219,11 @@ func (s *server) programNewForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form.ParentID = 1 // default: child of the root program ("General")
-	s.render(w, r, http.StatusOK, "program-form", form)
+	s.render(w, r, http.StatusOK, "program_edit.tmpl", s.newShellPage(r, form))
 }
 
 // programEditForm handles GET /programs/{id}/edit (TxnWrite): the form prefilled
-// from the program's current state, for an inline htmx swap.
+// from the program's current state, on its OWN full page.
 func (s *server) programEditForm(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id := ids.ProgramID(parseID(r.PathValue("id")))
@@ -221,11 +238,13 @@ func (s *server) programEditForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form.Name = prog.Name
+	form.NameES = prog.NameEs
+	form.Desc = prog.Description
 	form.IsRoot = !prog.ParentID.Valid
 	if prog.ParentID.Valid {
 		form.ParentID = prog.ParentID.Int64
 	}
-	s.render(w, r, http.StatusOK, "program-form", form)
+	s.render(w, r, http.StatusOK, "program_edit.tmpl", s.newShellPage(r, form))
 }
 
 // buildProgramForm assembles the parent option list for a form. The options are
@@ -283,6 +302,8 @@ func (s *server) programCreate(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.store.CreateProgram(s.actorCtx(ctx), store.CreateProgramInput{
 		ParentID: ids.ProgramID(in.parentID),
 		Name:     in.name,
+		NameES:   in.nameES,
+		Desc:     in.desc,
 	}); err != nil {
 		s.renderProgramFormError(w, r, form, err)
 		return
@@ -303,7 +324,7 @@ func (s *server) programUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
 		return
 	}
-	upd := store.UpdateProgramInput{Name: &in.name}
+	upd := store.UpdateProgramInput{Name: &in.name, NameES: &in.nameES, Desc: &in.desc}
 	// A positive parent selection is a MOVE target; the store validates it against
 	// root-immovability and cycles. Selecting nothing (0) leaves the parent as-is.
 	// Reparenting the ROOT is still attempted (the form for the root omits the
@@ -350,6 +371,8 @@ func (s *server) programDeactivate(w http.ResponseWriter, r *http.Request) {
 // of a submitted program form; the store does the real validation.
 type parsedProgramForm struct {
 	name     string
+	nameES   string
+	desc     string
 	parentID int64
 }
 
@@ -364,6 +387,8 @@ func (s *server) parseProgramForm(r *http.Request, id ids.ProgramID) (programFor
 	}
 	in := parsedProgramForm{
 		name:     r.PostFormValue("name"),
+		nameES:   r.PostFormValue("name_es"),
+		desc:     r.PostFormValue("description"),
 		parentID: parseID(r.PostFormValue("parent_id")),
 	}
 	form, err := s.buildProgramForm(r.Context(), id)
@@ -372,6 +397,8 @@ func (s *server) parseProgramForm(r *http.Request, id ids.ProgramID) (programFor
 	}
 	// Echo submitted values back so a 422 re-render keeps what the user entered.
 	form.Name = in.name
+	form.NameES = in.nameES
+	form.Desc = in.desc
 	form.ParentID = in.parentID
 	// On edit, mark the root so the template still omits the parent select.
 	if id != 0 {

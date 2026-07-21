@@ -27,10 +27,8 @@
   {{end}}
 </div>
 <div class="subnav-actions">
-  <button type="button" class="btn btn-primary"
-          hx-get="/funds/new" hx-target="#fund-form" hx-swap="outerHTML">
-    {{t "funds.new"}}
-  </button>
+  {{/* p29: New navigates to the create OWN PAGE (no longer injected atop the list). */}}
+  <a class="btn btn-primary" href="/funds/new">{{t "funds.new"}}</a>
 </div>
 {{- end}}
 {{- end}}
@@ -41,9 +39,7 @@
   <h1>{{t "funds.title"}}</h1>
   <p class="hint">{{t "funds.intro"}}</p>
 
-  {{/* The inline create/edit form (New trigger + closed toggle live in the section
-       bar, p23.11) swaps in here; empty until opened. */}}
-  <div id="fund-form" class="fund-form-region"></div>
+  {{/* p29: create/edit moved to their own page; no in-list form region here. */}}
 
   <table class="funds-table">
     <thead>
@@ -72,10 +68,7 @@
         </td>
         <td class="fund-actions">
           <a class="btn btn-ghost" href="/funds/{{.ID}}">{{t "funds.view_statement"}}</a>
-          <button type="button" class="btn btn-ghost"
-                  hx-get="/funds/{{.ID}}/edit" hx-target="#fund-form" hx-swap="outerHTML">
-            {{t "common.edit"}}
-          </button>
+          <a class="btn btn-ghost" href="/funds/{{.ID}}/edit">{{t "common.edit"}}</a>
           {{if $.Page.ShowClosed}}
           <form method="post" action="/funds/{{.ID}}/reopen" class="inline">
             <button type="submit" class="btn btn-ghost">{{t "funds.reopen"}}</button>
