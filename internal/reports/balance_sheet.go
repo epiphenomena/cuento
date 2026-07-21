@@ -3,6 +3,9 @@ package reports
 import (
 	"context"
 	"sort"
+	"strconv"
+
+	"cuento/internal/store"
 )
 
 // BalanceSheetReportID is the id (URL slug + registry key) of the balance-sheet
@@ -23,6 +26,18 @@ import (
 // accumulated revenue-minus-expense from inception to the as-of date -- is disclosed
 // as an "of which" component of the without-restriction figure, NOT summed into the
 // total (it is one source of the without-restriction balance, not a peer of it).
+//
+// MULTI-PERIOD COLUMNS (p18): the statement is presented as a SERIES of as-of value
+// columns, left to right: column 1 is the selected as-of date, then the most recent
+// December 31 STRICTLY BEFORE it, then the December 31 before that, and so on back to
+// the earliest posting date in the ledger (bsAsOfDates). Every column is the SAME
+// snapshot computation as of that column's date (computeSnapshot), so a reviewer reads
+// the year-end progression of the position at a glance. The statement STRUCTURE (which
+// account/net-asset/total rows exist, their drills and indents) is driven by column 1
+// (the selected as-of); an older column with no balance for a row shows a zero cell.
+// The multi-period fan-out is the CONVERTED-only view; the per-currency DETAIL toggle
+// stays a single as-of column (N periods x per-currency native/converted pairs would be
+// a combinatorial column set out of proportion to the goal).
 //
 // INTERCOMPANY (D19): across a CONSOLIDATED (multi-sub) scope the intercompany
 // due-to/due-from accounts are INTERNAL and are ELIMINATED -- dropped from the
@@ -67,6 +82,10 @@ func registerBalanceSheet(reg *Registry) {
 		ParamsSpec: ParamsSpec{AsOf: true, Currency: true, Detail: true, Fund: true},
 		Run:        runBalanceSheet,
 		Tree:       true, // p26.26: A/L/net-asset sections nest their account lines.
+		// p18: the multi-period fan-out emits one column per year-end back to inception,
+		// so render full-viewport-width (like the comparative income statement) rather
+		// than truncating the older columns.
+		WideMatrix: true,
 	})
 }
 
@@ -88,13 +107,230 @@ func (l *bsLine) add(ccy string, minor int64) {
 	l.byCcy[ccy] += minor
 }
 
-// runBalanceSheet computes the balance-sheet Table (p15.4). It reads the scope's
-// per-account per-currency as-of balances (native), classifies each account by TYPE
-// into the Assets/Liabilities sections (equity/revenue/expense accounts are NOT
-// listed -- they roll into the net-asset plug), builds the by-restriction net-asset
-// split from fund tagging + the section plug, and emits the sections with converted
-// totals (and, under the detail toggle, per-currency lines).
+// bsSnapshot is one as-of column's fully computed position (p18): the per-account
+// sign-normalized native leaf balances (for account rows + placeholder-parent rollups
+// + drills), the per-currency section totals and net-asset split, and the intercompany
+// residual/CTA state -- everything the builder needs to emit that column's value cell
+// for any row. It is the SAME computation the single-column statement always did,
+// captured per date so the builder iterates it over the date list. `asOf` is the
+// column's closing date (the rate seam converts each column at ITS own closing rate).
+type bsSnapshot struct {
+	asOf string
+
+	// assetLeaf/liabLeaf: in-section leaves by account id (sign-normalized, IC-eliminated),
+	// keyed for the p26.53 nested-tree walk and drills.
+	assetLeaf map[AccountID]bsLine
+	liabLeaf  map[AccountID]bsLine
+
+	// per-currency native section totals and net-asset split (all positive as displayed).
+	assetTotal      map[string]int64
+	liabilityTotal  map[string]int64
+	netAssetsTotal  map[string]int64
+	withoutShown    map[string]int64 // without-restriction, post CTA restoration
+	withRestriction map[string]int64
+	surplus         map[string]int64
+
+	// CTA reclassification (converted view only; nil when not shown for this column).
+	cta         map[string]int64
+	reconciling map[string]int64
+	showCTA     bool
+
+	// icNet is the native intercompany residual (for the native reconciling warning line).
+	icNet []CurAmt
+}
+
+// runBalanceSheet computes the balance-sheet Table (p15.4, p18). It resolves the
+// left-to-right as-of date series (the selected as-of, then each prior Dec 31 back to
+// the earliest posting date), computes the SAME position snapshot as of each date, and
+// emits the sections with one converted value column per date -- the statement structure
+// (rows, drills, indents) driven by the primary (selected) as-of column. The
+// per-currency detail toggle stays a single as-of column.
 func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
+	detail := p.DetailCurrency()
+
+	// The as-of date series (p18): column 1 is the selected as-of, then each Dec 31
+	// strictly before it back to the earliest posting date. The detail (per-currency)
+	// view stays single-column (see the report doc-comment).
+	var dates []string
+	if detail {
+		dates = []string{p.AsOf}
+	} else {
+		ds, err := bsAsOfDates(ctx, tk, p.AsOf)
+		if err != nil {
+			return Table{}, err
+		}
+		dates = ds
+	}
+
+	// The account tree is date-independent (the chart of accounts), so fetch it once.
+	tree, err := tk.Store().Tree(ctx, p.LangOr(), nil)
+	if err != nil {
+		return Table{}, err
+	}
+
+	snaps := make([]bsSnapshot, len(dates))
+	for i, d := range dates {
+		snap, err := computeSnapshot(ctx, tk, p, d, tree)
+		if err != nil {
+			return Table{}, err
+		}
+		snaps[i] = snap
+	}
+
+	b := &bsBuilder{tk: tk, ctx: ctx, p: p, target: p.TargetCurrency, detail: detail, snaps: snaps}
+
+	// p26.53: index the account tree so each section renders the NESTED account
+	// hierarchy (placeholder parents as rolled-up subtotal rows, leaves indented under
+	// them) -- consistent with the trial balance / income statement / chart. In the
+	// synthetic base fixture every asset/liability is a top-level leaf (no grouping
+	// parent), so this adds no rows there; on a real chart with parent asset/liability
+	// accounts (e.g. Fixed Assets > Building) the parents now surface with their
+	// rolled subtotals instead of being dropped.
+	tn := toTreeNodes(tree)
+	children, roots, isPlaceholder, name, depth, _ := indexTree(tn)
+
+	// --- Assets section (nested tree; section header at Indent 0, accounts at
+	// treeDepth+1 so a top-level leaf stays at Indent 1 exactly as before). The primary
+	// column's leaf set drives which account rows exist.
+	b.sectionHeader("reports.balance_sheet.section.assets")
+	b.emitSectionTree(children, roots, isPlaceholder, name, depth, sectionKind{asset: true})
+	b.totalLine("reports.balance_sheet.total.assets", func(s bsSnapshot) map[string]int64 { return s.assetTotal })
+
+	// --- Liabilities section.
+	b.sectionHeader("reports.balance_sheet.section.liabilities")
+	b.emitSectionTree(children, roots, isPlaceholder, name, depth, sectionKind{asset: false})
+	b.totalLine("reports.balance_sheet.total.liabilities", func(s bsSnapshot) map[string]int64 { return s.liabilityTotal })
+
+	// --- Net Assets section (by-restriction split; synthetic lines only). The CTA lines
+	// appear iff ANY column reclassifies a residual (p26.70): a residual nonzero at an
+	// older year-end but zero at the selected as-of must still surface its CTA/reconciling
+	// disclosure (else that column's net-asset section would not foot). Each column fills
+	// its OWN value; a column with no residual shows a zero cta/reconciling cell.
+	anyCTA := false
+	for _, s := range snaps {
+		if s.showCTA {
+			anyCTA = true
+			break
+		}
+	}
+	b.sectionHeader("reports.balance_sheet.section.net_assets")
+	// The converted "without" line is derived as a RESIDUAL (Total NA - with - CTA -
+	// reconciling) per column, NOT by converting the native without-map, so the net-asset
+	// section FOOTS EXACTLY in converted space (each of NA/with/without would otherwise
+	// round half-even independently and drift a minor unit -- the p15.5 "footing wins"
+	// rule). On column 1 the residual reproduces the old figure byte-for-byte.
+	b.withoutLine("reports.balance_sheet.na.without", anyCTA)
+	b.syntheticLine("reports.balance_sheet.na.surplus_of_which", func(s bsSnapshot) map[string]int64 { return s.surplus }, true)
+	if anyCTA {
+		b.syntheticLine("reports.balance_sheet.na.cta", func(s bsSnapshot) map[string]int64 { return s.cta }, false)
+		b.syntheticLine("reports.balance_sheet.na.ic_reconciling", func(s bsSnapshot) map[string]int64 { return s.reconciling }, false)
+	}
+	b.syntheticLine("reports.balance_sheet.na.with", func(s bsSnapshot) map[string]int64 { return s.withRestriction }, false)
+	b.totalLine("reports.balance_sheet.total.net_assets", func(s bsSnapshot) map[string]int64 { return s.netAssetsTotal })
+
+	// --- Total liabilities + net assets (the identity's right-hand side; equals total
+	// assets on a balanced statement), per column.
+	b.grandTotalLine("reports.balance_sheet.total.liabilities_net_assets", func(s bsSnapshot) map[string]int64 {
+		lPlusNA := map[string]int64{}
+		for ccy, v := range s.liabilityTotal {
+			lPlusNA[ccy] += v
+		}
+		for ccy, v := range s.netAssetsTotal {
+			lPlusNA[ccy] += v
+		}
+		return lPlusNA
+	})
+
+	// --- Intercompany residual, native view (no target): there is no single rate, so it
+	// cannot be split into a translation adjustment. Show it as the reconciling-difference
+	// line per native currency (p26.70). Emitted iff ANY column has a native residual not
+	// already reclassified into a CTA line (each column fills its own per-currency value).
+	anyNativeResidual := false
+	for _, s := range snaps {
+		if hasNonzero(s.icNet) && !s.showCTA {
+			anyNativeResidual = true
+			break
+		}
+	}
+	if anyNativeResidual {
+		b.warningLine("reports.balance_sheet.na.ic_reconciling", func(s bsSnapshot) map[string]int64 {
+			if s.showCTA {
+				return nil // this column reclassified into CTA above; no native line for it.
+			}
+			by := map[string]int64{}
+			for _, a := range s.icNet {
+				by[a.Currency] += a.Minor
+			}
+			return by
+		})
+	}
+
+	return b.table(dates), nil
+}
+
+// bsAsOfDates builds the left-to-right as-of date series (p18): the selected as-of
+// first, then the most recent December 31 STRICTLY BEFORE it, then each earlier
+// December 31 back to (and including, when it is itself a Dec 31) the earliest posting
+// date in the ledger. The strict "< asOf" is the on-Dec-31 dedup the task calls out: a
+// selected as-of that lands ON a Dec 31 is NOT repeated as the "prior year-end" column.
+// On an EMPTY ledger (LedgerDateRange ok=false) or a malformed as-of the series is just
+// the single selected column, so the loop can never run away or go negative.
+func bsAsOfDates(ctx context.Context, tk *Toolkit, asOf string) ([]string, error) {
+	dates := []string{asOf}
+	minDate, _, ok, err := tk.Store().LedgerDateRange(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return dates, nil // empty ledger: single column.
+	}
+	asOfYear, okY := isoYear(asOf)
+	if !okY {
+		return dates, nil // malformed as-of: single column, never loop.
+	}
+	// The first candidate year-end is Dec 31 of the selected as-of's year when that is
+	// strictly before the as-of, else the prior year's Dec 31 (so an as-of ON Dec 31
+	// dedups to the PRIOR year-end).
+	year := asOfYear
+	if ye := yearEnd(year); ye >= asOf {
+		year--
+	}
+	for ; ; year-- {
+		ye := yearEnd(year)
+		if ye < minDate {
+			break // earlier than the earliest posting: stop (guards the loop).
+		}
+		dates = append(dates, ye)
+	}
+	return dates, nil
+}
+
+// yearEnd returns the December 31 ISO date for the given year.
+func yearEnd(year int) string { return strconv.Itoa(year) + "-12-31" }
+
+// isoYear parses the leading YYYY of an ISO date (YYYY-MM-DD). ok=false on a malformed
+// value so the caller falls back to a single column rather than looping on garbage.
+func isoYear(iso string) (int, bool) {
+	if len(iso) < 4 {
+		return 0, false
+	}
+	y, err := strconv.Atoi(iso[:4])
+	if err != nil || y <= 0 {
+		return 0, false
+	}
+	// Reject an obviously-malformed date shape (must be YYYY-... or exactly YYYY).
+	if len(iso) > 4 && iso[4] != '-' {
+		return 0, false
+	}
+	return y, true
+}
+
+// computeSnapshot computes the position AS OF `d` (p15.4): per-account per-currency
+// as-of balances (native), classified into Assets/Liabilities, the by-restriction
+// net-asset split, and the intercompany residual/CTA state -- the single-column
+// computation, captured as a bsSnapshot so runBalanceSheet iterates it over the date
+// series. `tree` is the shared (date-independent) account tree.
+func computeSnapshot(ctx context.Context, tk *Toolkit, p Params, d string, tree []store.TreeRow) (bsSnapshot, error) {
 	// "Net assets with donor restrictions" needs a per-FUND scan (FundBalancesAsOf),
 	// independent of the per-account BalancesAsOf below. Run it CONCURRENTLY so its
 	// full-ledger scan overlaps BalancesAsOf's rather than running after it (p29.6 perf).
@@ -120,7 +356,7 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	rnaCh := make(chan rnaResult, 1)
 	if !fundFilter {
 		go func() {
-			m, err := tk.restrictedNetAssets(ctx, p.Scope, p.AsOf)
+			m, err := tk.restrictedNetAssets(ctx, p.Scope, d)
 			rnaCh <- rnaResult{m, err}
 		}()
 	}
@@ -128,16 +364,12 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	var balances map[AccountID][]CurAmt
 	var err error
 	if fundFilter {
-		balances, err = tk.FundBalancesAsOfByAccount(ctx, p.Fund, Scope{Sub: p.Scope}, p.AsOf)
+		balances, err = tk.FundBalancesAsOfByAccount(ctx, p.Fund, Scope{Sub: p.Scope}, d)
 	} else {
-		balances, err = tk.BalancesAsOf(ctx, Scope{Sub: p.Scope}, p.AsOf, ConvertOpts{Mode: RateNone})
+		balances, err = tk.BalancesAsOf(ctx, Scope{Sub: p.Scope}, d, ConvertOpts{Mode: RateNone})
 	}
 	if err != nil {
-		return Table{}, err
-	}
-	tree, err := tk.Store().Tree(ctx, p.LangOr(), nil)
-	if err != nil {
-		return Table{}, err
+		return bsSnapshot{}, err
 	}
 
 	// R/E account ids, straight from the tree we already fetched (no extra query) — used
@@ -161,7 +393,7 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	// only its own side).
 	consolidated, err := tk.isConsolidated(ctx, p.Scope)
 	if err != nil {
-		return Table{}, err
+		return bsSnapshot{}, err
 	}
 	// A single-fund view is never a consolidation: the fund's intercompany legs (if any)
 	// are its genuine due-to/due-from balances, shown as ordinary rows, never eliminated
@@ -173,7 +405,7 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	if consolidated {
 		ids, err := tk.store.IntercompanyAccountIDs(ctx)
 		if err != nil {
-			return Table{}, err
+			return bsSnapshot{}, err
 		}
 		for _, id := range ids {
 			icAccts[id] = true
@@ -186,10 +418,6 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	// a positive liability balance. Equity/revenue/expense accounts are skipped --
 	// they are absorbed into the net-asset plug below. Intercompany-flagged accounts
 	// are ELIMINATED at a consolidated scope (icAccts is empty at a leaf scope).
-	//
-	// assetLeaf / liabLeaf index each in-section leaf by account id (for the p26.53
-	// tree walk, scoped per section); assets/liabilities keep the flat ordered lists
-	// the section TOTALS sum over.
 	assetLeaf := map[AccountID]bsLine{}
 	liabLeaf := map[AccountID]bsLine{}
 	var assets, liabilities []bsLine
@@ -223,11 +451,7 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	assetTotal := sumLines(assets)
 	liabilityTotal := sumLines(liabilities)
 
-	// --- Net assets. total NA = plug (Assets - Liabilities) per currency; this keeps
-	// the identity exact and consistent with the collapsed sections (intercompany
-	// due-to/due-from already net inside those sections). "with donor restrictions" =
-	// the restricted funds' asset-side balances (fund tagging); "without" = total -
-	// with. Net surplus to date is a disclosure component of "without".
+	// --- Net assets. total NA = plug (Assets - Liabilities) per currency.
 	netAssetsTotal := map[string]int64{}
 	for ccy, v := range assetTotal {
 		netAssetsTotal[ccy] += v
@@ -238,21 +462,15 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 
 	var withRestriction map[string]int64
 	if fundFilter {
-		// Single-fund "with donor restrictions": the fund's OWN still-restricted MONETARY
-		// balance (current_cash + receivable_payable assets net of liabilities) when the
-		// fund is RESTRICTED (purpose/time/perpetual), else empty. The fund's DEPLOYED
-		// non-monetary assets (a capitalized building) are released, so without = plug
-		// (A - L) - monetary = the deployed amount. This mirrors the org-wide
-		// restrictedNetAssets narrowed to the one chosen fund.
-		wr, err := tk.fundRestrictedNetAssets(ctx, p.Scope, p.AsOf, p.Fund)
+		wr, err := tk.fundRestrictedNetAssets(ctx, p.Scope, d, p.Fund)
 		if err != nil {
-			return Table{}, err
+			return bsSnapshot{}, err
 		}
 		withRestriction = wr
 	} else {
 		rna := <-rnaCh
 		if rna.err != nil {
-			return Table{}, rna.err
+			return bsSnapshot{}, rna.err
 		}
 		withRestriction = rna.m
 	}
@@ -262,17 +480,14 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 	}
 	for ccy, v := range withRestriction {
 		if _, ok := netAssetsTotal[ccy]; !ok {
-			// A restricted currency with no net-asset total: still show the negative.
 			withoutRestriction[ccy] = -v
 		}
 	}
 
-	// Net surplus to date: cumulative R/E activity from inception to the as-of date.
-	// R/E accounts carry no opening balance, so an R/E account's balance AS OF the date
-	// IS its inception-to-date activity — already present in `balances`. Deriving it from
-	// there avoids a redundant full-ledger scan (the old netSurplusByCurrency re-ran
-	// Activity(inception, asof); p29.6 perf). NetIncome is net-debit (a surplus is a net
-	// CREDIT, negative); present it as a positive surplus.
+	// Net surplus to date: cumulative R/E activity from inception to `d`. An R/E account's
+	// as-of balance IS its inception-to-date activity (R/E carry no opening balance), so it
+	// is already present in `balances`. NetIncome is net-debit (a surplus is a net CREDIT,
+	// negative); present it as a positive surplus.
 	surplus := map[string]int64{}
 	for acct, amts := range balances {
 		if !reReport[acct] {
@@ -283,24 +498,13 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 		}
 	}
 
-	// Intercompany residual (D19): the flagged accounts, collapsed across the
-	// CONSOLIDATED scope, ideally net to zero per currency. A nonzero residual is NOT
-	// an unexplained error — most of it is a legitimate FX TRANSLATION ADJUSTMENT (ASC
-	// 830: retranslating accumulated foreign intercompany balances at the closing rate),
-	// with a smaller genuine-imbalance core. p26.70 reclassifies it: in the CONVERTED
-	// (single-target) view the residual is split into a Cumulative Translation Adjustment
-	// line (closing − historical value) and a reconciling-difference line (historical
-	// value), both carved OUT of the without-restriction figure so the net-assets total —
-	// and the balance-sheet identity — are unchanged. In the per-currency NATIVE detail
-	// view there is no single rate, so the native residual is shown as the reconciling
-	// difference only (no translation component). Only at a consolidated scope.
+	// Intercompany residual (D19, p26.70): the flagged accounts, collapsed across the
+	// CONSOLIDATED scope, ideally net to zero per currency. In the CONVERTED view a nonzero
+	// residual is reclassified into a CTA line + a reconciling line, both carved out of the
+	// without-restriction figure so the net-assets total is unchanged.
 	var icNet []CurAmt
 	var icSplit ICResidualSplit
 	if consolidated {
-		// IntercompanyNet is the intercompany-flagged accounts' balances summed per
-		// currency — the SAME SubtreeBalancesAsOf already in `balances`. Derive it here
-		// rather than re-running that scan (p29.6 perf). icAccts was built above for the
-		// consolidated elimination, so it is exactly the intercompany set.
 		icByCcy := map[string]int64{}
 		for acct, amts := range balances {
 			if icAccts[acct] {
@@ -311,121 +515,77 @@ func runBalanceSheet(ctx context.Context, tk *Toolkit, p Params) (Table, error) 
 		}
 		icNet = sortedCurAmts(icByCcy)
 		if hasNonzero(icNet) && target != "" {
-			icSplit, err = tk.IntercompanyResidualSplit(ctx, Scope{Sub: p.Scope}, p.AsOf, target)
+			icSplit, err = tk.IntercompanyResidualSplit(ctx, Scope{Sub: p.Scope}, d, target)
 			if err != nil {
-				return Table{}, err
+				return bsSnapshot{}, err
 			}
 		}
 	}
 
-	b := &bsBuilder{tk: tk, ctx: ctx, p: p, target: target, detail: p.DetailCurrency()}
-
-	// p26.53: index the account tree so each section renders the NESTED account
-	// hierarchy (placeholder parents as rolled-up subtotal rows, leaves indented under
-	// them) -- consistent with the trial balance / income statement / chart. In the
-	// synthetic base fixture every asset/liability is a top-level leaf (no grouping
-	// parent), so this adds no rows there; on a real chart with parent asset/liability
-	// accounts (e.g. Fixed Assets > Building) the parents now surface with their
-	// rolled subtotals instead of being dropped.
-	tn := toTreeNodes(tree)
-	children, roots, isPlaceholder, name, depth, _ := indexTree(tn)
-
-	// --- Assets section (nested tree; section header at Indent 0, accounts at
-	// treeDepth+1 so a top-level leaf stays at Indent 1 exactly as before).
-	b.sectionHeader("reports.balance_sheet.section.assets")
-	b.emitSectionTree(children, roots, isPlaceholder, name, depth, assetLeaf)
-	b.totalLine("reports.balance_sheet.total.assets", assetTotal)
-
-	// --- Liabilities section.
-	b.sectionHeader("reports.balance_sheet.section.liabilities")
-	b.emitSectionTree(children, roots, isPlaceholder, name, depth, liabLeaf)
-	b.totalLine("reports.balance_sheet.total.liabilities", liabilityTotal)
-
-	// --- Net Assets section (by-restriction split; synthetic lines only).
-	//
-	// p26.70 CTA reclassification (converted view only — see the showCTA gate). The
-	// intercompany residual is currently absorbed into the plug: eliminating the IC legs
-	// leaves consolidated assets short by the residual, so the plug (net assets = assets −
-	// liabilities) and thus the without-restriction figure are distorted by −closing. We
-	// carve that distortion out into two labeled lines WITHOUT changing the net-assets
-	// total, so the balance-sheet identity is untouched:
-	//   - restore the without-restriction line to its undistorted value: + closing;
-	//   - CTA line          = historical − closing  (the FX translation component);
-	//   - reconciling line  = − historical          (the genuine imbalance, → 0 as the
-	//                                                 import cutoff fix lands).
-	// The three added deltas sum to zero (+closing) + (historical − closing) + (−historical)
-	// == 0, so without + CTA + reconciling + with still foots to the plug and A == L + NA
-	// holds exactly. The signs are FORCED by the identity: with `without` restored to its
-	// clean value, CTA + reconciling MUST equal −closing (the amount the elimination pulled
-	// out of the plug) — a "+closing" reading would drive without ~2×closing away from clean
-	// and break balance. So the lines are the negation of the raw split components; "no
-	// value lost" holds in magnitude (|CTA + reconciling| == the old closing residual). The
-	// residual is converted (target minor) — injecting {target: v} into a native map
-	// converts identity, so the closing restoration lands exactly on the converted total.
-	// The CTA reclassification is a CONVERTED-view (single-target) presentation: a
-	// translation adjustment only exists under conversion, and the carve injects a
-	// target-currency amount into the converted total. The per-currency NATIVE DETAIL view
-	// (Detail=="currency") has no single rate, so it must NOT run the split — it falls
-	// through to the native reconciling line below (the residual shown per native
-	// currency). Hence the gate excludes detail mode as well as the no-target case.
+	// p26.70 CTA reclassification (converted view only). See the report doc-comment: the
+	// three added deltas sum to zero so A == L + NA still holds exactly. The per-currency
+	// NATIVE DETAIL view has no single rate, so it must NOT run the split.
 	withoutShown := withoutRestriction
-	showCTA := consolidated && hasNonzero(icNet) && target != "" && !b.detail
+	showCTA := consolidated && hasNonzero(icNet) && target != "" && !p.DetailCurrency()
+	var cta, reconciling map[string]int64
 	if showCTA {
 		withoutShown = map[string]int64{}
 		for ccy, v := range withoutRestriction {
 			withoutShown[ccy] = v
 		}
 		withoutShown[target] += icSplit.Closing // restore the undistorted figure
-	}
-	b.sectionHeader("reports.balance_sheet.section.net_assets")
-	b.syntheticLine("reports.balance_sheet.na.without", withoutShown, false)
-	b.syntheticLine("reports.balance_sheet.na.surplus_of_which", surplus, true) // "of which" memo, indented
-	if showCTA {
-		cta := map[string]int64{target: icSplit.Historical - icSplit.Closing}
-		reconciling := map[string]int64{target: -icSplit.Historical}
-		b.syntheticLine("reports.balance_sheet.na.cta", cta, false)
-		b.syntheticLine("reports.balance_sheet.na.ic_reconciling", reconciling, false)
-	}
-	b.syntheticLine("reports.balance_sheet.na.with", withRestriction, false)
-	b.totalLine("reports.balance_sheet.total.net_assets", netAssetsTotal)
-
-	// --- Total liabilities + net assets (the identity's right-hand side; equals
-	// total assets on a balanced statement).
-	lPlusNA := map[string]int64{}
-	for ccy, v := range liabilityTotal {
-		lPlusNA[ccy] += v
-	}
-	for ccy, v := range netAssetsTotal {
-		lPlusNA[ccy] += v
-	}
-	b.grandTotalLine("reports.balance_sheet.total.liabilities_net_assets", lPlusNA)
-
-	// --- Intercompany residual, native view (no target): there is no single rate, so it
-	// cannot be split into a translation adjustment. Show it as the reconciling-difference
-	// line per native currency (p26.70) — the residual is never hidden, just labeled
-	// honestly rather than flagged as an unexplained error. When the CTA split ran
-	// (converted view) the residual is already presented as the CTA + reconciling lines
-	// above, so no extra row here.
-	if hasNonzero(icNet) && !showCTA {
-		b.warningLine("reports.balance_sheet.na.ic_reconciling", icNet)
+		cta = map[string]int64{target: icSplit.Historical - icSplit.Closing}
+		reconciling = map[string]int64{target: -icSplit.Historical}
 	}
 
-	return b.table(), nil
+	return bsSnapshot{
+		asOf:            d,
+		assetLeaf:       assetLeaf,
+		liabLeaf:        liabLeaf,
+		assetTotal:      assetTotal,
+		liabilityTotal:  liabilityTotal,
+		netAssetsTotal:  netAssetsTotal,
+		withoutShown:    withoutShown,
+		withRestriction: withRestriction,
+		surplus:         surplus,
+		cta:             cta,
+		reconciling:     reconciling,
+		showCTA:         showCTA,
+		icNet:           icNet,
+	}, nil
+}
+
+// sectionKind selects which section a snapshot's leaf index a builder walk reads: the
+// Assets leaves (asset==true) or the Liabilities leaves.
+type sectionKind struct{ asset bool }
+
+func (k sectionKind) leaf(s bsSnapshot) map[AccountID]bsLine {
+	if k.asset {
+		return s.assetLeaf
+	}
+	return s.liabLeaf
 }
 
 // bsBuilder accumulates the Table rows with the right column shape for the current
-// detail mode. In converted-only mode the columns are [Line, Converted]; in
-// per-currency detail mode they are [Line, Currency, Native, Converted].
+// detail mode. In converted-only mode the columns are [Line, <as-of>...] (one value
+// column per date in the p18 series); in per-currency detail mode they are
+// [Line, Currency, Native, Converted] (single as-of).
 type bsBuilder struct {
 	tk     *Toolkit
 	ctx    context.Context
 	p      Params
 	target string
 	detail bool
+	snaps  []bsSnapshot // one per as-of date; snaps[0] is the selected as-of.
 	rows   []Row
 }
 
-func (b *bsBuilder) columns() []Column {
+// columns builds the column set. Detail mode: [Line, Currency, Native, Converted]
+// (single as-of). Converted-only: [Line, <as-of date>...] one value column per date in
+// the series, each header the raw ISO as-of date (a verbatim date marker the web layer
+// renders per the user's setting -- like the cashflow/budget bucket headers, so no
+// per-date i18n key is invented).
+func (b *bsBuilder) columns(dates []string) []Column {
 	if b.detail {
 		return []Column{
 			{HeaderKey: "reports.balance_sheet.col.line", Align: AlignLeft},
@@ -434,20 +594,23 @@ func (b *bsBuilder) columns() []Column {
 			{HeaderKey: "reports.balance_sheet.col.converted", Align: AlignRight},
 		}
 	}
-	return []Column{
-		{HeaderKey: "reports.balance_sheet.col.line", Align: AlignLeft},
-		{HeaderKey: "reports.balance_sheet.col.amount", Align: AlignRight},
+	cols := []Column{{HeaderKey: "reports.balance_sheet.col.line", Align: AlignLeft}}
+	for _, d := range dates {
+		cols = append(cols, Column{HeaderKey: d, Align: AlignRight})
 	}
+	return cols
 }
 
-// convert converts a native per-currency map to the target's minor total at the AsOf
-// closing rate (D12), summing each currency's converted contribution.
-func (b *bsBuilder) convert(byCcy map[string]int64) (int64, error) {
+// convertAt converts a native per-currency map to the target's minor total at the given
+// as-of closing rate (D12), summing each currency's converted contribution. Multi-period
+// columns each convert at THEIR column's closing date, so the rate is passed in (not
+// b.p.AsOf).
+func (b *bsBuilder) convertAt(byCcy map[string]int64, asOf string) (int64, error) {
 	var total int64
 	for _, ccy := range sortedKeys(byCcy) {
 		conv := byCcy[ccy]
 		if b.target != "" {
-			c, err := b.tk.ConvertMinorAt(b.ctx, byCcy[ccy], ccy, b.target, b.p.AsOf)
+			c, err := b.tk.ConvertMinorAt(b.ctx, byCcy[ccy], ccy, b.target, asOf)
 			if err != nil {
 				return 0, err
 			}
@@ -458,35 +621,33 @@ func (b *bsBuilder) convert(byCcy map[string]int64) (int64, error) {
 	return total, nil
 }
 
-// convCcy is the converted column's currency (target, or -- with no target -- blank
-// so the cell mirrors native; in that degenerate case the converted total is only
-// meaningful single-currency).
+// convCcy is the converted column's currency (target, or -- with no target -- blank).
 func (b *bsBuilder) convCcy() string { return b.target }
 
-// sectionHeader appends a section heading row (a label + blank amount cells).
+// sectionHeader appends a section heading row (a label + blank value cells).
 func (b *bsBuilder) sectionHeader(key string) {
 	b.rows = append(b.rows, Row{Cells: b.labelRow(LabelCell(key)), Kind: RowData})
 }
 
 // emitSectionTree walks the account tree pre-order (p26.53) and emits the section's
-// NESTED hierarchy: a PLACEHOLDER parent that has any in-section leaf beneath it becomes
-// a rolled-up SUBTOTAL row; each in-section LEAF becomes an account row. Every account
-// row sits at Indent = treeDepth+1 (the section header is Indent 0), so a TOP-LEVEL leaf
-// stays at Indent 1 exactly as the pre-p26.53 flat layout -- adding a parent above a leaf
-// pushes the leaf to Indent 2, mirroring the trial balance. leaf indexes the in-section
-// leaves (already sign-normalized + intercompany-eliminated); a placeholder with no
-// in-section leaf beneath it is skipped (empty chart branch).
+// NESTED hierarchy, driven by the PRIMARY (selected as-of) column's leaf set: a
+// PLACEHOLDER parent that has any in-section leaf beneath it in the primary column
+// becomes a rolled-up SUBTOTAL row; each in-section LEAF (present in the primary column)
+// becomes an account row. Every row carries one value cell per as-of column (looked up
+// in that column's snapshot; an account absent from an older column shows a zero cell).
 func (b *bsBuilder) emitSectionTree(
 	children map[AccountID][]AccountID, roots []AccountID, isPlaceholder map[AccountID]bool,
-	name map[AccountID]string, depth map[AccountID]int, leaf map[AccountID]bsLine,
+	name map[AccountID]string, depth map[AccountID]int, kind sectionKind,
 ) {
-	// hasLeaf marks a node whose subtree carries an in-section leaf (so empty
-	// placeholder branches drop out). A leaf qualifies iff it is in `leaf`.
+	primLeaf := kind.leaf(b.snaps[0])
+
+	// hasLeaf marks a node whose subtree carries an in-section leaf IN THE PRIMARY COLUMN
+	// (so empty placeholder branches drop out). A leaf qualifies iff it is in primLeaf.
 	hasLeaf := map[AccountID]bool{}
 	var mark func(id AccountID) bool
 	mark = func(id AccountID) bool {
 		if !isPlaceholder[id] {
-			_, ok := leaf[id]
+			_, ok := primLeaf[id]
 			hasLeaf[id] = ok
 			return ok
 		}
@@ -509,13 +670,13 @@ func (b *bsBuilder) emitSectionTree(
 			return
 		}
 		if isPlaceholder[id] {
-			b.parentSubtotal(name[id], b.subtreeByCcy(id, children, isPlaceholder, leaf), depth[id]+1)
+			b.parentSubtotal(name[id], id, children, isPlaceholder, kind, depth[id]+1)
 			for _, c := range children[id] {
 				walk(c)
 			}
 			return
 		}
-		b.accountLine(leaf[id], depth[id]+1)
+		b.accountLine(id, primLeaf[id], kind, depth[id]+1)
 	}
 	for _, r := range roots {
 		walk(r)
@@ -523,10 +684,9 @@ func (b *bsBuilder) emitSectionTree(
 }
 
 // subtreeByCcy sums the per-currency native balances of every in-section LEAF beneath id
-// (id inclusive when it is itself a leaf) -- a placeholder parent's rolled figure. The
-// intercompany elimination and sign normalization already live in the leaf bsLines, so a
-// parent's rollup inherits them (an eliminated child is simply absent from `leaf`, D19).
-func (b *bsBuilder) subtreeByCcy(
+// in the given snapshot (id inclusive when it is itself a leaf) -- a placeholder parent's
+// rolled figure for that column.
+func subtreeByCcy(
 	id AccountID, children map[AccountID][]AccountID, isPlaceholder map[AccountID]bool, leaf map[AccountID]bsLine,
 ) map[string]int64 {
 	out := map[string]int64{}
@@ -549,20 +709,24 @@ func (b *bsBuilder) subtreeByCcy(
 }
 
 // parentSubtotal appends a placeholder parent's rolled-up subtotal row at the given
-// indent: its converted rollup (blank native in detail mode -- a mixed-currency subtree
-// has no single native figure, mirroring the trial balance). Not drillable (a rollup
-// spans many leaves).
-func (b *bsBuilder) parentSubtotal(nm string, byCcy map[string]int64, indent int) {
+// indent: one converted rollup cell per as-of column (blank native in detail mode). Not
+// drillable (a rollup spans many leaves).
+func (b *bsBuilder) parentSubtotal(
+	nm string, id AccountID, children map[AccountID][]AccountID, isPlaceholder map[AccountID]bool,
+	kind sectionKind, indent int,
+) {
 	if !b.detail {
-		conv, _ := b.convert(byCcy)
-		b.rows = append(b.rows, Row{
-			Cells:  b.amountRow(TextCell(nm), conv, b.convCcy(), nil),
-			Indent: indent,
-			Kind:   RowSubtotal,
-		})
+		cells := []Cell{TextCell(nm)}
+		for _, s := range b.snaps {
+			conv, _ := b.convertAt(subtreeByCcy(id, children, isPlaceholder, kind.leaf(s)), s.asOf)
+			cells = append(cells, MoneyCell(conv, b.convCcy()))
+		}
+		b.rows = append(b.rows, Row{Cells: cells, Indent: indent, Kind: RowSubtotal})
 		return
 	}
-	conv, _ := b.convert(byCcy)
+	// Detail (single as-of) mode: converted rollup, blank native.
+	s := b.snaps[0]
+	conv, _ := b.convertAt(subtreeByCcy(id, children, isPlaceholder, kind.leaf(s)), s.asOf)
 	b.rows = append(b.rows, Row{
 		Cells:  []Cell{TextCell(nm), TextCell(""), BlankMoneyCell(), MoneyCell(conv, b.convCcy())},
 		Indent: indent,
@@ -570,34 +734,42 @@ func (b *bsBuilder) parentSubtotal(nm string, byCcy map[string]int64, indent int
 	})
 }
 
-// accountLine appends an asset/liability account leaf line at the given indent: its
-// converted total (and, in detail mode, one row per native currency with a drill on the
-// native cell). The account name is a proper noun (TextCell). In detail mode the FIRST
-// currency row carries the name and subsequent rows are blank-named continuations.
-func (b *bsBuilder) accountLine(l bsLine, indent int) {
+// accountLine appends an asset/liability account leaf line at the given indent. Converted
+// -only mode: one converted cell per as-of column, each drillable to that column's as-of
+// (single-currency accounts only). Detail mode: one row per native currency (single as-of).
+// `primLine` is the leaf in the primary column (its name + drill currency set).
+func (b *bsBuilder) accountLine(id AccountID, primLine bsLine, kind sectionKind, indent int) {
 	if !b.detail {
-		conv, _ := b.convert(l.byCcy)
-		b.rows = append(b.rows, Row{
-			Cells:  b.amountRow(TextCell(l.name), conv, b.convCcy(), b.accountDrillAll(l)),
-			Indent: indent,
-			Kind:   RowData,
-		})
+		cells := []Cell{TextCell(primLine.name)}
+		for _, s := range b.snaps {
+			line := kind.leaf(s)[id] // zero-value bsLine (empty byCcy) when absent this column.
+			conv, _ := b.convertAt(line.byCcy, s.asOf)
+			cell := MoneyCell(conv, b.convCcy())
+			if d := b.accountDrillAll(id, line, s.asOf); d != nil {
+				cell = cell.WithDrill(d)
+			}
+			cells = append(cells, cell)
+		}
+		b.rows = append(b.rows, Row{Cells: cells, Indent: indent, Kind: RowData})
 		return
 	}
+	// Detail (single as-of) mode: one row per native currency, drill on the native cell.
+	s := b.snaps[0]
+	line := kind.leaf(s)[id]
 	first := true
-	for _, ccy := range sortedKeys(l.byCcy) {
-		native := l.byCcy[ccy]
+	for _, ccy := range sortedKeys(line.byCcy) {
+		native := line.byCcy[ccy]
 		conv := native
 		if b.target != "" {
-			conv, _ = b.tk.ConvertMinorAt(b.ctx, native, ccy, b.target, b.p.AsOf)
+			conv, _ = b.tk.ConvertMinorAt(b.ctx, native, ccy, b.target, s.asOf)
 		}
 		nameCell := TextCell("")
 		if first {
-			nameCell = TextCell(l.name)
+			nameCell = TextCell(primLine.name)
 			first = false
 		}
 		nativeCell := MoneyCell(native, ccy)
-		if d := b.accountDrill(l, ccy); d != nil {
+		if d := b.accountDrill(id, ccy, s.asOf); d != nil {
 			nativeCell = nativeCell.WithDrill(d)
 		}
 		b.rows = append(b.rows, Row{
@@ -608,28 +780,32 @@ func (b *bsBuilder) accountLine(l bsLine, indent int) {
 	}
 }
 
-// syntheticLine appends a net-asset line (no account; not drillable). ofWhich renders
-// it as an indented "of which" disclosure memo (net surplus to date).
-func (b *bsBuilder) syntheticLine(key string, byCcy map[string]int64, ofWhich bool) {
+// syntheticLine appends a net-asset line (no account; not drillable) whose per-column
+// value comes from pick(snapshot). ofWhich renders it as an indented "of which"
+// disclosure memo (net surplus to date).
+func (b *bsBuilder) syntheticLine(key string, pick func(bsSnapshot) map[string]int64, ofWhich bool) {
 	indent := 1
 	if ofWhich {
 		indent = 2
 	}
 	if !b.detail {
-		conv, _ := b.convert(byCcy)
-		b.rows = append(b.rows, Row{
-			Cells:  b.amountRow(LabelCell(key), conv, b.convCcy(), nil),
-			Indent: indent,
-			Kind:   RowData,
-		})
+		cells := []Cell{LabelCell(key)}
+		for _, s := range b.snaps {
+			conv, _ := b.convertAt(pick(s), s.asOf)
+			cells = append(cells, MoneyCell(conv, b.convCcy()))
+		}
+		b.rows = append(b.rows, Row{Cells: cells, Indent: indent, Kind: RowData})
 		return
 	}
+	// Detail (single as-of) mode: one row per native currency.
+	s := b.snaps[0]
+	byCcy := pick(s)
 	first := true
 	for _, ccy := range sortedKeys(byCcy) {
 		native := byCcy[ccy]
 		conv := native
 		if b.target != "" {
-			conv, _ = b.tk.ConvertMinorAt(b.ctx, native, ccy, b.target, b.p.AsOf)
+			conv, _ = b.tk.ConvertMinorAt(b.ctx, native, ccy, b.target, s.asOf)
 		}
 		nameCell := LabelCell(key)
 		if !first {
@@ -644,36 +820,66 @@ func (b *bsBuilder) syntheticLine(key string, byCcy map[string]int64, ofWhich bo
 	}
 }
 
-// totalLine appends a SECTION total row (converted total; per-currency in detail):
-// "Total assets"/"Total liabilities"/"Total net assets". A RowSectionTotal (p30.10) —
-// the definitive section figure, ranked ABOVE the placeholder-parent RowSubtotal rollups
-// and BELOW the grand-total "Total liabilities and net assets" (RowTotal), so the three
-// total tiers read distinctly (matching the statement of activities).
-func (b *bsBuilder) totalLine(key string, byCcy map[string]int64) {
-	b.emphasized(key, byCcy, RowSectionTotal, 0)
+// withoutLine appends the "net assets without donor restrictions" line. In the
+// converted-only view each column's cell is derived as a RESIDUAL --
+// Total NA(conv) - with(conv) - CTA(conv) - reconciling(conv) -- rather than converting
+// the native without-map, so the net-asset section FOOTS EXACTLY in converted space:
+// without + with (+ CTA + reconciling) == Total net assets per column, with no half-even
+// drift from converting three sibling figures independently (the p15.5 "footing wins"
+// rule, mirrored to the balance sheet). On column 1 this reproduces the historical figure
+// byte-for-byte (NA - with, no residual). The `hasCTA` flag mirrors whether the CTA lines
+// are emitted so the residual subtracts them iff they exist. Detail (per-currency) mode is
+// unchanged: it renders the native withoutShown map, which already foots per currency by
+// subtraction.
+func (b *bsBuilder) withoutLine(key string, hasCTA bool) {
+	if b.detail {
+		b.syntheticLine(key, func(s bsSnapshot) map[string]int64 { return s.withoutShown }, false)
+		return
+	}
+	cells := []Cell{LabelCell(key)}
+	for _, s := range b.snaps {
+		na, _ := b.convertAt(s.netAssetsTotal, s.asOf)
+		with, _ := b.convertAt(s.withRestriction, s.asOf)
+		conv := na - with
+		if hasCTA {
+			cta, _ := b.convertAt(s.cta, s.asOf)
+			rec, _ := b.convertAt(s.reconciling, s.asOf)
+			conv -= cta + rec
+		}
+		cells = append(cells, MoneyCell(conv, b.convCcy()))
+	}
+	b.rows = append(b.rows, Row{Cells: cells, Indent: 1, Kind: RowData})
+}
+
+// totalLine appends a SECTION total row (RowSectionTotal, p30.10): one converted total
+// per as-of column (per-currency in detail).
+func (b *bsBuilder) totalLine(key string, pick func(bsSnapshot) map[string]int64) {
+	b.emphasized(key, pick, RowSectionTotal, 0)
 }
 
 // grandTotalLine appends the identity's right-hand grand total (L + NA).
-func (b *bsBuilder) grandTotalLine(key string, byCcy map[string]int64) {
-	b.emphasized(key, byCcy, RowTotal, 0)
+func (b *bsBuilder) grandTotalLine(key string, pick func(bsSnapshot) map[string]int64) {
+	b.emphasized(key, pick, RowTotal, 0)
 }
 
-func (b *bsBuilder) emphasized(key string, byCcy map[string]int64, kind RowKind, indent int) {
+func (b *bsBuilder) emphasized(key string, pick func(bsSnapshot) map[string]int64, kind RowKind, indent int) {
 	if !b.detail {
-		conv, _ := b.convert(byCcy)
-		b.rows = append(b.rows, Row{
-			Cells:  b.amountRow(LabelCell(key), conv, b.convCcy(), nil),
-			Indent: indent,
-			Kind:   kind,
-		})
+		cells := []Cell{LabelCell(key)}
+		for _, s := range b.snaps {
+			conv, _ := b.convertAt(pick(s), s.asOf)
+			cells = append(cells, MoneyCell(conv, b.convCcy()))
+		}
+		b.rows = append(b.rows, Row{Cells: cells, Indent: indent, Kind: kind})
 		return
 	}
+	s := b.snaps[0]
+	byCcy := pick(s)
 	first := true
 	for _, ccy := range sortedKeys(byCcy) {
 		native := byCcy[ccy]
 		conv := native
 		if b.target != "" {
-			conv, _ = b.tk.ConvertMinorAt(b.ctx, native, ccy, b.target, b.p.AsOf)
+			conv, _ = b.tk.ConvertMinorAt(b.ctx, native, ccy, b.target, s.asOf)
 		}
 		nameCell := LabelCell(key)
 		if !first {
@@ -688,32 +894,23 @@ func (b *bsBuilder) emphasized(key string, byCcy map[string]int64, kind RowKind,
 	}
 }
 
-// warningLine appends the D19 intercompany warning row (nonzero residual). In both
-// modes it shows the residual converted; in detail mode, per currency.
-func (b *bsBuilder) warningLine(key string, amts []CurAmt) {
-	byCcy := map[string]int64{}
-	for _, a := range amts {
-		byCcy[a.Currency] += a.Minor
-	}
-	b.emphasized(key, byCcy, RowWarning, 0)
+// warningLine appends the D19 intercompany reconciling row (nonzero native residual): one
+// converted residual per as-of column (per currency in detail). Only reached in the native
+// (no-target) converted view; pick reads each column's residual.
+func (b *bsBuilder) warningLine(key string, pick func(bsSnapshot) map[string]int64) {
+	b.emphasized(key, pick, RowWarning, 0)
 }
 
-// labelRow builds a row's cells for a pure label heading (blank amount columns).
+// labelRow builds a row's cells for a pure label heading (blank value columns).
 func (b *bsBuilder) labelRow(label Cell) []Cell {
 	if b.detail {
 		return []Cell{label, TextCell(""), BlankMoneyCell(), BlankMoneyCell()}
 	}
-	return []Cell{label, BlankMoneyCell()}
-}
-
-// amountRow builds a converted-only row's cells: the name/label cell + the converted
-// amount cell (drillable when d != nil, though only account cells drill).
-func (b *bsBuilder) amountRow(nameCell Cell, conv int64, ccy string, d *Drill) []Cell {
-	amt := MoneyCell(conv, ccy)
-	if d != nil {
-		amt = amt.WithDrill(d)
+	cells := []Cell{label}
+	for range b.snaps {
+		cells = append(cells, BlankMoneyCell())
 	}
-	return []Cell{nameCell, amt}
+	return cells
 }
 
 // convCcyOr returns the converted-column currency: the target, or ccy when no target
@@ -725,40 +922,36 @@ func (b *bsBuilder) convCcyOr(ccy string) string {
 	return b.target
 }
 
-// accountDrill builds the p15.3d drill for one (account, currency) as-of balance --
-// the trial-balance retrofit pattern: same scope (descendant closure), this account,
-// this native currency, cumulative to AsOf, so the drilled splits' signed native sum
-// reconciles to the pre-sign-normalization native figure.
-func (b *bsBuilder) accountDrill(l bsLine, ccy string) *Drill {
-	if l.acctID == 0 {
+// accountDrill builds the p15.3d drill for one (account, currency) as-of balance at the
+// given as-of date -- the trial-balance retrofit pattern.
+func (b *bsBuilder) accountDrill(id AccountID, ccy, asOf string) *Drill {
+	if id == 0 {
 		return nil
 	}
 	return &Drill{
 		Scope:      b.p.Scope,
-		AccountIDs: []AccountID{l.acctID},
+		AccountIDs: []AccountID{id},
 		Currency:   ccy,
 		Mode:       DrillAsOf,
-		AsOf:       b.p.AsOf,
+		AsOf:       asOf,
 	}
 }
 
-// accountDrillAll builds a drill for the converted-only account cell. A single-
-// currency account drills to that currency; a multi-currency account is left non-
-// drillable in the converted-only view (one link cannot reconcile a summed-across-
-// currencies converted figure) -- the per-currency detail view is the drill path for
-// those. Assets/liabilities in this fixture are single-currency except FX Clearing.
-func (b *bsBuilder) accountDrillAll(l bsLine) *Drill {
-	if l.acctID == 0 || len(l.byCcy) != 1 {
+// accountDrillAll builds a drill for a converted-only account cell at the given as-of. A
+// single-currency account (in THAT column) drills to that currency; a multi-currency (or
+// empty) account cell is left non-drillable.
+func (b *bsBuilder) accountDrillAll(id AccountID, line bsLine, asOf string) *Drill {
+	if id == 0 || len(line.byCcy) != 1 {
 		return nil
 	}
-	for ccy := range l.byCcy {
-		return b.accountDrill(l, ccy)
+	for ccy := range line.byCcy {
+		return b.accountDrill(id, ccy, asOf)
 	}
 	return nil
 }
 
-func (b *bsBuilder) table() Table {
-	return Table{Columns: b.columns(), Rows: b.rows}
+func (b *bsBuilder) table(dates []string) Table {
+	return Table{Columns: b.columns(dates), Rows: b.rows}
 }
 
 // --- toolkit helpers (p15.4) -----------------------------------------------
@@ -787,9 +980,7 @@ func (tk *Toolkit) isConsolidated(ctx context.Context, scope SubsidiaryID) (bool
 // receivables still owed to the purpose (net of liabilities) remain restricted. The
 // released amount = full asset side - monetary, which the balance sheet surfaces in
 // "without restrictions" (without = total NA - with), keeping with + without == total
-// NA exactly. This makes the point-in-time line articulate with the flow report's
-// "net assets released from restrictions" (which already releases on acquisition via
-// AppliedNonExpense).
+// NA exactly.
 func (tk *Toolkit) restrictedNetAssets(ctx context.Context, scope SubsidiaryID, d string) (map[string]int64, error) {
 	funds, err := tk.store.ListFunds(ctx)
 	if err != nil {
@@ -817,9 +1008,7 @@ func (tk *Toolkit) restrictedNetAssets(ctx context.Context, scope SubsidiaryID, 
 // FundBalancesAsOfByAccount returns ONE fund's per-(account, currency) native cumulative
 // balances as of d in the scope (p15.4 fund selector). It mirrors BalancesAsOf(RateNone)
 // but reads the fund-filtered store query, so the balance sheet's classification/plug/
-// identity logic runs unchanged over a single fund's ledger. Native only (the balance
-// sheet converts downstream); a fund's whole-fund sum is zero by conservation (D20/Z10),
-// so its Assets - Liabilities equals its net-asset balance and A = L + NA holds.
+// identity logic runs unchanged over a single fund's ledger.
 func (tk *Toolkit) FundBalancesAsOfByAccount(ctx context.Context, f FundID, s Scope, d string) (map[AccountID][]CurAmt, error) {
 	rows, err := tk.store.FundSubtreeBalancesAsOf(ctx, f, d, s.Sub)
 	if err != nil {
@@ -836,11 +1025,8 @@ func (tk *Toolkit) FundBalancesAsOfByAccount(ctx context.Context, f FundID, s Sc
 // fundRestrictedNetAssets returns the single fund's "net assets with donor restrictions"
 // per currency: the fund's still-restricted MONETARY net balance (current_cash +
 // receivable_payable assets, net of liabilities -- MonetaryFundBalancesAsOf) when the
-// fund is RESTRICTED (non-empty Restriction), else an empty map (an unrestricted fund
-// contributes nothing to the restricted line, so its whole plug reads as
-// without-restriction). It mirrors the org-wide restrictedNetAssets narrowed to one
-// fund: the fund's DEPLOYED non-monetary assets (a capitalized building) are released,
-// so with = monetary and the released remainder falls into without (= plug - with).
+// fund is RESTRICTED (non-empty Restriction), else an empty map. It mirrors the org-wide
+// restrictedNetAssets narrowed to one fund.
 func (tk *Toolkit) fundRestrictedNetAssets(ctx context.Context, scope SubsidiaryID, d string, f FundID) (map[string]int64, error) {
 	funds, err := tk.store.ListFunds(ctx)
 	if err != nil {
@@ -871,9 +1057,7 @@ func (tk *Toolkit) fundRestrictedNetAssets(ctx context.Context, scope Subsidiary
 
 // inceptionDate is the "from" bound for the cumulative net-surplus-to-date figure: a
 // date on-or-before every possible transaction, so the accumulated surplus is truly
-// from inception. The ledger has no transactions before this (the synthetic fixture
-// starts 2025-01; a real org's first entries postdate it), and PeriodActivity is
-// inclusive, so it captures the full accumulated surplus without a per-org config.
+// from inception.
 const inceptionDate = "1900-01-01"
 
 // --- small pure helpers ----------------------------------------------------
@@ -900,7 +1084,7 @@ func sortedKeys(m map[string]int64) []string {
 }
 
 // hasNonzero reports whether any currency's intercompany residual is nonzero (=> a
-// warning row is emitted, D19).
+// reconciling row is emitted, D19).
 func hasNonzero(amts []CurAmt) bool {
 	for _, a := range amts {
 		if a.Minor != 0 {

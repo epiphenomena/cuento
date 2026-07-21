@@ -1,18 +1,18 @@
-   Line                                            Amount
--  -------------------------------------  ---------------
+   Line                                        2026-06-30       2025-12-31
+-  -------------------------------------  ---------------  ---------------
    Assets
-   Checking US                             USD $35,935.00
-   Checking MX                             USD $21,823.20
-   Savings                                 USD $20,000.00
-   Cash MXN                                   USD $353.59
-   Building                               USD $160,000.00
-#  Total assets                           USD $238,111.80
+   Checking US                             USD $35,935.00   USD $44,035.00
+   Checking MX                             USD $21,823.20   USD $22,301.56
+   Savings                                 USD $20,000.00   USD $20,000.00
+   Cash MXN                                   USD $353.59      USD $446.03
+   Building                               USD $160,000.00  USD $160,000.00
+#  Total assets                           USD $238,111.80  USD $246,782.59
    Liabilities
-   Credit Card                              USD $3,000.00
-#  Total liabilities                        USD $3,000.00
+   Credit Card                              USD $3,000.00    USD $3,000.00
+#  Total liabilities                        USD $3,000.00    USD $3,000.00
    Net assets
-   Net assets without donor restrictions  USD $219,252.68
-   of which change in net assets to date   USD $40,724.72
-   Net assets with donor restrictions      USD $15,859.12
-#  Total net assets                       USD $235,111.80
-=  Total liabilities and net assets       USD $238,111.80
+   Net assets without donor restrictions  USD $219,252.68  USD $227,806.00
+   of which change in net assets to date   USD $40,724.72   USD $49,020.10
+   Net assets with donor restrictions      USD $15,859.12   USD $15,976.59
+#  Total net assets                       USD $235,111.80  USD $243,782.59
+=  Total liabilities and net assets       USD $238,111.80  USD $246,782.59

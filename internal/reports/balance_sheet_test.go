@@ -52,9 +52,11 @@ func balanceSheetReport(t *testing.T) reports.Report {
 	return rep
 }
 
-// labelAmount returns the converted (last-column) minor amount for the DATA/subtotal/
-// total row whose FIRST cell is a LABEL matching key, and whether it was found. Used
-// in the converted-only (2-column) view where synthetic/total lines are labels.
+// labelAmount returns the PRIMARY (selected as-of) converted minor amount for the
+// DATA/subtotal/total row whose FIRST cell is a LABEL matching key, and whether it was
+// found. In the p18 multi-period view column 1 (Cells[1]) is the selected as-of (the
+// old single-column figure); the older year-end columns follow to the RIGHT, so the
+// oracle reads the FIRST value cell, NOT the last.
 func labelAmount(t reports.Table, key string) (int64, bool) {
 	for _, row := range t.Rows {
 		if len(row.Cells) < 2 {
@@ -62,15 +64,15 @@ func labelAmount(t reports.Table, key string) (int64, bool) {
 		}
 		c := row.Cells[0]
 		if c.Kind == reports.CellLabel && c.Text == key {
-			last := row.Cells[len(row.Cells)-1]
-			return last.Minor, true
+			return row.Cells[1].Minor, true
 		}
 	}
 	return 0, false
 }
 
-// nameAmount returns the converted amount for the account row whose first cell is a
-// TEXT cell equal to name (converted-only view).
+// nameAmount returns the PRIMARY (selected as-of) converted amount for the account row
+// whose first cell is a TEXT cell equal to name (converted-only view). Reads the first
+// value cell (Cells[1]) -- the selected as-of column (p18).
 func nameAmount(t reports.Table, name string) (int64, bool) {
 	for _, row := range t.Rows {
 		if len(row.Cells) < 2 {
@@ -78,8 +80,7 @@ func nameAmount(t reports.Table, name string) (int64, bool) {
 		}
 		c := row.Cells[0]
 		if c.Kind == reports.CellText && c.Text == name {
-			last := row.Cells[len(row.Cells)-1]
-			return last.Minor, true
+			return row.Cells[1].Minor, true
 		}
 	}
 	return 0, false
@@ -219,6 +220,146 @@ func TestBalanceSheetGolden(t *testing.T) {
 	}
 	checkGolden(t, "balance_sheet.txt", []byte(textDump))
 	checkGolden(t, "balance_sheet.csv", csvBuf.Bytes())
+}
+
+// TestBalanceSheetMultiPeriod (p18) verifies the multi-period column shape: the
+// statement is a SERIES of as-of value columns, left to right -- column 1 is the
+// selected as-of, then each prior December 31 strictly before it, back to the earliest
+// posting date. On the fixture (as-of 2026-06-30, ledger from 2025-01-01) the series is
+// EXACTLY [2026-06-30, 2025-12-31]: 2024-12-31 is before the earliest posting so the
+// walk stops there (2026-12-31 is >= the as-of, so the current year-end is not repeated).
+//
+// It asserts: (1) the column headers are Line + those two ISO dates in order; (2) column
+// 1 (the selected as-of) reproduces the OLD single-as-of converted figures exactly -- the
+// same numbers TestBalanceSheetGolden hand-verifies; (3) the prior year-end column
+// (2025-12-31) carries its own, DIFFERENT snapshot (the fixture posts activity in H1 2026,
+// so at least the change-in-net-assets-to-date figure moves between the two columns).
+func TestBalanceSheetMultiPeriod(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := context.Background()
+	rep := balanceSheetReport(t)
+
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, bsGoldenParams(f)), bsGoldenParams(f))
+	if err != nil {
+		t.Fatalf("run balance sheet: %v", err)
+	}
+
+	// (1) Columns: Line + two as-of date columns, in descending-date order.
+	wantHeaders := []string{"reports.balance_sheet.col.line", "2026-06-30", "2025-12-31"}
+	if len(table.Columns) != len(wantHeaders) {
+		t.Fatalf("columns = %d, want %d %v; got headers %v",
+			len(table.Columns), len(wantHeaders), wantHeaders, columnHeaderKeys(table))
+	}
+	for i, want := range wantHeaders {
+		if table.Columns[i].HeaderKey != want {
+			t.Errorf("column %d header = %q, want %q", i, table.Columns[i].HeaderKey, want)
+		}
+	}
+
+	// (2) Column 1 (Cells[1], the selected as-of) == the old single-as-of figures. These
+	// are exactly the converted numbers TestBalanceSheetGolden hand-derives from the oracle.
+	wantPrimary := map[string]int64{
+		"reports.balance_sheet.total.assets":                 23_811_180,
+		"reports.balance_sheet.total.liabilities":            300_000,
+		"reports.balance_sheet.total.net_assets":             23_511_180,
+		"reports.balance_sheet.na.without":                   21_925_268,
+		"reports.balance_sheet.na.with":                      1_585_912,
+		"reports.balance_sheet.total.liabilities_net_assets": 23_811_180,
+	}
+	for key, want := range wantPrimary {
+		got, ok := labelAmount(table, key) // labelAmount reads Cells[1] = the selected as-of
+		if !ok {
+			t.Errorf("no row for label %q", key)
+			continue
+		}
+		if got != want {
+			t.Errorf("primary-column %q = %d, want %d (must equal the old single-as-of figure)", key, got, want)
+		}
+	}
+
+	// (3) The prior year-end column (2025-12-31, Cells[2]) is its OWN snapshot: the
+	// change-in-net-assets-to-date at 2025-12-31 differs from the 2026-06-30 figure (the
+	// fixture posts revenue/expense activity in H1 2026), so the two columns are distinct.
+	priorSurplus, ok := labelColumn(table, "reports.balance_sheet.na.surplus_of_which", 2)
+	if !ok {
+		t.Fatalf("no surplus row for the prior year-end column")
+	}
+	primarySurplus, _ := labelColumn(table, "reports.balance_sheet.na.surplus_of_which", 1)
+	if priorSurplus == primarySurplus {
+		t.Errorf("prior year-end surplus (%d) == selected-as-of surplus (%d): the columns are not distinct snapshots",
+			priorSurplus, primarySurplus)
+	}
+	// EVERY column must foot in CONVERTED space, both the balance-sheet identity
+	// (A == L + NA) and the net-asset split (without + with == Total NA). The split
+	// footing is the discriminator the residual-derivation fixes: converting without/with/
+	// NA independently drifts a half-even cent at the older year-end's rate, so a naive
+	// per-figure conversion breaks without + with == NA there (p15.5 "footing wins").
+	for col := 1; col <= 2; col++ {
+		assets, _ := labelColumn(table, "reports.balance_sheet.total.assets", col)
+		lPlusNA, _ := labelColumn(table, "reports.balance_sheet.total.liabilities_net_assets", col)
+		if assets != lPlusNA {
+			t.Errorf("column %d identity broken: A %d != L+NA %d", col, assets, lPlusNA)
+		}
+		without, _ := labelColumn(table, "reports.balance_sheet.na.without", col)
+		with, _ := labelColumn(table, "reports.balance_sheet.na.with", col)
+		na, _ := labelColumn(table, "reports.balance_sheet.total.net_assets", col)
+		if without+with != na {
+			t.Errorf("column %d net-asset split does not foot: without %d + with %d = %d != Total NA %d",
+				col, without, with, without+with, na)
+		}
+	}
+}
+
+// TestBalanceSheetMultiPeriodBeforeInception (p18 guard): an as-of date BEFORE the
+// earliest posting (the fixture ledger starts 2025-01-01) must NOT walk year-ends back
+// forever -- the first candidate prior year-end already precedes the earliest posting, so
+// the walk stops immediately and the statement is the single selected as-of column. This
+// exercises the "stop before min" break with a real fixture (no degenerate/negative loop).
+func TestBalanceSheetMultiPeriodBeforeInception(t *testing.T) {
+	f := fixture.New(t)
+	ctx := context.Background()
+	rep := balanceSheetReport(t)
+
+	// As-of 2024-06-30 is before the earliest posting (2025-01-01); the prior year-end
+	// candidate 2023-12-31 precedes the min, so no year-end columns are added.
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), AsOf: "2024-06-30", Lang: "en", TargetCurrency: "USD"}
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run balance sheet before inception: %v", err)
+	}
+	// Line + exactly one as-of value column (no year-end fan-out before the ledger starts).
+	if len(table.Columns) != 2 {
+		t.Errorf("before-inception columns = %d, want 2 (Line + single as-of); headers %v", len(table.Columns), columnHeaderKeys(table))
+	}
+	if len(table.Columns) >= 2 && table.Columns[1].HeaderKey != "2024-06-30" {
+		t.Errorf("before-inception value column header = %q, want 2024-06-30", table.Columns[1].HeaderKey)
+	}
+}
+
+// columnHeaderKeys returns the header keys of every column (for diagnostics).
+func columnHeaderKeys(t reports.Table) []string {
+	out := make([]string, len(t.Columns))
+	for i, c := range t.Columns {
+		out[i] = c.HeaderKey
+	}
+	return out
+}
+
+// labelColumn returns the minor amount in value-column `col` (1-based over the value
+// columns; col 1 is the leftmost/selected as-of) for the row whose first cell is a LABEL
+// matching key.
+func labelColumn(t reports.Table, key string, col int) (int64, bool) {
+	for _, row := range t.Rows {
+		if len(row.Cells) <= col {
+			continue
+		}
+		c := row.Cells[0]
+		if c.Kind == reports.CellLabel && c.Text == key {
+			return row.Cells[col].Minor, true
+		}
+	}
+	return 0, false
 }
 
 // TestBalanceSheetFundFilter runs the Statement of Position NARROWED to the Building
@@ -581,8 +722,9 @@ func TestBalanceSheetNestedTree(t *testing.T) {
 			if len(row.Cells) < 2 || row.Cells[0].Kind != reports.CellText || row.Cells[0].Text != name {
 				continue
 			}
-			last := row.Cells[len(row.Cells)-1]
-			return rowInfo{found: true, kind: row.Kind, indent: row.Indent, amount: last.Minor}
+			// p18: the selected as-of is column 1 (Cells[1]); the nested-tree oracle reads
+			// that primary column, not the oldest (last) year-end column.
+			return rowInfo{found: true, kind: row.Kind, indent: row.Indent, amount: row.Cells[1].Minor}
 		}
 		return rowInfo{}
 	}
@@ -858,11 +1000,17 @@ func TestBalanceSheetDetailToggle(t *testing.T) {
 		t.Fatalf("run detail: %v", err)
 	}
 
-	if len(convT.Columns) != 2 {
-		t.Errorf("converted-only columns = %d, want 2", len(convT.Columns))
+	// p18: the converted-only view is Line + one value column per as-of date (>= 2
+	// value columns on the fixture: 2026-06-30 + 2025-12-31), so >= 3 columns total.
+	// The per-currency detail view stays a single as-of, 4 columns.
+	if len(convT.Columns) < 3 {
+		t.Errorf("converted-only columns = %d, want >= 3 (Line + multi-period value columns)", len(convT.Columns))
+	}
+	if convT.Columns[0].HeaderKey != "reports.balance_sheet.col.line" {
+		t.Errorf("converted-only column 0 = %q, want the line column", convT.Columns[0].HeaderKey)
 	}
 	if len(detT.Columns) != 4 {
-		t.Errorf("detail columns = %d, want 4", len(detT.Columns))
+		t.Errorf("detail columns = %d, want 4 (single as-of, per-currency)", len(detT.Columns))
 	}
 	// Detail expands multi-currency lines, so it has strictly more rows.
 	if len(detT.Rows) <= len(convT.Rows) {
