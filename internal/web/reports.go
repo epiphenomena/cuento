@@ -435,9 +435,27 @@ func (s *server) programStatementOptions(ctx context.Context) ([]programOption, 
 	}
 	out := make([]programOption, 0, len(tree))
 	for _, p := range tree {
-		out = append(out, programOption{ID: int64(p.ID), Name: p.Name, Path: paths[p.ID]})
+		// The report PROGRAM FILTER drops the implied root-program segment from the
+		// displayed/fuzzy-matched path: the whole tree hangs off the single seeded root
+		// ("General"), so prefixing every descendant with "General." is noise. Strip only
+		// the FIRST dotted segment (scoped to THIS filter -- ProgramPaths itself, shared by
+		// the fund/register/txn/account/expense pickers, is unchanged). The root program
+		// (path == its bare name, no dot) yields "", so its option falls back to Name in
+		// the template and stays selectable. The option's value (program id) is untouched.
+		out = append(out, programOption{ID: int64(p.ID), Name: p.Name, Path: stripRootSegment(paths[p.ID])})
 	}
 	return out, nil
+}
+
+// stripRootSegment removes the leading dotted segment (the implied root program) from a
+// program path for the report program filter: "General.UPH.Interns" -> "UPH.Interns",
+// "General" -> "" (the root: template falls back to the bare Name). Used only by
+// programStatementOptions so the shared ProgramPaths stays full-path for every other picker.
+func stripRootSegment(path string) string {
+	if i := strings.IndexByte(path, '.'); i >= 0 {
+		return path[i+1:]
+	}
+	return ""
 }
 
 // programExists reports whether id is one of the offered programs (a query program

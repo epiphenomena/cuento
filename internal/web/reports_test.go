@@ -385,15 +385,22 @@ func TestWideMatrixReportsFullWidth(t *testing.T) {
 // TestProgramSelectShowsHierarchy (p29.13): the program-statement report's program
 // selector is a fuzzy hierarchy combobox (combo-input) whose options carry the dotted
 // ancestor path on data-path, exactly like the account pickers (p28.2), so the shared
-// combobox ranks/labels by the program tree.
+// combobox ranks/labels by the program tree. The IMPLIED ROOT segment ("General.")
+// is stripped from the filter's paths, and the default (value 0) is an EMPTY option so
+// the box renders blank and a cleared input means "all programs".
 func TestProgramSelectShowsHierarchy(t *testing.T) {
 	h, st, _, sm := reportsApp(t)
 	admin := mkUser(t, st, "admin", "none", true)
 
-	// A child under the seeded root "General" so a dotted path exists.
+	// A grandchild under the seeded root "General" so a multi-segment path exists and we
+	// can prove ONLY the leading root segment is stripped (not every segment).
 	ctx := store.WithActor(context.Background(), store.Actor{ID: admin})
-	if _, err := st.CreateProgram(ctx, store.CreateProgramInput{ParentID: 1, Name: "Education"}); err != nil {
+	edu, err := st.CreateProgram(ctx, store.CreateProgramInput{ParentID: 1, Name: "Education"})
+	if err != nil {
 		t.Fatalf("create program: %v", err)
+	}
+	if _, err := st.CreateProgram(ctx, store.CreateProgramInput{ParentID: edu, Name: "Interns"}); err != nil {
+		t.Fatalf("create child program: %v", err)
 	}
 
 	rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.ProgramStatementReportID, nil)
@@ -404,8 +411,24 @@ func TestProgramSelectShowsHierarchy(t *testing.T) {
 	if !strings.Contains(body, `report-program-select combo-input`) {
 		t.Errorf("program selector is not a combo-input; body:\n%s", body)
 	}
-	if !strings.Contains(body, `data-path="General.Education"`) {
-		t.Errorf("program option missing the dotted hierarchy data-path; body:\n%s", body)
+	// The implied root "General." prefix is dropped: the child reads "Education", the
+	// grandchild "Education.Interns" -- NOT "General.Education[.Interns]".
+	if !strings.Contains(body, `data-path="Education"`) {
+		t.Errorf("child program path should drop the implied root ('Education'); body:\n%s", body)
+	}
+	if !strings.Contains(body, `data-path="Education.Interns"`) {
+		t.Errorf("grandchild path should keep sub-hierarchy minus root ('Education.Interns'); body:\n%s", body)
+	}
+	if strings.Contains(body, `data-path="General.`) {
+		t.Errorf("program filter still carries the implied 'General.' root prefix; body:\n%s", body)
+	}
+	// The default option is EMPTY (blank label, no data-path) and opts into empty==all via
+	// data-empty-value="0"; the greyed placeholder still names the state.
+	if !strings.Contains(body, `data-empty-value="0"`) {
+		t.Errorf("program select missing data-empty-value opt-in; body:\n%s", body)
+	}
+	if !strings.Contains(body, `<option value="0" selected></option>`) {
+		t.Errorf("default program option should be empty (blank label); body:\n%s", body)
 	}
 }
 

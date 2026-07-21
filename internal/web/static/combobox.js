@@ -91,6 +91,15 @@ function enhance(select, opts) {
   input.setAttribute('role', 'combobox');
   input.setAttribute('aria-autocomplete', 'list');
   input.setAttribute('aria-expanded', 'false');
+  // An optional data-placeholder on the select (the report PROGRAM filter's
+  // "— all programs —") is mirrored onto the overlay so a blank box (the empty == all
+  // default) still names its meaning. Purely cosmetic; other combos set no placeholder.
+  if (select.dataset.placeholder) input.placeholder = select.dataset.placeholder;
+  // data-empty-value scopes "a cleared/blank input means THIS option" to the select that
+  // opts in (the report program filter: blank == all programs, value 0). Absent on the
+  // fund/account/payee combos, so their "empty reverts to the current selection" behavior
+  // is unchanged.
+  const emptyValue = select.dataset.emptyValue;
   // Tab order: by default the native <select> underneath is the tab stop (keeps the
   // grid's Tab order account->amount and the keyboard e2e intact); the overlay is
   // reachable by click/focus only. For a freeText combo (payee) the overlay IS the
@@ -254,7 +263,21 @@ function enhance(select, opts) {
     // Defer so a list mousedown can win; then reconcile the input text to the selection.
     // The timer id is kept so a re-focus within the window can cancel it (see `focus`).
     if (blurTimer) clearTimeout(blurTimer);
-    blurTimer = setTimeout(() => { blurTimer = null; close(); syncInputToSelection(); }, 120);
+    blurTimer = setTimeout(() => {
+      blurTimer = null;
+      close();
+      // empty == the opt-in "empty value" (report program filter: blank -> program 0 ==
+      // all). A cleared box does NOT move select.value on its own, so without this a
+      // click-away would REVERT the box to the old selection's label (and never post 0).
+      // Reset the select here and fire `change` so the report's form (hx-trigger="change")
+      // reloads at "all". Gated on data-empty-value + non-freeText, so only the program
+      // filter opts in. syncInputToSelection then leaves the box blank (value-0 has no label).
+      if (!freeText && emptyValue != null && input.value.trim() === '' && select.value !== emptyValue) {
+        select.value = emptyValue;
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      syncInputToSelection();
+    }, 120);
   });
 
   // p26.44: KEYBOARD ENTRY bridge. For a non-freeText combo the native <select> is the Tab

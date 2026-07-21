@@ -1018,7 +1018,7 @@ test('reports: open the program statement MATRIX, collapse a program COLUMN grou
   await page.goto(`${PS}?scope=1&from=2025-01-01&to=2030-12-31&currency=USD`);
   await expect(page.locator('form.report-params')).toBeVisible();
   await expect(page.locator('select.report-scope-select[name="scope"]')).toBeVisible();
-  // The report-specific PROGRAM selector (comparative default is "— all programs —").
+  // The report-specific PROGRAM selector (default is EMPTY == all programs).
   const progSelect = page.locator('select.report-program-select[name="program"]');
   await expect(progSelect).toBeVisible();
   // The period FROM/TO controls are present -- plain text inputs (never input[type=date]).

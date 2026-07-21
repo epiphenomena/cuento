@@ -138,9 +138,17 @@
     <div class="report-field">
       <label for="rp-program">{{t "reports.params.program"}}</label>
       {{/* p29.13: fuzzy program combobox (combo-input) with the dotted hierarchy in
-           data-path so a query ranks by the program tree, like the account picker. */}}
-      <select id="rp-program" name="program" class="report-program-select combo-input">
-        <option value="0"{{if eq .Program 0}} selected{{end}}>{{t "reports.program_statement.all_programs"}}</option>
+           data-path so a query ranks by the program tree, like the account picker. The
+           implied root-program segment is stripped from each Path (in reports.go), so paths
+           read as "Affiliates" / "UPH.Interns" rather than "General.Affiliates". The default
+           (value="0") is "all programs": its option carries an EMPTY label (no text, no
+           data-path) so the box renders BLANK, and data-empty-value="0" tells combobox.js to
+           resolve a cleared/blank input back to this option (empty == all). The greyed
+           placeholder still names the empty state. Scoped to THIS select -- other comboboxes
+           lack data-empty-value and keep their "empty reverts to selection" behavior. */}}
+      <select id="rp-program" name="program" class="report-program-select combo-input"
+              data-empty-value="0" data-placeholder="{{t "reports.program_statement.all_programs"}}">
+        <option value="0"{{if eq .Program 0}} selected{{end}}></option>
         {{- range .Programs}}
         <option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.Program}} selected{{end}}>{{.Name}}</option>
         {{- end}}

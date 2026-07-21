@@ -42,8 +42,9 @@ test.describe('program selectors are fuzzy + hierarchy comboboxes (p29.13)', () 
     await page.goto('/reports/program_statement');
     await expect(page.locator('#rp-program')).toBeVisible();
 
-    // The child option carries the dotted PATH on data-path (General.Edufuzz Program).
-    const path = 'General.Edufuzz Program';
+    // The report program filter DROPS the implied root ("General.") segment, so a
+    // direct child of the root carries just its own name on data-path.
+    const path = 'Edufuzz Program';
     await expect(
       page.locator('#rp-program option', { hasText: 'Edufuzz Program' }).first(),
     ).toHaveAttribute('data-path', path);
@@ -53,7 +54,7 @@ test.describe('program selectors are fuzzy + hierarchy comboboxes (p29.13)', () 
     const list = cell.locator('.combo-list');
     await input.click();
     await input.fill('');
-    await input.type('gen.edufuzz'); // subsequence of "General.Edufuzz Program"
+    await input.type('edufuzz'); // contiguous fragment of "Edufuzz Program"
     // (1) DOM: the child ranks into the filtered list, labeled by its path.
     const wanted = list.locator('.combo-option', { hasText: path });
     await expect(wanted).toBeVisible();
@@ -63,5 +64,40 @@ test.describe('program selectors are fuzzy + hierarchy comboboxes (p29.13)', () 
     const val = await page.locator('#rp-program option', { hasText: 'Edufuzz Program' }).first().getAttribute('value');
     await wanted.first().click();
     await expect(page.locator('#rp-program')).toHaveValue(/** @type {string} */ (val));
+  });
+
+  // The program filter default is EMPTY (blank box) and CLEARING it means "all
+  // programs" (value 0). A user picks a program, then clears the box + tabs away -> the
+  // select resets to 0 and the report reloads at "all" (scoped ONLY to this select via
+  // data-empty-value; other combos still revert a cleared box to their selection).
+  test('clearing the program filter resets to all (empty == program 0)', async ({ page, server }) => {
+    await login(page, server);
+    await createChildProgram(page, 'Clearme Program');
+
+    await page.goto('/reports/program_statement');
+    const select = page.locator('#rp-program');
+    await expect(select).toBeVisible();
+    // Default render: value 0 (all) and a BLANK overlay box (no "— all programs —" text).
+    await expect(select).toHaveValue('0');
+    const cell = select.locator('xpath=ancestor::div[contains(@class,"combo")][1]');
+    const input = cell.locator('.combo-text');
+    await expect(input).toHaveValue('');
+    await expect(input).toHaveAttribute('placeholder', /programs/i);
+
+    // Pick a real program via the overlay.
+    const list = cell.locator('.combo-list');
+    await input.click();
+    await input.type('clearme');
+    await list.locator('.combo-option', { hasText: 'Clearme Program' }).first().click();
+    const val = await select.locator('option', { hasText: 'Clearme Program' }).first().getAttribute('value');
+    await expect(select).toHaveValue(/** @type {string} */ (val));
+
+    // Now CLEAR the box and blur (tab away) -> the select snaps back to 0 (all programs),
+    // the overlay stays blank, and the report reloads (the URL drops to program=0 / absent).
+    await input.click();
+    await input.fill('');
+    await input.blur();
+    await expect(select).toHaveValue('0');
+    await expect(input).toHaveValue('');
   });
 });
