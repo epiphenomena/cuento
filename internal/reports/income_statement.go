@@ -115,10 +115,6 @@ func runIncomeStatement(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 	// Per-period converted activity per account (target currency, txn-date rate). One
 	// map per column; a leaf absent from a period simply has no entry (rendered zero).
 	perAcct := make([]map[AccountID]int64, len(periods))
-	// Per-period NATIVE activity per (account,currency) -- for the drill filter's native
-	// currency and to detect single- vs multi-currency leaves (only single-currency
-	// leaves are drillable, mirroring the balance sheet).
-	nativeCcy := make([]map[AccountID]map[string]int64, len(periods))
 	for i, pr := range periods {
 		conv, err := tk.Activity(ctx, Scope{Sub: p.Scope}, pr.from, pr.to, ConvertOpts{To: target, Mode: RateTxnDate})
 		if err != nil {
@@ -131,20 +127,26 @@ func runIncomeStatement(ctx context.Context, tk *Toolkit, p Params) (Table, erro
 			}
 		}
 		perAcct[i] = m
+	}
 
-		nat, err := tk.Activity(ctx, Scope{Sub: p.Scope}, pr.from, pr.to, ConvertOpts{Mode: RateNone})
-		if err != nil {
-			return Table{}, err
+	// NATIVE currency SET per account, read ONCE over the whole range (p-perf). The drill
+	// filter (leafDrill) reads ONLY the union of each leaf's native currencies across all
+	// columns and drills only a SINGLE-currency leaf; the per-column native AMOUNTS are
+	// never consumed. A whole-range RateNone activity yields exactly that union (a currency
+	// present in any month is present over the range, and GROUP BY emits a row per (account,
+	// currency) with any split), so this is byte-identical to unioning per-month native maps
+	// -- while replacing N per-month native queries with ONE.
+	nat, err := tk.Activity(ctx, Scope{Sub: p.Scope}, p.From, p.To, ConvertOpts{Mode: RateNone})
+	if err != nil {
+		return Table{}, err
+	}
+	nativeCcy := make(map[AccountID]map[string]bool, len(nat))
+	for acct, amts := range nat {
+		cm := make(map[string]bool, len(amts))
+		for _, a := range amts {
+			cm[a.Currency] = true
 		}
-		nm := make(map[AccountID]map[string]int64, len(nat))
-		for acct, amts := range nat {
-			cm := make(map[string]int64, len(amts))
-			for _, a := range amts {
-				cm[a.Currency] += a.Minor
-			}
-			nm[acct] = cm
-		}
-		nativeCcy[i] = nm
+		nativeCcy[acct] = cm
 	}
 
 	// The TOTAL column per account = SUM of the per-period converted cells (footing rule).
@@ -335,9 +337,9 @@ type isBuilder struct {
 	target  string
 	periods []period
 
-	perAcct   []map[AccountID]int64            // [col]acct -> converted minor
-	nativeCcy []map[AccountID]map[string]int64 // [col]acct -> ccy -> native minor
-	total     map[AccountID]int64              // acct -> converted total (sum of cols)
+	perAcct   []map[AccountID]int64         // [col]acct -> converted minor
+	nativeCcy map[AccountID]map[string]bool // acct -> whole-range native currency SET (drill)
+	total     map[AccountID]int64           // acct -> converted total (sum of cols)
 
 	// FUNCTIONAL layout (GranNone only): the Admin/Fundraising per-leaf RAW net-debit
 	// sums (target currency), from FunctionalMatrix. Program is the residual at render.
@@ -564,13 +566,8 @@ func (b *isBuilder) funcCells(nameCell Cell, admin, fr, tot, sign int64, funcHas
 // account, that range, and the native currency; the drilled native splits' signed sum
 // equals the pre-conversion native figure (drill.go reconciliation invariant).
 func (b *isBuilder) leafDrill(id AccountID, pr period) *Drill {
-	// Determine the leaf's native currency set across the whole range (union of columns).
-	ccys := map[string]bool{}
-	for i := range b.periods {
-		for c := range b.nativeCcy[i][id] {
-			ccys[c] = true
-		}
-	}
+	// The leaf's native currency set over the whole range (read once, not per column).
+	ccys := b.nativeCcy[id]
 	if len(ccys) != 1 {
 		return nil // multi-currency (or no) native currency: not drillable
 	}
