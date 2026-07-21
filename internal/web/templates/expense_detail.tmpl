@@ -74,8 +74,14 @@
        submit forms (never nested). */}}
   <h2>{{t "expense.header.title"}}</h2>
   {{if .Editable}}
+  {{/* FIX 1b: the NOTES textarea moved OUT of this form to below the lines table, but the
+       handler (expenseSetHeader) still writes date/memo/notes together in ONE call, so a
+       partial post would blank the untouched ones. Both auto-saving surfaces therefore
+       carry the OTHER's fields via hx-include: this header form (date/memo) pulls #er-notes;
+       the relocated notes textarea pulls #er-date,#er-memo. So every save posts all three. */}}
   <form method="post" action="/expenses/{{.ID}}/header" class="expense-header-form"
-        hx-post="/expenses/{{.ID}}/header" hx-trigger="change" hx-target="#main" hx-swap="outerHTML">
+        hx-post="/expenses/{{.ID}}/header" hx-trigger="change" hx-target="#main" hx-swap="outerHTML"
+        hx-include="#er-notes">
     <div class="txn-main-header">
       {{/* Main account (AP payable): LOCKED read-only text for the submitter (reviewer edits). */}}
       <div class="txn-field txn-main-account-field">
@@ -94,16 +100,15 @@
         <label for="er-memo">{{t "expense.header.memo"}}</label>
         <input type="text" name="memo" id="er-memo" value="{{.Memo}}" autocomplete="off">
       </div>
-      {{/* Date: editable. */}}
+      {{/* Date: editable. FIX 1a: the SAME reusable date widget every other date field uses
+           (datefield partial + datefield.js -> autoformat-as-you-type + calendar picker
+           button, per-user format, rule 10). Keeps id "er-date" and name "date" (the handler
+           reads r.PostFormValue("date"); e2e/JS query #er-date). Format "" -> datefield.js
+           uses the global per-user format (as register/report do). */}}
       <div class="txn-field">
         <label for="er-date">{{t "expense.header.date"}}</label>
-        <input type="text" name="date" id="er-date" value="{{.Date}}" autocomplete="off" placeholder="{{t "expense.header.date_hint"}}">
+        {{template "datefield" (datefield "er-date" "date" .Date (t "expense.header.date_hint") "" "" false)}}
       </div>
-    </div>
-    {{/* Notes: editable, full-width below the header (mirrors the txn notes field). */}}
-    <div class="txn-notes-field">
-      <label for="er-notes">{{t "expense.header.notes"}}</label>
-      <textarea name="notes" id="er-notes" rows="4">{{.Notes}}</textarea>
     </div>
     <noscript><button type="submit" class="btn btn-ghost">{{t "expense.header.save"}}</button></noscript>
   </form>
@@ -253,6 +258,24 @@
       {{end}}
     </tbody>
   </table>
+  {{end}}
+
+  {{if .Editable}}
+  {{/* FIX 1b: NOTES now render BELOW the lines table (were above it, in the header form).
+       Its own auto-saving form posting to /header (the same handler): hx-include pulls the
+       header's #er-date + #er-memo so a notes-only change still carries them (the handler
+       writes date/memo/notes together -- see the header form's hx-include note). Keeps name
+       "notes" + id "er-notes" and the auto-save-on-change behavior intact. A SIBLING of the
+       grid/submit forms (never nested). */}}
+  <form method="post" action="/expenses/{{.ID}}/header" class="expense-notes-form"
+        hx-post="/expenses/{{.ID}}/header" hx-trigger="change" hx-target="#main" hx-swap="outerHTML"
+        hx-include="#er-date,#er-memo">
+    <div class="txn-notes-field">
+      <label for="er-notes">{{t "expense.header.notes"}}</label>
+      <textarea name="notes" id="er-notes" rows="4">{{.Notes}}</textarea>
+    </div>
+    <noscript><button type="submit" class="btn btn-ghost">{{t "expense.header.save"}}</button></noscript>
+  </form>
   {{end}}
 
   {{if .Editable}}
