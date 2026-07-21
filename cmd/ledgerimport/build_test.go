@@ -1991,3 +1991,257 @@ func TestFinalizeRequiresCorrections(t *testing.T) {
 		t.Fatal("finalize with no corrections succeeded; want a loud failure")
 	}
 }
+
+// ---- merge_into: two source accounts collapse to one bilingual account -------
+
+// mergeAccountMap returns a mapping in which a US-only leaf ("1100 Cash:Bank US")
+// and an MX-only leaf ("1100 Efectivo:Banco MX") MERGE into ONE bilingual cuento
+// account: the US (canonical) row supplies name_en, the MX (merge-in) row supplies
+// name_es, and the account spans BOTH subsidiaries. Everything else mirrors the
+// synthetic org (FX Clearing + Opening Balances counters on both subs). Two flavors:
+// withMerge=false emits an unmerged control (both leaves separate) for the
+// byte-identical guard. Synthetic-only (rule 11).
+func mergeAccountMap(withMerge bool) []AccountMap {
+	rows := []AccountMap{
+		{SourceAcct: "Assets", CuentoType: "asset", Subsidiaries: []string{"Test US", "Test MX"}, Active: true, NameEN: "Assets", NameES: "Activos"},
+		{SourceAcct: "1100 Cash:Bank US", CuentoType: "asset", CuentoParent: "Assets", Subsidiaries: []string{"Test US"}, Active: true, NameEN: "Bank US", NameES: "Bank US"},
+		{SourceAcct: "1100 Efectivo:Banco MX", CuentoType: "asset", CuentoParent: "Assets", Subsidiaries: []string{"Test MX"}, Active: true, NameEN: "Banco MX", NameES: "Banco MX"},
+		{SourceAcct: "Revenue", CuentoType: "revenue", Subsidiaries: []string{"Test US", "Test MX"}, Active: true, NameEN: "Revenue", NameES: "Ingresos"},
+		{SourceAcct: "Donations", CuentoType: "revenue", CuentoParent: "Revenue", Subsidiaries: []string{"Test US", "Test MX"}, Active: true, NameEN: "Donations", NameES: "Donaciones"},
+		{SourceAcct: "Equity", CuentoType: "equity", Subsidiaries: []string{"Test US", "Test MX"}, Active: true, NameEN: "Equity", NameES: "Patrimonio"},
+		{SourceAcct: "Opening Balances", CuentoType: "equity", CuentoParent: "Equity", Subsidiaries: []string{"Test US", "Test MX"}, Active: true, NameEN: "Opening Balances", NameES: "Saldos"},
+		{SourceAcct: "FX Clearing", CuentoType: "equity", CuentoParent: "Equity", Subsidiaries: []string{"Test US", "Test MX"}, Active: true, NameEN: "FX Clearing", NameES: "FX"},
+	}
+	if withMerge {
+		// The MX leaf merges INTO the US leaf (canonical). The MERGE RULE: name_en
+		// from the canonical ("Bank US"), name_es from the merge-in ("Banco MX").
+		for i := range rows {
+			switch rows[i].SourceAcct {
+			case "1100 Efectivo:Banco MX":
+				rows[i].MergeInto = "1100 Cash:Bank US"
+				rows[i].NameES = "Banco Bilingue" // the ES name the merged account should carry
+			case "1100 Cash:Bank US":
+				rows[i].NameEN = "Bilingual Bank" // the EN name the merged account should carry
+			}
+		}
+	}
+	return rows
+}
+
+func mergeConfig(t *testing.T) Config {
+	t.Helper()
+	cfg, err := ReadConfig(strings.NewReader(`{
+	  "root_subsidiary_name": "Test Org Root", "root_base_currency": "USD",
+	  "subsidiaries": {"US": {"name": "Test US", "base_currency": "USD"},
+	                   "MX": {"name": "Test MX", "base_currency": "MXN"}},
+	  "base_currency": "USD", "fx_clearing_account": "FX Clearing",
+	  "opening_balance_account": "Opening Balances"
+	}`))
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	return cfg
+}
+
+// TestMergeAccountsProducesOneBilingualAccount is the core Deliverable-1 proof: two
+// source `acct` strings linked by merge_into become ONE account carrying name_en (en)
+// + name_es (es), subsidiaries unioned to BOTH books, and splits keyed by EITHER
+// source string post to that single account. Runs the all-in-one runBuild path.
+func TestMergeAccountsProducesOneBilingualAccount(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	accMap := mergeAccountMap(true)
+	cfg := mergeConfig(t)
+	// One balanced US/USD txn on the US source string, one balanced MX/MXN txn on the
+	// MX source string -- both must land on the SAME merged account.
+	src := header + "\n" +
+		row("US", "A", "plain", "1100 Cash:Bank US", "", "2025-01-02", "", "1", "us donation", "", "USD", "1.0", "50.00", "50.00", "0", "0", "Assets") + "\n" +
+		row("US", "I", "plain", "Donations", "", "2025-01-02", "", "1", "us donation", "", "USD", "1.0", "0", "0", "50.00", "50.00", "Revenue") + "\n" +
+		row("MX", "A", "plain", "1100 Efectivo:Banco MX", "", "2025-01-03", "", "2", "mx donation", "", "MXN", "1.0", "70.00", "70.00", "0", "0", "Assets") + "\n" +
+		row("MX", "I", "plain", "Donations", "", "2025-01-03", "", "2", "mx donation", "", "MXN", "1.0", "0", "0", "70.00", "70.00", "Revenue") + "\n"
+
+	res, err := runBuild(ctx, strings.NewReader(src), accMap, cfg, nil, st, false)
+	if err != nil {
+		t.Fatalf("runBuild: %v", err)
+	}
+
+	usID := res.AccountIDs["1100 Cash:Bank US"]
+	mxID := res.AccountIDs["1100 Efectivo:Banco MX"]
+	if usID == 0 || mxID == 0 {
+		t.Fatalf("both source strings must resolve: us=%d mx=%d", usID, mxID)
+	}
+	if usID != mxID {
+		t.Fatalf("merge_into did NOT collapse the two accounts: us=%d mx=%d", usID, mxID)
+	}
+	id := usID
+
+	// Exactly ONE bank account exists in the db (no second account was created).
+	tree, err := st.Tree(ctx, "en", nil)
+	if err != nil {
+		t.Fatalf("Tree: %v", err)
+	}
+	nBank := 0
+	for _, r := range tree {
+		if r.ID == id {
+			nBank++
+		}
+	}
+	if nBank != 1 {
+		t.Fatalf("merged account id %d appears %d times in the tree, want 1", id, nBank)
+	}
+
+	// Bilingual names: en from the canonical, es from the merge-in.
+	en, err := st.AccountName(ctx, id, "en")
+	if err != nil {
+		t.Fatalf("AccountName en: %v", err)
+	}
+	es, err := st.AccountName(ctx, id, "es")
+	if err != nil {
+		t.Fatalf("AccountName es: %v", err)
+	}
+	if en != "Bilingual Bank" {
+		t.Errorf("merged en name = %q, want %q", en, "Bilingual Bank")
+	}
+	if es != "Banco Bilingue" {
+		t.Errorf("merged es name = %q, want %q", es, "Banco Bilingue")
+	}
+
+	// Subsidiaries unioned to BOTH books.
+	subIDs, err := st.AccountSubsidiaryIDs(ctx, id)
+	if err != nil {
+		t.Fatalf("AccountSubsidiaryIDs: %v", err)
+	}
+	want := map[ids.SubsidiaryID]bool{res.SubsidiaryIDs["Test US"]: false, res.SubsidiaryIDs["Test MX"]: false}
+	for _, s := range subIDs {
+		if _, ok := want[s]; ok {
+			want[s] = true
+		}
+	}
+	if len(subIDs) != 2 || !want[res.SubsidiaryIDs["Test US"]] || !want[res.SubsidiaryIDs["Test MX"]] {
+		t.Errorf("merged account subs = %v, want exactly {Test US, Test MX}", subIDs)
+	}
+
+	// Splits from BOTH source strings posted (one per tid) to the merged account.
+	if n := res.txnCountForTid("1"); n != 1 {
+		t.Errorf("US tid produced %d transactions, want 1", n)
+	}
+	if n := res.txnCountForTid("2"); n != 1 {
+		t.Errorf("MX tid produced %d transactions, want 1", n)
+	}
+
+	vs, err := ledger.Check(context.Background(), sqldb)
+	if err != nil {
+		t.Fatalf("ledger.Check: %v", err)
+	}
+	if ledger.HasErrors(vs) {
+		t.Fatalf("ledger.Check has errors: %+v", vs)
+	}
+}
+
+// TestMergePhasedReloadAcceptsMerge proves the SECOND account-hydration path --
+// reloadAccounts inside a per-subsidiary import -- accepts a merged pair: the
+// scaffold creates one bilingual account, and importing EACH subsidiary re-resolves
+// BOTH source strings onto that single id (the dup-(type,path) guard does not trip,
+// and the merge-in row resolves via the canonical's path).
+func TestMergePhasedReloadAcceptsMerge(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	accMap := mergeAccountMap(true)
+	cfg := mergeConfig(t)
+	src := header + "\n" +
+		row("US", "A", "plain", "1100 Cash:Bank US", "", "2025-01-02", "", "1", "us donation", "", "USD", "1.0", "50.00", "50.00", "0", "0", "Assets") + "\n" +
+		row("US", "I", "plain", "Donations", "", "2025-01-02", "", "1", "us donation", "", "USD", "1.0", "0", "0", "50.00", "50.00", "Revenue") + "\n" +
+		row("MX", "A", "plain", "1100 Efectivo:Banco MX", "", "2025-01-03", "", "2", "mx donation", "", "MXN", "1.0", "70.00", "70.00", "0", "0", "Assets") + "\n" +
+		row("MX", "I", "plain", "Donations", "", "2025-01-03", "", "2", "mx donation", "", "MXN", "1.0", "0", "0", "70.00", "70.00", "Revenue") + "\n"
+	recs, err := ParseRecords(strings.NewReader(src))
+	if err != nil {
+		t.Fatalf("ParseRecords: %v", err)
+	}
+
+	scaf, err := runScaffold(ctx, accMap, cfg, nil, st, false)
+	if err != nil {
+		t.Fatalf("runScaffold: %v", err)
+	}
+	// The scaffold created ONE bilingual account for the pair.
+	scafID := scaf.AccountIDs["1100 Cash:Bank US"]
+	if scafID == 0 || scafID != scaf.AccountIDs["1100 Efectivo:Banco MX"] {
+		t.Fatalf("scaffold did not merge the pair: us=%d mx=%d", scafID, scaf.AccountIDs["1100 Efectivo:Banco MX"])
+	}
+
+	// reloadAccounts runs inside each import-subsidiary; both must resolve BOTH keys
+	// to the SAME scaffolded id (proof the guard accepts the merge).
+	usRes, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, "Test US", false)
+	if err != nil {
+		t.Fatalf("runImportSubsidiary US (reload must accept merge): %v", err)
+	}
+	if usRes.AccountIDs["1100 Cash:Bank US"] != scafID || usRes.AccountIDs["1100 Efectivo:Banco MX"] != scafID {
+		t.Errorf("US reload diverged: us=%d mx=%d want %d",
+			usRes.AccountIDs["1100 Cash:Bank US"], usRes.AccountIDs["1100 Efectivo:Banco MX"], scafID)
+	}
+	mxRes, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, "Test MX", false)
+	if err != nil {
+		t.Fatalf("runImportSubsidiary MX (reload must accept merge): %v", err)
+	}
+	if mxRes.AccountIDs["1100 Efectivo:Banco MX"] != scafID {
+		t.Errorf("MX reload diverged: mx=%d want %d", mxRes.AccountIDs["1100 Efectivo:Banco MX"], scafID)
+	}
+
+	vs, err := ledger.Check(context.Background(), sqldb)
+	if err != nil {
+		t.Fatalf("ledger.Check: %v", err)
+	}
+	if ledger.HasErrors(vs) {
+		t.Fatalf("ledger.Check has errors: %+v", vs)
+	}
+}
+
+// TestReadAccountMapMergeColumn proves the mapping reader accepts BOTH the
+// historical 11-column file (merge_into absent, MergeInto="") AND a 12-column file
+// (merge_into present), and that WriteAccountMap round-trips the merge target. The
+// 11-column control also guards the byte-identical property: a merge-free file must
+// still parse and re-emit without a 12th column.
+func TestReadAccountMapMergeColumn(t *testing.T) {
+	// 11-column historical file still parses, MergeInto defaults to "".
+	eleven := strings.Join(accountMapCols, ",") + "\n" +
+		"X,expense,,A,,,,false,true,X,Xes\n"
+	got11, err := ReadAccountMap(strings.NewReader(eleven))
+	if err != nil {
+		t.Fatalf("11-col ReadAccountMap: %v", err)
+	}
+	if len(got11) != 1 || got11[0].MergeInto != "" {
+		t.Fatalf("11-col row MergeInto = %q, want empty", got11[0].MergeInto)
+	}
+
+	// 12-column file parses the merge target.
+	twelve := strings.Join(append(append([]string{}, accountMapCols...), mergeIntoCol), ",") + "\n" +
+		"Canon,asset,,US,,,,false,true,Canon EN,Canon ES,\n" +
+		"MergeIn,asset,,MX,,,,false,true,MergeIn EN,MergeIn ES,Canon\n"
+	got12, err := ReadAccountMap(strings.NewReader(twelve))
+	if err != nil {
+		t.Fatalf("12-col ReadAccountMap: %v", err)
+	}
+	if got12[0].MergeInto != "" || got12[1].MergeInto != "Canon" {
+		t.Fatalf("12-col MergeInto = [%q,%q], want [\"\",\"Canon\"]", got12[0].MergeInto, got12[1].MergeInto)
+	}
+
+	// A merge-free set re-emits WITHOUT the 12th column (byte-identical guard).
+	var noMerge strings.Builder
+	if err := WriteAccountMap(&noMerge, mergeAccountMap(false)); err != nil {
+		t.Fatalf("WriteAccountMap(no merge): %v", err)
+	}
+	if strings.Contains(noMerge.String(), mergeIntoCol) {
+		t.Errorf("merge-free WriteAccountMap emitted a %q column; want the 11-column format", mergeIntoCol)
+	}
+	// A set WITH a merge re-emits WITH the 12th column.
+	var withMerge strings.Builder
+	if err := WriteAccountMap(&withMerge, mergeAccountMap(true)); err != nil {
+		t.Fatalf("WriteAccountMap(merge): %v", err)
+	}
+	if !strings.Contains(withMerge.String(), mergeIntoCol) {
+		t.Errorf("merged WriteAccountMap did NOT emit a %q column", mergeIntoCol)
+	}
+}

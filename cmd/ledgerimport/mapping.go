@@ -23,6 +23,13 @@ import (
 
 // accountMapCols is the header of the account-mapping CSV, in order. Kept as one
 // list so the emitter and the reader agree by construction.
+//
+// The optional trailing mergeIntoCol is NOT part of this base list: an empty
+// merge column carries no information and would needlessly widen every historical
+// file, so the reader accepts BOTH an 11-column file (no merges) and a
+// 12-column file (with merge_into), and the writer only emits the 12th column
+// when at least one row declares a merge. That keeps today's merge-free output
+// byte-identical (D p26.116).
 var accountMapCols = []string{
 	"source_acct",
 	"cuento_type",
@@ -36,6 +43,12 @@ var accountMapCols = []string{
 	"name_en",
 	"name_es",
 }
+
+// mergeIntoCol is the OPTIONAL 12th column. When set on a row it names the
+// source_acct of the CANONICAL partner row this row merges INTO: the two source
+// accounts collapse to ONE cuento account (a bilingual EN/ES account spanning
+// both books). Empty (or column absent) = no merge, the historical behavior.
+const mergeIntoCol = "merge_into"
 
 // AccountMap is one reviewable account-mapping row. Multi-valued cells
 // (subsidiaries) are ";"-separated. Empty cells mean "unset" (the human left the
@@ -52,6 +65,15 @@ type AccountMap struct {
 	Active          bool // false = inactivated in the source (QuickBooks "(deleted)")
 	NameEN          string
 	NameES          string
+
+	// MergeInto, when non-empty, is the source_acct of the CANONICAL partner row
+	// this row merges INTO (the two source accounts become ONE bilingual cuento
+	// account). Empty = no merge (the common case / historical behavior). See
+	// accounts() and reloadAccounts() for the two-pass wiring, and the merge rule:
+	// the canonical (merge_into TARGET) row supplies name_en, this (merge_into
+	// SOURCE) row supplies name_es; subsidiaries are unioned; the account is active
+	// if EITHER row is active.
+	MergeInto string
 }
 
 // stmtToType maps the source `stmt` super-type char to a cuento account type
@@ -76,8 +98,23 @@ func stmtToType(stmt string) string {
 // WriteAccountMap emits the account-mapping CSV (header + rows) to w. Row order
 // is caller-controlled (accounts sorts by source account for a stable skeleton).
 func WriteAccountMap(w io.Writer, rows []AccountMap) error {
+	// Emit the optional merge_into column ONLY when at least one row declares a
+	// merge, so a merge-free file stays byte-identical to the historical 11-column
+	// format (D p26.116).
+	withMerge := false
+	for _, r := range rows {
+		if r.MergeInto != "" {
+			withMerge = true
+			break
+		}
+	}
+
 	cw := csv.NewWriter(w)
-	if err := cw.Write(accountMapCols); err != nil {
+	header := accountMapCols
+	if withMerge {
+		header = append(append([]string{}, accountMapCols...), mergeIntoCol)
+	}
+	if err := cw.Write(header); err != nil {
 		return fmt.Errorf("write header: %w", err)
 	}
 	for _, r := range rows {
@@ -94,6 +131,9 @@ func WriteAccountMap(w io.Writer, rows []AccountMap) error {
 			r.NameEN,
 			r.NameES,
 		}
+		if withMerge {
+			rec = append(rec, r.MergeInto)
+		}
 		if err := cw.Write(rec); err != nil {
 			return fmt.Errorf("write row %q: %w", r.SourceAcct, err)
 		}
@@ -107,7 +147,10 @@ func WriteAccountMap(w io.Writer, rows []AccountMap) error {
 // loudly rather than mis-mapping columns).
 func ReadAccountMap(r io.Reader) ([]AccountMap, error) {
 	cr := csv.NewReader(r)
-	cr.FieldsPerRecord = len(accountMapCols)
+	// Accept BOTH the historical 11-column file and a 12-column file whose extra
+	// trailing column is merge_into. FieldsPerRecord=-1 lets us decide the width
+	// from the header, then we enforce a consistent width ourselves below.
+	cr.FieldsPerRecord = -1
 	rows, err := cr.ReadAll()
 	if err != nil {
 		return nil, fmt.Errorf("read account map: %w", err)
@@ -116,13 +159,33 @@ func ReadAccountMap(r io.Reader) ([]AccountMap, error) {
 		return nil, fmt.Errorf("read account map: empty (missing header)")
 	}
 	for i, h := range accountMapCols {
-		if rows[0][i] != h {
-			return nil, fmt.Errorf("read account map: header col %d = %q, want %q", i, rows[0][i], h)
+		if len(rows[0]) <= i || rows[0][i] != h {
+			return nil, fmt.Errorf("read account map: header col %d = %q, want %q", i, colAt(rows[0], i), h)
 		}
 	}
+	// The optional 12th column, if present, must be merge_into (a scrambled/extra
+	// column fails loudly rather than being silently read as a merge target).
+	hasMerge := false
+	switch len(rows[0]) {
+	case len(accountMapCols):
+		// historical width, no merge column
+	case len(accountMapCols) + 1:
+		if rows[0][len(accountMapCols)] != mergeIntoCol {
+			return nil, fmt.Errorf("read account map: header col %d = %q, want %q",
+				len(accountMapCols), rows[0][len(accountMapCols)], mergeIntoCol)
+		}
+		hasMerge = true
+	default:
+		return nil, fmt.Errorf("read account map: header has %d columns, want %d or %d",
+			len(rows[0]), len(accountMapCols), len(accountMapCols)+1)
+	}
+	wantCols := len(rows[0])
 
 	out := make([]AccountMap, 0, len(rows)-1)
 	for i, f := range rows[1:] {
+		if len(f) != wantCols {
+			return nil, fmt.Errorf("read account map: row %d has %d columns, want %d", i+2, len(f), wantCols)
+		}
 		ic, err := parseBoolCell(f[7], false)
 		if err != nil {
 			return nil, fmt.Errorf("read account map: row %d intercompany %q: %w", i+2, f[7], err)
@@ -131,7 +194,7 @@ func ReadAccountMap(r io.Reader) ([]AccountMap, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read account map: row %d active %q: %w", i+2, f[8], err)
 		}
-		out = append(out, AccountMap{
+		m := AccountMap{
 			SourceAcct:      f[0],
 			CuentoType:      f[1],
 			CuentoParent:    f[2],
@@ -143,9 +206,22 @@ func ReadAccountMap(r io.Reader) ([]AccountMap, error) {
 			Active:          active,
 			NameEN:          f[9],
 			NameES:          f[10],
-		})
+		}
+		if hasMerge {
+			m.MergeInto = strings.TrimSpace(f[11])
+		}
+		out = append(out, m)
 	}
 	return out, nil
+}
+
+// colAt returns row[i] or "" (used only for a friendly header-mismatch message on
+// a too-short header, so we never index out of range).
+func colAt(row []string, i int) string {
+	if i < len(row) {
+		return row[i]
+	}
+	return ""
 }
 
 // parseBoolCell parses a boolean flag cell: blank = def, else a Go bool literal

@@ -76,6 +76,10 @@ func main() {
 		if err := finalizeCmd(ctx, args); err != nil {
 			log.Fatalf("finalize: %v", err)
 		}
+	case "merge-candidates":
+		if err := mergeCandidatesCmd(args); err != nil {
+			log.Fatalf("merge-candidates: %v", err)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "ledgerimport: unknown subcommand %q\n\n", cmd)
 		usage()
@@ -89,7 +93,8 @@ func usage() {
 		"  build              convert the source export + mapping into a FRESH cuento SQLite db (all subsidiaries)\n"+
 		"  scaffold           create a fresh db with reference data only (subs, programs, funds, chart, rates)\n"+
 		"  import-subsidiary  additively import ONE subsidiary's transactions into a scaffolded db\n"+
-		"  finalize           post cross-subsidiary corrections (run ONCE after the LAST import-subsidiary)\n")
+		"  finalize           post cross-subsidiary corrections (run ONCE after the LAST import-subsidiary)\n"+
+		"  merge-candidates   emit a reviewable US<->UPH candidate account-merge CSV from the reviewed mapping\n")
 }
 
 // accountsCmd wires runAccounts to the real files. It reads the source CSV at

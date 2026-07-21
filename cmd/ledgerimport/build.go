@@ -526,6 +526,11 @@ func (b *builder) campusFund(ctx context.Context) error {
 // orders rows so every parent is created before its children (D11: a child needs
 // its parent's id), and records the source_acct -> account id map.
 func (b *builder) accounts(ctx context.Context, rows []AccountMap) error {
+	merges, err := resolveMerges(rows)
+	if err != nil {
+		return err
+	}
+
 	ordered, err := topoAccounts(rows)
 	if err != nil {
 		return err
@@ -535,6 +540,14 @@ func (b *builder) accounts(ctx context.Context, rows []AccountMap) error {
 	}
 
 	for _, r := range ordered {
+		// A merge-in (merge_into SOURCE) row creates NO second account: it is wired
+		// AFTER the loop, aliasing its source_acct onto the canonical account's id.
+		// Skipping it here keeps the CreateAccount sequence (and thus every id)
+		// identical to the historical single-pass build when no row declares a merge.
+		if r.MergeInto != "" {
+			continue
+		}
+
 		var parent *ids.AccountID
 		if r.CuentoParent != "" {
 			pid, ok := b.res.AccountIDs[r.CuentoParent]
@@ -543,7 +556,20 @@ func (b *builder) accounts(ctx context.Context, rows []AccountMap) error {
 			}
 			parent = &pid
 		}
-		subs, err := b.subIDs(r.Subsidiaries)
+
+		// If this row is a merge CANONICAL (a partner merges INTO it), it carries the
+		// UNION of both rows' subsidiaries, and it is active if EITHER row is active.
+		// name_en comes from this (canonical) row; name_es from the merge-in partner.
+		subsNames := r.Subsidiaries
+		nameES := r.NameES
+		if mi, ok := merges[r.SourceAcct]; ok {
+			subsNames = mi.subsidiaries
+			if mi.nameES != "" {
+				nameES = mi.nameES
+			}
+		}
+
+		subs, err := b.subIDs(subsNames)
 		if err != nil {
 			return fmt.Errorf("account %q: %w", r.SourceAcct, err)
 		}
@@ -559,8 +585,8 @@ func (b *builder) accounts(ctx context.Context, rows []AccountMap) error {
 			Subsidiaries:    subs,
 			Intercompany:    r.Intercompany,
 		}
-		if r.NameES != "" {
-			in.Names["es"] = r.NameES
+		if nameES != "" {
+			in.Names["es"] = nameES
 		}
 		if r.CuentoType == "expense" && r.FunctionalClass != "" {
 			fc := r.FunctionalClass
@@ -588,7 +614,141 @@ func (b *builder) accounts(ctx context.Context, rows []AccountMap) error {
 		// deactivated later, per subsidiary, once their historical splits have posted
 		// (deactivateReadyAccounts).
 	}
+
+	// Pass 2: wire each merge-in row's source_acct to its canonical account id, so
+	// splits keyed by EITHER source string (transactions.go resolves via
+	// b.res.AccountIDs[r.Acct]) land on the one merged account. Order-independent:
+	// the canonical account is guaranteed created above (it is never a merge-in row).
+	for _, r := range ordered {
+		if r.MergeInto == "" {
+			continue
+		}
+		id, ok := b.res.AccountIDs[r.MergeInto]
+		if !ok {
+			return fmt.Errorf("account %q: merge_into target %q not created", r.SourceAcct, r.MergeInto)
+		}
+		b.res.AccountIDs[r.SourceAcct] = id
+		b.acctType[id] = r.CuentoType
+	}
 	return nil
+}
+
+// mergeInfo is the derived shape of a merged (bilingual) account, keyed by the
+// CANONICAL row's source_acct in the map resolveMerges returns.
+type mergeInfo struct {
+	subsidiaries []string // union of both rows' subsidiaries, sorted
+	nameES       string   // Spanish name, taken from the merge-in (merge_into SOURCE) row
+}
+
+// resolveMerges validates the merge_into links and derives, per CANONICAL row, the
+// merged account's unioned subsidiaries and Spanish name. The MERGE RULE (D p26.116):
+//
+//   - the canonical (merge_into TARGET) row supplies name_en;
+//   - the merge-in (merge_into SOURCE) row supplies name_es;
+//   - subsidiaries are the UNION of both rows (sorted, deterministic);
+//   - the account is active if EITHER row is active (handled where active is read).
+//
+// It rejects a merge_into pointing at a missing row, at another merge-in row
+// (chains are not allowed -- the target must be a real canonical account), or two
+// rows merging into the same canonical (a canonical takes exactly one partner:
+// this is a US<->UPH pairing, not a many-way collapse).
+func resolveMerges(rows []AccountMap) (map[string]mergeInfo, error) {
+	byName := make(map[string]AccountMap, len(rows))
+	for _, r := range rows {
+		byName[r.SourceAcct] = r
+	}
+	// A merge-in row must be a LEAF (no other row parents under it): accounts() skips
+	// it in pass 1, so a child depending on its id would fail its parent lookup. The
+	// pairing sheet only ever proposes leaf pairs, so this is a guard, not a limit.
+	hasChild := map[string]bool{}
+	for _, r := range rows {
+		if r.CuentoParent != "" {
+			hasChild[r.CuentoParent] = true
+		}
+	}
+	out := map[string]mergeInfo{}
+	claimed := map[string]string{} // canonical source_acct -> the merge-in row that took it
+	for _, r := range rows {
+		if r.MergeInto == "" {
+			continue
+		}
+		if hasChild[r.SourceAcct] {
+			return nil, fmt.Errorf("account %q has merge_into set but is not a leaf (has children); only leaves may merge", r.SourceAcct)
+		}
+		canon, ok := byName[r.MergeInto]
+		if !ok {
+			return nil, fmt.Errorf("account %q: merge_into target %q not found", r.SourceAcct, r.MergeInto)
+		}
+		if canon.MergeInto != "" {
+			return nil, fmt.Errorf("account %q: merge_into target %q is itself a merge-in row (chains not allowed)",
+				r.SourceAcct, r.MergeInto)
+		}
+		if canon.CuentoType != r.CuentoType {
+			return nil, fmt.Errorf("account %q merges into %q but types differ (%q vs %q)",
+				r.SourceAcct, r.MergeInto, r.CuentoType, canon.CuentoType)
+		}
+		if prev, dup := claimed[r.MergeInto]; dup {
+			return nil, fmt.Errorf("account %q: canonical %q already merged from %q (one partner per canonical)",
+				r.SourceAcct, r.MergeInto, prev)
+		}
+		claimed[r.MergeInto] = r.SourceAcct
+		out[r.MergeInto] = mergeInfo{
+			subsidiaries: unionSorted(canon.Subsidiaries, r.Subsidiaries),
+			nameES:       r.NameES,
+		}
+	}
+	return out, nil
+}
+
+// unionSorted returns the sorted set-union of two subsidiary-name lists.
+func unionSorted(a, b []string) []string {
+	seen := map[string]bool{}
+	for _, s := range a {
+		seen[s] = true
+	}
+	for _, s := range b {
+		seen[s] = true
+	}
+	out := make([]string, 0, len(seen))
+	for s := range seen {
+		out = append(out, s)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// subsOf returns the Subsidiaries of the row with the given source_acct (or nil).
+func subsOf(rows []AccountMap, sourceAcct string) []string {
+	for _, r := range rows {
+		if r.SourceAcct == sourceAcct {
+			return r.Subsidiaries
+		}
+	}
+	return nil
+}
+
+// mergedActive reports the effective active flag for a (possibly merged) account:
+// active if EITHER the row or its merge partner is active. merges is keyed by the
+// CANONICAL source_acct. For a non-merge row it degrades to m.Active.
+func mergedActive(m AccountMap, rows []AccountMap) bool {
+	if m.Active {
+		return true
+	}
+	// A canonical row: active if its merge-in partner is active.
+	for _, r := range rows {
+		if r.MergeInto == m.SourceAcct && r.Active {
+			return true
+		}
+	}
+	// A merge-in row: active if its canonical target is active.
+	if m.MergeInto != "" {
+		for _, r := range rows {
+			if r.SourceAcct == m.MergeInto && r.Active {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // deactivateReadyAccounts sets active=0 on the mapping's source-inactive
@@ -599,15 +759,31 @@ func (b *builder) accounts(ctx context.Context, rows []AccountMap) error {
 // for an account shared by several subsidiaries).
 func (b *builder) deactivateReadyAccounts(ctx context.Context, accMap []AccountMap) error {
 	for _, m := range accMap {
-		if m.Active {
+		// A merged account is active if EITHER partner is active, so it is only a
+		// deactivation candidate when both sides are inactive. This also means a
+		// merge-in row never deactivates the SHARED (canonical) account out from
+		// under an active partner (both rows resolve to the one id now).
+		if mergedActive(m, accMap) {
 			continue
 		}
 		id, ok := b.res.AccountIDs[m.SourceAcct]
 		if !ok {
 			continue
 		}
+		// Readiness spans the account's FULL merged subsidiary scope (a merge-in row
+		// carries only its own subs, so consult the canonical when this is one).
+		readySubs := m.Subsidiaries
+		if m.MergeInto != "" {
+			readySubs = unionSorted(m.Subsidiaries, subsOf(accMap, m.MergeInto))
+		} else {
+			for _, r := range accMap {
+				if r.MergeInto == m.SourceAcct {
+					readySubs = unionSorted(m.Subsidiaries, r.Subsidiaries)
+				}
+			}
+		}
 		ready := true
-		for _, sn := range m.Subsidiaries {
+		for _, sn := range readySubs {
 			sid, ok := b.res.SubsidiaryIDs[sn]
 			if !ok {
 				ready = false
@@ -732,7 +908,16 @@ func (b *builder) reloadAccounts(ctx context.Context, accMap []AccountMap) error
 		parEN[m.SourceAcct] = m.CuentoParent
 	}
 	for _, m := range accMap {
-		p, err := mapAccountPath(m.SourceAcct, nameEN, parEN)
+		// A merge-in (merge_into SOURCE) row has NO account of its own in the db --
+		// the scaffold created ONE bilingual account under the CANONICAL row's name_en
+		// path. Resolve via the canonical's path (its own name_en/name_es may differ)
+		// and alias this source_acct onto that id, mirroring accounts()' two-pass wiring
+		// so both source strings resolve on the phased-import path too.
+		key := m.SourceAcct
+		if m.MergeInto != "" {
+			key = m.MergeInto
+		}
+		p, err := mapAccountPath(key, nameEN, parEN)
 		if err != nil {
 			return fmt.Errorf("reload accounts: %w", err)
 		}
