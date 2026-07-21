@@ -1401,6 +1401,20 @@ input[aria-invalid="true"] {
   cursor: default;
 }
 .txn-main-header .txn-main-amount-field { flex: 0 0 auto; }
+/* p-fix2: the main ACCOUNT + BALANCING AMOUNT always occupy their OWN second header row,
+   below the subsidiary/date/description/memo row. flex-basis 100% (same full-width break the
+   .txn-status band uses) forces this wrapper onto a fresh line no matter how narrow the account
+   select is -- so a subsidiary with few/short account names can't let the select wrap UP into
+   leftover top-row space. Inside, its two fields lay out as a normal flex row, aligned to the
+   bottom like the header fields above. This wrapper is txn-form-only; expense_detail's reused
+   header does NOT use it (its locked AP-account field stays a plain top-row field). */
+.txn-main-header .txn-main-line {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3) var(--space-4);
+}
 /* p30.2 status band: the per-fund imbalance chips + the balance-error slot, on their own
    full-width row at the foot of the grouped header (flex-basis 100% forces the wrap). */
 .txn-main-header .txn-status {

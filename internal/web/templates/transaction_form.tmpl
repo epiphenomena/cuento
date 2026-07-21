@@ -283,6 +283,16 @@
     <input type="hidden" name="main_memo" id="txn-main-memo" value="{{.MainMemo}}">
     <input type="hidden" name="main_program" id="txn-main-program" value="{{.MainProgram}}">
     <input type="hidden" name="main_class" id="txn-main-class" value="{{.MainClass}}">
+    {{/* p-fix2: the MAIN ACCOUNT + BALANCING AMOUNT always sit on their OWN second header
+         row, below the subsidiary/date/description/memo row -- regardless of how narrow the
+         account select is (a sub with few/short account names must NOT let the select wrap UP
+         to fill leftover top-row space). The .txn-main-line wrapper is a full-width flex break
+         (flex-basis 100%, mirrors the .txn-status band) that also lays its two fields out as a
+         flex row. This wrapper exists ONLY here (transaction_form.tmpl) -- expense_detail's
+         reused header keeps .txn-main-account-field as a bare (non-broken) field. The inner
+         .txn-main-account-field / #txn-main-account id + classes are unchanged (e2e depends on
+         them). Gated on MainPresent so import/expense-review (no main account) render no break. */}}
+    <div class="txn-main-line">
     <div class="txn-field txn-main-account-field">
       <label for="txn-main-account">{{t "txn.main.account"}}</label>
       <select name="main_account" id="txn-main-account" class="txn-account combo-input">
@@ -303,6 +313,7 @@
       {{/* Display-only: NO name attribute so it never posts; the server computes the
            residual. The client keeps this in sync as a live preview. */}}
       <input type="text" id="txn-main-amount" class="txn-amount amount txn-main-amount" value="{{.MainAmount}}" readonly tabindex="-1" aria-live="polite">
+    </div>
     </div>
     {{end}}
 
