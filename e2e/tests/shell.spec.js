@@ -26,6 +26,27 @@ async function login(page, server) {
 }
 
 test.describe('authenticated shell', () => {
+  // A favicon <link> in <head> keeps the browser tab from falling back to a
+  // default mark, and explicit intrinsic width/height on the inline brand SVG
+  // stops it rendering at its ballooned intrinsic size (a viewBox-only inline
+  // SVG lays out ~300px, or fills its container, before app.css sizes it) —
+  // that giant-then-snap paint is the "star flash" on a cold full-page load.
+  test('head has a favicon link and the brand icon has explicit dimensions', async ({ page, server }) => {
+    await login(page, server);
+
+    // A single SVG favicon link is present in the document head.
+    const icon = page.locator('head link[rel="icon"]');
+    await expect(icon).toHaveCount(1);
+    await expect(icon).toHaveAttribute('type', 'image/svg+xml');
+    await expect(icon).toHaveAttribute('href', /favicon.*\.svg$/);
+
+    // The inline brand mark carries explicit width/height so it can never render
+    // at its ballooned intrinsic size before CSS applies (FOUC guard).
+    const brand = page.locator('header.app-header svg.brand-icon');
+    await expect(brand).toHaveAttribute('width', /\d+/);
+    await expect(brand).toHaveAttribute('height', /\d+/);
+  });
+
   test('renders the shell landmarks and a localized nav after login', async ({ page, server }) => {
     await login(page, server);
 

@@ -36,7 +36,7 @@
      ~1em via the .icon class. Inline SVG in a template is CSP-safe (rule 12): no icon
      font, no external file, no CDN. Add a glyph by adding one {{else if}} arm. */ -}}
 {{define "icon" -}}
-<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+<svg class="icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
 {{- if eq . "gear" -}}
 <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
 {{- else if eq . "report" -}}
@@ -48,7 +48,7 @@
 {{- end}}
 
 {{define "brand-icon" -}}
-<svg class="brand-icon" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+<svg class="brand-icon" width="64" height="64" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
   <g class="logo-book" fill="none" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
     <path d="M32 22 C 25 17, 16 17, 10 19 L 10 50 C 16 48, 25 48, 32 52"/>
     <path d="M32 22 C 39 17, 48 17, 54 19 L 54 50 C 48 48, 39 48, 32 52"/>
