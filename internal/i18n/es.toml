@@ -1317,8 +1317,18 @@ other = "Libro mayor de cuenta"
 other = "Fecha"
 [reports.account_ledger.col.description]
 other = "Descripcion"
+[reports.account_ledger.col.memo]
+other = "Nota"
+[reports.account_ledger.col.counterparty]
+other = "Contraparte"
 [reports.account_ledger.col.fund]
 other = "Fondo"
+[reports.account_ledger.col.program]
+other = "Programa"
+[reports.account_ledger.col.functional]
+other = "Categoria"
+[reports.account_ledger.split]
+other = "Varias"
 [reports.account_ledger.col.amount]
 other = "Importe"
 [reports.account_ledger.col.balance]

@@ -111,6 +111,28 @@ func TestAccountLedgerGolden(t *testing.T) {
 	// Line 2: Unrestricted -200,000, running 39,500,000.
 	assertLine(t, lines[1], "Unrestricted", -200_000, 39_500_000)
 
+	// --- COUNTERPARTY (case A): the report account (Checking MX) is NOT the transaction's
+	// MAIN split (the Program supplies txn's position-0 split is Program Supplies), so both
+	// lines face the MAIN split's account name.
+	for i, ln := range lines {
+		if got := ledgerCounterparty(ln); got != "Program Supplies" {
+			t.Errorf("line %d counterparty = %q, want %q (the main split's account)", i, got, "Program Supplies")
+		}
+	}
+	// --- MEMO column present but blank here: the fixture's supply lines carry a per-split
+	// DESCRIPTION (surfaced in the Description column), not a split memo.
+	for i, ln := range lines {
+		if got := ledgerMemo(ln); got != "" {
+			t.Errorf("line %d memo = %q, want empty (fixture lines carry description, not split memo)", i, got)
+		}
+	}
+	// --- PROGRAM/FUNCTIONAL columns are ABSENT for this ASSET ledger (expense-only R/E
+	// dimension): the base column set is 7 (date, description, memo, counterparty, fund,
+	// amount, balance).
+	if len(table.Columns) != 7 {
+		t.Errorf("asset ledger columns = %d, want 7 (no program/functional)", len(table.Columns))
+	}
+
 	// --- Golden artifacts: aligned text dump + machine CSV.
 	exps := goldenExps(t, f)
 	textDump := reports.DumpTable(table, goldenLocalize, exps)
@@ -197,11 +219,150 @@ func TestAccountLedgerMultiCurrency(t *testing.T) {
 		if row.Kind != reports.RowData {
 			continue
 		}
-		amt := row.Cells[3]
-		bal := row.Cells[4]
+		amt := ledgerAmountCell(row)
+		bal := ledgerBalanceCell(row)
 		if amt.Currency != bal.Currency {
 			t.Errorf("line mixes currencies: amount %s, running %s", amt.Currency, bal.Currency)
 		}
+	}
+}
+
+// TestAccountLedgerCounterpartyOneOther exercises COUNTERPARTY case B (report account IS
+// the transaction's MAIN split) with EXACTLY ONE other split: the 2025-04-01 Beca Agua
+// grant receipt posts Checking MX (position-0 MAIN) + Government Grants. Viewed from
+// Checking MX, that line's counterparty is the sole OTHER split's account name.
+func TestAccountLedgerCounterpartyOneOther(t *testing.T) {
+	f := fixture.New(t)
+	ctx := context.Background()
+	rep := accountLedgerReport(t)
+
+	// Full range so the grant-receipt line (2025-04-01) is included.
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), Account: reports.AccountID(f.IDs.CheckingMX), From: "2025-01-01", To: f.Expected.AsOf, Lang: "en"}
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	// Find the +10,000,000 grant-receipt line (Checking MX is the main split; one other
+	// split, Government Grants).
+	var found bool
+	for _, ln := range ledgerDataRows(table) {
+		if ledgerAmountCell(ln).Minor != 10_000_000 {
+			continue
+		}
+		found = true
+		if got := ledgerCounterparty(ln); got != "Government Grants" {
+			t.Errorf("grant-receipt counterparty = %q, want %q (the sole other split)", got, "Government Grants")
+		}
+	}
+	if !found {
+		t.Fatalf("did not find the +10,000,000 grant-receipt line")
+	}
+}
+
+// TestAccountLedgerExpenseDimensions exercises an EXPENSE account ledger (Program
+// Supplies): (1) COUNTERPARTY case B with MULTIPLE other splits -> the localized "split"
+// word, and (2) the expense-only PROGRAM + FUNCTIONAL columns carrying the split's
+// program path and functional-class label. The 2025-05-10 mixed-funding txn posts FOUR
+// splits (Program Supplies is the position-0 MAIN, so from its own ledger the report
+// account IS the main split and there are THREE other splits -> "split").
+func TestAccountLedgerExpenseDimensions(t *testing.T) {
+	f := fixture.New(t)
+	ctx := context.Background()
+	rep := accountLedgerReport(t)
+
+	p := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), Account: reports.AccountID(f.IDs.ProgramSupplies), From: "2025-01-01", To: f.Expected.AsOf, Lang: "en"}
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	// Expense ledger: the program + functional columns exist (9 columns total: date,
+	// description, memo, counterparty, fund, program, functional, amount, balance).
+	if len(table.Columns) != 9 {
+		t.Fatalf("expense ledger columns = %d, want 9 (program + functional added)", len(table.Columns))
+	}
+
+	// The MXN section's two Program Supplies lines (+300,000 Beca Agua, +200,000
+	// Unrestricted) are the mixed-funding txn's expense legs.
+	var mxnLines []reports.Row
+	for _, ln := range ledgerDataRows(table) {
+		if amt := ledgerAmountCell(ln); amt.Currency == "MXN" && !amt.Blank {
+			mxnLines = append(mxnLines, ln)
+		}
+	}
+	if len(mxnLines) != 2 {
+		t.Fatalf("MXN expense lines = %d, want 2", len(mxnLines))
+	}
+	for i, ln := range mxnLines {
+		// Counterparty: Program Supplies IS the main split and there are 3 other splits ->
+		// the localized "split" word.
+		if got := ledgerCounterparty(ln); got != goldenLocalize("reports.account_ledger.split") {
+			t.Errorf("MXN line %d counterparty = %q, want the localized split word", i, got)
+		}
+		// Program column (index 5): Educacion, shown as its dotted path.
+		if got := ln.Cells[5].Text; got != "General.Educacion" {
+			t.Errorf("MXN line %d program = %q, want %q", i, got, "General.Educacion")
+		}
+		// Functional column (index 6): the defaulted class "program" -> localized "Program".
+		fc := ln.Cells[6]
+		fcText := fc.Text
+		if fc.Kind == reports.CellLabel {
+			fcText = goldenLocalize(fc.Text)
+		}
+		if fcText != "Program" {
+			t.Errorf("MXN line %d functional = %q, want %q", i, fcText, "Program")
+		}
+	}
+}
+
+// TestAccountLedgerMemoColumn pins the MEMO column: a bespoke transaction whose split
+// carries a memo surfaces that memo in its own column (the fixture's golden lines set a
+// per-split description, not a memo, so this is asserted on a purpose-built txn).
+func TestAccountLedgerMemoColumn(t *testing.T) {
+	d := testutil.NewDB(t)
+	s := store.New(d)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	const rootSub = ids.SubsidiaryID(1)
+	mkAcct := func(name, typ string) ids.AccountID {
+		t.Helper()
+		id, err := s.CreateAccount(ctx, store.CreateAccountInput{
+			Type: typ, DefaultCurrency: "EUR", Names: map[string]string{"en": name},
+			Subsidiaries: []ids.SubsidiaryID{rootSub},
+		})
+		if err != nil {
+			t.Fatalf("CreateAccount(%s): %v", name, err)
+		}
+		return id
+	}
+	cash := mkAcct("Cash EUR", "asset")
+	equity := mkAcct("Opening Equity", "equity")
+
+	const wantMemo = "wire ref 12345"
+	if _, err := s.PostTransaction(ctx, store.PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: rootSub, Currency: "EUR",
+		Splits: []store.SplitInput{
+			{AccountID: cash, Amount: 100_000, Position: 0, Memo: wantMemo},
+			{AccountID: equity, Amount: -100_000, Position: 1},
+		},
+	}); err != nil {
+		t.Fatalf("post: %v", err)
+	}
+
+	rep := accountLedgerReport(t)
+	p := reports.Params{Scope: reports.SubsidiaryID(rootSub), Account: reports.AccountID(cash), From: "2025-02-01", To: "2025-11-30", Lang: "en"}
+	table, err := rep.Run(ctx, reports.NewToolkit(s, p), p)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	lines := ledgerDataRows(table)
+	if len(lines) != 1 {
+		t.Fatalf("lines = %d, want 1", len(lines))
+	}
+	if got := ledgerMemo(lines[0]); got != wantMemo {
+		t.Errorf("memo column = %q, want %q", got, wantMemo)
 	}
 }
 
@@ -221,9 +382,10 @@ func TestAccountLedgerNoAccount(t *testing.T) {
 	if len(table.Rows) != 0 {
 		t.Errorf("no-account ledger has %d rows, want 0 (empty table)", len(table.Rows))
 	}
-	// The columns are still declared (the empty-table render shows the header).
-	if len(table.Columns) != 5 {
-		t.Errorf("no-account ledger columns = %d, want 5", len(table.Columns))
+	// The columns are still declared (the empty-table render shows the header): the base
+	// (non-expense) set -- date, description, memo, counterparty, fund, amount, balance.
+	if len(table.Columns) != 7 {
+		t.Errorf("no-account ledger columns = %d, want 7", len(table.Columns))
 	}
 }
 
@@ -370,23 +532,27 @@ func TestAccountLedgerCSVParses(t *testing.T) {
 	if len(recs) < 2 {
 		t.Fatalf("csv has %d records, want header + rows", len(recs))
 	}
-	wantHeader := []string{"Date", "Description", "Fund", "Amount", "Balance"}
+	// CheckingMX is an ASSET account, so the header is the base (non-expense) column set:
+	// date, description, memo, counterparty, fund, amount, balance (no program/functional).
+	wantHeader := []string{"Date", "Description", "Memo", "Counterparty", "Fund", "Amount", "Balance"}
 	for i, h := range wantHeader {
 		if recs[0][i] != h {
 			t.Errorf("csv header[%d] = %q, want %q", i, recs[0][i], h)
 		}
 	}
-	// Re-sum the Amount column (index 3) over the two data lines (skip the opening/closing
-	// rows, whose Description is the localized label and whose Amount cell is blank).
+	// Re-sum the Amount column (second-to-last, index len-2) over the two data lines (skip
+	// the opening/closing rows, whose Description is the localized label and whose Amount
+	// cell is blank).
+	amtCol := len(wantHeader) - 2
 	var sum int64
 	for _, rec := range recs[1:] {
-		if rec[0] == "" || rec[3] == "" {
+		if rec[0] == "" || rec[amtCol] == "" {
 			continue
 		}
 		if rec[1] == "Opening balance" || rec[1] == "Closing balance" {
 			continue
 		}
-		sum += parseMinor(t, rec[3])
+		sum += parseMinor(t, rec[amtCol])
 	}
 	if sum != -500_000 {
 		t.Errorf("csv amount re-sum = %d, want -500,000", sum)
@@ -510,14 +676,16 @@ func ledgerFramingBalance(t *testing.T, tbl reports.Table, k reports.RowKind, cc
 	return 0
 }
 
-// ledgerLineAmountSum sums the amount cells (col 3) of the DATA lines in currency ccy.
+// ledgerLineAmountSum sums the amount cells (the SECOND-TO-LAST cell -- amount then
+// running balance are always the last two columns, regardless of the conditional
+// program/functional columns) of the DATA lines in currency ccy.
 func ledgerLineAmountSum(t reports.Table, ccy string) int64 {
 	var sum int64
 	for _, row := range t.Rows {
 		if row.Kind != reports.RowData {
 			continue
 		}
-		amt := row.Cells[3]
+		amt := ledgerAmountCell(row)
 		if amt.Kind == reports.CellMoney && !amt.Blank && amt.Currency == ccy {
 			sum += amt.Minor
 		}
@@ -525,11 +693,40 @@ func ledgerLineAmountSum(t reports.Table, ccy string) int64 {
 	return sum
 }
 
+// ledgerAmountCell / ledgerBalanceCell return a row's amount + running-balance cells,
+// which are ALWAYS the last two columns (the memo/counterparty/fund and the expense-only
+// program/functional columns are inserted BEFORE them, so absolute indices shift but
+// len-2/len-1 do not).
+func ledgerAmountCell(row reports.Row) reports.Cell  { return row.Cells[len(row.Cells)-2] }
+func ledgerBalanceCell(row reports.Row) reports.Cell { return row.Cells[len(row.Cells)-1] }
+
+// Column indices on a DATA row that are FIXED from the front (the always-present prefix:
+// date, description, memo, counterparty, fund). Program/functional (expense-only), amount
+// and balance follow and are addressed from the BACK (len-1/len-2).
+const (
+	ledgerMemoCol    = 2
+	ledgerCounterCol = 3
+	ledgerFundCol    = 4
+)
+
+// ledgerMemo returns a DATA row's memo-cell text.
+func ledgerMemo(row reports.Row) string { return row.Cells[ledgerMemoCol].Text }
+
+// ledgerCounterparty returns a DATA row's counterparty text: the account-name TextCell
+// verbatim, or the localized "split" word when the cell is the split LabelCell.
+func ledgerCounterparty(row reports.Row) string {
+	c := row.Cells[ledgerCounterCol]
+	if c.Kind == reports.CellLabel {
+		return goldenLocalize(c.Text)
+	}
+	return c.Text
+}
+
 // assertLine checks one ledger DATA row's fund label/name, amount, and running balance.
 // wantFund is the localized/verbatim fund text ("Unrestricted" or the fund name).
 func assertLine(t *testing.T, row reports.Row, wantFund string, wantAmount, wantRunning int64) {
 	t.Helper()
-	fund := row.Cells[2]
+	fund := row.Cells[ledgerFundCol]
 	fundText := fund.Text
 	if fund.Kind == reports.CellLabel {
 		fundText = goldenLocalize(fund.Text)
@@ -537,10 +734,10 @@ func assertLine(t *testing.T, row reports.Row, wantFund string, wantAmount, want
 	if fundText != wantFund {
 		t.Errorf("line fund = %q, want %q", fundText, wantFund)
 	}
-	if amt := row.Cells[3]; amt.Minor != wantAmount {
+	if amt := ledgerAmountCell(row); amt.Minor != wantAmount {
 		t.Errorf("line amount = %d, want %d", amt.Minor, wantAmount)
 	}
-	if bal := row.Cells[4]; bal.Minor != wantRunning {
+	if bal := ledgerBalanceCell(row); bal.Minor != wantRunning {
 		t.Errorf("line running balance = %d, want %d", bal.Minor, wantRunning)
 	}
 }

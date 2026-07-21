@@ -1322,8 +1322,18 @@ other = "Account ledger"
 other = "Date"
 [reports.account_ledger.col.description]
 other = "Description"
+[reports.account_ledger.col.memo]
+other = "Memo"
+[reports.account_ledger.col.counterparty]
+other = "Counterparty"
 [reports.account_ledger.col.fund]
 other = "Fund"
+[reports.account_ledger.col.program]
+other = "Program"
+[reports.account_ledger.col.functional]
+other = "Category"
+[reports.account_ledger.split]
+other = "Split"
 [reports.account_ledger.col.amount]
 other = "Amount"
 [reports.account_ledger.col.balance]
