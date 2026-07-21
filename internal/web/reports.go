@@ -775,11 +775,35 @@ type reportPageModel struct {
 type renderedTable struct {
 	Columns []renderedColumn
 	Rows    []renderedRow
+	// HeaderGroups, when non-empty, is the TOP row of a STACKED (two-row) header (p31
+	// program statement): one spanning cell per contiguous run of columns sharing a group,
+	// left to right. Empty for a flat single-row header (every other report), so those
+	// tables render byte-identically.
+	HeaderGroups []renderedHeaderGroup
+}
+
+// renderedHeaderGroup is one spanning cell of a stacked header's TOP row: a localized (or
+// blank) label over Colspan leaf columns. The leftmost row-label column(s) with no group are
+// covered by a blank leading cell so the group row aligns with the leaf row.
+type renderedHeaderGroup struct {
+	Label   string
+	Colspan int
+	Right   bool // right-align hint (a money-column group)
 }
 
 type renderedColumn struct {
 	Header string
 	Right  bool // right-align hint (money columns)
+	// ProgramID / ProgramParent / ProgramGroup are the p31 10b program-column-tree data
+	// attributes the template stamps on this column's leaf <th> as FIXED-name attributes
+	// (data-program / data-program-parent / data-program-group). Static attribute names +
+	// a dynamic value is the html/template-safe pattern; a computed attribute NAME trips
+	// the escaper (it neutralizes hyphenated dynamic names to "zgotmplz"), so these are
+	// typed fields, not a generic name/value map. Empty = the attribute is not emitted (a
+	// ROOT program has no ProgramParent; a leaf has no ProgramGroup marker).
+	ProgramID     string
+	ProgramParent string
+	ProgramGroup  bool
 }
 
 type renderedRow struct {
@@ -819,6 +843,57 @@ type renderedMeasures struct {
 	Bucket     string // "" | "over-slight" | "under-large" | ... (signed magnitude class)
 }
 
+// buildHeaderGroups builds the TOP row of a STACKED header (p31 program statement): one
+// spanning cell per contiguous run of columns sharing a group (Column.Group), left to right.
+// Leading columns with NO group (the row-label column) collapse into ONE blank leading cell
+// so the group row aligns with the leaf row. Returns nil when NO column declares a group, so
+// every flat-header report renders a single-row <thead> unchanged. Adjacent columns form one
+// span iff they share the same non-empty GroupID (a nil group breaks the run).
+func buildHeaderGroups(cols []reports.Column, lang string) []renderedHeaderGroup {
+	anyGroup := false
+	for _, c := range cols {
+		if c.Group != nil {
+			anyGroup = true
+			break
+		}
+	}
+	if !anyGroup {
+		return nil
+	}
+	var groups []renderedHeaderGroup
+	i := 0
+	for i < len(cols) {
+		g := cols[i].Group
+		if g == nil {
+			// A run of ungrouped columns → one blank spanning cell.
+			span := 0
+			for i < len(cols) && cols[i].Group == nil {
+				span++
+				i++
+			}
+			groups = append(groups, renderedHeaderGroup{Colspan: span})
+			continue
+		}
+		// A run of columns sharing this group's id.
+		id := g.GroupID
+		label := ""
+		if g.Key != "" {
+			label = i18n.T(lang, g.Key)
+		}
+		span := 0
+		right := true
+		for i < len(cols) && cols[i].Group != nil && cols[i].Group.GroupID == id {
+			if cols[i].Align != reports.AlignRight {
+				right = false
+			}
+			span++
+			i++
+		}
+		groups = append(groups, renderedHeaderGroup{Label: label, Colspan: span, Right: right})
+	}
+	return groups
+}
+
 // renderTable turns a reports.Table into the display-ready renderedTable for lang,
 // formatting money/date cells per the user's settings (rule 10) and localizing
 // column headers and LABEL cells (CellLabel carries an i18n key), while TEXT cells
@@ -830,11 +905,24 @@ type renderedMeasures struct {
 func renderTable(t reports.Table, reportID, lang string, opts money.FormatOpts, df money.DateFormat, exps map[string]int) renderedTable {
 	var rt renderedTable
 	for _, c := range t.Columns {
-		rt.Columns = append(rt.Columns, renderedColumn{
-			Header: i18n.T(lang, c.HeaderKey),
+		header := c.HeaderText // a verbatim proper-noun header (a program name, rule 9)
+		if header == "" {
+			header = i18n.T(lang, c.HeaderKey)
+		}
+		rc := renderedColumn{
+			Header: header,
 			Right:  c.Align == reports.AlignRight,
-		})
+		}
+		if c.Group != nil {
+			// p31 10b: the program-column-tree data attributes. Fixed names, dynamic values
+			// (html/template-safe); a root omits program-parent, a leaf omits program-group.
+			rc.ProgramID = c.Group.Data["program"]
+			rc.ProgramParent = c.Group.Data["program-parent"]
+			rc.ProgramGroup = c.Group.Data["program-group"] == "1"
+		}
+		rt.Columns = append(rt.Columns, rc)
 	}
+	rt.HeaderGroups = buildHeaderGroups(t.Columns, lang)
 	for _, row := range t.Rows {
 		rr := renderedRow{
 			Indent:       row.Indent,

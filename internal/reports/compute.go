@@ -749,6 +749,179 @@ func (tk *Toolkit) ProgramActivity(ctx context.Context, s Scope, from, to string
 	return out, nil
 }
 
+// ProgramMatrixCol identifies one COLUMN of the program-statement matrix (p31): the
+// two fixed FUNCTIONAL columns (Admin = management, Fundraising) plus one column per
+// PROGRAM (program-services). Exactly one of Class/Program is meaningful:
+//
+//   - Class != "" (management|fundraising): the functional column, expense splits of
+//     that class AGGREGATED ACROSS ALL PROGRAMS (revenue never lands here).
+//   - Program != 0: a program-services column — expense splits with functional_class ==
+//     program tagged with that program (or a descendant, rolled up), PLUS all revenue
+//     tagged with that program (revenue has no class, D24, so every revenue cell is a
+//     program-services cell).
+type ProgramMatrixCol struct {
+	Class   Class     // "" unless a functional (Admin/Fundraising) column
+	Program ProgramID // 0 unless a program-services column
+}
+
+// ProgramMatrix is the p31 program-statement data source: per (account, column) the
+// activity converted to the target currency, where columns are the two functional
+// classes (management, fundraising — aggregated across all programs) and every program
+// (program-services expense + revenue, rolled UP the program tree so a parent program's
+// column folds in its descendants'). It composes the existing store queries
+// (FunctionalActivityByProgram for the class-tagged expense side, ProgramActivity for
+// revenue) — NO new SQL — and mirrors FunctionalMatrix/income_statement's conversion:
+//
+//   - RateTxnDate (o.Mode): each cell converted month-by-month at the month's on-or-
+//     before rate, accumulated UNROUNDED and rounded HALF-EVEN once (D12), so the
+//     program-services totals tie the income statement's revenue/expense exactly (an
+//     expense/revenue FLOW is measured at the rate in force when it occurred, p26.71).
+//   - Consolidated intercompany accounts are DROPPED (D19), matching both source methods.
+//   - The p27.4 program-subtree grant filter (Params.ProgramScope) is applied to the RAW
+//     split program BEFORE the ancestor rollup, so a sibling subtree never leaks into any
+//     (incl. ancestor) cell.
+//
+// Only RateTxnDate is supported (the statement is a single-currency functional matrix,
+// like the 990). Revenue is signed net-debit-credit (a credit is negative); the report
+// applies the display sign. Every returned cell is target-currency minor units.
+func (tk *Toolkit) ProgramMatrix(ctx context.Context, s Scope, from, to, target string) (map[AccountID]map[ProgramMatrixCol]int64, error) {
+	excl, err := tk.consolidatedICExclusions(ctx, s.Sub)
+	if err != nil {
+		return nil, err
+	}
+	// parent[program] = its parent, for the ancestor rollup (a program cell folds up).
+	tree, err := tk.store.ProgramTree(ctx)
+	if err != nil {
+		return nil, err
+	}
+	parent := make(map[ProgramID]ProgramID, len(tree))
+	for _, n := range tree {
+		if n.ParentID.Valid {
+			parent[ProgramID(n.ID)] = ProgramID(n.ParentID.Int64)
+		}
+	}
+	// Revenue vs expense per account (revenue -> program-services columns only; the
+	// class-tagged rows are all expenses).
+	stTree, err := tk.store.Tree(ctx, "en", nil)
+	if err != nil {
+		return nil, err
+	}
+	isRevenue := make(map[AccountID]bool, len(stTree))
+	for _, r := range stTree {
+		if r.Type == "revenue" {
+			isRevenue[AccountID(r.ID)] = true
+		}
+	}
+
+	// UNROUNDED accumulation per (account, column) in target currency; rounded once at
+	// the end (D12 final-aggregate grain, matching FunctionalMatrix RateTxnDate).
+	type key struct {
+		acct AccountID
+		col  ProgramMatrixCol
+	}
+	unrounded := make(map[key]float64)
+	// addProgramRollup adds a program-services amount to prog AND every ancestor column.
+	convert := func(minor int64, ccy, monthEnd string) (float64, error) {
+		if minor == 0 {
+			return 0, nil
+		}
+		rr, cErr := tk.RateOn(ctx, ccy, target, monthEnd)
+		if cErr != nil {
+			return 0, cErr
+		}
+		exFrom, exTo, cErr := tk.exponents(ctx, ccy, target)
+		if cErr != nil {
+			return 0, cErr
+		}
+		return float64(minor) * rr.Rate * math.Pow(10, float64(exTo-exFrom)), nil
+	}
+
+	err = tk.ByPeriod(from, to, GranMonth, func(pFrom, pTo string) error {
+		// Expense side: class-tagged (management|fundraising|program) by (account,
+		// class, program, currency). FunctionalActivityByProgram returns EVERY class,
+		// so Admin/Fundraising/program-services all come from this ONE query.
+		exp, fErr := tk.store.FunctionalActivityByProgram(ctx, pFrom, pTo, s.Sub)
+		if fErr != nil {
+			return fErr
+		}
+		for _, r := range exp {
+			if excl[r.AccountID] {
+				continue // intra-group expense, excluded at consolidation (D19)
+			}
+			if !tk.Params.InProgramScope(r.ProgramID) {
+				continue // p27.4: sibling subtree filtered at the raw split (no leak)
+			}
+			v, cErr := convert(r.Amount, r.Currency, pTo)
+			if cErr != nil {
+				return cErr
+			}
+			switch Class(r.FunctionalClass) {
+			case "program":
+				// A program-services expense: add to its program column AND every ancestor.
+				for p := r.ProgramID; ; {
+					unrounded[key{r.AccountID, ProgramMatrixCol{Program: p}}] += v
+					up, ok := parent[p]
+					if !ok {
+						break
+					}
+					p = up
+				}
+			case "management", "fundraising":
+				// A functional column: aggregated across ALL programs (no program dim).
+				unrounded[key{r.AccountID, ProgramMatrixCol{Class: Class(r.FunctionalClass)}}] += v
+			}
+		}
+
+		// Revenue side: ProgramActivity is (program, account, currency); revenue has NO
+		// class, so every revenue cell is program-services. Keep only revenue accounts.
+		rev, pErr := tk.store.ProgramActivity(ctx, pFrom, pTo, s.Sub)
+		if pErr != nil {
+			return pErr
+		}
+		for _, r := range rev {
+			acct := AccountID(r.AccountID)
+			if !isRevenue[acct] {
+				continue // expense rows come from the class-tagged query above
+			}
+			if excl[acct] {
+				continue // intra-group revenue, excluded (D19)
+			}
+			if !tk.Params.InProgramScope(ProgramID(r.ProgramID)) {
+				continue // p27.4
+			}
+			v, cErr := convert(r.Amount, r.Currency, pTo)
+			if cErr != nil {
+				return cErr
+			}
+			for p := ProgramID(r.ProgramID); ; {
+				unrounded[key{acct, ProgramMatrixCol{Program: p}}] += v
+				up, ok := parent[p]
+				if !ok {
+					break
+				}
+				p = up
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(map[AccountID]map[ProgramMatrixCol]int64)
+	for k, v := range unrounded {
+		m := RoundHalfEven(v)
+		if m == 0 {
+			continue
+		}
+		if out[k.acct] == nil {
+			out[k.acct] = make(map[ProgramMatrixCol]int64)
+		}
+		out[k.acct][k.col] = m
+	}
+	return out, nil
+}
+
 // Group990 rolls a leaf (account -> minor) map to EFFECTIVE 990 codes for a part
 // (D25): each account's amount lands under its effective code (own, else nearest
 // ancestor's — a leaf override lands on its OWN line); accounts with no effective

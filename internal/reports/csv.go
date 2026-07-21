@@ -29,7 +29,7 @@ func WriteCSV(w io.Writer, t Table, localize func(key string) string, exps map[s
 	// Header row: localized column headers.
 	header := make([]string, len(t.Columns))
 	for i, c := range t.Columns {
-		header[i] = localize(c.HeaderKey)
+		header[i] = columnHeader(c, localize)
 	}
 	if err := cw.Write(header); err != nil {
 		return fmt.Errorf("reports: write csv header: %w", err)

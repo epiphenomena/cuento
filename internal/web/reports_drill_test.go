@@ -25,6 +25,7 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 
+	"cuento/internal/i18n"
 	entids "cuento/internal/ids"
 	"cuento/internal/reports"
 	"cuento/internal/store"
@@ -530,5 +531,47 @@ func TestIncomeStatementDrillReconciles(t *testing.T) {
 	// fixture R/E oracle), reconciled through the drill over the full span.
 	if got, _ := drillSum(t, st, store.DrillFilter{Scope: ids.Root, AccountID: ids.FoodPurchases, Currency: "MXN", From: from, To: to}); got != 360_000 {
 		t.Errorf("Food Purchases whole-range drill = %d, want 360,000", got)
+	}
+}
+
+// TestProgramStatementStackedHeaderHTML renders the program-statement page over the fixture
+// and asserts the STACKED (two-row) header HTML (p31-10a) and the 10b program-column data
+// attributes are emitted with their REAL fixed names — the render-layer concern the reports-
+// package Table test cannot see. A regression here (a computed attribute name) makes
+// html/template neutralize the name to "zgotmplz", silently breaking 10b's DOM contract, so
+// this asserts the concrete rendered names + the absence of zgotmplz.
+func TestProgramStatementStackedHeaderHTML(t *testing.T) {
+	h, _, sm, admin, _ := drillFixtureApp(t)
+
+	rec := asUser(t, h, sm, admin, http.MethodGet,
+		"/reports/"+reports.ProgramStatementReportID+"?from=2025-01-01&to=2026-06-30&currency=USD", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("program statement page status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// The html/template escaper neutralizes a computed attribute NAME to "zgotmplz"; a real
+	// data attribute must never render as that.
+	if strings.Contains(body, "zgotmplz") {
+		t.Fatalf("program statement thead contains zgotmplz (a data-attr name was computed, not static)")
+	}
+	// The stacked-header top row spans the program tree under the Program-services group.
+	if !strings.Contains(body, `class="report-header-groups"`) {
+		t.Errorf("stacked-header top row (report-header-groups) missing")
+	}
+	if !strings.Contains(body, i18n.T("en", "reports.program_statement.group.program_services")) {
+		t.Errorf("Program-services group super-header missing")
+	}
+	// Program columns carry data-program; a CHILD carries data-program-parent; a program WITH
+	// children carries data-program-group="1". General (root, has children) → group marker, no
+	// parent; Educacion (child leaf) → a parent, no group marker.
+	for _, want := range []string{
+		`data-program="`,
+		`data-program-parent="`,
+		`data-program-group="1"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("program column header missing %q", want)
+		}
 	}
 }

@@ -1417,16 +1417,18 @@ other = "Cambio en activos netos"
 other = "Estado de programas"
 [reports.program_statement.all_programs]
 other = "— todos los programas —"
-# p31: el reporte es ahora un árbol de PROGRAMAS cuyas hojas llevan un subárbol de cuentas,
-# por lo que la primera columna contiene tanto encabezados de programa como nombres de
-# cuenta; la columna de dinero es un único Importe por moneda (los programas se apilan
-# verticalmente como una jerarquía colapsable).
-[reports.program_statement.col.program_account]
-other = "Programa / Cuenta"
-[reports.program_statement.col.amount]
-other = "Importe"
-[reports.program_statement.col.currency]
-other = "Moneda"
+# p31-10a: el reporte es una matriz de FILAS de cuenta × COLUMNAS de clase funcional/programa.
+# La primera columna es el nombre de la cuenta; las columnas de dinero son Total, Admin,
+# Recaudación de fondos y el árbol de programas bajo el superencabezado "Servicios de
+# programa". Moneda única (convertida).
+[reports.program_statement.col.account]
+other = "Cuenta"
+[reports.program_statement.col.total]
+other = "Total"
+[reports.program_statement.col.admin]
+other = "Admin"
+[reports.program_statement.group.program_services]
+other = "Servicios de programa"
 [reports.program_statement.section.revenue]
 other = "Ingresos"
 [reports.program_statement.section.expenses]

@@ -41,6 +41,7 @@ import (
 	"context"
 	"testing"
 
+	"cuento/internal/ids"
 	"cuento/internal/reports"
 	"cuento/internal/store"
 	"cuento/internal/testutil/fixture"
@@ -337,10 +338,14 @@ func TestForm990PartXCrossCheckP154(t *testing.T) {
 	}
 }
 
-// TestForm990PartIIICrossCheckP1510: each program's Part III revenue and expense figures
-// (native, per currency) equal the corresponding program column in p15.10's comparative
-// program statement — an identity, since both drive off the same ProgramActivity call.
-func TestForm990PartIIICrossCheckP1510(t *testing.T) {
+// TestForm990PartIIICrossCheckProgramActivity: each program's Part III revenue and expense
+// figures (native, per currency) equal the SHARED toolkit ProgramActivity rollup — the same
+// source Part III draws its program groups from (form_990.go). Formerly this cross-checked
+// the p15.10 program statement, but p31-10a redesigned that report into a converted account ×
+// (functional-class/program) MATRIX, which no longer emits per-program per-currency section-
+// total ROWS; the reconciliation intent is preserved by tying Part III straight to
+// ProgramActivity (its own data source), so the two still must agree exactly.
+func TestForm990PartIIICrossCheckProgramActivity(t *testing.T) {
 	f := fixture.New(t)
 	f.ExtendRates(t)
 	ctx := context.Background()
@@ -350,80 +355,73 @@ func TestForm990PartIIICrossCheckP1510(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run 990: %v", err)
 	}
-	// p15.10 comparative (no program chosen): a column per program (General, Educacion,
-	// Food Pantry). Section total rows carry the per-currency totals per program column.
-	psP := reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root), From: p.From, To: p.To, Lang: "en"}
-	ps, err := psReport(t).Run(ctx, reports.NewToolkit(f.Store, psP), psP)
+	// The shared source: rolled per-(program, account) NATIVE activity (RateNone), exactly
+	// what form_990.go's Part III groups by program (revenue vs expense by account type).
+	tk := reports.NewToolkit(f.Store, reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root)})
+	act, err := tk.ProgramActivity(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)},
+		p.From, p.To, reports.ConvertOpts{Mode: reports.RateNone})
 	if err != nil {
-		t.Fatalf("run program statement: %v", err)
+		t.Fatalf("program activity: %v", err)
 	}
+	types := psAccountTypes(t, f) // account id -> type ("revenue"/"expense"/...)
 
-	// p15.10 (p31) is now a PROGRAM TREE stacked as rows: each program is a header row
-	// (General, Educacion, Food Pantry) spanning its own Revenue/Expense account tree, with
-	// the per-currency "Total revenue"/"Total expenses" section-total rows INSIDE its block
-	// (a single Amount column). Compare each program's section totals per currency.
+	// Expected per-(program, section, currency): sum the program's rolled per-account native
+	// activity by account type. Revenue is a credit (negative net-debit) shown POSITIVE; the
+	// 990 Part III revenue sub-line is positive, so negate the revenue sum.
+	progIDs := map[string]reports.ProgramID{
+		"General": reports.ProgramID(f.IDs.General), "Educacion": reports.ProgramID(f.IDs.Educacion),
+		"Food Pantry": reports.ProgramID(f.IDs.FoodPantry),
+	}
 	for _, prog := range []string{"General", "Educacion", "Food Pantry"} {
-		for _, sec := range []struct{ psKey, iiiKey string }{
-			{"reports.program_statement.total.revenue", "reports.form_990.iii.revenue"},
-			{"reports.program_statement.total.expenses", "reports.form_990.iii.expenses"},
+		wantRev := map[string]int64{}
+		wantExp := map[string]int64{}
+		for acct, amts := range act[progIDs[prog]] {
+			for _, a := range amts {
+				switch types[ids.AccountID(acct)] {
+				case "revenue":
+					wantRev[a.Currency] -= a.Minor // credit shown positive
+				case "expense":
+					wantExp[a.Currency] += a.Minor
+				}
+			}
+		}
+		for _, sec := range []struct {
+			iiiKey string
+			want   map[string]int64
+		}{
+			{"reports.form_990.iii.revenue", wantRev},
+			{"reports.form_990.iii.expenses", wantExp},
 		} {
-			psByCcy := psTotalsByCurrency(ps, prog, sec.psKey)
 			nineByCcy := f990ProgramSectionByCurrency(nine, prog, sec.iiiKey)
-			// Union the currency sets; an absent entry is 0. p15.10 emits a per-currency
-			// row for EVERY currency present in ANY program column (a program without that
-			// currency shows 0), whereas the 990 emits only the currencies a program
-			// actually has — so the two agree with absent==0 on both sides.
 			ccys := map[string]bool{}
-			for c := range psByCcy {
+			for c := range sec.want {
 				ccys[c] = true
 			}
 			for c := range nineByCcy {
 				ccys[c] = true
 			}
 			for ccy := range ccys {
-				if nineByCcy[ccy] != psByCcy[ccy] {
-					t.Errorf("Part III %s %s %s = %d, p15.10 = %d", prog, sec.iiiKey, ccy, nineByCcy[ccy], psByCcy[ccy])
+				if nineByCcy[ccy] != sec.want[ccy] {
+					t.Errorf("Part III %s %s %s = %d, ProgramActivity = %d", prog, sec.iiiKey, ccy, nineByCcy[ccy], sec.want[ccy])
 				}
 			}
 		}
 	}
 }
 
-// psTotalsByCurrency returns the p15.10 section-total row values (per currency) WITHIN the
-// named program's OWN block (p31): each currency block opens with the program's header
-// (RowSubtotal, first cell == prog) and ends at its Net line (RowTotal); the section-total
-// rows (labelKey) inside carry the per-currency total in the single Amount column. A program
-// with multiple currency blocks contributes one section total per currency.
-func psTotalsByCurrency(t reports.Table, prog, labelKey string) map[string]int64 {
-	col := len(t.Columns) - 1 // single Amount column (last)
-	out := map[string]int64{}
-	in := false
-	for _, row := range t.Rows {
-		if len(row.Cells) <= col {
-			continue
-		}
-		c0 := row.Cells[0]
-		// This program's header (a RowSubtotal TEXT cell == prog) opens its block.
-		if row.Kind == reports.RowSubtotal && c0.Kind == reports.CellText && c0.Text == prog {
-			in = true
-			continue
-		}
-		if !in {
-			continue
-		}
-		// The Net line (RowTotal) ends this program's OWN content — it is emitted after both
-		// section totals and BEFORE any nested child program, so the section-total rows we
-		// collected belong to THIS program only (an account placeholder is also a RowSubtotal
-		// TextCell but nests deeper, so it must NOT be treated as a block boundary).
-		if row.Kind == reports.RowTotal {
-			in = false
-			continue
-		}
-		if row.Kind == reports.RowSectionTotal && c0.Kind == reports.CellLabel && c0.Text == labelKey {
-			out[row.Cells[1].Text] = row.Cells[col].Minor // Currency column is index 1
-		}
+// psAccountTypes returns account id -> type from the store tree (for the Part III cross-check
+// to split ProgramActivity into revenue vs expense).
+func psAccountTypes(t *testing.T, f *fixture.Fixture) map[ids.AccountID]string {
+	t.Helper()
+	tree, err := f.Store.Tree(context.Background(), "en", nil)
+	if err != nil {
+		t.Fatalf("tree: %v", err)
 	}
-	return out
+	m := make(map[ids.AccountID]string, len(tree))
+	for _, r := range tree {
+		m[r.ID] = r.Type
+	}
+	return m
 }
 
 // f990ProgramSectionByCurrency returns the 990 Part III revenue/expense sub-line values

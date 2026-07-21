@@ -49,7 +49,7 @@ func DumpTable(t Table, localize func(key string) string, exps map[string]int) s
 	header := make([]string, 0, len(t.Columns)+1)
 	header = append(header, "") // kind-marker column header is blank
 	for _, c := range t.Columns {
-		header = append(header, localize(c.HeaderKey))
+		header = append(header, columnHeader(c, localize))
 	}
 
 	grid := [][]string{header}
@@ -103,6 +103,18 @@ func DumpTable(t Table, localize func(key string) string, exps map[string]int) s
 		writeRow(line)
 	}
 	return b.String()
+}
+
+// columnHeader returns a column's golden/CSV header text: its VERBATIM proper-noun
+// HeaderText when set (a program name, rule 9), else its localized HeaderKey label.
+// The golden/CSV renderers emit the flat LEAF header row only — a stacked-header
+// group (Column.Group) is a web-render concern and is ignored here, so a matrix
+// report's text/CSV dump stays a plain one-header-row table.
+func columnHeader(c Column, localize func(key string) string) string {
+	if c.HeaderText != "" {
+		return c.HeaderText
+	}
+	return localize(c.HeaderKey)
 }
 
 // kindMarker returns the leading marker for a row kind in the text dump: blank for a

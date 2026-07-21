@@ -1418,15 +1418,17 @@ other = "Change in net assets"
 other = "Program statement"
 [reports.program_statement.all_programs]
 other = "— all programs —"
-# p31: the report is now a PROGRAM tree whose leaves carry an account subtree, so the
-# first column holds both program headers and account names; the money column is a single
-# per-currency Amount (the programs stack vertically as a collapsible hierarchy).
-[reports.program_statement.col.program_account]
-other = "Program / Account"
-[reports.program_statement.col.amount]
-other = "Amount"
-[reports.program_statement.col.currency]
-other = "Currency"
+# p31-10a: the report is an ACCOUNT-row × functional-class/program-COLUMN matrix. The first
+# column is the account name; the money columns are Total, Admin, Fundraising, then the
+# program tree under a "Program services" stacked super-header. Single currency (converted).
+[reports.program_statement.col.account]
+other = "Account"
+[reports.program_statement.col.total]
+other = "Total"
+[reports.program_statement.col.admin]
+other = "Admin"
+[reports.program_statement.group.program_services]
+other = "Program services"
 [reports.program_statement.section.revenue]
 other = "Revenue"
 [reports.program_statement.section.expenses]

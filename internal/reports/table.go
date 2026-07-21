@@ -38,10 +38,47 @@ const (
 // hint. Keeping the header a KEY (not localized text) upholds rule 9 — the web
 // renderer localizes it per request.
 type Column struct {
-	// HeaderKey is the i18n message id for the column header.
+	// HeaderKey is the i18n message id for the column header. Empty when HeaderText
+	// carries a verbatim proper-noun header instead (a program name, rule 9).
 	HeaderKey string
+	// HeaderText is a VERBATIM header string (a stored proper noun — e.g. a program
+	// name), rendered as-is and NEVER localized (rule 9's carve-out for stored data).
+	// A column sets HeaderKey (a catalog label) OR HeaderText (a proper noun), never
+	// both; the renderers prefer HeaderText when it is non-empty.
+	HeaderText string
 	// Align is the alignment hint for the HTML renderer.
 	Align Align
+	// Group, when non-nil, places this column under a STACKED (two-row) header group
+	// (p31 program statement: the program matrix's Admin | Fundraising | Program-
+	// services super-columns). The web renderer emits a two-row <thead> — a group row
+	// (one <th colspan> per contiguous run of columns sharing a group Key) above the
+	// per-column leaf header row — and stamps each program column's data-* attributes
+	// (Data) so a follow-up can wire click-to-collapse of a program subtree. The
+	// text/CSV golden renderers IGNORE Group entirely (they emit the flat leaf header
+	// row), so every other report's golden stays byte-identical.
+	Group *ColumnGroup
+}
+
+// ColumnGroup is a stacked-header super-column a Column belongs to (p31): the group's
+// localized label Key spans a contiguous run of columns that share it, and optional
+// per-column Data attributes encode the program tree for the column-collapse follow-up
+// (10b). It is a RENDER concern only — the golden/CSV renderers ignore it.
+type ColumnGroup struct {
+	// Key is the group super-header's i18n message id (e.g. the "Program services"
+	// label). Every column in one contiguous group run carries the SAME Key; the web
+	// renderer collapses the run into one spanning <th>. An empty Key groups columns
+	// under a blank super-header cell (so a leading Total/Admin/Fundraising column can
+	// sit alongside the program-services group without a redundant label).
+	Key string
+	// GroupID identifies the group run: adjacent columns with the same non-empty Key
+	// AND GroupID form one <th colspan> super-header. It lets two distinct groups that
+	// happen to share a Key stay separate, and disambiguates blank-Key runs.
+	GroupID string
+	// Data holds render-only data-* attribute values (attribute name -> value) the web
+	// renderer stamps on this column's LEAF <th> (p31 10b hook: program id, parent
+	// program id, and a group-parent marker). ASCII keys; the web layer prefixes each
+	// with "data-". Ignored by the golden/CSV renderers.
+	Data map[string]string
 }
 
 // RowKind classifies a row for rendering: an ordinary data row, an emphasized
