@@ -823,8 +823,12 @@ async function createChildExpenseAccount(page, name, parentName) {
 // createFund makes a restricted fund scoped to the root subsidiary via the /funds form.
 async function createFund(page, name, funder) {
   await page.goto('/funds');
-  await page.getByRole('button', { name: /new fund/i }).click();
-  await expect(page.locator('form#fund-form.e2e-settled')).toBeVisible();
+  // "New fund" is a subnav action (a link to its own /funds/new page), not an inline htmx
+  // swap (the bc2dd5b subnav refactor moved section actions to right-aligned links). It is a
+  // full-page navigation, so we wait for the form itself rather than an htmx settle marker.
+  await page.getByRole('link', { name: /new fund/i }).click();
+  await page.waitForURL('**/funds/new');
+  await expect(page.locator('form#fund-form')).toBeVisible();
   await page.locator('#ff-name').fill(name);
   await page.locator('#ff-funder').fill(funder);
   const rootSub = page.locator('input[name="sub_1"]');
@@ -979,6 +983,11 @@ test('reports: open the fund statement, pick a fund, see by-account line detail 
   await expect(table).toContainText('check 1042');
   // The account subtotal label is present (each account section closes with one).
   await expect(table).toContainText('Account subtotal');
+  // ACCOUNT-TYPE top tier (fund #7): the account tree is grouped under localized TYPE
+  // headers. The fund touches an asset (FStmt Cash) and revenue (FStmt Gift) account, so
+  // the "Assets" and "Revenue" type headers render as the top level of the hierarchy.
+  await expect(table).toContainText('Assets');
+  await expect(table).toContainText('Revenue');
   // The line date links to the txn editor (Cell.TxnID -> /transactions/{id}/edit).
   await expect(
     table.locator('a[href*="/transactions/"][href*="/edit"]').first(),
@@ -1060,6 +1069,13 @@ test('reports: open the fund-activity-by-period matrix, pick a fund + granularit
   // Rows = the accounts the fund touches (the cash + the revenue account).
   await expect(table).toContainText('FPer Cash E2E');
   await expect(table).toContainText('FPer Gift E2E');
+  // ACCOUNT-TYPE top tier + per-type TOTAL rows (fund #5): the matrix rows are grouped
+  // under localized TYPE headers ("Assets", "Revenue") and each type closes with a
+  // "Total <type>" row across the period + Total columns. The fund's revenue account
+  // yields a "Total revenue" row; a "Change in net assets" line closes the matrix.
+  await expect(table).toContainText('Assets');
+  await expect(table).toContainText('Total revenue');
+  await expect(table).toContainText('Change in net assets');
   // At least one period-identifier column header (YYYY-Qn) and the Total column.
   const headerText = await table.locator('thead').innerText();
   expect(headerText).toMatch(/\d{4}-Q\d/);
