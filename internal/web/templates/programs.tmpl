@@ -21,6 +21,12 @@
           hx-get="/programs/new" hx-target="#program-form" hx-swap="outerHTML">
     {{t "programs.new"}}
   </button>
+  {{/* p11.5b: Merge folds a source program into a destination (its two-step preview
+       swaps into #program-form below), mirroring the chart-of-accounts Merge trigger. */}}
+  <button type="button" class="btn btn-ghost"
+          hx-get="/programs/merge" hx-target="#program-form" hx-swap="outerHTML">
+    {{t "programs.merge"}}
+  </button>
 </div>
 {{- end}}
 

@@ -776,6 +776,8 @@ other = "Your program tree — the mission dimension on every revenue and expens
 other = "Activity shown for the period %s to %s."
 [programs.new]
 other = "New program"
+[programs.merge]
+other = "Merge programs"
 [programs.deactivate]
 other = "Deactivate"
 [programs.inactive]
@@ -798,6 +800,31 @@ other = "Name"
 other = "Parent program"
 [programs.form.root_note]
 other = "This is the root program; it has no parent and cannot be moved."
+[program_merge.title]
+other = "Merge programs"
+[program_merge.intro]
+other = "Fold a source program into a destination program. Every transaction line, report grant and child program on the source moves to the destination, and the source is deactivated."
+[program_merge.source]
+other = "Source program"
+[program_merge.destination]
+other = "Destination program"
+[program_merge.select_placeholder]
+other = "— select a program —"
+[program_merge.coverage_note]
+other = "The destination must be an active program, and it cannot be the source or one of its descendants."
+[program_merge.review]
+other = "Review merge"
+[program_merge.confirm_title]
+other = "Confirm merge"
+[program_merge.summary]
+other = "Merge %s into %s. This cannot be undone from here."
+[program_merge.consequence.splits]
+one = "%d transaction line will move to the destination."
+other = "%d transaction lines will move to the destination."
+[program_merge.consequence.deactivate]
+other = "%s will be deactivated (its history is kept)."
+[program_merge.confirm]
+other = "Confirm merge"
 [error.program.second_root]
 other = "A program must have a parent; there is already a root."
 [error.program.parent_missing]
@@ -808,6 +835,18 @@ other = "The root program cannot be given a parent."
 other = "A program cannot be moved under itself or its descendants."
 [error.program.has_active_children]
 other = "This program still has active children and cannot be deactivated."
+[error.program_merge.select_both]
+other = "Select both a source and a destination program."
+[error.program_merge.self]
+other = "A program cannot be merged into itself."
+[error.program_merge.root]
+other = "The root program cannot be merged into another program."
+[error.program_merge.cycle]
+other = "The destination cannot be the source program or one of its descendants."
+[error.program_merge.into_inactive]
+other = "The destination program is inactive."
+[error.program_merge.fund_scoped]
+other = "A transaction on the source belongs to a fund whose program scope does not cover the destination. Move those transactions first."
 [funds.title]
 other = "Funds"
 [funds.intro]

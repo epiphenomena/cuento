@@ -1,0 +1,80 @@
+{{/*
+  p11.5b merge-programs partials. Two named templates share this file, mirroring the
+  merge-accounts partials (merge_form.tmpl):
+
+    - "program-merge-form": the picker (source + destination program). It swaps into
+      #program-form (like the create/edit form). hx-post /programs/merge WITHOUT a
+      confirm flag, so a first submit renders the consequences preview. On a store
+      typed error the handler re-renders THIS partial at 422 with a localized field
+      error (.Errors, the p10.3 convention); autofocus lands on .Errors.FirstInvalid.
+
+    - "program-merge-preview": the consequences summary + Confirm control. It re-POSTs
+      to /programs/merge with the same src/dst PLUS confirm=1 (a hidden input), so the
+      SECOND submit executes the merge. The preview reports the transaction-line count
+      that will repoint.
+
+  Both target #program-form / outerHTML. Program names are stored data (proper nouns),
+  rendered verbatim; every other string via {{t}} (rule 9); no inline script (rule 12).
+*/ -}}
+
+{{define "program-merge-form" -}}
+<form id="program-form" class="program-form merge-form"
+      hx-post="/programs/merge" hx-target="#program-form" hx-swap="outerHTML">
+  <h2>{{t "program_merge.title"}}</h2>
+  <p class="hint">{{t "program_merge.intro"}}</p>
+
+  <div class="field">
+    <label for="pmg-src">{{t "program_merge.source"}}</label>
+    {{/* p29.13: shared fuzzy program combobox (combo-input) whose option label carries
+         the dotted hierarchy (data-path) so a query like "gen.ed" ranks "General.Education". */}}
+    <select id="pmg-src" name="src" class="combo-input"
+      {{- if eq .Errors.FirstInvalid "src"}} autofocus{{end}}>
+      <option value="0">{{t "program_merge.select_placeholder"}}</option>
+      {{range .Options}}<option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.Src}} selected{{end}}>{{.Path}}</option>
+      {{end}}
+    </select>
+    {{with .Errors.ErrorKey "src"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+
+  <div class="field">
+    <label for="pmg-dst">{{t "program_merge.destination"}}</label>
+    <select id="pmg-dst" name="dst" class="combo-input"
+      {{- if eq .Errors.FirstInvalid "dst"}} autofocus{{end}}>
+      <option value="0">{{t "program_merge.select_placeholder"}}</option>
+      {{range .Options}}<option value="{{.ID}}" data-path="{{.Path}}"{{if eq .ID $.Dst}} selected{{end}}>{{.Path}}</option>
+      {{end}}
+    </select>
+    {{with .Errors.ErrorKey "dst"}}<p class="field-error" role="alert">{{t .}}</p>{{end}}
+  </div>
+
+  <p class="hint">{{t "program_merge.coverage_note"}}</p>
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">{{t "program_merge.review"}}</button>
+    <a class="btn btn-ghost" href="/programs">{{t "common.cancel"}}</a>
+  </div>
+</form>
+{{- end}}
+
+{{define "program-merge-preview" -}}
+<form id="program-form" class="program-form merge-preview"
+      hx-post="/programs/merge" hx-target="#program-form" hx-swap="outerHTML">
+  <h2>{{t "program_merge.confirm_title"}}</h2>
+
+  <p class="merge-summary">{{t "program_merge.summary" .SrcName .DstName}}</p>
+  <ul class="merge-consequences">
+    <li>{{tn "program_merge.consequence.splits" .SplitCount}}</li>
+    <li>{{t "program_merge.consequence.deactivate" .SrcName}}</li>
+  </ul>
+  <p class="hint">{{t "program_merge.coverage_note"}}</p>
+
+  <input type="hidden" name="src" value="{{.Src}}">
+  <input type="hidden" name="dst" value="{{.Dst}}">
+  <input type="hidden" name="confirm" value="1">
+
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary">{{t "program_merge.confirm"}}</button>
+    <a class="btn btn-ghost" href="/programs">{{t "common.cancel"}}</a>
+  </div>
+</form>
+{{- end}}

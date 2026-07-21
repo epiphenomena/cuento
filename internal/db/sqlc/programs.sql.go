@@ -258,3 +258,209 @@ func (q *Queries) UpdateProgram(ctx context.Context, arg UpdateProgramParams) er
 	)
 	return err
 }
+
+const countSplitsForProgram = `-- name: CountSplitsForProgram :one
+SELECT COUNT(*) FROM splits WHERE program_id = ?
+`
+
+// How many splits currently carry this program_id (p11.5b). The merge preview
+// reports it as the number of transaction lines that will move to the destination,
+// reusing the SAME predicate MergeProgram repoints from so the preview never lies.
+func (q *Queries) CountSplitsForProgram(ctx context.Context, programID ids.ProgramID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSplitsForProgram, sql.NullInt64{Int64: int64(programID), Valid: true})
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countFundScopeBlockingSplits = `-- name: CountFundScopeBlockingSplits :one
+SELECT COUNT(*)
+FROM splits s
+JOIN funds f ON f.id = s.fund_id
+WHERE s.program_id = ?1
+  AND f.program_id IS NOT NULL
+  AND ?2 NOT IN (
+    WITH RECURSIVE sub(id) AS (
+      SELECT f.program_id
+      UNION ALL
+      SELECT p.id FROM programs p JOIN sub ON p.parent_id = sub.id
+    )
+    SELECT id FROM sub)
+`
+
+type CountFundScopeBlockingSplitsParams struct {
+	Src ids.ProgramID
+	Dst ids.ProgramID
+}
+
+// How many splits on the SOURCE program (program_id = src) would leave their fund's
+// program scope if repointed to the DESTINATION (p11.5b Z15b block-guard). A split
+// tagged a FUND whose program scope R is set must carry a program inside R's subtree
+// (D20, Z15b; the same rule PostTransaction enforces as ErrFundProgramScope). Merging
+// src into dst repoints the split's program to dst, so the merge is REFUSED when any
+// such split's fund program scope R does NOT contain dst -- otherwise the repoint would
+// write a Z15b hole (nothing at the trigger layer guards the fund-subtree scope). Full
+// fund-scope repointing is out of scope (mirrors the account merge's recon backlog).
+// Params: src (the source program), dst (the candidate destination).
+func (q *Queries) CountFundScopeBlockingSplits(ctx context.Context, arg CountFundScopeBlockingSplitsParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countFundScopeBlockingSplits,
+		sql.NullInt64{Int64: int64(arg.Src), Valid: true},
+		int64(arg.Dst),
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const splitIdsByProgram = `-- name: SplitIdsByProgram :many
+SELECT id FROM splits WHERE program_id = ? ORDER BY id
+`
+
+// All split ids currently on a program, oldest first. Used by MergeProgram to
+// repoint each split's program_id individually and version it (snapshot-from-live),
+// exactly as SplitIdsByAccount does for the account merge. NOT filtered by
+// transaction.deleted: a merge clears the source program entirely so its history
+// reads coherently. Captured BEFORE any repoint write so the moved rows are not
+// confused with the destination's pre-existing splits.
+func (q *Queries) SplitIdsByProgram(ctx context.Context, programID ids.ProgramID) ([]ids.SplitID, error) {
+	rows, err := q.db.QueryContext(ctx, splitIdsByProgram, sql.NullInt64{Int64: int64(programID), Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ids.SplitID
+	for rows.Next() {
+		var id ids.SplitID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const repointSplitProgram = `-- name: RepointSplitProgram :exec
+UPDATE splits SET program_id = ? WHERE id = ?
+`
+
+type RepointSplitProgramParams struct {
+	ProgramID ids.ProgramID
+	ID        ids.SplitID
+}
+
+// Move ONE split to a new program_id (the merge repoint). The store versions the
+// split op='update' AFTER this so the snapshot-from-live row records program_id =
+// the destination. id last.
+func (q *Queries) RepointSplitProgram(ctx context.Context, arg RepointSplitProgramParams) error {
+	_, err := q.db.ExecContext(ctx, repointSplitProgram, arg.ProgramID, arg.ID)
+	return err
+}
+
+const programChildIDs = `-- name: ProgramChildIDs :many
+SELECT id FROM programs WHERE parent_id = ? ORDER BY id
+`
+
+// The ids of the DIRECT children of a program (parent_id = ?), oldest first. Used
+// by MergeProgram to reparent each child onto the destination and version it. The
+// store guards dst against being src or a descendant of src (ErrCycle) BEFORE this,
+// so reparenting the children under dst can never form a cycle.
+func (q *Queries) ProgramChildIDs(ctx context.Context, parentID ids.ProgramID) ([]ids.ProgramID, error) {
+	rows, err := q.db.QueryContext(ctx, programChildIDs, sql.NullInt64{Int64: int64(parentID), Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ids.ProgramID
+	for rows.Next() {
+		var id ids.ProgramID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const repointProgramParent = `-- name: RepointProgramParent :exec
+UPDATE programs SET parent_id = ? WHERE id = ?
+`
+
+type RepointProgramParentParams struct {
+	ParentID ids.ProgramID
+	ID       ids.ProgramID
+}
+
+// Reparent ONE program to a new parent_id (the merge child-repoint). The store
+// versions the program op='update' AFTER this. id last.
+func (q *Queries) RepointProgramParent(ctx context.Context, arg RepointProgramParentParams) error {
+	_, err := q.db.ExecContext(ctx, repointProgramParent, sql.NullInt64{Int64: int64(arg.ParentID), Valid: true}, arg.ID)
+	return err
+}
+
+const reportGrantsByProgram = `-- name: ReportGrantsByProgram :many
+SELECT user_id, group_name FROM user_report_grants
+WHERE program_id = ? ORDER BY user_id, group_name
+`
+
+type ReportGrantsByProgramRow struct {
+	UserID    ids.UserID
+	GroupName string
+}
+
+// Every (user_id, group_name) grant currently scoped to a program (program_id = ?).
+// MergeProgram re-scopes each to the destination; the scope is a mutable ATTRIBUTE
+// (not part of the (user, group) key), so a re-scope is a delete+create version
+// pair (no 'update' op). Two grants for the same (user, group) can never both exist
+// (the PK forbids it), so repointing program_id never collides.
+func (q *Queries) ReportGrantsByProgram(ctx context.Context, programID ids.ProgramID) ([]ReportGrantsByProgramRow, error) {
+	rows, err := q.db.QueryContext(ctx, reportGrantsByProgram, sql.NullInt64{Int64: int64(programID), Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReportGrantsByProgramRow
+	for rows.Next() {
+		var i ReportGrantsByProgramRow
+		if err := rows.Scan(&i.UserID, &i.GroupName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const repointReportGrantProgram = `-- name: RepointReportGrantProgram :exec
+UPDATE user_report_grants SET program_id = ? WHERE user_id = ? AND group_name = ?
+`
+
+type RepointReportGrantProgramParams struct {
+	ProgramID ids.ProgramID
+	UserID    ids.UserID
+	GroupName string
+}
+
+// Move ONE grant's program scope to a new program_id (the merge re-scope). The
+// store snapshots op='delete' BEFORE this and op='create' AFTER (a scope change is
+// delete+create, no 'update' op). Keyed on (user_id, group_name); program_id first.
+func (q *Queries) RepointReportGrantProgram(ctx context.Context, arg RepointReportGrantProgramParams) error {
+	_, err := q.db.ExecContext(ctx, repointReportGrantProgram, sql.NullInt64{Int64: int64(arg.ProgramID), Valid: true}, arg.UserID, arg.GroupName)
+	return err
+}

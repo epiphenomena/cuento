@@ -295,6 +295,13 @@ func (s *server) routes() []Route {
 		// picks these up automatically (rule 8).
 		{http.MethodGet, "/programs", TxnRead, http.HandlerFunc(s.programsPage)},
 		{http.MethodGet, "/programs/new", TxnWrite, http.HandlerFunc(s.programNewForm)},
+		// p11.5b merge UI (TxnWrite), mirroring the account merge. GET renders the merge
+		// form (source/destination pickers) into #program-form; POST is the two-step flow
+		// (preview without confirm, execute with confirm=1). The literal "/programs/merge"
+		// is more specific than "/programs/{id}", so the Go 1.22+ mux routes it precisely.
+		// The permission-matrix test picks both up automatically (rule 8).
+		{http.MethodGet, "/programs/merge", TxnWrite, http.HandlerFunc(s.programMergeFormPartial)},
+		{http.MethodPost, "/programs/merge", TxnWrite, http.HandlerFunc(s.programMerge)},
 		{http.MethodGet, "/programs/{id}/edit", TxnWrite, http.HandlerFunc(s.programEditForm)},
 		{http.MethodPost, "/programs", TxnWrite, http.HandlerFunc(s.programCreate)},
 		{http.MethodPost, "/programs/{id}", TxnWrite, http.HandlerFunc(s.programUpdate)},

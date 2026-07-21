@@ -769,6 +769,8 @@ other = "Su arbol de programas — la dimension de mision en cada partida de ing
 other = "Actividad mostrada para el periodo %s a %s."
 [programs.new]
 other = "Nuevo programa"
+[programs.merge]
+other = "Combinar programas"
 [programs.deactivate]
 other = "Desactivar"
 [programs.inactive]
@@ -791,6 +793,31 @@ other = "Nombre"
 other = "Programa padre"
 [programs.form.root_note]
 other = "Este es el programa raiz; no tiene padre y no se puede mover."
+[program_merge.title]
+other = "Combinar programas"
+[program_merge.intro]
+other = "Fusiona un programa origen en un programa destino. Cada partida, permiso de informe y programa hijo del origen se mueve al destino, y el origen se desactiva."
+[program_merge.source]
+other = "Programa origen"
+[program_merge.destination]
+other = "Programa destino"
+[program_merge.select_placeholder]
+other = "— seleccione un programa —"
+[program_merge.coverage_note]
+other = "El destino debe ser un programa activo, y no puede ser el origen ni uno de sus descendientes."
+[program_merge.review]
+other = "Revisar combinacion"
+[program_merge.confirm_title]
+other = "Confirmar combinacion"
+[program_merge.summary]
+other = "Combinar %s en %s. Esto no se puede deshacer desde aqui."
+[program_merge.consequence.splits]
+one = "%d partida se movera al destino."
+other = "%d partidas se moveran al destino."
+[program_merge.consequence.deactivate]
+other = "%s se desactivara (se conserva su historial)."
+[program_merge.confirm]
+other = "Confirmar combinacion"
 [error.program.second_root]
 other = "Un programa debe tener un padre; ya existe una raiz."
 [error.program.parent_missing]
@@ -801,6 +828,18 @@ other = "Al programa raiz no se le puede asignar un padre."
 other = "Un programa no puede moverse bajo si mismo ni sus descendientes."
 [error.program.has_active_children]
 other = "Este programa aun tiene hijos activos y no se puede desactivar."
+[error.program_merge.select_both]
+other = "Seleccione un programa origen y un programa destino."
+[error.program_merge.self]
+other = "Un programa no se puede combinar consigo mismo."
+[error.program_merge.root]
+other = "El programa raiz no se puede combinar en otro programa."
+[error.program_merge.cycle]
+other = "El destino no puede ser el programa origen ni uno de sus descendientes."
+[error.program_merge.into_inactive]
+other = "El programa destino esta inactivo."
+[error.program_merge.fund_scoped]
+other = "Un asiento del origen pertenece a un fondo cuyo alcance de programa no cubre el destino. Mueva esos asientos primero."
 [funds.title]
 other = "Fondos"
 [funds.intro]
