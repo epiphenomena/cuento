@@ -1,0 +1,27 @@
+-- +goose Up
+-- Composite (subsidiary_id, date) index on transactions. Forward-only; never edit an
+-- applied migration; no Down (AGENTS rule 4).
+--
+-- The comparative activity reports (income statement, form 990 Part VIII/IX, program
+-- statement, functional expenses) decompose a multi-year range into per-MONTH activity
+-- queries (PeriodActivity / ProgramActivity), each a `subsidiary_id IN (scope) AND date
+-- BETWEEN pf AND pt` predicate. With only the single-column txn_sub and txn_date indexes,
+-- the planner drove each monthly query off txn_sub -- a SEARCH by subsidiary_id that then
+-- scanned EVERY one of that subsidiary's transactions and filtered the month out in a
+-- residual test. Over a decade that is ~120 full subsidiary scans per report.
+--
+-- The composite lets the planner range-seek the exact month:
+--   SEARCH t USING INDEX txn_sub_date (subsidiary_id=? AND date>? AND date<?)
+-- measured ~7x faster on the monthly PeriodActivity/ProgramActivity queries over a
+-- 49k-transaction / 146k-split db (12 monthly queries: 122ms -> 18ms), which is the
+-- dominant cost of form_990 and program_statement (each ~6-7s of DB time).
+--
+-- txn_sub is KEPT (subsidiary_id-only lookups still use it, and TestTransactionsSplits
+-- IndexesExist pins it); this ADDS the composite. The extra index costs one B-tree
+-- maintenance per transaction write, negligible for this workload. subsidiary_id leads so
+-- the composite also serves a bare subsidiary_id equality (it is a strict superset of
+-- txn_sub for read purposes), but txn_sub is retained rather than dropped to keep this a
+-- pure additive, forward-only change.
+--
+-- Keep this file PURE ASCII (sqlc reads migrations as its schema; docs/DECISIONS.md p04.2).
+CREATE INDEX txn_sub_date ON transactions(subsidiary_id, date);
