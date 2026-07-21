@@ -102,3 +102,84 @@ test('funds: create with checklist + program, view statement, close and reopen',
   await page.goto('/funds');
   await expect(page.locator('tr.fund-row', { hasText: 'Water Grant E2E' })).toBeVisible();
 });
+
+// A closed fund is HIDDEN from fund CHOICE pickers (here: the fund-activity report's
+// fund selector), EXCEPT when the report's "show inactive" checkbox is on. This is the
+// picker-exclusion arm of the inactive-fund feature. Flow: create -> present in the
+// report picker -> close -> absent by default -> "show inactive" reveals it (marked
+// closed) -> reopen -> present again by default. Own fund so it is independent of the
+// first test.
+test('funds: closed fund is hidden from the report picker until "show inactive"', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  // --- create a fund ---
+  await page.goto('/funds');
+  await page.getByRole('button', { name: /new fund/i }).click();
+  await expect(page.locator('form#fund-form.e2e-settled')).toBeVisible();
+  await page.locator('#ff-name').fill('Picker Grant E2E');
+  await page.locator('#ff-funder').fill('Picker Fund E2E');
+  await page.locator('#ff-program').selectOption({ label: 'General' });
+  const rootSub = page.locator('input[name="sub_1"]');
+  if (!(await rootSub.isChecked())) {
+    await rootSub.check();
+  }
+  let reloaded = page.waitForResponse(
+    (r) => r.url().endsWith('/funds') && r.request().method() === 'GET',
+  );
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await reloaded;
+  await expect(page.locator('tr.fund-row', { hasText: 'Picker Grant E2E' })).toBeVisible();
+
+  const FA = '/reports/fund_activity';
+  const fundSelect = page.locator('select.report-fund-select[name="fund"]');
+  const fundOption = fundSelect.locator('option', { hasText: 'Picker Grant E2E' });
+
+  // --- while ACTIVE: the fund is an offered option in the report picker ---
+  await page.goto(`${FA}?scope=1`);
+  await expect(fundSelect).toBeVisible();
+  await expect(fundOption).toHaveCount(1);
+
+  // --- close the fund ---
+  await page.goto('/funds');
+  reloaded = page.waitForResponse(
+    (r) => r.url().includes('/funds') && r.request().method() === 'GET',
+  );
+  await page
+    .locator('tr.fund-row', { hasText: 'Picker Grant E2E' })
+    .getByRole('button', { name: /^close$/i })
+    .click();
+  await reloaded;
+
+  // --- closed: GONE from the report picker by default (unchecked "show inactive") ---
+  await page.goto(`${FA}?scope=1`);
+  await expect(fundSelect).toBeVisible();
+  await expect(fundOption).toHaveCount(0);
+
+  // --- check "show inactive": the closed fund reappears (marked closed) via the OOB
+  //     re-render of #rp-fund. The checkbox rides the form's change trigger. ---
+  const showInactive = page.locator('input[name="show_inactive"]');
+  await showInactive.check();
+  await expect(fundOption).toHaveCount(1);
+  await expect(fundOption).toContainText('(closed)');
+
+  // Loading the report with ?show_inactive=1 directly also offers it (persistence).
+  await page.goto(`${FA}?scope=1&show_inactive=1`);
+  await expect(fundOption).toHaveCount(1);
+
+  // --- reopen (Reactivate): the fund is offered again by DEFAULT (no checkbox) ---
+  await page.goto('/funds?closed=1');
+  reloaded = page.waitForResponse(
+    (r) => r.url().includes('/funds') && r.request().method() === 'GET',
+  );
+  await page
+    .locator('tr.fund-row', { hasText: 'Picker Grant E2E' })
+    .getByRole('button', { name: /^reopen$/i })
+    .click();
+  await reloaded;
+  await page.goto(`${FA}?scope=1`);
+  await expect(fundOption).toHaveCount(1);
+  await expect(fundOption).not.toContainText('(closed)');
+});

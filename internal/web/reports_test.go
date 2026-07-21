@@ -432,6 +432,61 @@ func TestProgramSelectShowsHierarchy(t *testing.T) {
 	}
 }
 
+// TestFundSelectHidesClosedFundsByDefault: the fund-activity report's fund selector
+// offers ACTIVE funds only by default; ?show_inactive=1 (the "show inactive" checkbox)
+// widens it to include CLOSED funds, marked with the (closed) suffix. This is the
+// report-selector arm of the picker-exclusion feature (the register/txn pickers exclude
+// inactive funds unconditionally; fund-specific reports get the checkbox instead).
+func TestFundSelectHidesClosedFundsByDefault(t *testing.T) {
+	h, st, _, sm := reportsApp(t)
+	admin := mkUser(t, st, "admin", "none", true)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: admin})
+
+	openFund, err := st.CreateFund(ctx, store.CreateFundInput{
+		Name: "Open Grant", Restriction: "purpose", Subsidiaries: []ids.SubsidiaryID{1},
+	})
+	if err != nil {
+		t.Fatalf("create open fund: %v", err)
+	}
+	closedFund, err := st.CreateFund(ctx, store.CreateFundInput{
+		Name: "Closed Grant", Restriction: "purpose", Subsidiaries: []ids.SubsidiaryID{1},
+	})
+	if err != nil {
+		t.Fatalf("create closed fund: %v", err)
+	}
+	if err := st.CloseFund(ctx, closedFund); err != nil {
+		t.Fatalf("CloseFund: %v", err)
+	}
+
+	// Default (no show_inactive): the closed fund is NOT an offered option; the active one is.
+	rec := asUser(t, h, sm, admin, http.MethodGet, "/reports/"+reports.FundActivityReportID, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("fund activity status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Open Grant") {
+		t.Errorf("active fund missing from selector; body:\n%s", body)
+	}
+	if strings.Contains(body, "Closed Grant") {
+		t.Errorf("closed fund should be hidden by default; body:\n%s", body)
+	}
+	_ = openFund
+
+	// With ?show_inactive=1 the closed fund appears, marked (closed).
+	rec = asUser(t, h, sm, admin, http.MethodGet,
+		"/reports/"+reports.FundActivityReportID+"?show_inactive=1", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("fund activity (show_inactive) status = %d, want 200", rec.Code)
+	}
+	body = rec.Body.String()
+	if !strings.Contains(body, "Closed Grant") {
+		t.Errorf("closed fund should appear with show_inactive=1; body:\n%s", body)
+	}
+	if !strings.Contains(body, "(closed)") {
+		t.Errorf("closed fund option should carry the (closed) suffix; body:\n%s", body)
+	}
+}
+
 // TestPeriodDefaults (p30.8, refines p29.12): the PERIOD default distinguishes an
 // ABSENT bound from a PRESENT-BUT-EMPTY one.
 //   - ABSENT (no from=/to= key — first page load) -> YTD: From = Jan 1 of the current

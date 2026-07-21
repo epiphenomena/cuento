@@ -936,6 +936,92 @@ func TestUpdateNewSplitOnInactiveAccountRejected(t *testing.T) {
 	}
 }
 
+// TestUpdateKeepsClosedFundOnUnchangedSplit: the FUND analogue of
+// TestUpdateKeepsInactiveAccountOnUnchangedSplit (p26.13). A pre-existing split whose
+// fund is UNCHANGED may keep a now-closed fund, so a historical transaction stays
+// editable (memo-only edit) without reopening the fund.
+func TestUpdateKeepsClosedFundOnUnchangedSplit(t *testing.T) {
+	e := newTxnEnv(t)
+	fund := mkFund(t, e.s, "Grant", []ids.SubsidiaryID{e.subUS}, nil)
+	in := e.balancedInput(100)
+	in.Splits[0].FundID = &fund
+	in.Splits[1].FundID = &fund
+	id, err := e.s.PostTransaction(mutCtx(), in)
+	if err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+	live := txnSplits(t, e.d, id)
+	var salariesSplit, checkingSplit ids.SplitID
+	for _, sp := range live {
+		switch sp.AccountID {
+		case e.salaries:
+			salariesSplit = sp.ID
+		case e.checking:
+			checkingSplit = sp.ID
+		}
+	}
+
+	if err := e.s.CloseFund(mutCtx(), fund); err != nil {
+		t.Fatalf("CloseFund: %v", err)
+	}
+
+	// Update ONLY the memo; keep the same (now-closed) fund on both splits.
+	upd := PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD", Memo: "edited",
+		Splits: []SplitInput{
+			{ID: &salariesSplit, AccountID: e.salaries, Amount: 100, FundID: &fund, Position: 0},
+			{ID: &checkingSplit, AccountID: e.checking, Amount: -100, FundID: &fund, Position: 1},
+		},
+	}
+	if err := e.s.UpdateTransaction(mutCtx(), id, upd); err != nil {
+		t.Fatalf("UpdateTransaction (memo only, closed fund unchanged) = %v, want nil", err)
+	}
+	testutil.AssertVersioned(t, e.d, "transactions", int64(id), "update")
+}
+
+// TestUpdateChangeToClosedFundRejected: changing an existing split's fund to a
+// DIFFERENT (also closed) fund still requires an active fund -> rejected.
+func TestUpdateChangeToClosedFundRejected(t *testing.T) {
+	e := newTxnEnv(t)
+	fundA := mkFund(t, e.s, "Grant A", []ids.SubsidiaryID{e.subUS}, nil)
+	fundB := mkFund(t, e.s, "Grant B", []ids.SubsidiaryID{e.subUS}, nil)
+	in := e.balancedInput(100)
+	in.Splits[0].FundID = &fundA
+	in.Splits[1].FundID = &fundA
+	id, err := e.s.PostTransaction(mutCtx(), in)
+	if err != nil {
+		t.Fatalf("PostTransaction: %v", err)
+	}
+	live := txnSplits(t, e.d, id)
+	var salariesSplit, checkingSplit ids.SplitID
+	for _, sp := range live {
+		switch sp.AccountID {
+		case e.salaries:
+			salariesSplit = sp.ID
+		case e.checking:
+			checkingSplit = sp.ID
+		}
+	}
+	if err := e.s.CloseFund(mutCtx(), fundB); err != nil {
+		t.Fatalf("CloseFund(B): %v", err)
+	}
+
+	before := countChanges(t, e.d)
+	upd := PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.subUS, Currency: "USD",
+		Splits: []SplitInput{
+			{ID: &salariesSplit, AccountID: e.salaries, Amount: 100, FundID: &fundB, Position: 0}, // fund CHANGED to closed
+			{ID: &checkingSplit, AccountID: e.checking, Amount: -100, FundID: &fundB, Position: 1},
+		},
+	}
+	if err := e.s.UpdateTransaction(mutCtx(), id, upd); !errors.Is(err, ErrInactiveFund) {
+		t.Fatalf("UpdateTransaction (fund changed to closed) = %v, want ErrInactiveFund", err)
+	}
+	if n := countChanges(t, e.d); n != before {
+		t.Errorf("changes = %d, want %d (rejected update leaves no trace)", n, before)
+	}
+}
+
 // --- Delete: soft ---------------------------------------------------------
 
 func TestDeleteIsSoft(t *testing.T) {

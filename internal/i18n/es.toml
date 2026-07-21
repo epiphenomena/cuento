@@ -1177,6 +1177,8 @@ other = "Detalle"
 other = "Cuenta"
 [reports.params.fund]
 other = "Fondo"
+[reports.params.show_inactive]
+other = "Mostrar inactivos"
 [reports.params.program]
 other = "Programa"
 [reports.params.reconciliation]

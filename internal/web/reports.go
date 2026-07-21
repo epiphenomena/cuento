@@ -279,7 +279,12 @@ func (s *server) resolveParams(
 		}
 	}
 
-	form, err := s.buildParamsForm(ctx, u, rep, p, subs)
+	// The fund selector defaults to ACTIVE funds only; ?show_inactive=1 (the "show
+	// inactive" checkbox) widens it to include closed funds. A closed fund that is
+	// already the current selection is always offered, regardless of the checkbox, so
+	// a saved/linked fund statement round-trips.
+	showInactiveFunds := first(q, "show_inactive") == "1"
+	form, err := s.buildParamsForm(ctx, u, rep, p, subs, showInactiveFunds)
 	if err != nil {
 		return reports.Params{}, paramsForm{}, err
 	}
@@ -389,8 +394,9 @@ func acctExists(accts []acctOption, id int64) bool {
 // analogue of acctOption; picking one switches the report from its LIST view (the fund
 // roster) to that fund's period statement.
 type fundOption struct {
-	ID   int64
-	Name string
+	ID     int64
+	Name   string
+	Active bool // false = a closed fund; hidden from the selector unless "show inactive" is on or it is the current selection
 }
 
 // fundActivityOptions returns every fund (active and closed — a closed fund may still
@@ -403,7 +409,7 @@ func (s *server) fundActivityOptions(ctx context.Context) ([]fundOption, error) 
 	}
 	out := make([]fundOption, 0, len(fs))
 	for _, f := range fs {
-		out = append(out, fundOption{ID: int64(f.ID), Name: f.Name})
+		out = append(out, fundOption{ID: int64(f.ID), Name: f.Name, Active: f.Active != 0})
 	}
 	return out, nil
 }
@@ -630,7 +636,8 @@ type paramsForm struct {
 	// Options for the selects.
 	Currencies []ccyChoice
 	Accounts   []acctOption    // the leaf-account options (account-ledger only)
-	Funds      []fundOption    // the fund options (fund-activity report only)
+	Funds             []fundOption // the fund options (fund-activity report only)
+	ShowInactiveFunds bool         // the "show inactive" checkbox state (fund-activity report only)
 	Programs   []programOption // the program options (program-statement report only)
 	Recons     []reconOption   // the finalized-recon options (statement report only)
 	Budgets    []budgetOption  // the budget options (budget reports only)
@@ -659,7 +666,7 @@ type ccyChoice struct {
 // input[type=date] -- rule 10 / rule 12).
 func (s *server) buildParamsForm(
 	ctx context.Context, u *store.CurrentUser, rep reports.Report,
-	p reports.Params, subs []subInfo,
+	p reports.Params, subs []subInfo, showInactiveFunds bool,
 ) (paramsForm, error) {
 	df := dateFormatFor(u)
 
@@ -725,7 +732,14 @@ func (s *server) buildParamsForm(
 		if err != nil {
 			return paramsForm{}, err
 		}
-		f.Funds = funds
+		f.ShowInactiveFunds = showInactiveFunds
+		// Default: ACTIVE funds only. The checkbox widens to all; the current selection
+		// (a possibly-closed fund the statement is already showing) is always kept.
+		for _, opt := range funds {
+			if opt.Active || showInactiveFunds || opt.ID == f.Fund {
+				f.Funds = append(f.Funds, opt)
+			}
+		}
 	}
 	if rep.ParamsSpec.Program {
 		progs, err := s.programStatementOptions(ctx)
@@ -777,6 +791,11 @@ type reportPageModel struct {
 	// columns renders in the FULL-viewport-width shell (app-main-full) so no column
 	// truncates/scrolls. False keeps the ordinary wide shell (100rem reading cap).
 	FullWidth bool
+	// Fragment is true only when the model is rendered as the bare #report-results
+	// fragment (a p26.90 apply-on-change swap), NOT embedded in the full page. It gates
+	// the OOB re-render of the subnav fund <select> (#rp-fund): emitting that OOB copy on
+	// a full page load would duplicate the id, so it must appear ONLY in the swap response.
+	Fragment bool
 	// MeasureToggle (p30.9) mirrors reports.Report.MeasureToggle: the budget-variance
 	// grid folds three measures per cell (budgeted/actual/variance) and offers a
 	// client-side button group to switch which shows. The template then renders the
@@ -1257,6 +1276,7 @@ func (s *server) reportPage(w http.ResponseWriter, r *http.Request) {
 // renders in the SAME results region with a 200 (htmx swaps it), never a 5xx.
 func (s *server) renderReportResults(w http.ResponseWriter, r *http.Request, model reportPageModel) {
 	if r.Header.Get("HX-Target") == "report-results" {
+		model.Fragment = true // gate the OOB #rp-fund re-render to the swap response only
 		s.render(w, r, http.StatusOK, "report-results", model)
 		return
 	}

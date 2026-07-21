@@ -34,6 +34,20 @@
      when a new change fires, so rapid changes settle on the LATEST response (ordering
      correctness). No-JS: the form is still a plain method="get" GET, and the Run button —
      kept in <noscript> — submits it (full reload). */ -}}
+{{/* report-fund-select: the fund-activity report's fund <select>. Extracted so the
+     filter form AND the results fragment's OOB re-render (hx-swap-oob) emit byte-identical
+     markup — a closed fund shows a (closed) suffix; the option list is already filtered in
+     the handler (active-only unless "show inactive", plus the current selection). Dot is a
+     paramsForm. */ -}}
+{{define "report-fund-select" -}}
+<select id="rp-fund" name="fund" class="report-fund-select">
+  <option value="0"{{if eq .Fund 0}} selected{{end}}>{{t "reports.fund_activity.all_funds"}}</option>
+  {{- range .Funds}}
+  <option value="{{.ID}}"{{if eq .ID $.Fund}} selected{{end}}>{{.Name}}{{if not .Active}} {{t "txn.fund.unavailable_suffix"}}{{end}}</option>
+  {{- end}}
+</select>
+{{- end}}
+
 {{define "report-filters" -}}
 {{- /* Dot is a paramsForm. */ -}}
 <form class="report-params" method="get" action="/reports/{{.ReportID}}"
@@ -125,12 +139,17 @@
     {{if .ShowFund}}
     <div class="report-field">
       <label for="rp-fund">{{t "reports.params.fund"}}</label>
-      <select id="rp-fund" name="fund" class="report-fund-select">
-        <option value="0"{{if eq .Fund 0}} selected{{end}}>{{t "reports.fund_activity.all_funds"}}</option>
-        {{- range .Funds}}
-        <option value="{{.ID}}"{{if eq .ID $.Fund}} selected{{end}}>{{.Name}}</option>
-        {{- end}}
-      </select>
+      {{template "report-fund-select" .}}
+    </div>
+    {{/* "Show inactive" widens the fund selector to include CLOSED funds. Plain checkbox
+         (no hx-*): the form's own change trigger carries show_inactive into the single
+         hx-get, and the response re-renders #rp-fund out-of-band (hx-swap-oob) so the
+         option list expands/collapses without a full page load. */}}
+    <div class="report-field report-field-check">
+      <label class="report-check">
+        <input type="checkbox" name="show_inactive" value="1"{{if .ShowInactiveFunds}} checked{{end}}>
+        {{t "reports.params.show_inactive"}}
+      </label>
     </div>
     {{end}}
 
@@ -205,6 +224,18 @@
      chrome-only: the golden renders the Table, not this shell. */ -}}
 {{define "report-results" -}}
 {{- with .}}
+{{/* p31: when "show inactive" toggles, the fund selector lives in the subnav form (NOT
+     inside #report-results), so re-render it OUT-OF-BAND here. htmx applies this to the
+     #rp-fund element in place, expanding/collapsing the closed-fund options in the same
+     single request the form's change trigger already fires. Guarded to the fund report. */ -}}
+{{- if and .Fragment .Params.ShowFund}}
+<select id="rp-fund" name="fund" class="report-fund-select" hx-swap-oob="true">
+  <option value="0"{{if eq .Params.Fund 0}} selected{{end}}>{{t "reports.fund_activity.all_funds"}}</option>
+  {{- range .Params.Funds}}
+  <option value="{{.ID}}"{{if eq .ID $.Params.Fund}} selected{{end}}>{{.Name}}{{if not .Active}} {{t "txn.fund.unavailable_suffix"}}{{end}}</option>
+  {{- end}}
+</select>
+{{- end}}
 <div id="report-results">
   {{/* p26.95: a report-LEVEL error (currently: a required exchange rate is missing
        for the chosen target currency) renders inline here INSTEAD of the table/CSV.
