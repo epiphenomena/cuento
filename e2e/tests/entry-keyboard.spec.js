@@ -76,12 +76,12 @@ async function selectByKeyboard(page, selector, label) {
   const { targetIndex, currentIndex, value } = await sel.evaluate((el, wantLabel) => {
     const s = /** @type {HTMLSelectElement} */ (el);
     const opts = [...s.options];
-    // The transaction account options now carry an account-type prefix ("Asset · Cash"),
-    // so match the bare name as the trailing segment after " · " (falling back to an exact
-    // match for any non-prefixed select).
+    // The transaction account options are a type-rooted dotted path ("Asset.Cash.Checking"),
+    // so match the bare name as the trailing dotted segment (falling back to the legacy
+    // " · " prefix and to an exact match for any non-prefixed select).
     const ti = opts.findIndex((o) => {
       const t = o.textContent.trim();
-      return t === wantLabel || t.endsWith(` · ${wantLabel}`);
+      return t === wantLabel || t.endsWith(`.${wantLabel}`) || t.endsWith(` · ${wantLabel}`);
     });
     return { targetIndex: ti, currentIndex: s.selectedIndex, value: ti >= 0 ? opts[ti].value : '' };
   }, label);
