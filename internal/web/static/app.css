@@ -246,6 +246,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
   gap: var(--space-1) var(--space-3);
   width: 100%;
 }
+/* The .subnav-split above is width:100%, but that resolves against its parent
+   .app-subnav-controls, which — as a shrink-to-fit flex item of .app-subnav —
+   only sizes to its content, not the full bar. So the split (and its trailing
+   .subnav-actions margin-left:auto) had NO free space to consume: the actions
+   landed at the content edge, not the far right of the bar. Make the wrapper
+   grow to fill the bar so the 100% (and the auto-margin pin) has real width to
+   work with. Scoped via :has(.subnav-split) so it touches ONLY the accounts
+   toolbar — reports/register controls-only bars (.report-params / .subnav-filters,
+   no .subnav-split) keep their existing shrink-to-fit sizing untouched. */
+.app-subnav-controls:has(.subnav-split) { flex: 1 1 auto; }
 .subnav-split .subnav-actions { margin-left: auto; align-self: center; }
 /* p26.11: after p26.7 the New/Merge/Reconcile triggers in the section bar are anchors
    (<a class="btn ...">). The generic nav-link rule `.app-subnav a` (specificity 0,1,1)
