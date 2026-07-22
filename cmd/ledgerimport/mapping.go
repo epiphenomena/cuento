@@ -286,6 +286,29 @@ type Config struct {
 	// entry (or a blank donor) means unrestricted (NULL fund).
 	Funds map[string]FundConfig `json:"funds"`
 
+	// FundClasses maps a source `klass` (the raw QuickBooks CLASS column) -> a fund
+	// KEY into FundDefs, tagging EVERY split carrying that klass (both economic and
+	// counter legs) with the class-derived fund. This is the class-driven fund path
+	// (a grant/restricted fund identified by the QB class that rides both legs of a
+	// transaction, so the per-(txn,fund) group nets to zero naturally -- D20/Z10).
+	// A klass with no entry leaves the split's fund to the donor/campus decision. The
+	// class-fund path YIELDS to donor and campus funds: it tags only a split still
+	// unrestricted after those (see resolveSplit). It is INDEPENDENT of the program
+	// path: the same klass may also appear in ProgramClasses, so a split can carry
+	// BOTH a class-fund and a program (a grant funding a program). Empty/nil = the
+	// class-fund path is off (today's default -- the import is byte-identical to the
+	// pre-feature build). A class marked here must NOT also ride kat=campus rows or a
+	// donor fund on the same transaction: two legs would land in different fund groups
+	// and neither would net to zero (the store fails the build loudly, not silently).
+	FundClasses map[string]string `json:"fund_classes"`
+
+	// FundDefs maps a fund KEY (the value side of FundClasses) -> its fund definition.
+	// Keyed by an opaque key, not a donor, so several klasses can point at one fund and
+	// the fund metadata (name, funder, restriction, dates) lives in one place. Only keys
+	// referenced by FundClasses are created; an unreferenced def is inert. Empty/nil when
+	// the class-fund path is off.
+	FundDefs map[string]FundConfig `json:"fund_defs"`
+
 	// CampusFund, when set, is a single fund assigned to every split whose source
 	// `kat` is "campus" -- a marker-driven fund (NOT donor-driven), so it lives in
 	// its own field, not the donor-keyed Funds map. A campus split takes this fund
@@ -378,12 +401,18 @@ type SubsidiaryConfig struct {
 	BaseCurrency string `json:"base_currency"`
 }
 
-// FundConfig is a fund derived from a source donor value (D20).
+// FundConfig is a fund derived from a source donor value (D20) or, in the
+// class-driven path, from a fund key (Config.FundDefs). StartDate/EndDate/NameES
+// are optional and only used by the class path today (the donor path leaves them
+// empty); the store accepts them on any fund.
 type FundConfig struct {
 	Name         string   `json:"name"`
+	NameES       string   `json:"name_es"` // optional Spanish name ("" = en-fallback)
 	Funder       string   `json:"funder"`
 	Purpose      string   `json:"purpose"`
 	Restriction  string   `json:"restriction"`  // purpose|time|perpetual
+	StartDate    string   `json:"start_date"`   // optional YYYY-MM-DD ("" = none)
+	EndDate      string   `json:"end_date"`     // optional YYYY-MM-DD ("" = none)
 	Subsidiaries []string `json:"subsidiaries"` // subsidiary NAMES (>=1)
 	Program      string   `json:"program"`      // optional program-subtree scope
 }

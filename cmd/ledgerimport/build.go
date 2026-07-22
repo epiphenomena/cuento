@@ -40,6 +40,13 @@ type BuildResult struct {
 	// or nil when none is configured. Set in the scaffold and rehydrated on reload.
 	CampusFundID *ids.FundID
 
+	// FundClassIDs maps a source `klass` -> the class-driven fund id (Config.FundClasses
+	// resolved through Config.FundDefs), so resolveSplit can tag every split carrying
+	// that klass with its fund. Empty when the class-fund path is off. Keyed by klass
+	// (not fund key) so the resolveSplit lookup is a single map hit on r.Klass; when two
+	// klasses share one fund def both keys point at the same id.
+	FundClassIDs map[string]ids.FundID
+
 	// tidTxns records, per source tid, the transaction ids produced (one for a
 	// single-currency group, N for a decomposed multi-currency group).
 	tidTxns map[string][]ids.TransactionID
@@ -49,13 +56,21 @@ type BuildResult struct {
 
 func (r *BuildResult) txnCountForTid(tid string) int { return len(r.tidTxns[tid]) }
 
-// fundCount is the number of funds created: the donor-keyed funds plus the
-// marker-driven campus fund when configured (which is NOT in FundIDs). Used only
-// for the operator summary log so a created campus fund is not undercounted.
+// fundCount is the number of funds created: the donor-keyed funds, the
+// marker-driven campus fund when configured (NOT in FundIDs), and the class-driven
+// funds (counted by DISTINCT id, since several klasses may share one fund def).
+// Used only for the operator summary log so a created fund is not undercounted.
 func (r *BuildResult) fundCount() int {
 	n := len(r.FundIDs)
 	if r.CampusFundID != nil {
 		n++
+	}
+	seen := map[ids.FundID]bool{}
+	for _, id := range r.FundClassIDs {
+		if !seen[id] {
+			seen[id] = true
+			n++
+		}
 	}
 	return n
 }
@@ -72,6 +87,7 @@ func newResult() *BuildResult {
 		SubsidiaryIDs: map[string]ids.SubsidiaryID{},
 		ProgramIDs:    map[string]ids.ProgramID{},
 		FundIDs:       map[string]ids.FundID{},
+		FundClassIDs:  map[string]ids.FundID{},
 		AccountIDs:    map[string]ids.AccountID{},
 		tidTxns:       map[string][]ids.TransactionID{},
 		splitAccounts: map[ids.AccountID]bool{},
@@ -475,7 +491,10 @@ func (b *builder) funds(ctx context.Context) error {
 		}
 		b.res.FundIDs[donor] = id
 	}
-	return b.campusFund(ctx)
+	if err := b.campusFund(ctx); err != nil {
+		return err
+	}
+	return b.classFunds(ctx)
 }
 
 // campusFund creates the marker-driven "campus" fund (cfg.CampusFund) if
@@ -520,6 +539,78 @@ func (b *builder) campusFund(ctx context.Context) error {
 	}
 	b.res.CampusFundID = &id
 	return nil
+}
+
+// classFunds creates the class-driven funds (cfg.FundClasses -> cfg.FundDefs) and
+// records the source `klass` -> fund id map used by resolveSplit. It runs AFTER
+// campusFund so donor and campus fund ids keep their pre-feature order (the feature
+// is additive: with cfg.FundClasses empty this is a no-op and the build is
+// byte-identical). One fund is created per DISTINCT fund key (sorted for a
+// deterministic id order); every klass pointing at that key shares the id, so
+// several bilingual/duplicate classes can fund one grant. A klass whose def is
+// missing, or a subsidiary/program that does not resolve, fails the build loudly.
+func (b *builder) classFunds(ctx context.Context) error {
+	if len(b.cfg.FundClasses) == 0 {
+		return nil
+	}
+	// The distinct fund keys actually referenced, created in sorted-key order.
+	keyIDs := map[string]ids.FundID{}
+	referenced := map[string]bool{}
+	for _, key := range b.cfg.FundClasses {
+		referenced[key] = true
+	}
+	var keys []string
+	for k := range referenced {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		fc, ok := b.cfg.FundDefs[key]
+		if !ok {
+			return fmt.Errorf("fund class key %q not defined in fund_defs", key)
+		}
+		subs, err := b.subIDs(fc.Subsidiaries)
+		if err != nil {
+			return fmt.Errorf("class fund %q: %w", fc.Name, err)
+		}
+		var prog *ids.ProgramID
+		if fc.Program != "" {
+			pid, ok := b.res.ProgramIDs[fc.Program]
+			if !ok {
+				return fmt.Errorf("class fund %q: program %q not configured", fc.Name, fc.Program)
+			}
+			prog = &pid
+		}
+		id, err := b.st.CreateFund(ctx, store.CreateFundInput{
+			Name:         fc.Name,
+			NameES:       fc.NameES,
+			Funder:       fc.Funder,
+			Purpose:      fc.Purpose,
+			Restriction:  fc.Restriction,
+			ProgramID:    prog,
+			StartDate:    optDate(fc.StartDate),
+			EndDate:      optDate(fc.EndDate),
+			Subsidiaries: subs,
+		})
+		if err != nil {
+			return fmt.Errorf("create class fund %q: %w", fc.Name, err)
+		}
+		keyIDs[key] = id
+	}
+	// Fan the fund ids out onto every klass that references the key.
+	for klass, key := range b.cfg.FundClasses {
+		b.res.FundClassIDs[klass] = keyIDs[key]
+	}
+	return nil
+}
+
+// optDate returns a pointer to s, or nil when s is empty -- the store's optional
+// YYYY-MM-DD convention (nil = no date).
+func optDate(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 // accounts builds the account tree from the reviewed account-mapping rows. It
@@ -859,6 +950,21 @@ func (b *builder) reloadState(ctx context.Context, accMap []AccountMap) error {
 		} else {
 			return fmt.Errorf("reload funds: campus fund %q not in db; scaffold first", b.cfg.CampusFund.Name)
 		}
+	}
+	// Rehydrate the class-driven funds (created in the scaffold, keyed by klass in
+	// res.FundClassIDs) so the separate import-subsidiary process can tag klass splits
+	// with them. Resolve each fund key's name -> id via the db, then fan out to every
+	// klass, exactly as classFunds does at scaffold time.
+	for klass, key := range b.cfg.FundClasses {
+		fc, ok := b.cfg.FundDefs[key]
+		if !ok {
+			return fmt.Errorf("reload funds: fund class key %q not defined in fund_defs", key)
+		}
+		id, ok := fundByName[fc.Name]
+		if !ok {
+			return fmt.Errorf("reload funds: class fund %q not in db; scaffold first", fc.Name)
+		}
+		b.res.FundClassIDs[klass] = id
 	}
 	return b.reloadAccounts(ctx, accMap)
 }

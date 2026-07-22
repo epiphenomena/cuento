@@ -2245,3 +2245,232 @@ func TestReadAccountMapMergeColumn(t *testing.T) {
 		t.Errorf("merged WriteAccountMap did NOT emit a %q column", mergeIntoCol)
 	}
 }
+
+// classRow builds one synthetic 22-field CSV data line with a SETTABLE klass (the
+// package row() helper pins klass="subclass"; the class-fund path keys on klass, so
+// this test needs to vary it). Only the fields the class-fund build uses are
+// meaningful; the float-noisy v/ndb/fndb are garbage to prove they are ignored.
+func classRow(country, acct, kat, dt, kls, klass, tid, desc, donor, currency, db, cr, parent string) string {
+	f := []string{
+		country, "X", "gen", acct, kat, dt,
+		"9.9", "8.8", "7.7", // v, ndb, fndb -- garbage, ignored
+		kls, klass, tid, desc, donor, currency, "1.0",
+		db, db, cr, cr, "", parent,
+	}
+	return strings.Join(f, ",")
+}
+
+// classFundConfig returns testConfig extended with a class-fund mapping: the source
+// klass "EDU Grant 2025" -> fund key "edu_grant" -> a fully-specified fund def
+// (name, funder, restriction, dates, program scope). No donor fund and no campus kat
+// touch the tagged transactions, so the class-fund path is exercised in isolation.
+func classFundConfig() string {
+	base := strings.TrimSuffix(strings.TrimSpace(testConfig()), "}")
+	return base + `,
+  "fund_classes": {"EDU Grant 2025": "edu_grant"},
+  "fund_defs": {
+    "edu_grant": {"name": "EDU Grant 2025", "name_es": "Beca EDU 2025",
+                  "funder": "Education Foundation", "purpose": "schooling",
+                  "restriction": "purpose", "start_date": "2025-01-01",
+                  "end_date": "2025-12-31", "subsidiaries": ["Test US"],
+                  "program": "Education"}
+  }
+}`
+}
+
+// classFundSource is a minimal export where the class "EDU Grant 2025" rides BOTH
+// legs of two transactions -- a grant receipt (revenue + cash) and a grant-funded
+// expense (expense + cash) -- with NO donor and NO campus kat. Every leg carries the
+// klass, so both legs take the class fund and the per-(txn,fund) group nets to zero
+// (the store enforces this on write, D20/Z10). A THIRD txn carries a DIFFERENT klass
+// (unmapped) to prove an unmapped class leaves the split unrestricted.
+func classFundSource() string {
+	k := "EDU Grant 2025"
+	lines := []string{
+		header,
+		// tid 100: grant receipt 300 (Grant Revenue) offset to Checking. Both legs klass=k.
+		classRow("US", "Grant Revenue", "EDU", "2025-05-01", "", k, "100", "grant in", "", "USD", "0", "300.00", "Revenue"),
+		classRow("US", "Checking", "", "2025-05-01", "", k, "100", "grant in", "", "USD", "300.00", "0", "Assets"),
+		// tid 101: grant-funded expense 120 (Supplies) paid from Checking. Both legs klass=k.
+		classRow("US", "Supplies", "EDU", "2025-06-01", "PRG", k, "101", "grant spend", "", "USD", "120.00", "0", "Expenses"),
+		classRow("US", "Checking", "", "2025-06-01", "", k, "101", "grant paid", "", "USD", "0", "120.00", "Assets"),
+		// tid 102: an unmapped klass -> unrestricted (control). Both legs klass="Other".
+		classRow("US", "Donations", "EDU", "2025-07-01", "", "Other", "102", "plain gift", "", "USD", "0", "50.00", "Revenue"),
+		classRow("US", "Checking", "", "2025-07-01", "", "Other", "102", "plain gift", "", "USD", "50.00", "0", "Assets"),
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+// TestClassFundTagsBothLegsAndBalances proves the class-driven fund path: a source
+// klass mapped via fund_classes -> fund_defs (a) CREATES the fund with its metadata
+// (name_es, funder, restriction, dates, program scope), (b) tags EVERY split carrying
+// that klass -- BOTH the economic leg AND its cash counter-leg -- so the (txn, fund)
+// group nets to zero, and (c) leaves an UNMAPPED klass unrestricted. The class fund is
+// INDEPENDENT of the program path: the revenue/expense legs still carry their program.
+//
+// The zero-sum property is proven by the EXPLICIT per-leg fund-id assertions below (the
+// cash counter-leg carries the class fund), NOT by the build merely succeeding: an
+// untagged counter-leg would NOT fail the build -- the importer plugs a lopsided fund
+// group into Opening Balances with a warning (still exit 0). The assertions catch the
+// case the plug would hide (the plug leg, not the cash leg, would carry the fund).
+// Synthetic values only (AGENTS rule 11).
+func TestClassFundTagsBothLegsAndBalances(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	accMap, err := ReadAccountMap(strings.NewReader(testAccountMap()))
+	if err != nil {
+		t.Fatalf("ReadAccountMap: %v", err)
+	}
+	cfg, err := ReadConfig(strings.NewReader(classFundConfig()))
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	res, err := runBuild(ctx, strings.NewReader(classFundSource()), accMap, cfg, testRates(), st, false)
+	if err != nil {
+		t.Fatalf("runBuild (class-fund): %v", err)
+	}
+
+	// (a) The fund was created with its metadata, keyed by klass in FundClassIDs.
+	fid, ok := res.FundClassIDs["EDU Grant 2025"]
+	if !ok {
+		t.Fatalf("class fund for klass %q not created", "EDU Grant 2025")
+	}
+	fund, err := st.GetFund(ctx, fid)
+	if err != nil {
+		t.Fatalf("GetFund: %v", err)
+	}
+	if fund.Name != "EDU Grant 2025" || fund.NameEs != "Beca EDU 2025" {
+		t.Errorf("class fund name = %q/%q, want %q/%q", fund.Name, fund.NameEs, "EDU Grant 2025", "Beca EDU 2025")
+	}
+	if fund.Funder != "Education Foundation" || fund.Restriction != "purpose" {
+		t.Errorf("class fund funder/restriction = %q/%q, want %q/purpose", fund.Funder, fund.Restriction, "Education Foundation")
+	}
+	if !fund.StartDate.Valid || fund.StartDate.String != "2025-01-01" || !fund.EndDate.Valid || fund.EndDate.String != "2025-12-31" {
+		t.Errorf("class fund dates = %v..%v, want 2025-01-01..2025-12-31", fund.StartDate, fund.EndDate)
+	}
+	if !fund.ProgramID.Valid || fund.ProgramID.Int64 != int64(res.ProgramIDs["Education"]) {
+		t.Errorf("class fund program scope not applied: %+v", fund.ProgramID)
+	}
+	// fundCount = donor funds (1: GRANT1, created but unused here) + campus fund (1) +
+	// class fund (1) = 3. Proves the class fund is counted in the operator summary.
+	if fc := res.fundCount(); fc != 3 {
+		t.Errorf("fundCount = %d, want 3 (1 donor + 1 campus + 1 class)", fc)
+	}
+
+	// (b) BOTH legs of the grant receipt (tid 100) carry the class fund: the Grant
+	// Revenue economic leg AND the Checking counter-leg. The revenue leg ALSO carries
+	// its program (Education) -- fund and program are independent.
+	assertSplitFundProgram(t, sqldb, res, "Grant Revenue", fid, res.ProgramIDs["Education"])
+	assertSplitFundOnTxn(t, sqldb, res, "Checking", fid, "100")
+
+	// (b2) The grant-funded EXPENSE (tid 101) and its cash offset both carry the fund.
+	assertSplitFundOnTxn(t, sqldb, res, "Supplies", fid, "101")
+	assertSplitFundOnTxn(t, sqldb, res, "Checking", fid, "101")
+
+	// (c) The UNMAPPED klass "Other" (tid 102) leaves both legs unrestricted (nil fund).
+	assertSplitFundOnTxn(t, sqldb, res, "Donations", 0 /*NULL*/, "102")
+	assertSplitFundOnTxn(t, sqldb, res, "Checking", 0 /*NULL*/, "102")
+
+	// (d) ledger.Check is Error-clean on the produced db (per-fund invariants hold).
+	vs, err := ledger.Check(ctx, sqldb)
+	if err != nil {
+		t.Fatalf("ledger.Check: %v", err)
+	}
+	if ledger.HasErrors(vs) {
+		for _, v := range vs {
+			if v.Severity == "Error" {
+				t.Errorf("ledger.Check Error: %s: %s", v.Rule, v.Detail)
+			}
+		}
+	}
+}
+
+// assertSplitFundOnTxn asserts every split on srcAcct within the given source tid has
+// fund_id == wantFund (0 meaning SQL NULL / unrestricted).
+func assertSplitFundOnTxn(t *testing.T, sqldb *sql.DB, res *BuildResult, srcAcct string, wantFund ids.FundID, tid string) {
+	t.Helper()
+	txnIDs := res.tidTxns[tid]
+	if len(txnIDs) == 0 {
+		t.Fatalf("no transactions for tid %q", tid)
+	}
+	acctID := res.AccountIDs[srcAcct]
+	found := false
+	for _, txID := range txnIDs {
+		rows, err := sqldb.Query(`SELECT fund_id FROM splits WHERE account_id = ? AND transaction_id = ?`, acctID, txID)
+		if err != nil {
+			t.Fatalf("query splits: %v", err)
+		}
+		for rows.Next() {
+			var f interface{}
+			if err := rows.Scan(&f); err != nil {
+				_ = rows.Close()
+				t.Fatal(err)
+			}
+			found = true
+			if asInt(f) != int64(wantFund) {
+				t.Errorf("split on %s (tid %s) fund_id = %v, want %d", srcAcct, tid, f, wantFund)
+			}
+		}
+		_ = rows.Close()
+	}
+	if !found {
+		t.Errorf("no split on %s within tid %s", srcAcct, tid)
+	}
+}
+
+// TestClassFundRehydratesOnSplitImport proves the PRODUCTION path: in the D26 split
+// model (scaffold once, then import each subsidiary in a SEPARATE process) the class
+// funds are created only in the scaffold, and each import-subsidiary run must REHYDRATE
+// res.FundClassIDs by fund name from the db (reloadState) so klass splits tag the fund.
+// This exercises reloadState's class-fund loop -- the code that actually runs at go-live,
+// which runBuild/classFunds (the all-in-one build test above) does NOT touch. Synthetic
+// values only (AGENTS rule 11).
+func TestClassFundRehydratesOnSplitImport(t *testing.T) {
+	sqldb := testutil.NewDB(t)
+	st := store.New(sqldb)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	accMap, err := ReadAccountMap(strings.NewReader(testAccountMap()))
+	if err != nil {
+		t.Fatalf("ReadAccountMap: %v", err)
+	}
+	cfg, err := ReadConfig(strings.NewReader(classFundConfig()))
+	if err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	recs, err := ParseRecords(strings.NewReader(classFundSource()))
+	if err != nil {
+		t.Fatalf("ParseRecords: %v", err)
+	}
+
+	// Scaffold creates the class fund (via classFunds); it records the klass -> id map.
+	scaf, err := runScaffold(ctx, accMap, cfg, testRates(), st, false)
+	if err != nil {
+		t.Fatalf("runScaffold: %v", err)
+	}
+	scafFID, ok := scaf.FundClassIDs["EDU Grant 2025"]
+	if !ok {
+		t.Fatalf("scaffold did not create the class fund")
+	}
+
+	// import-subsidiary runs in a fresh builder and must REHYDRATE FundClassIDs from the
+	// db by name (no funds are created here). The class source is all Test US.
+	usRes, err := runImportSubsidiary(ctx, recs, accMap, cfg, st, "Test US", false)
+	if err != nil {
+		t.Fatalf("import Test US (class-fund reload): %v", err)
+	}
+	reFID, ok := usRes.FundClassIDs["EDU Grant 2025"]
+	if !ok {
+		t.Fatalf("reloadState did not rehydrate the class fund by name")
+	}
+	if reFID != scafFID {
+		t.Errorf("rehydrated class fund id = %d, want the scaffold id %d", reFID, scafFID)
+	}
+
+	// The klass splits posted in this separate run carry the rehydrated fund id: both
+	// legs of the grant receipt (Grant Revenue + its Checking counter-leg).
+	assertSplitFundOnTxn(t, sqldb, usRes, "Grant Revenue", reFID, "100")
+	assertSplitFundOnTxn(t, sqldb, usRes, "Checking", reFID, "100")
+}

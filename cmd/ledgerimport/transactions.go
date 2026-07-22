@@ -388,6 +388,19 @@ func (b *builder) resolveSplit(tid string, idx int, r Record) (pending, error) {
 			}
 		}
 	}
+	// Class-driven fund (cfg.FundClasses -> cfg.FundDefs). Deliberately NO isRE guard:
+	// the fund must tag EVERY leg carrying the klass (the economic R/E leg AND its
+	// cash/asset counter-leg), so the per-(txn,fund) group nets to zero and the store
+	// accepts it (D20/Z10). It YIELDS to donor and campus funds (only tags a split still
+	// unrestricted after them), so a class fund never overrides a more specific fund. It
+	// is INDEPENDENT of the program set above: a split may carry both a class fund and a
+	// program (a grant funding a program). Empty map -> no lookup hits -> the pre-feature
+	// build is unchanged.
+	if s.FundID == nil {
+		if fid, ok := b.res.FundClassIDs[r.Klass]; ok {
+			s.FundID = &fid
+		}
+	}
 	// Functional class from kls (D21), ONLY on expense splits: the store rejects a
 	// functional class on a non-expense split (ErrNonExpenseFunction), and the
 	// source populates kls on non-expense lines (revenue/asset) too. The store
