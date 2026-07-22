@@ -53,18 +53,32 @@ import (
 // DrillAsOf(To) for X), reusing the p15.3d drill patterns.
 const Form990ReportID = "form_990"
 
+// form990Target is the FIXED reporting currency of the 990 package: the IRS Form 990 is a
+// US federal filing, so every amount is reported in USD regardless of the scope's base
+// currency (a lempira-based / MXN-based subsidiary still files its 990 in USD). The report
+// therefore IGNORES Params.TargetCurrency and offers NO currency control (see
+// registerForm990's ParamsSpec — no Currency flag, so the web layer renders no selector and
+// there is no native/per-currency view). All four Parts convert to USD (D12): VIII/IX at the
+// txn-date flow rate, X at the year-end closing rate, and Part III at the closing rate (the
+// ProgramActivity conversion grain). A currency with no USD rate on file surfaces the
+// existing rate-less handling (store.ErrRateMissing -> the web layer's inline 200 message,
+// not a 500), exactly as the balance sheet / income statement do.
+const form990Target = "USD"
+
 // registerForm990 registers the 990 package report (p15.11) into reg under the "tax"
-// (IRS-990) group. It offers the period (From/To = the fiscal year) and the target-
-// currency control (defaulting to the scope base, USD); Part X's as-of is derived from
-// the period end internally (no separate as-of control).
+// (IRS-990) group. It offers the period (From/To = the fiscal year); Part X's as-of is
+// derived from the period end internally (no separate as-of control). It offers NO
+// currency control: the 990 is a US federal form, ALWAYS reported in USD (form990Target),
+// so there is no native/per-currency view to select.
 func registerForm990(reg *Registry) {
 	reg.Register(Report{
 		ID:                 Form990ReportID,
 		TitleKey:           "reports.form_990.title",
 		Group:              "tax",
-		ParamsSpec:         ParamsSpec{Period: true, Currency: true},
+		ParamsSpec:         ParamsSpec{Period: true}, // no Currency: always USD (form990Target).
 		Run:                runForm990,
 		ProgramDimensioned: true, // p27.4: R/E activity carries a program (grant-subtree filterable).
+		Tree:               true, // p26.26: each 990 line nests its contributing accounts (collapsible).
 	})
 }
 
@@ -72,7 +86,12 @@ func registerForm990(reg *Registry) {
 // in one Table, each built from its sibling report's toolkit path so the numbers
 // reconcile, each with an explicit Unmapped bucket.
 func runForm990(ctx context.Context, tk *Toolkit, p Params) (Table, error) {
-	b := &f990Builder{tk: tk, p: p, target: p.TargetCurrency}
+	// The 990 is a US federal form: force USD (form990Target), ignoring Params.TargetCurrency
+	// (there is no currency control — see registerForm990). Every Part converts to USD.
+	b := &f990Builder{tk: tk, p: p, target: form990Target}
+	if err := b.loadTree(ctx); err != nil {
+		return Table{}, err
+	}
 	b.columns()
 
 	if err := b.partIII(ctx); err != nil {
@@ -106,6 +125,105 @@ type f990Builder struct {
 	p      Params
 	target string
 	rows   []Row
+
+	// Account-tree index (loaded once) so each 990 line nests its contributing accounts by
+	// hierarchy (p26.26): placeholder parents roll up their descendant leaves' amounts and
+	// leaves show their own, mirroring the balance sheet / trial balance nested walk. The
+	// 990-LINE row stays the rollup total; the account detail nests one indent deeper.
+	children      map[AccountID][]AccountID
+	roots         []AccountID
+	isPlaceholder map[AccountID]bool
+	acctName      map[AccountID]string
+	depth         map[AccountID]int
+}
+
+// loadTree indexes the chart-of-accounts once for the account-hierarchy detail nested under
+// each 990 line (VIII/IX). Uses the SAME indexTree(toTreeNodes(...)) reduction the balance
+// sheet / trial balance use, so the nesting/indent/placeholder semantics match.
+func (b *f990Builder) loadTree(ctx context.Context) error {
+	tree, err := b.tk.Store().Tree(ctx, b.p.LangOr(), nil)
+	if err != nil {
+		return err
+	}
+	b.children, b.roots, b.isPlaceholder, b.acctName, b.depth, _ = indexTree(toTreeNodes(tree))
+	return nil
+}
+
+// accountTreeDetail emits, nested UNDER a 990 line at treeIndent (the account rows start at
+// treeIndent), the contributing accounts by hierarchy: the tree walked pre-order, keeping
+// only branches that carry a contributing leaf (byAcct has the account), placeholder parents
+// as rolled-up RowSubtotal rows and leaves as RowData rows. byAcct maps each contributing
+// leaf account to its DISPLAY-SIGNED, USD-converted amount (the same figure the line total
+// rolls up), so parents sum their descendants and a leaf shows its own -- the 990 line above
+// stays the grand rollup, the accounts nest within it (p26.26). Leaves are RowData so they
+// (not the line/parents) are the section's summed detail -- no double-count with the footing.
+func (b *f990Builder) accountTreeDetail(byAcct map[AccountID]int64, treeIndent int) {
+	if len(byAcct) == 0 {
+		return
+	}
+	// Mark every node whose subtree carries a contributing leaf (empty branches drop out).
+	hasLeaf := map[AccountID]bool{}
+	var mark func(id AccountID) bool
+	mark = func(id AccountID) bool {
+		if !b.isPlaceholder[id] {
+			_, ok := byAcct[id]
+			hasLeaf[id] = ok
+			return ok
+		}
+		any := false
+		for _, c := range b.children[id] {
+			if mark(c) {
+				any = true
+			}
+		}
+		hasLeaf[id] = any
+		return any
+	}
+	for _, r := range b.roots {
+		mark(r)
+	}
+
+	// subtreeSum rolls a placeholder parent's contributing leaves (scalar, like subtreeByCcy).
+	var subtreeSum func(id AccountID) int64
+	subtreeSum = func(id AccountID) int64 {
+		if !b.isPlaceholder[id] {
+			return byAcct[id]
+		}
+		var s int64
+		for _, c := range b.children[id] {
+			s += subtreeSum(c)
+		}
+		return s
+	}
+
+	var walk func(id AccountID)
+	walk = func(id AccountID) {
+		if !hasLeaf[id] {
+			return
+		}
+		indent := treeIndent + b.depth[id]
+		if b.isPlaceholder[id] {
+			// Placeholder parent: a rolled-up subtotal (non-summed by the footing).
+			b.rows = append(b.rows, Row{
+				Cells:  []Cell{TextCell(b.acctName[id]), TextCell(b.target), MoneyCell(subtreeSum(id), b.target)},
+				Indent: indent,
+				Kind:   RowSubtotal,
+			})
+			for _, c := range b.children[id] {
+				walk(c)
+			}
+			return
+		}
+		// Contributing leaf account: RowData (the summed detail).
+		b.rows = append(b.rows, Row{
+			Cells:  []Cell{TextCell(b.acctName[id]), TextCell(b.target), MoneyCell(byAcct[id], b.target)},
+			Indent: indent,
+			Kind:   RowData,
+		})
+	}
+	for _, r := range b.roots {
+		walk(r)
+	}
 }
 
 // columns is the shared shape every Part renders into: a line/account label, the row's
@@ -144,6 +262,22 @@ func (b *f990Builder) lineRowText(text, ccy string, minor int64, d *Drill, inden
 		Cells:  []Cell{TextCell(text), TextCell(ccy), amt},
 		Indent: indent,
 		Kind:   RowData,
+	})
+}
+
+// lineSubtotalText appends a 990-LINE rollup row (a line label proper noun, currency, amount,
+// optional drill) as an emphasized RowSubtotal: the line total that its contributing accounts
+// nest beneath (accountTreeDetail). RowSubtotal so the footing sums the LEAF account detail
+// (RowData), not the line row -- no double-count -- and treetable wires the collapse toggle.
+func (b *f990Builder) lineSubtotalText(text, ccy string, minor int64, d *Drill, indent int) {
+	amt := MoneyCell(minor, ccy)
+	if d != nil {
+		amt = amt.WithDrill(d)
+	}
+	b.rows = append(b.rows, Row{
+		Cells:  []Cell{TextCell(text), TextCell(ccy), amt},
+		Indent: indent,
+		Kind:   RowSubtotal,
 	})
 }
 
@@ -247,8 +381,20 @@ func (b *f990Builder) periodLineDrill(accts []AccountID, ccys map[string]bool) *
 func (b *f990Builder) partIII(ctx context.Context) error {
 	b.sectionRow("reports.form_990.part.iii")
 
-	// Same native rollup p15.10 reads: a parent program's cells fold in its descendants.
-	act, err := b.tk.ProgramActivity(ctx, Scope{Sub: b.p.Scope}, b.p.From, b.p.To, ConvertOpts{Mode: RateNone})
+	// The 990 is a US federal form: report Part III in USD (form990Target), converting each
+	// program/account cell to USD (the ProgramActivity conversion grain -- closing rate at the
+	// period end). A currency with no USD rate surfaces store.ErrRateMissing (the web layer's
+	// inline 200), not a 500 -- so do NOT swallow this error.
+	act, err := b.tk.ProgramActivity(ctx, Scope{Sub: b.p.Scope}, b.p.From, b.p.To, ConvertOpts{To: b.target})
+	if err != nil {
+		return err
+	}
+	// Native per-(program, account) activity (RateNone): the drill's NATIVE currency + single-
+	// vs multi-currency detection. Only a program/type that posted in a SINGLE native currency
+	// drills (its converted figure == that one currency's native, currency-filter reconciles);
+	// a multi-currency figure summed across currencies has no single reconciling drill (the
+	// VIII/IX rule), so it is left non-drillable.
+	native, err := b.tk.ProgramActivity(ctx, Scope{Sub: b.p.Scope}, b.p.From, b.p.To, ConvertOpts{Mode: RateNone})
 	if err != nil {
 		return err
 	}
@@ -264,11 +410,11 @@ func (b *f990Builder) partIII(ctx context.Context) error {
 
 	for _, c := range cols {
 		b.lineRowText(c.name, "", 0, nil, 1) // program group header (proper-noun label)
-		// Revenue then Expense, per currency, native. Sum this program's accounts of the
-		// type per currency. Revenue is net-debit NEGATIVE (a credit) shown +inflow (−1);
-		// expense net-debit POSITIVE shown as-is (+1).
-		b.programTypeLines(act[c.id], types, c, "revenue", "reports.form_990.iii.revenue", -1)
-		b.programTypeLines(act[c.id], types, c, "expense", "reports.form_990.iii.expenses", +1)
+		// Revenue then Expense, converted to USD (form990Target). Sum this program's accounts
+		// of the type. Revenue is net-debit NEGATIVE (a credit) shown +inflow (−1); expense
+		// net-debit POSITIVE shown as-is (+1).
+		b.programTypeLines(act[c.id], native[c.id], types, c, "revenue", "reports.form_990.iii.revenue", -1)
+		b.programTypeLines(act[c.id], native[c.id], types, c, "expense", "reports.form_990.iii.expenses", +1)
 	}
 
 	// Unmapped bucket: a program with an activity account of NO recognized R/E type — none
@@ -277,29 +423,45 @@ func (b *f990Builder) partIII(ctx context.Context) error {
 	return nil
 }
 
-// programTypeLines emits one subtotal line per currency for a program's accounts of the
-// given type, signed for display, each drillable across the program's subtree (the p15.10
-// rollup-cell drill: ProgramIDs for a program WITH descendants, ProgramID for a leaf).
+// programTypeLines emits ONE USD subtotal line for a program's accounts of the given type,
+// signed for display: the accounts' USD-converted (`convByAcct`) activity summed to a single
+// target figure (the 990 is a US form -- one currency, not per-currency-native). The line
+// drills across the program's subtree (the p15.10 rollup-cell drill: ProgramIDs for a program
+// WITH descendants, ProgramID for a leaf) ONLY when the contributing accounts posted in a
+// SINGLE native currency (`natByAcct`) -- then the converted figure equals that one currency's
+// native and a currency-filtered drill reconciles; a multi-native-currency figure summed across
+// currencies has no single reconciling drill (the VIII/IX rule), so it is left non-drillable.
 func (b *f990Builder) programTypeLines(
-	byAcct map[AccountID][]CurAmt, types map[AccountID]string, c progCol,
+	convByAcct, natByAcct map[AccountID][]CurAmt, types map[AccountID]string, c progCol,
 	typ, labelKey string, sign int64,
 ) {
-	byCcy := map[string]int64{}
-	acctsByCcy := map[string][]AccountID{}
-	for acct, amts := range byAcct {
+	var total int64
+	var accts []AccountID
+	ccys := map[string]bool{}
+	for acct, amts := range convByAcct {
 		if types[acct] != typ {
 			continue
 		}
-		for _, a := range amts {
-			byCcy[a.Currency] += a.Minor
-			acctsByCcy[a.Currency] = append(acctsByCcy[a.Currency], acct)
+		for _, a := range amts { // exactly one USD CurAmt per account after conversion
+			total += a.Minor
+		}
+		accts = append(accts, acct)
+		for _, na := range natByAcct[acct] {
+			ccys[na.Currency] = true
 		}
 	}
-	for _, ccy := range sortedKeys(byCcy) {
-		accts := dedupSortInts(acctsByCcy[ccy])
-		d := &Drill{
+	if len(accts) == 0 {
+		return
+	}
+	var d *Drill
+	if len(ccys) == 1 {
+		var ccy string
+		for cc := range ccys {
+			ccy = cc
+		}
+		d = &Drill{
 			Scope:      b.p.Scope,
-			AccountIDs: accts,
+			AccountIDs: dedupSortInts(accts),
 			Currency:   ccy,
 			Mode:       DrillPeriod,
 			From:       b.p.From,
@@ -311,12 +473,16 @@ func (b *f990Builder) programTypeLines(
 			id := c.id
 			d.ProgramID = &id
 		}
-		b.rows = append(b.rows, Row{
-			Cells:  []Cell{LabelCell(labelKey), TextCell(ccy), MoneyCell(sign*byCcy[ccy], ccy).WithDrill(d)},
-			Indent: 2,
-			Kind:   RowSubtotal,
-		})
 	}
+	amt := MoneyCell(sign*total, b.target)
+	if d != nil {
+		amt = amt.WithDrill(d)
+	}
+	b.rows = append(b.rows, Row{
+		Cells:  []Cell{LabelCell(labelKey), TextCell(b.target), amt},
+		Indent: 2,
+		Kind:   RowSubtotal,
+	})
 }
 
 // --- Part VIII: revenue by effective line (reuses p15.5 flow + Group990) ----
@@ -406,7 +572,14 @@ func (b *f990Builder) partVIII(ctx context.Context) error {
 			}
 			b.unmappedDetailRows(ctx, byAcct, target)
 		} else {
-			b.lineRowText(labelOf[lr.Code], target, amt, d, 1)
+			// The 990 LINE is now a ROLLUP subtotal (non-summed by the footing); its
+			// contributing accounts nest beneath it by hierarchy as the summed detail (p26.26).
+			b.lineSubtotalText(labelOf[lr.Code], target, amt, d, 1)
+			byAcct := map[AccountID]int64{}
+			for _, acct := range acctsByCode[lr.Code] {
+				byAcct[acct] = -leaf[acct] // display revenue as a positive inflow
+			}
+			b.accountTreeDetail(byAcct, 2)
 		}
 	}
 	if !seenUnmapped {
@@ -499,7 +672,14 @@ func (b *f990Builder) partIX(ctx context.Context) error {
 			}
 			b.unmappedDetailRows(ctx, byAcct, target)
 		} else {
-			b.lineRowText(label, target, total, d, 1)
+			// The 990 LINE is a ROLLUP subtotal; its contributing expense accounts nest beneath
+			// it by hierarchy as the summed detail (p26.26).
+			b.lineSubtotalText(label, target, total, d, 1)
+			byAcct := map[AccountID]int64{}
+			for _, acct := range acctsByCode[code] {
+				byAcct[acct] = perAcct[acct]
+			}
+			b.accountTreeDetail(byAcct, 2)
 		}
 	}
 	for _, pl := range lines {

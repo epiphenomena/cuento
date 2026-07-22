@@ -12,12 +12,17 @@ package reports_test
 // The report is ONE Table with four labeled Part sections over a shared 3-column shape
 // [Line/Account, Currency, Amount]:
 //
+// The 990 is a US FEDERAL form: EVERY Part reports in USD (form990Target), never native /
+// per-currency (a lempira- or MXN-based scope still files its 990 in USD). There is no
+// currency control. Parts VIII/IX/X also NEST their contributing accounts by hierarchy under
+// each 990 line (p26.26): the 990 line is the rollup subtotal, the accounts nest beneath it.
+//
 //   - Part III  — program service summary: revenue + expense per program (General,
-//     Educacion, Food Pantry — the p15.10 comparative set), NATIVE per currency, driven
-//     by the identical ProgramActivity(RateNone) call so each group == p15.10's column.
+//     Educacion, Food Pantry — the p15.10 comparative set), converted to USD, driven
+//     by the identical ProgramActivity(To: USD) call so each group ties that rollup.
 //   - Part VIII — revenue by effective line: revenue accounts converted at the TXN-DATE
 //     rate (p15.5's flow), rolled to effective Part VIII codes (Group990), Unmapped last.
-//     Line total == p15.5 total revenue = 6,476,594.
+//     Line total == p15.5 total revenue = 6,476,594; contributing accounts nest beneath.
 //   - Part IX  — functional-expense line totals: p15.7 FunctionalMatrix(RateTxnDate,
 //     p26.71 — the expense FLOW rate, matching Part VIII revenue and the income
 //     statement), each line total == p15.7's line total; grand == p15.7 grand =
@@ -339,12 +344,11 @@ func TestForm990PartXCrossCheckP154(t *testing.T) {
 }
 
 // TestForm990PartIIICrossCheckProgramActivity: each program's Part III revenue and expense
-// figures (native, per currency) equal the SHARED toolkit ProgramActivity rollup — the same
-// source Part III draws its program groups from (form_990.go). Formerly this cross-checked
-// the p15.10 program statement, but p31-10a redesigned that report into a converted account ×
-// (functional-class/program) MATRIX, which no longer emits per-program per-currency section-
-// total ROWS; the reconciliation intent is preserved by tying Part III straight to
-// ProgramActivity (its own data source), so the two still must agree exactly.
+// figures equal the SHARED toolkit ProgramActivity rollup — the same source Part III draws
+// its program groups from (form_990.go). The 990 is a US federal form, so Part III reports in
+// USD (form990Target): the report converts each program/account cell to USD and emits ONE USD
+// figure per program/type. The cross-check mirrors that — the SAME ProgramActivity(To: USD)
+// call, summed per type — so the two must agree exactly (an identity, not a re-derivation).
 func TestForm990PartIIICrossCheckProgramActivity(t *testing.T) {
 	f := fixture.New(t)
 	f.ExtendRates(t)
@@ -355,55 +359,45 @@ func TestForm990PartIIICrossCheckProgramActivity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run 990: %v", err)
 	}
-	// The shared source: rolled per-(program, account) NATIVE activity (RateNone), exactly
-	// what form_990.go's Part III groups by program (revenue vs expense by account type).
+	// The shared source: rolled per-(program, account) activity CONVERTED TO USD (the same
+	// ConvertOpts the report's Part III uses), exactly what form_990.go groups by program.
 	tk := reports.NewToolkit(f.Store, reports.Params{Scope: reports.SubsidiaryID(f.IDs.Root)})
 	act, err := tk.ProgramActivity(ctx, reports.Scope{Sub: reports.SubsidiaryID(f.IDs.Root)},
-		p.From, p.To, reports.ConvertOpts{Mode: reports.RateNone})
+		p.From, p.To, reports.ConvertOpts{To: "USD"})
 	if err != nil {
 		t.Fatalf("program activity: %v", err)
 	}
 	types := psAccountTypes(t, f) // account id -> type ("revenue"/"expense"/...)
 
-	// Expected per-(program, section, currency): sum the program's rolled per-account native
-	// activity by account type. Revenue is a credit (negative net-debit) shown POSITIVE; the
-	// 990 Part III revenue sub-line is positive, so negate the revenue sum.
+	// Expected per-(program, section): sum the program's rolled per-account USD activity by
+	// account type. Revenue is a credit (negative net-debit) shown POSITIVE; the 990 Part III
+	// revenue sub-line is positive, so negate the revenue sum. One USD figure per program/type.
 	progIDs := map[string]reports.ProgramID{
 		"General": reports.ProgramID(f.IDs.General), "Educacion": reports.ProgramID(f.IDs.Educacion),
 		"Food Pantry": reports.ProgramID(f.IDs.FoodPantry),
 	}
 	for _, prog := range []string{"General", "Educacion", "Food Pantry"} {
-		wantRev := map[string]int64{}
-		wantExp := map[string]int64{}
+		var wantRev, wantExp int64
 		for acct, amts := range act[progIDs[prog]] {
-			for _, a := range amts {
+			for _, a := range amts { // one USD CurAmt per account after conversion
 				switch types[ids.AccountID(acct)] {
 				case "revenue":
-					wantRev[a.Currency] -= a.Minor // credit shown positive
+					wantRev -= a.Minor // credit shown positive
 				case "expense":
-					wantExp[a.Currency] += a.Minor
+					wantExp += a.Minor
 				}
 			}
 		}
 		for _, sec := range []struct {
 			iiiKey string
-			want   map[string]int64
+			want   int64
 		}{
 			{"reports.form_990.iii.revenue", wantRev},
 			{"reports.form_990.iii.expenses", wantExp},
 		} {
-			nineByCcy := f990ProgramSectionByCurrency(nine, prog, sec.iiiKey)
-			ccys := map[string]bool{}
-			for c := range sec.want {
-				ccys[c] = true
-			}
-			for c := range nineByCcy {
-				ccys[c] = true
-			}
-			for ccy := range ccys {
-				if nineByCcy[ccy] != sec.want[ccy] {
-					t.Errorf("Part III %s %s %s = %d, ProgramActivity = %d", prog, sec.iiiKey, ccy, nineByCcy[ccy], sec.want[ccy])
-				}
+			got := f990ProgramSectionUSD(nine, prog, sec.iiiKey)
+			if got != sec.want {
+				t.Errorf("Part III %s %s = %d USD, ProgramActivity(USD) = %d", prog, sec.iiiKey, got, sec.want)
 			}
 		}
 	}
@@ -424,12 +418,12 @@ func psAccountTypes(t *testing.T, f *fixture.Fixture) map[ids.AccountID]string {
 	return m
 }
 
-// f990ProgramSectionByCurrency returns the 990 Part III revenue/expense sub-line values
-// (per currency) for the named program group: the rows between that program's group-header
-// row (first cell == program name) and the NEXT program-header (or the Unmapped bucket),
-// whose first cell is the section label sectionKey.
-func f990ProgramSectionByCurrency(t reports.Table, prog, sectionKey string) map[string]int64 {
-	out := map[string]int64{}
+// f990ProgramSectionUSD returns the 990 Part III revenue/expense sub-line USD figure for the
+// named program group: the row between that program's group-header row (first cell == program
+// name) and the NEXT program-header (or the Unmapped bucket) whose first cell is the section
+// label sectionKey. Part III is now a single USD figure per program/type (the 990 is a US
+// federal form -- one currency, no per-currency native rows), so this returns one minor value.
+func f990ProgramSectionUSD(t reports.Table, prog, sectionKey string) int64 {
 	in := false
 	for _, row := range t.Rows {
 		if len(row.Cells) == 0 {
@@ -443,17 +437,16 @@ func f990ProgramSectionByCurrency(t reports.Table, prog, sectionKey string) map[
 		}
 		// Another program header, the Unmapped bucket, or a new Part section ends this group.
 		if in && c0.Kind == reports.CellText && c0.Text != "" && c0.Text != prog {
-			// A different program name row: stop.
 			break
 		}
 		if in && c0.Kind == reports.CellLabel && c0.Text == "reports.form_990.unmapped" {
 			break
 		}
 		if in && c0.Kind == reports.CellLabel && c0.Text == sectionKey {
-			out[row.Cells[1].Text] = row.Cells[2].Minor
+			return row.Cells[2].Minor
 		}
 	}
-	return out
+	return 0
 }
 
 // TestForm990UnmappedBucketsPresent: EVERY Part renders an explicit Unmapped bucket line
@@ -572,6 +565,116 @@ func TestForm990PartVIIIDrillReconciles(t *testing.T) {
 		if cells[2].Drill != nil {
 			t.Errorf("multi-native-currency line %q is drillable; must not be (p15.7 rule)", label)
 		}
+	}
+}
+
+// TestForm990AlwaysUSD: the 990 is a US federal form, ALWAYS reported in USD, with NO
+// currency control. Its ParamsSpec offers no Currency/CurrencyOptional (so the web layer
+// renders no selector), Params.TargetCurrency is IGNORED (a bogus target does not change the
+// output), and every rendered amount row carries the USD currency cell -- never a native
+// (MXN) row -- across ALL four Parts (incl. Part III, formerly native).
+func TestForm990AlwaysUSD(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := context.Background()
+
+	rep := form990Report(t)
+	if rep.ParamsSpec.Currency || rep.ParamsSpec.CurrencyOptional {
+		t.Errorf("990 must offer NO currency control (US form, always USD); spec = %+v", rep.ParamsSpec)
+	}
+
+	// A run whose Params names a NON-USD target must still render USD (the report forces it).
+	p := f990GoldenParams(f)
+	p.TargetCurrency = "MXN" // ignored: the 990 forces USD.
+	table, err := rep.Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	for _, row := range table.Rows {
+		if len(row.Cells) < 3 || row.Cells[2].Kind != reports.CellMoney || row.Cells[2].Blank {
+			continue // section headers / program-group headers carry a blank money cell.
+		}
+		if ccy := row.Cells[2].Currency; ccy != "" && ccy != "USD" {
+			t.Errorf("990 row %q renders currency %q; must be USD (US federal form)", row.Cells[0].Text, ccy)
+		}
+		if c1 := row.Cells[1].Text; c1 != "" && c1 != "USD" {
+			t.Errorf("990 row %q currency column = %q; must be USD", row.Cells[0].Text, c1)
+		}
+	}
+}
+
+// TestForm990AccountHierarchy: each mapped 990 line (Part VIII / Part IX) is a ROLLUP
+// subtotal (RowSubtotal, the collapse toggle treetable wires) whose CONTRIBUTING ACCOUNTS
+// nest beneath it by hierarchy (deeper Indent), and those nested LEAF account rows sum to
+// the line total (the 990-line structure stays; the account detail nests within it, p26.26).
+// IX.24e is the multi-account line (Program Supplies + Food Purchases + Insurance + Event
+// Costs) -- its four leaves nest under it and sum to 419,588.
+func TestForm990AccountHierarchy(t *testing.T) {
+	f := fixture.New(t)
+	f.ExtendRates(t)
+	ctx := context.Background()
+	p := f990GoldenParams(f)
+	table, err := form990Report(t).Run(ctx, reports.NewToolkit(f.Store, p), p)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	// nestedSum returns the line row's kind/indent/amount and the sum of the LEAF (RowData)
+	// account rows nested strictly beneath it (deeper Indent), stopping at the next row at or
+	// above the line's own indent.
+	lineCheck := func(label string) (lineKind reports.RowKind, lineIndent int, lineAmt, leafSum int64, leafCount int, found bool) {
+		for i, row := range table.Rows {
+			if len(row.Cells) == 0 || row.Cells[0].Text != label {
+				continue
+			}
+			found = true
+			lineKind, lineIndent, lineAmt = row.Kind, row.Indent, row.Cells[2].Minor
+			for _, det := range table.Rows[i+1:] {
+				if det.Indent <= lineIndent {
+					break // left the line's subtree
+				}
+				if det.Kind == reports.RowData && len(det.Cells) >= 3 &&
+					det.Cells[2].Kind == reports.CellMoney && !det.Cells[2].Blank {
+					leafSum += det.Cells[2].Minor
+					leafCount++
+				}
+			}
+			return
+		}
+		return
+	}
+
+	for _, tc := range []struct {
+		label     string
+		want      int64
+		minLeaves int
+	}{
+		{"24e — All other expenses", 419_588, 4},                 // Program Supplies + Food Purchases + Insurance + Event Costs
+		{"7 — Other salaries and wages", 1_650_000, 1},           // Salaries
+		{"1f — All other contributions and gifts", 5_275_000, 1}, // Contributions
+	} {
+		kind, _, amt, leafSum, leaves, ok := lineCheck(tc.label)
+		if !ok {
+			t.Errorf("line %q missing", tc.label)
+			continue
+		}
+		if kind != reports.RowSubtotal {
+			t.Errorf("line %q kind = %v, want RowSubtotal (rollup with nested accounts)", tc.label, kind)
+		}
+		if amt != tc.want {
+			t.Errorf("line %q = %d, want %d", tc.label, amt, tc.want)
+		}
+		if leaves < tc.minLeaves {
+			t.Errorf("line %q nests %d leaf account rows, want >= %d", tc.label, leaves, tc.minLeaves)
+		}
+		if leafSum != tc.want {
+			t.Errorf("line %q nested leaves sum to %d, want %d (== the line total)", tc.label, leafSum, tc.want)
+		}
+	}
+
+	// The specific contributing account of IX.24e is surfaced BY NAME under it.
+	if _, ok := f990RowFor(table, "Program Supplies"); !ok {
+		t.Errorf("IX.24e account hierarchy missing 'Program Supplies' leaf row")
 	}
 }
 

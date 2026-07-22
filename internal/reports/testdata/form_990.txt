@@ -2,30 +2,43 @@
 -  ------------------------------------------  --------  ---------------
    Part III — Program service accomplishments
    General                                                             0
->  Revenue                                     MXN       MXN $100,000.00
->  Revenue                                     USD        USD $58,950.00
->  Expenses                                    MXN         MXN $8,600.00
->  Expenses                                    USD        USD $23,275.00
+>  Revenue                                     USD       USD $158,950.00
+>  Expenses                                    USD        USD $31,875.00
    Educacion                                                           0
->  Revenue                                     MXN       MXN $100,000.00
->  Revenue                                     USD         USD $3,200.00
->  Expenses                                    MXN         MXN $5,000.00
->  Expenses                                    USD         USD $1,500.00
+>  Revenue                                     USD       USD $103,200.00
+>  Expenses                                    USD         USD $6,500.00
    Food Pantry                                                         0
->  Expenses                                    MXN         MXN $1,500.00
+>  Expenses                                    USD         USD $1,500.00
    Unmapped — assign a 990 line                                        0
    Part VIII — Statement of revenue
-   1e — Government grants (contributions)      USD         USD $7,815.94
-   1f — All other contributions and gifts      USD        USD $52,750.00
-   2 — Program service revenue                 USD         USD $1,200.00
+>  1e — Government grants (contributions)      USD         USD $7,815.94
+>  Revenue                                     USD         USD $7,815.94
+   Government Grants                           USD         USD $7,815.94
+>  1f — All other contributions and gifts      USD        USD $52,750.00
+>  Revenue                                     USD        USD $52,750.00
+   Contributions                               USD        USD $52,750.00
+>  2 — Program service revenue                 USD         USD $1,200.00
+>  Revenue                                     USD         USD $1,200.00
+   Program Service Fees                        USD         USD $1,200.00
 >  Unmapped — assign a 990 line                USD         USD $3,000.00
    Event Income                                USD         USD $3,000.00
 =  Total revenue                               USD        USD $64,765.94
    Part IX — Statement of functional expenses
-   7 — Other salaries and wages                USD        USD $16,500.00
-   11g — Fees for services -- other            USD            USD $25.00
-   16 — Occupancy                              USD         USD $3,050.00
-   24e — All other expenses                    USD         USD $4,195.88
+>  7 — Other salaries and wages                USD        USD $16,500.00
+>  Expenses                                    USD        USD $16,500.00
+   Salaries                                    USD        USD $16,500.00
+>  11g — Fees for services -- other            USD            USD $25.00
+>  Expenses                                    USD            USD $25.00
+   Bank Fees                                   USD            USD $25.00
+>  16 — Occupancy                              USD         USD $3,050.00
+>  Expenses                                    USD         USD $3,050.00
+   Occupancy                                   USD         USD $3,050.00
+>  24e — All other expenses                    USD         USD $4,195.88
+>  Expenses                                    USD         USD $4,195.88
+   Program Supplies                            USD         USD $2,389.71
+   Food Purchases                              USD           USD $206.17
+   Insurance                                   USD           USD $600.00
+   Event Costs                                 USD         USD $1,000.00
    Unmapped — assign a 990 line                USD             USD $0.00
 =  Total functional expenses                   USD        USD $23,770.88
    Part X — Balance sheet

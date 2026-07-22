@@ -1,30 +1,43 @@
 Line,Currency,Amount
 Part III — Program service accomplishments,,
 General,,0
-Revenue,MXN,100000.00
-Revenue,USD,58950.00
-Expenses,MXN,8600.00
-Expenses,USD,23275.00
+Revenue,USD,158950.00
+Expenses,USD,31875.00
 Educacion,,0
-Revenue,MXN,100000.00
-Revenue,USD,3200.00
-Expenses,MXN,5000.00
-Expenses,USD,1500.00
+Revenue,USD,103200.00
+Expenses,USD,6500.00
 Food Pantry,,0
-Expenses,MXN,1500.00
+Expenses,USD,1500.00
 Unmapped — assign a 990 line,,0
 Part VIII — Statement of revenue,,
 1e — Government grants (contributions),USD,7815.94
+Revenue,USD,7815.94
+Government Grants,USD,7815.94
 1f — All other contributions and gifts,USD,52750.00
+Revenue,USD,52750.00
+Contributions,USD,52750.00
 2 — Program service revenue,USD,1200.00
+Revenue,USD,1200.00
+Program Service Fees,USD,1200.00
 Unmapped — assign a 990 line,USD,3000.00
 Event Income,USD,3000.00
 Total revenue,USD,64765.94
 Part IX — Statement of functional expenses,,
 7 — Other salaries and wages,USD,16500.00
+Expenses,USD,16500.00
+Salaries,USD,16500.00
 11g — Fees for services -- other,USD,25.00
+Expenses,USD,25.00
+Bank Fees,USD,25.00
 16 — Occupancy,USD,3050.00
+Expenses,USD,3050.00
+Occupancy,USD,3050.00
 24e — All other expenses,USD,4195.88
+Expenses,USD,4195.88
+Program Supplies,USD,2389.71
+Food Purchases,USD,206.17
+Insurance,USD,600.00
+Event Costs,USD,1000.00
 Unmapped — assign a 990 line,USD,0.00
 Total functional expenses,USD,23770.88
 Part X — Balance sheet,,
