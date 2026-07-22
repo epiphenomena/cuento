@@ -1,0 +1,39 @@
+   Item                 Description                           Memo  Currency           Amount  % spent
+-  -------------------  ------------------------------------  ----  --------  ---------------  -------
+>  Status
+   Received                                                         MXN       MXN $100,000.00
+   Spent so far                                                     MXN         MXN $3,000.00
+   Remaining                                                        MXN        MXN $97,000.00
+   % spent                                                          MXN                             3%
+   Received                                                         USD         USD $2,000.00
+   Spent so far                                                     USD         USD $1,500.00
+   Remaining                                                        USD           USD $500.00
+   % spent                                                          USD                            75%
+>  Receipts
+>  Revenue
+>  Government Grants
+   2025-04-01                                                       MXN       MXN $100,000.00
+   2025-04-05                                                       USD         USD $2,000.00
+#  Account subtotal                                                 MXN       MXN $100,000.00
+#  Account subtotal                                                 USD         USD $2,000.00
+>  Expenses by account
+>  Expenses
+>  Program Supplies
+   2025-05-10           Water filters (grant-funded portion)        MXN         MXN $3,000.00
+   2025-05-20                                                       USD         USD $1,500.00
+#  Account subtotal                                                 MXN         MXN $3,000.00
+#  Account subtotal                                                 USD         USD $1,500.00
+>  Assets held
+>  Checking US                                                      USD           USD $500.00
+   2025-04-05           Restricted gift deposit                     USD         USD $2,000.00
+   2025-05-20           Filter parts payment                        USD        USD -$1,500.00
+#  Account subtotal                                                 USD           USD $500.00
+>  Checking MX                                                      MXN        MXN $97,000.00
+   2025-04-01                                                       MXN       MXN $100,000.00
+   2025-05-10           Water filters (grant-funded portion)        MXN        MXN -$3,000.00
+#  Account subtotal                                                 MXN        MXN $97,000.00
+>  Reconciliation
+>  Closing (spendable)                                              MXN        MXN $97,000.00
+=  Total fund assets                                                MXN        MXN $97,000.00
+>  Closing (spendable)                                              USD           USD $500.00
+=  Total fund assets                                                USD           USD $500.00

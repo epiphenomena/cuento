@@ -30,6 +30,7 @@ const AL = '/reports/account_ledger';
 const FE = '/reports/functional_expenses';
 const FA = '/reports/fund_activity';
 const FS = '/reports/fund_statement';
+const FR = '/reports/fund_report';
 const FP = '/reports/fund_period';
 const ABR = '/reports/activities_by_restriction';
 const PS = '/reports/program_statement';
@@ -1020,6 +1021,111 @@ test('reports: open the fund statement, pick a fund, see by-account line detail 
   expect(resp.headers()['content-type']).toContain('text/csv');
   const body = await resp.text();
   expect(body).toContain('Annual gala pledge');
+});
+
+// FUND REPORT (the grant-reporting COVER PAGE): one fund selector, no date range, composing
+// a STATUS band (Received / Spent so far / Remaining / % spent) with collapsible account-
+// tree sections for RECEIPTS, EXPENSES by account, and ASSETS held, plus a reconciliation
+// line. This spec seeds a restricted fund, a cash asset, a revenue account and an EXPENSE
+// account, posts a receipt INTO the fund and a spend OUT OF it, then opens the report, picks
+// the fund, and confirms the status headline + the receipts section + the expenses-by-
+// account tree (the expense account leaf + its subtotal) + the CSV export.
+test('reports: open the fund report cover page, pick a fund, see the status band + receipts + expenses-by-account, CSV returns', async ({
+  page,
+  server,
+}) => {
+  await login(page, server);
+
+  // --- seed: a restricted fund, its cash, a revenue line, and an expense line ---
+  await createFund(page, 'FRpt Fund E2E', 'FRpt Donor E2E');
+  await createAsset(page, 'FRpt Cash E2E');
+  await createRevenueAccount(page, 'FRpt Gift E2E');
+  await createExpenseAccount(page, 'FRpt Supplies E2E');
+
+  // Receipt INTO the fund: DR FRpt Cash 100.00 (fund), CR FRpt Gift 100.00 (fund). Both
+  // splits fund-tagged so the txn nets to zero WITHIN the fund (D20) — the Received side.
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await selectTxnAccount(page.locator('#txn-main-account'), 'FRpt Cash E2E');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'FRpt Gift E2E');
+  await page.locator('#txn-amount-0').fill('-100.00');
+  await page.locator('#txn-fund-0').selectOption({ label: 'FRpt Fund E2E' });
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+  // Spend OUT OF the fund (an EXPENSE application): DR FRpt Supplies 30.00 (fund), CR FRpt
+  // Cash 30.00 (fund). The expense split carries a DESCRIPTION so the by-account detail is
+  // visible in the EXPENSES tree.
+  await page.goto('/transactions/new');
+  await expect(page.locator('form#txn-form')).toBeVisible();
+  await selectTxnAccount(page.locator('#txn-main-account'), 'FRpt Cash E2E');
+  await selectTxnAccount(page.locator('#txn-account-0'), 'FRpt Supplies E2E');
+  await page.locator('#txn-amount-0').fill('30.00');
+  await page.locator('#txn-fund-0').selectOption({ label: 'FRpt Fund E2E' });
+  await page.locator('#txn-desc-0').fill('Field supplies purchase');
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+
+  // --- open the report; the report-specific FUND selector is present, NO date range ---
+  await page.goto(`${FR}?scope=1`);
+  await expect(page.locator('form.report-params')).toBeVisible();
+  const fundSelect = page.locator('select.report-fund-select[name="fund"]');
+  await expect(fundSelect).toBeVisible();
+  await expect(page.locator('form.report-params [name="from"]')).toHaveCount(0);
+  await expect(page.locator('form.report-params [name="to"]')).toHaveCount(0);
+
+  // --- pick the fund -> the cover page (navigate the auto-apply GET) ---
+  const fundVal = await fundSelect
+    .locator('option', { hasText: 'FRpt Fund E2E' })
+    .getAttribute('value');
+  await page.goto(`${FR}?scope=1&fund=${fundVal}`);
+
+  const table = page.locator('table.report-table');
+  await expect(table).toBeVisible();
+
+  // STATUS band: the headline funder figures (localized en labels).
+  await expect(table).toContainText('Status');
+  await expect(table).toContainText('Received');
+  await expect(table).toContainText('Spent so far');
+  await expect(table).toContainText('Remaining');
+
+  // RECEIPTS section: the revenue account the fund received into.
+  await expect(table).toContainText('Receipts');
+  await expect(table).toContainText('FRpt Gift E2E');
+
+  // EXPENSES by account: the expense account leaf + its per-line detail + the account
+  // subtotal (the point of the by-account expense tree).
+  await expect(table).toContainText('Expenses by account');
+  await expect(table).toContainText('FRpt Supplies E2E');
+  await expect(table).toContainText('Field supplies purchase');
+  await expect(table).toContainText('Account subtotal');
+
+  // ASSETS held + the reconciliation line frame the page.
+  await expect(table).toContainText('Assets held');
+  await expect(table).toContainText('Reconciliation');
+  await expect(table).toContainText('Total fund assets');
+
+  // COLLAPSIBLE ACCOUNT TREE: the report is a tree table, so treetable.js injects a
+  // disclosure toggle into the expense leaf header; collapsing it hides its detail line.
+  await expect(table).toHaveClass(/tree-table/);
+  const supHeader = table
+    .locator('tr[data-depth]', { hasText: 'FRpt Supplies E2E' })
+    .filter({ has: page.locator('button.tree-toggle') })
+    .first();
+  await expect(supHeader).toBeVisible();
+  const detailLine = table.locator('tr[data-depth]', { hasText: 'Field supplies purchase' });
+  await expect(detailLine).toBeVisible();
+  await supHeader.locator('button.tree-toggle').click();
+  await expect(detailLine).toBeHidden();
+
+  // --- the CSV export link is present and the endpoint returns text/csv ---
+  await expect(page.locator('a.report-csv-link')).toBeVisible();
+  const csvHref = await page.locator('a.report-csv-link').getAttribute('href');
+  const resp = await page.request.get(csvHref);
+  expect(resp.status()).toBe(200);
+  expect(resp.headers()['content-type']).toContain('text/csv');
+  const body = await resp.text();
+  expect(body).toContain('Field supplies purchase');
 });
 
 // FUND ACTIVITY BY PERIOD (Report B): an account x period MATRIX for ONE fund -- rows

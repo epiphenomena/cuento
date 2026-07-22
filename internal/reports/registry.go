@@ -39,6 +39,7 @@ func Default() *Registry {
 	registerFundActivity(reg)
 	registerFundStatement(reg)
 	registerFundPeriod(reg)
+	registerFundReport(reg)
 	registerActivitiesByRestriction(reg)
 	registerProgramStatement(reg)
 	registerForm990(reg)

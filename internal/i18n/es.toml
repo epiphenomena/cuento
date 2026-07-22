@@ -1492,6 +1492,54 @@ other = "Moneda"
 [reports.fund_period.col.total]
 other = "Total"
 
+# Informe del fondo — la PORTADA de rendicion de subvenciones para UN fondo: una franja
+# de ESTADO (recibido / gastado / restante / % gastado / totalmente gastado) por moneda,
+# luego secciones de arbol de cuentas plegable para INGRESOS (entradas), GASTOS por cuenta
+# (en que se gasto) y ACTIVOS retenidos (donde esta el dinero), mas una linea de
+# conciliacion. Selector de fondo, sin rango de fechas. Nativo / por moneda.
+[reports.fund_report.title]
+other = "Informe del fondo"
+[reports.fund_report.col.item]
+other = "Concepto"
+[reports.fund_report.col.description]
+other = "Descripción"
+[reports.fund_report.col.memo]
+other = "Memo"
+[reports.fund_report.col.currency]
+other = "Moneda"
+[reports.fund_report.col.amount]
+other = "Monto"
+[reports.fund_report.col.pct]
+other = "% gastado"
+[reports.fund_report.section.status]
+other = "Estado"
+[reports.fund_report.section.receipts]
+other = "Ingresos"
+[reports.fund_report.section.expenses]
+other = "Gastos por cuenta"
+[reports.fund_report.section.assets]
+other = "Activos retenidos"
+[reports.fund_report.section.reconciliation]
+other = "Conciliación"
+[reports.fund_report.received]
+other = "Recibido"
+[reports.fund_report.spent]
+other = "Gastado hasta ahora"
+[reports.fund_report.remaining]
+other = "Restante"
+[reports.fund_report.pct_spent]
+other = "% gastado"
+[reports.fund_report.fully_spent]
+other = "Totalmente gastado"
+[reports.fund_report.subtotal]
+other = "Subtotal de cuenta"
+[reports.fund_report.closing]
+other = "Saldo final (disponible)"
+[reports.fund_report.capitalized]
+other = "Desplegado (activos capitalizados)"
+[reports.fund_report.total_assets]
+other = "Total de activos del fondo"
+
 # p15.9 actividades por restriccion — el estado de actividades FASB con las dos columnas
 # por restriccion del donante (Sin / Con) + una columna Total, por moneda. La linea
 # "activos netos liberados de restricciones" es DERIVADA (D20, sin traspaso asentado):
@@ -2241,6 +2289,8 @@ other = "Saldo inicial, actividad y saldo final de cada fondo."
 other = "Cada partida etiquetada a un fondo, agrupada por cuenta, con descripción y memo."
 [reports.fund_period.desc]
 other = "Actividad de un fondo por cuenta y período — una matriz mensual, trimestral o anual."
+[reports.fund_report.desc]
+other = "Una portada de rendición de subvenciones para un fondo: recibido, gastado, restante, ingresos, gastos por cuenta y activos retenidos."
 [reports.activities_by_restriction.desc]
 other = "Ingresos y gastos divididos por restricción de donantes, con liberaciones de activos netos."
 [reports.program_statement.desc]

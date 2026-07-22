@@ -1495,6 +1495,54 @@ other = "Currency"
 [reports.fund_period.col.total]
 other = "Total"
 
+# Fund Report — the grant-reporting COVER PAGE for ONE fund: a STATUS band (received /
+# spent / remaining / % spent / fully-spent) per currency, then collapsible account-tree
+# sections for RECEIPTS (revenue in), EXPENSES by account (what it was spent on), and
+# ASSETS held (where the money sits), plus a reconciliation line. Fund selector, no date
+# range (spans all data). Native / per-currency, like the other fund reports.
+[reports.fund_report.title]
+other = "Fund Report"
+[reports.fund_report.col.item]
+other = "Item"
+[reports.fund_report.col.description]
+other = "Description"
+[reports.fund_report.col.memo]
+other = "Memo"
+[reports.fund_report.col.currency]
+other = "Currency"
+[reports.fund_report.col.amount]
+other = "Amount"
+[reports.fund_report.col.pct]
+other = "% spent"
+[reports.fund_report.section.status]
+other = "Status"
+[reports.fund_report.section.receipts]
+other = "Receipts"
+[reports.fund_report.section.expenses]
+other = "Expenses by account"
+[reports.fund_report.section.assets]
+other = "Assets held"
+[reports.fund_report.section.reconciliation]
+other = "Reconciliation"
+[reports.fund_report.received]
+other = "Received"
+[reports.fund_report.spent]
+other = "Spent so far"
+[reports.fund_report.remaining]
+other = "Remaining"
+[reports.fund_report.pct_spent]
+other = "% spent"
+[reports.fund_report.fully_spent]
+other = "Fully spent"
+[reports.fund_report.subtotal]
+other = "Account subtotal"
+[reports.fund_report.closing]
+other = "Closing (spendable)"
+[reports.fund_report.capitalized]
+other = "Deployed (capitalized assets)"
+[reports.fund_report.total_assets]
+other = "Total fund assets"
+
 # p15.9 activities by restriction — the FASB statement of activities with the two
 # donor-restriction columns (Without / With) + a Total column, per currency. The "net
 # assets released from restrictions" line is DERIVED (D20, no journaled transfer): it
@@ -2252,6 +2300,8 @@ other = "Opening balance, activity, and closing balance for each fund."
 other = "Every line tagged to one fund, grouped by account, with description and memo."
 [reports.fund_period.desc]
 other = "One fund's activity by account and period — a month, quarter, or year matrix."
+[reports.fund_report.desc]
+other = "A grant-reporting cover page for one fund: received, spent, remaining, receipts, expenses by account, and assets held."
 [reports.activities_by_restriction.desc]
 other = "Revenue and expense split by donor restriction, with net-asset releases."
 [reports.program_statement.desc]
