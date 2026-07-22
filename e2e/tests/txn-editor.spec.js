@@ -46,8 +46,11 @@ async function createAsset(page, name) {
 // option to filter (a fresh -dev db has none). Mirrors funds.spec.js.
 async function createFund(page, name) {
   await page.goto('/funds');
-  await page.getByRole('button', { name: /new fund/i }).click();
-  await expect(page.locator('form#fund-form.e2e-settled')).toBeVisible();
+  // "New fund" is a subnav link to its own /funds/new page (bc2dd5b subnav refactor), a
+  // full-page navigation -- wait for the form itself, not an htmx settle marker.
+  await page.getByRole('link', { name: /new fund/i }).click();
+  await page.waitForURL('**/funds/new');
+  await expect(page.locator('form#fund-form')).toBeVisible();
   await page.locator('#ff-name').fill(name);
   await page.locator('#ff-program').selectOption({ label: 'General' });
   const rootSub = page.locator('input[name="sub_1"]');

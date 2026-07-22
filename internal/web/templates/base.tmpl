@@ -163,6 +163,18 @@
        select.combo-input shell-wide (idempotent; skips the manual payee combo) so those
        pickers become the SAME fuzzy + hierarchy combobox (rule 12: external module). */}}
   <script type="module" src="{{asset "combos.js"}}"></script>
+  {{/* p26.25 tree collapse/expand + p28.9 chart fuzzy-search enhancers. Loaded
+       SHELL-WIDE, not page-locally: the top nav is hx-boost, so arriving on
+       /accounts (or a tree report) via an in-app nav is a boosted <body> swap and a
+       <script type="module"> injected by that swap does NOT execute -- so a
+       page-local load left the collapse/expand controls and the search dead until a
+       hard reload. Loaded in <head> they self-init on DOMContentLoaded and register
+       the persistent htmx:afterSwap listener that re-wires the fresh table after a
+       filter swap. Both are guarded no-ops when their target table/input is absent
+       (idempotent via a dataset flag), so loading them everywhere is safe (rule 12:
+       external modules, no inline handler). */}}
+  <script type="module" src="{{asset "treetable.js"}}"></script>
+  <script type="module" src="{{asset "chartsearch.js"}}"></script>
 </head>
 {{/* data-* feed datefield.js: the per-user date format and the localized calendar
      labels (rule 9: the strings originate in the i18n catalog, rendered here). */ -}}

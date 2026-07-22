@@ -377,13 +377,12 @@
        fragment a filter change swaps. */}}
   {{template "report-results" .}}
 
-  {{if .Tree}}
-  {{/* p26.26: the reusable tree module (p26.25). Loaded on the PAGE (a <script> injected
-       via an htmx innerHTML swap would not execute); self-inits on DOMContentLoaded and
-       re-runs on htmx:afterSwap when a filter change replaces #report-results. It
-       enhances every table.tree-table, looking up the sibling .tree-controls container. */}}
-  <script type="module" src="{{asset "treetable.js"}}"></script>
-  {{end}}
+  {{/* p26.26: the reusable tree module (p26.25) is loaded SHELL-WIDE in base.tmpl's
+       <head>, NOT here: reports are reached via the hx-boost top nav, and a page-local
+       <script> injected by that boosted <body> swap would never execute, leaving tree
+       report collapse/expand dead until a hard reload. Loaded in <head> it self-inits
+       on DOMContentLoaded and re-wires on htmx:afterSwap when a filter change replaces
+       #report-results; it is a guarded no-op on non-tree reports. */}}
 
   {{if .Table.HeaderMatrix}}
   {{/* p31 10b: the program-statement COLUMN-collapse module. Loaded on the PAGE (a script

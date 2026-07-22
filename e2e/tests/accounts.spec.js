@@ -209,7 +209,22 @@ test.describe('chart of accounts', () => {
     await createAccount('Tree Child E2E', 'Tree Root E2E');
     await createAccount('Tree Leaf E2E', 'Tree Root E2E.Tree Child E2E');
 
-    await page.goto('/accounts');
+    // REGRESSION GUARD: reach /accounts via the BOOSTED top-nav link, NOT page.goto.
+    // The top nav is hx-boost, so an in-app nav to /accounts is an AJAX <body> swap --
+    // and a <script type="module"> injected by an htmx swap does NOT execute. treetable.js
+    // is therefore loaded SHELL-WIDE in <head> (base.tmpl), not page-locally; a page-local
+    // load left collapse/expand dead on every boosted arrival (working only after a hard
+    // reload). Navigate away first, then click the Accounts nav link so this path is the
+    // one under test (a page.goto would be a full load and mask the bug).
+    await page.goto('/reports');
+    await page.locator('nav.app-nav a', { hasText: /accounts/i }).first().click();
+    await page.waitForURL('**/accounts');
+
+    // treetable.js ran on this boosted arrival: it reveals the (initially `hidden`) tree
+    // controls. If the module never executed (the bug), this button stays hidden and the
+    // clicks below would be no-ops.
+    await expect(page.locator('.tree-collapse-all')).toBeVisible();
+
     // p26.74: an injected "Assets" TYPE HEADER now sits at depth 0 above the asset
     // roots (which shifted to depth 1); the chain is header(0) -> Tree Root E2E(1) ->
     // Child(2) -> Leaf(3). The header is a plain .acct-row.acct-type-header (no id, no

@@ -206,15 +206,11 @@
        chart controls live in one bar. It stays a SIBLING of the filter form there (never a
        submitting field) — see the note in "accounts-controls". */}}
   {{template "accounts-results" .}}
-  {{/* p26.25: the reusable tree collapse/expand module. Loaded on the PAGE (not the
-       swapped #accounts-results partial: a <script> injected via htmx innerHTML does
-       not execute). It self-inits on DOMContentLoaded and re-runs on htmx:afterSwap
-       when the filter replaces #accounts-results, re-wiring the fresh table. */}}
-  <script type="module" src="{{asset "treetable.js"}}"></script>
-  {{/* p28.9: the ephemeral chart search. Loaded on the PAGE (the input lives outside
-       the swapped #accounts-results, so it is never re-rendered); it self-inits on
-       DOMContentLoaded and re-applies the current query on htmx:afterSwap. */}}
-  <script type="module" src="{{asset "chartsearch.js"}}"></script>
+  {{/* p26.25 treetable.js (collapse/expand) + p28.9 chartsearch.js are loaded
+       SHELL-WIDE in base.tmpl's <head>, NOT here: the top nav is hx-boost, so a
+       page-local <script> would never execute when /accounts is reached via a
+       boosted <body> swap (module scripts injected by an htmx swap don't run),
+       leaving collapse + search dead until a hard reload. */}}
   {{- end}}
 {{template "shell-close" .}}
 {{- end}}
