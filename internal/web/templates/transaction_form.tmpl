@@ -258,8 +258,12 @@
          The payee data/columns/routes were physically removed in p26.20. */}}
     {{/* p26.23: with the payee and apply-fund controls both gone, the header memo grows to
          fill the freed horizontal space (the txn-field-grow modifier flex-grows this field). */}}
+    {{/* p30.4: this is the TRANSACTION memo (transactions.memo), NOT a per-split memo. The
+         main (position-0) line has no separate memo input; its displayed memo comes from the
+         split-memo-else-txn-memo fallback (register/funds/reconcile), so this one field is the
+         sole memo for the header line. The per-LINE overrides live in the grid's Memo column. */}}
     <div class="txn-field txn-field-grow">
-      <label for="txn-memo">{{t "txn.memo"}}</label>
+      <label for="txn-memo">{{t "txn.memo_transaction"}}</label>
       <input type="text" name="memo" id="txn-memo" class="txn-memo-header" value="{{.Memo}}" autocomplete="off">
     </div>
     <input type="hidden" name="currency" value="{{.Currency}}">
@@ -280,7 +284,9 @@
     {{if .MainPresent}}
     <input type="hidden" name="main_present" value="1">
     <input type="hidden" name="main_split_id" id="txn-main-splitid" value="{{.MainSplitID}}">
-    <input type="hidden" name="main_memo" id="txn-main-memo" value="{{.MainMemo}}">
+    {{/* p30.4: no hidden main_memo carrier -- the header memo is the TRANSACTION memo; the
+         main line has no per-split memo of its own (a loaded txn whose split0 had a memo takes
+         the flat fallback so that memo stays a visible, editable body-row field). */}}
     <input type="hidden" name="main_program" id="txn-main-program" value="{{.MainProgram}}">
     <input type="hidden" name="main_class" id="txn-main-class" value="{{.MainClass}}">
     {{/* p-fix2: the MAIN ACCOUNT + BALANCING AMOUNT always sit on their OWN second header

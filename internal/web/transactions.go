@@ -150,7 +150,6 @@ type txnEditorModel struct {
 	FlatFallback    bool
 	MainAccount     int64  // the main (position-0) split's account
 	MainDescription string // header description (fuels descfield autocomplete for all splits)
-	MainMemo        string
 	MainProgram     int64  // round-tripped when the main account is R/E
 	MainClass       string // round-tripped when the main account is expense
 	MainFund        int64  // display-only gating; the SAVED main fund is DERIVED from the body
@@ -232,7 +231,6 @@ func (s *server) txnNewForm(w http.ResponseWriter, r *http.Request) {
 		if mh, ok := parseMainHeader(r); ok {
 			model.MainAccount = int64(mh.AccountID)
 			model.MainDescription = mh.Description
-			model.MainMemo = mh.Memo
 			model.MainProgram = mh.ProgramID
 			model.MainClass = mh.Class
 			model.MainSplitID = mh.SplitID
@@ -398,8 +396,18 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 		}
 		distinctFunds[key] = true
 	}
-	// log-comment (task cap-guard rule): multi-fund reload takes the flat fallback.
-	flat := len(distinctFunds) >= 2
+	// p30.4: the position-0 (main/header) split no longer has its OWN memo input -- the
+	// header memo field is the TRANSACTION memo (transactions.memo), and the main line's
+	// displayed memo comes from the split-memo-else-txn-memo fallback (register/funds/
+	// reconcile/reports-drill). The header can therefore no longer EDIT a per-split memo on
+	// split0. So a loaded txn whose split0 carries a NON-EMPTY split memo (imported bank
+	// lines, expense-review pay-from rows, legacy entries) must FALL BACK to the flat grid --
+	// split0 becomes a visible body row with its own memo input -- rather than lift it into a
+	// header that would silently drop that memo on save. Same philosophy as the multi-fund
+	// guard: keep any data the header cannot faithfully round-trip out of the header path.
+	split0Memo := len(splits) > 0 && splits[0].Memo != ""
+	// log-comment (task cap-guard rule): multi-fund OR split0-memo reload takes the flat fallback.
+	flat := len(distinctFunds) >= 2 || split0Memo
 	model.MainPresent = !flat
 	model.FlatFallback = flat
 
@@ -434,7 +442,8 @@ func (s *server) txnEditForm(w http.ResponseWriter, r *http.Request) {
 		m := splits[0]
 		model.MainAccount = int64(m.AccountID)
 		model.MainDescription = m.Description
-		model.MainMemo = m.Memo
+		// p30.4: split0 no longer has its own memo input in the header; a non-empty split0
+		// memo already forced the flat fallback above, so the lifted main here carries none.
 		model.MainSplitID = strconv.FormatInt(int64(m.ID), 10)
 		model.MainAmount = money.Format(m.Amount, exp, fmtOpts)
 		if m.FundID.Valid {
@@ -556,7 +565,6 @@ func (s *server) txnSubmit(w http.ResponseWriter, r *http.Request, txnID ids.Tra
 		model.MainPresent = true
 		model.MainAccount = mh.AccountID
 		model.MainDescription = mh.Description
-		model.MainMemo = mh.Memo
 		model.MainProgram = mh.ProgramID
 		model.MainClass = mh.Class
 		model.MainSplitID = mh.SplitID
@@ -958,7 +966,6 @@ func decodeProgClass(encoded string, carrier int64, acctType string) (program in
 type mainHeaderInput struct {
 	AccountID   int64
 	Description string
-	Memo        string
 	ProgramID   int64
 	Class       string
 	SplitID     string
@@ -974,7 +981,6 @@ func parseMainHeader(r *http.Request) (mainHeaderInput, bool) {
 	return mainHeaderInput{
 		AccountID:   parseID(r.FormValue("main_account")),
 		Description: r.FormValue("main_description"),
-		Memo:        r.FormValue("main_memo"),
 		ProgramID:   parseID(r.FormValue("main_program")),
 		Class:       r.FormValue("main_class"),
 		SplitID:     r.FormValue("main_split_id"),
@@ -987,7 +993,7 @@ func parseMainHeader(r *http.Request) (mainHeaderInput, bool) {
 // full split list (main first, body shifted after) ready for the store.
 //
 //   - Single fund among the body → ONE main split: amount = -(sum of body), fund = that
-//     single fund, program/class/memo/description/split-id from the header. Idempotent:
+//     single fund, program/class/description/split-id from the header. Idempotent:
 //     loading a single-fund txn into the header then saving reproduces byte-identical
 //     splits (the residual reconstructs split0's amount; the id round-trips).
 //   - Multi-fund body → FAN OUT: one main split per fund with a NONZERO residual, each at
@@ -1031,7 +1037,6 @@ func autoBalanceMain(main mainHeaderInput, body []store.SplitInput) ([]store.Spl
 		sp := store.SplitInput{
 			AccountID:   ids.AccountID(main.AccountID),
 			Amount:      amt,
-			Memo:        main.Memo,
 			Description: main.Description,
 		}
 		if key != 0 {
@@ -1053,7 +1058,7 @@ func autoBalanceMain(main mainHeaderInput, body []store.SplitInput) ([]store.Spl
 	// (and rejects an unbalanced / accountless / too-few-splits txn rather than silently
 	// dropping the header). amount 0 -> the store's balance check rejects.
 	if len(mains) == 0 {
-		sp := store.SplitInput{AccountID: ids.AccountID(main.AccountID), Amount: 0, Memo: main.Memo, Description: main.Description}
+		sp := store.SplitInput{AccountID: ids.AccountID(main.AccountID), Amount: 0, Description: main.Description}
 		if main.ProgramID != 0 {
 			p := ids.ProgramID(main.ProgramID)
 			sp.ProgramID = &p

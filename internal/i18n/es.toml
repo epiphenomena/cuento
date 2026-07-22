@@ -952,6 +952,8 @@ other = "Fecha"
 other = "Escriba una fecha; t = hoy, + / - cambian un dia"
 [txn.memo]
 other = "Nota"
+[txn.memo_transaction]
+other = "Nota de transacción"
 [txn.description_hint]
 other = "Descripción"
 [txn.notes]

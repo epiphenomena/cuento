@@ -170,16 +170,17 @@ test('expenses review: reviewer posts one report (converts) and rejects another'
   // CONSISTENCY with the normal txn editor: review reuses the SAME transaction-form grid,
   // and the MAIN split (the pay-from / counter-side leg) is the FIRST row (main split =
   // first split, p26.34). Row 0 is that main split -- it carries the report's HEADER
-  // description + memo (the report's overall description/memo, the same way split0 does in
-  // the normal editor), with a blank account here (this sub has no default AP) for the
-  // reviewer to fill. Row 1 is the prefilled expense LINE (its account + its per-line
-  // description).
+  // description, with a blank account here (this sub has no default AP) for the reviewer to
+  // fill. Row 1 is the prefilled expense LINE (its account + its per-line description).
   // The report's header description defaults to the submitter's display name (which falls
-  // back to the username when unset), and lands on the main split (row 0). The report's
-  // header MEMO (defaulting to the localized "Expense report") also rides the main split, so
-  // the main split carries BOTH the description AND the memo (the task's consistency point).
+  // back to the username when unset), and lands on the main split (row 0).
+  // p30.4: the report MEMO is the TRANSACTION memo -- it renders in the header #txn-memo
+  // field, NOT as a per-split memo on row 0. So row 0's memo input is EMPTY (the register
+  // display falls back to the txn memo for a memo-less split; no value is duplicated across
+  // two fields). This is the memo-model unification: one place holds the report memo.
   await expect(page.locator('#txn-desc-0')).toHaveValue(subUser);
-  await expect(page.locator('#txn-memo-0')).not.toHaveValue('');
+  await expect(page.locator('#txn-memo')).not.toHaveValue('');
+  await expect(page.locator('#txn-memo-0')).toHaveValue('');
   await expect(page.locator('#txn-account-1')).toHaveValue(/\d+/);
   // p26.19: the line's description was carried into the review editor row (prefillExpenseRows
   // -> description_1 now that the main split leads at row 0), so it round-trips into the

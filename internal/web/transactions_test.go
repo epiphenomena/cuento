@@ -918,7 +918,8 @@ type splitFull struct {
 
 // mainHeaderForm builds a POST form in the p26.34 shape: the position-0 (MAIN) split is
 // carried by the header fields (main_account / main_description / main_split_id /
-// main_program / main_class / main_memo); its amount is OMITTED (the server computes the
+// main_program / main_class -- p30.4: NO main_memo, the header memo is the transaction
+// memo); its amount is OMITTED (the server computes the
 // per-fund residual) and its fund is DERIVED from the body. `body` is the list of body
 // rows (positions 1..m as stored). The header is always present, so the client posts
 // main_present=1.
@@ -930,7 +931,8 @@ func mainHeaderForm(sub ids.SubsidiaryID, main splitFull, body []splitFull) url.
 	f.Set("main_present", "1")
 	f.Set("main_account", itoa(int64(main.AccountID)))
 	f.Set("main_description", main.Description)
-	f.Set("main_memo", main.Memo)
+	// p30.4: the main (position-0) line has no memo input of its own -- the header memo is the
+	// TRANSACTION memo, posted separately as `memo`. So mainHeaderForm posts no main_memo.
 	if main.ProgramID.Valid {
 		f.Set("main_program", itoa(main.ProgramID.Int64))
 	}
@@ -993,15 +995,17 @@ func TestTxnMainHeaderSingleFundIdempotent(t *testing.T) {
 	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
 
 	// Seed a single-fund txn: MAIN = Salaries (expense, fund=Beca, program=Educacion,
-	// class=program, a memo) at position 0; body = Checking -100 in the SAME fund. The
-	// program is Educacion (the fund's scope), NOT the account/root default -- so a naive
-	// re-default would corrupt it (the discriminator).
+	// class=program) at position 0; body = Checking -100 in the SAME fund. The program is
+	// Educacion (the fund's scope), NOT the account/root default -- so a naive re-default
+	// would corrupt it (the discriminator). p30.4: split0 carries NO split memo (a non-empty
+	// split0 memo would force the flat fallback; see TestTxnSplit0MemoReloadFlatFallback); the
+	// transaction-level memo below is what the header memo field edits.
 	fund := e.fund
 	prog := e.progEdu
 	id, err := e.st.PostTransaction(ctx, store.PostTransactionInput{
-		Date: "2025-03-01", SubsidiaryID: e.sub1, Currency: "USD",
+		Date: "2025-03-01", SubsidiaryID: e.sub1, Currency: "USD", Memo: "March payroll",
 		Splits: []store.SplitInput{
-			{AccountID: e.salaries, Amount: 10000, FundID: &fund, ProgramID: &prog, FunctionalClass: strptr("program"), Memo: "March payroll", Position: 0},
+			{AccountID: e.salaries, Amount: 10000, FundID: &fund, ProgramID: &prog, FunctionalClass: strptr("program"), Position: 0},
 			{AccountID: e.checking, Amount: -10000, FundID: &fund, Position: 1},
 		},
 	})
@@ -1045,6 +1049,7 @@ func TestTxnMainHeaderSingleFundIdempotent(t *testing.T) {
 	// Re-submit via the header form (main amount OMITTED, fund derived). Round-trip the
 	// main split id so UpdateTransaction diffs by id (no churn).
 	f := mainHeaderForm(e.sub1, main, body)
+	f.Set("memo", "March payroll") // p30.4: the transaction memo round-trips via the header memo field
 	f.Set("main_split_id", itoa(int64(main.ID)))
 	for i, b := range body {
 		f.Set("split_id_"+itoa(int64(i)), itoa(int64(b.ID)))
@@ -1218,6 +1223,89 @@ func TestTxnMultiFundReloadFlatFallback(t *testing.T) {
 	after := splitStatesByPosition(t, e, id)
 	if len(after) != 4 {
 		t.Fatalf("flat re-save changed split count to %d (fan-out leaked into the flat path)", len(after))
+	}
+}
+
+// TestTxnSplit0MemoReloadFlatFallback (p30.4 guard): the header memo field is the TRANSACTION
+// memo and the main (position-0) line has no per-split memo input of its own. So a stored
+// SINGLE-FUND txn whose split0 carries a NON-EMPTY split memo (imported bank lines / legacy
+// entries) must NOT lift split0 into the header -- that would silently DROP the memo on save.
+// Instead it falls back to the FLAT grid: split0 is a visible body row keeping its memo, so a
+// load->save round-trips the split memo instead of destroying it.
+func TestTxnSplit0MemoReloadFlatFallback(t *testing.T) {
+	e := newTxnWebEnv(t)
+	ctx := store.WithActor(context.Background(), store.Actor{ID: 1})
+
+	// Single-fund txn, but split0 (the Checking bank line) carries a per-split memo -- as an
+	// imported bank line would. Single fund, so WITHOUT the memo guard this would take the
+	// header path and lose the memo.
+	fund := e.fund
+	prog := e.progEdu
+	id, err := e.st.PostTransaction(ctx, store.PostTransactionInput{
+		Date: "2025-03-01", SubsidiaryID: e.sub1, Currency: "USD",
+		Splits: []store.SplitInput{
+			{AccountID: e.checking, Amount: -10000, FundID: &fund, Memo: "ACH ref 8842", Position: 0},
+			{AccountID: e.salaries, Amount: 10000, FundID: &fund, ProgramID: &prog, FunctionalClass: strptr("program"), Position: 1},
+		},
+	})
+	must(t, err, "seed split0-memo txn")
+
+	rec := asUser(t, e.h, e.sm, e.book, http.MethodGet, "/transactions/"+itoa(int64(id))+"/edit", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("edit GET: %d", rec.Code)
+	}
+	body := rec.Body.String()
+	// FLAT fallback: no header (main_present=0), and split0's memo renders as a body-row memo
+	// input (not swallowed into a hidden header carrier that no longer exists).
+	if strings.Contains(body, `name="main_present" value="1"`) {
+		t.Fatalf("split0-memo reload rendered the header (should fall back to flat grid so the memo stays editable); body:\n%s", body)
+	}
+	if !strings.Contains(body, `value="ACH ref 8842"`) {
+		t.Fatalf("split0 memo not rendered as a visible body-row field; body:\n%s", body)
+	}
+	// Both splits are body rows.
+	if !strings.Contains(body, `id="txn-account-0"`) || !strings.Contains(body, `id="txn-account-1"`) {
+		t.Fatalf("flat fallback should render both splits as body rows; body:\n%s", body)
+	}
+
+	// Re-save the flat form as-is: the split0 memo must survive (not be dropped).
+	live := splitStatesByPosition(t, e, id)
+	f := url.Values{}
+	f.Set("subsidiary", itoa(int64(e.sub1)))
+	f.Set("date", "2025-03-01")
+	f.Set("currency", "USD")
+	for i, s := range live {
+		si := itoa(int64(i))
+		f.Set("split_id_"+si, itoa(int64(s.ID)))
+		f.Set("account_"+si, itoa(int64(s.AccountID)))
+		f.Set("amount_"+si, signedStr(s.Amount))
+		if s.FundID.Valid {
+			f.Set("fund_"+si, itoa(s.FundID.Int64))
+		} else {
+			f.Set("fund_"+si, "")
+		}
+		if s.ProgramID.Valid {
+			f.Set("program_"+si, itoa(s.ProgramID.Int64))
+		}
+		if s.FunctionalClass.Valid {
+			f.Set("class_"+si, s.FunctionalClass.String)
+		}
+		f.Set("memo_"+si, s.Memo)
+		f.Set("description_"+si, s.Description)
+	}
+	f.Set("rows", itoa(int64(len(live))))
+	if rec := asUser(t, e.h, e.sm, e.book, http.MethodPost, "/transactions/"+itoa(int64(id)), f); rec.Code != http.StatusSeeOther {
+		t.Fatalf("flat re-save: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	after := splitStatesByPosition(t, e, id)
+	var split0Memo string
+	for _, s := range after {
+		if s.Position == 0 {
+			split0Memo = s.Memo
+		}
+	}
+	if split0Memo != "ACH ref 8842" {
+		t.Fatalf("split0 memo lost on load->save round-trip: got %q, want %q", split0Memo, "ACH ref 8842")
 	}
 }
 

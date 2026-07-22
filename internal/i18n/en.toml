@@ -959,6 +959,8 @@ other = "Date"
 other = "Type a date; t = today, + / - shift a day"
 [txn.memo]
 other = "Memo"
+[txn.memo_transaction]
+other = "Transaction memo"
 [txn.description_hint]
 other = "Description"
 [txn.notes]

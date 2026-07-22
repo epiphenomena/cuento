@@ -309,7 +309,13 @@ func (s *server) prefillExpenseRows(r *http.Request, model txnEditorModel, rep s
 	// (seeded + re-seeded from it), so it can't be cross-sub. Its amount stays blank for the
 	// reviewer to balance. On POST the p26.x copy-down still propagates a description into any
 	// blank split, so an untouched description flows through to the posted splits.
-	main := txnRowModel{Index: 0, Description: rep.Description, Memo: rep.Memo}
+	// p30.4: the report MEMO is the TRANSACTION memo (model.Memo = rep.Memo above), NOT a
+	// per-split memo. The pay-from row-0 gets NO line memo of its own -- the register/funds/
+	// reconcile display fall back to the txn memo for a memo-less split, so the AP line shows
+	// the report memo either way, with no duplicated value across two fields (and this keeps a
+	// single-fund converted report re-editable via the header path). The reviewer can still
+	// type a genuine per-line override into the row-0 memo input.
+	main := txnRowModel{Index: 0, Description: rep.Description}
 	if rep.APAccountID.Valid {
 		main.Account = rep.APAccountID.Int64
 	}

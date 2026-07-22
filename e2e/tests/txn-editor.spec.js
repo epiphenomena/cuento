@@ -122,6 +122,45 @@ test.describe('transaction editor', () => {
     await expect(page.locator('table.register-table')).toContainText('25.00');
   });
 
+  // p30.4: the header memo field is the TRANSACTION memo (transactions.memo), NOT the main
+  // (position-0) split's memo -- the main line has NO memo input of its own. This pins the
+  // corrected memo model: the transaction memo the user types in #txn-memo round-trips back
+  // into #txn-memo on reload (not into a hidden/orphaned per-split field), and renders on the
+  // main line's register row (via the split-memo-else-txn-memo display fallback).
+  test('the header memo is the transaction memo and round-trips to #txn-memo and the register', async ({ page, server }) => {
+    await login(page, server);
+    await createAsset(page, 'Memo Checking');
+    await createAsset(page, 'Memo Savings');
+
+    // Open the editor and enter a balanced transfer, typing a TRANSACTION memo in the header.
+    await page.goto('/transactions/new');
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await selectTxnAccount(page.locator('#txn-main-account'), 'Memo Checking');
+    await selectTxnAccount(page.locator('#txn-account-0'), 'Memo Savings');
+    await page.locator('#txn-amount-0').fill('30.00');
+    // The MAIN (header) line has no memo input of its own: the header carries exactly ONE memo
+    // field, #txn-memo (the transaction memo). (#txn-memo-0 is the BODY row-0 split's own memo,
+    // a different split -- not a second field for the main line.) There is no hidden main_memo.
+    await expect(page.locator('#txn-main-memo')).toHaveCount(0);
+    await expect(page.locator('input[name="main_memo"]')).toHaveCount(0);
+    await page.locator('#txn-memo').fill('wire fee for March');
+    await page.getByRole('button', { name: /^save$/i }).click();
+
+    // Land on the main split's register (Memo Checking) -- the transaction memo shows on the
+    // main line's row (the split has no memo of its own, so the register falls back to it).
+    await page.waitForURL((u) => /\/accounts\/\d+\/register/.test(u.pathname));
+    await expect(page.locator('table.register-table')).toContainText('wire fee for March');
+
+    // Reopen the txn for EDIT: the memo the user typed comes back in #txn-memo (the SAME
+    // field), not swallowed into a hidden per-split carrier. The register row carries a direct
+    // edit link (/transactions/{id}/edit); the memo row is the one showing our memo text.
+    const memoRow = page.locator('tr.reg-row', { hasText: 'wire fee for March' });
+    await memoRow.getByRole('link', { name: /edit/i }).click();
+    await page.waitForURL(/\/transactions\/\d+\/edit/);
+    await expect(page.locator('form#txn-form')).toBeVisible();
+    await expect(page.locator('#txn-memo')).toHaveValue('wire fee for March');
+  });
+
   // p26.34: the MAIN (header) description fuels descfield autocomplete for all splits -- it
   // must SUGGEST prior descriptions like a body row's desc field. (Prefill on the header is
   // intentionally a no-op: the header has no fund/program/amount cells to fill.)
