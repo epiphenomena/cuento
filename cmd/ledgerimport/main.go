@@ -80,6 +80,10 @@ func main() {
 		if err := mergeCandidatesCmd(args); err != nil {
 			log.Fatalf("merge-candidates: %v", err)
 		}
+	case "class-candidates":
+		if err := classCandidatesCmd(args); err != nil {
+			log.Fatalf("class-candidates: %v", err)
+		}
 	default:
 		fmt.Fprintf(os.Stderr, "ledgerimport: unknown subcommand %q\n\n", cmd)
 		usage()
@@ -94,7 +98,8 @@ func usage() {
 		"  scaffold           create a fresh db with reference data only (subs, programs, funds, chart, rates)\n"+
 		"  import-subsidiary  additively import ONE subsidiary's transactions into a scaffolded db\n"+
 		"  finalize           post cross-subsidiary corrections (run ONCE after the LAST import-subsidiary)\n"+
-		"  merge-candidates   emit a reviewable US<->UPH candidate account-merge CSV from the reviewed mapping\n")
+		"  merge-candidates   emit a reviewable US<->UPH candidate account-merge CSV from the reviewed mapping\n"+
+		"  class-candidates   emit a reviewable per-class classification CSV (mark which classes are restricted funds)\n")
 }
 
 // accountsCmd wires runAccounts to the real files. It reads the source CSV at
