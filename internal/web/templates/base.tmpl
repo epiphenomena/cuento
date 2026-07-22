@@ -175,6 +175,17 @@
        external modules, no inline handler). */}}
   <script type="module" src="{{asset "treetable.js"}}"></script>
   <script type="module" src="{{asset "chartsearch.js"}}"></script>
+  {{/* p31 10b program-statement COLUMN-collapse + p30.9 budget-variance MEASURE toggle,
+       loaded SHELL-WIDE for the SAME reason as treetable/chartsearch above: reports are
+       reached via the hx-boost top nav, so a page-local <script type="module"> injected by
+       that boosted <body> swap never executes -- leaving the column collapse and the measure
+       toggle dead until a hard reload. In <head> they self-init on DOMContentLoaded and
+       re-wire on htmx:afterSwap when a filter change replaces #report-results. Each is a
+       guarded no-op when its target is absent (colcollapse: no [data-program-group] header;
+       budgetvariance: no .bv-table), idempotent via a dataset flag, so loading them on every
+       page is harmless (rule 12: external modules, no inline handler). */}}
+  <script type="module" src="{{asset "colcollapse.js"}}"></script>
+  <script type="module" src="{{asset "budgetvariance.js"}}"></script>
 </head>
 {{/* data-* feed datefield.js: the per-user date format and the localized calendar
      labels (rule 9: the strings originate in the i18n catalog, rendered here). */ -}}

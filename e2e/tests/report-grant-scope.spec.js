@@ -26,7 +26,7 @@
 // waits and page.request fetches.
 
 const { test, expect } = require('../fixtures');
-const { saveAndReload, openNewAccount, saveAccount, selectTxnAccount } = require('../helpers');
+const { openNewAccount, saveAccount, selectTxnAccount } = require('../helpers');
 
 const IS = '/reports/income_statement';
 const DEMOTED = '/reports/balance_sheet'; // demoted (non-program) report in "financial"
@@ -43,13 +43,20 @@ async function login(page, username, password) {
   await page.waitForURL('**/');
 }
 
-// createProgram makes a child program under the seeded root ("General").
+// createProgram makes a child program under the seeded root ("General"). "New program" is a
+// subnav action link to its own /programs/new page (bc2dd5b), a full-page navigation, so we
+// wait for the form itself; Save still hx-posts and follows the HX-Redirect back to /programs.
 async function createProgram(page, name) {
   await page.goto('/programs');
-  await page.getByRole('button', { name: /new program/i }).click();
-  await expect(page.locator('#pf-name')).toBeVisible();
+  await page.getByRole('link', { name: /new program/i }).click();
+  await page.waitForURL('**/programs/new');
+  await expect(page.locator('form#program-form')).toBeVisible();
   await page.locator('#pf-name').fill(name); // parent defaults to the root program
-  await saveAndReload(page, { reloadPath: '/programs', formSelector: 'form#program-form' });
+  const reloaded = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/programs' && r.request().method() === 'GET',
+  );
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await reloaded;
   await expect(page.locator('tr.prog-row', { hasText: name })).toBeVisible();
 }
 

@@ -1211,10 +1211,19 @@ test('reports: open the activities-by-restriction statement, see the two restric
 // form, so the comparative program statement has more than the single root column.
 async function createProgram(page, name) {
   await page.goto('/programs');
-  await page.getByRole('button', { name: /new program/i }).click();
-  await expect(page.locator('#pf-name')).toBeVisible();
+  // "New program" is a subnav action (a link to its own /programs/new page), not an inline
+  // htmx swap (the bc2dd5b subnav refactor moved section actions to right-aligned links). It
+  // is a full-page navigation, so we wait for the form itself rather than an htmx settle
+  // marker. Save still hx-posts and follows the HX-Redirect back to /programs (a GET).
+  await page.getByRole('link', { name: /new program/i }).click();
+  await page.waitForURL('**/programs/new');
+  await expect(page.locator('form#program-form')).toBeVisible();
   await page.locator('#pf-name').fill(name); // parent defaults to the root program
-  await saveAndReload(page, { reloadPath: '/programs', formSelector: 'form#program-form' });
+  const reloaded = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === '/programs' && r.request().method() === 'GET',
+  );
+  await page.getByRole('button', { name: /^save$/i }).click();
+  await reloaded;
   await expect(page.locator('tr.prog-row', { hasText: name })).toBeVisible();
 }
 
